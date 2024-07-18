@@ -15,25 +15,34 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 public class OkProxySelector extends ProxySelector {
 
-    private List<String> hosts;
+    private final List<String> hosts;
     private Proxy proxy;
 
-    public List<String> getHosts() {
-        if (Objects.isNull(hosts)) {
-            hosts = new ArrayList<>();
-        }
-        return hosts;
+    public OkProxySelector() {
+        this.hosts = new ArrayList<>();
     }
 
-    public void setHosts(List<String> hosts) {
-        if (hosts == null) {
-            hosts = new ArrayList<>();
-        }
-        this.hosts = hosts;
+    public void addAll(List<String> hosts) {
+        this.hosts.addAll(hosts);
+    }
+
+    public void add(String host) {
+        this.hosts.add(host);
+    }
+
+    public void remove(String host) {
+        this.hosts.remove(host);
+    }
+
+    public boolean contains(String host) {
+        return this.hosts.contains(host);
+    }
+
+    public void clear() {
+        this.hosts.clear();
     }
 
     public void setProxy(String proxy) {
@@ -42,7 +51,8 @@ public class OkProxySelector extends ProxySelector {
 
     @Override
     public List<Proxy> select(URI uri) {
-        if (proxy == null || hosts == null || hosts.isEmpty() || uri.getHost() == null || "127.0.0.1".equals(uri.getHost())) return Collections.singletonList(Proxy.NO_PROXY);
+        if (proxy == null || hosts.isEmpty() || uri.getHost() == null || "127.0.0.1".equals(uri.getHost()))
+            return Collections.singletonList(Proxy.NO_PROXY);
         for (String host : hosts) if (Util.containOrMatch(uri.getHost(), host)) return Collections.singletonList(proxy);
         return Collections.singletonList(Proxy.NO_PROXY);
     }

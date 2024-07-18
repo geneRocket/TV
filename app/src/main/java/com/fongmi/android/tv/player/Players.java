@@ -235,8 +235,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         this.position = position;
     }
 
-    public int addCount() {
-        return ++count;
+    public boolean canToggleDecode() {
+        return isExo() && ++count <= 1;
     }
 
     public void reset() {
@@ -255,8 +255,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public int addRetry() {
-        ++retry;
-        return retry;
+        return ++retry;
     }
 
     public String stringToTime(long time) {

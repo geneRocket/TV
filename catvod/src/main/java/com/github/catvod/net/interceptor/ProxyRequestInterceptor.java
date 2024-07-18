@@ -30,15 +30,15 @@ public class ProxyRequestInterceptor implements Interceptor {
             }
             response.close();
         } catch (Exception e) {
-            if (selector.getHosts().contains(request.url().host())) {
+            if (selector.contains(request.url().host())) {
                 throw e;
             }
         }
         try {
-            selector.getHosts().add(request.url().host());
+            selector.add(request.url().host());
             return chain.proceed(request);
         } catch (Exception e) {
-            selector.getHosts().remove(request.url().host());
+            selector.remove(request.url().host());
             throw e;
         }
     }
