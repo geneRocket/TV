@@ -12,17 +12,18 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class OkProxySelector extends ProxySelector {
 
-    private final List<String> hosts;
+    private final Set<String> hosts;
     private Proxy proxy;
 
     public OkProxySelector() {
-        this.hosts = new ArrayList<>();
+        this.hosts = new HashSet<>();
     }
 
     public void addAll(List<String> hosts) {
