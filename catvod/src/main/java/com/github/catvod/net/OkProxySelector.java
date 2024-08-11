@@ -13,9 +13,9 @@ import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 public class OkProxySelector extends ProxySelector {
 
@@ -23,7 +23,7 @@ public class OkProxySelector extends ProxySelector {
     private Proxy proxy;
 
     public OkProxySelector() {
-        this.hosts = new HashSet<>();
+        this.hosts = new ConcurrentSkipListSet<>();
     }
 
     public void addAll(List<String> hosts) {
