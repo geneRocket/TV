@@ -30,16 +30,10 @@ public class OkHttp {
 
     private static final int TIMEOUT = 30 * 1000;
     private static final int CACHE = 100 * 1024 * 1024;
-    private static final ProxySelector defaultSelector;
 
-    private boolean proxy;
     private DnsOverHttps dns;
     private OkHttpClient client;
     private OkProxySelector selector;
-
-    static {
-        defaultSelector = ProxySelector.getDefault();
-    }
 
     private static class Loader {
         static volatile OkHttp INSTANCE = new OkHttp();
@@ -60,9 +54,8 @@ public class OkHttp {
     }
 
     public void setProxy(String proxy) {
-        ProxySelector.setDefault(TextUtils.isEmpty(proxy) ? defaultSelector : selector());
+        ProxySelector.setDefault(selector());
         if (!TextUtils.isEmpty(proxy)) selector().setProxy(proxy);
-        this.proxy = !TextUtils.isEmpty(proxy);
         client = null;
     }
 
@@ -144,7 +137,7 @@ public class OkHttp {
 
     private static OkHttpClient.Builder getBuilder() {
         OkHttpClient.Builder builder = new OkHttpClient.Builder().addInterceptor(new RequestInterceptor()).addNetworkInterceptor(new ResponseInterceptor()).addInterceptor(new ProxyRequestInterceptor(selector())).connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS).readTimeout(TIMEOUT, TimeUnit.MILLISECONDS).writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS).dns(dns()).hostnameVerifier((hostname, session) -> true).followRedirects(true).sslSocketFactory(new SSLCompat(), SSLCompat.TM);
-        builder.proxySelector(get().proxy ? selector() : defaultSelector);
+        builder.proxySelector(selector());
         return builder;
     }
 }
