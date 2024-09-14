@@ -13,6 +13,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.RenderersFactory;
@@ -26,6 +27,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Drm;
 import com.fongmi.android.tv.bean.Sub;
+import com.fongmi.android.tv.player.DynamicVolumeRenderersFactory;
 import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.utils.Sniffer;
 
@@ -47,7 +49,7 @@ public class ExoUtil {
     }
 
     public static RenderersFactory buildRenderersFactory(int decode) {
-        return new NextRenderersFactory(App.get(), decode);
+        return new DefaultRenderersFactory(App.get());
     }
 
     public static MediaSource.Factory buildMediaSourceFactory() {
