@@ -26,18 +26,9 @@
         <androidx.media3.ui.PlayerView
             android:id="@+id/exo"
             style="@style/Player.Vod"
-            app:surface_type="surface_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone" />
-
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/exo_texture"
-            style="@style/Player.Vod"
-            app:surface_type="texture_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone" />
+            app:surface_type="none" />
 
         <tv.danmaku.ijk.media.player.ui.IjkVideoView
             android:id="@+id/ijk"

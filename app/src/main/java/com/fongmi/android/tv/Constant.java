@@ -29,6 +29,4 @@ public class Constant {
     public static final int TIMEOUT_TRANSMIT = 60 * 1000;
     //搜尋線程數量
     public static final int THREAD_POOL = 10;
-    public static final int RENDER_SURFACE_VIEW = 0;
-    public static final int RENDER_TEXTURE_VIEW = 1;
 }
