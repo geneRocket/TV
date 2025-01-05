@@ -108,20 +108,6 @@ dependencies {
     implementation project(':forcetech')
     implementation project(':ijkplayer')
     pythonImplementation project(':pyramid')
-    implementation 'androidx.media3:media3-datasource-okhttp:' + media3Version
-    implementation 'androidx.media3:media3-datasource-rtmp:' + media3Version
-    implementation 'androidx.media3:media3-exoplayer:' + media3Version
-    implementation 'androidx.media3:media3-exoplayer-dash:' + media3Version
-    implementation 'androidx.media3:media3-exoplayer-hls:' + media3Version
-    implementation 'androidx.media3:media3-exoplayer-rtsp:' + media3Version
-    implementation 'androidx.media3:media3-exoplayer-smoothstreaming:' + media3Version
-    implementation 'androidx.media3:media3-ui:' + media3Version
-    implementation 'androidx.media3:media3-common:' + media3Version
-    implementation 'androidx.media3:media3-extractor:' + media3Version
-    implementation 'androidx.media3:media3-datasource:' + media3Version
-    implementation 'androidx.media3:media3-container:' + media3Version
-    implementation 'androidx.media3:media3-database:' + media3Version
-    implementation 'androidx.media3:media3-decoder:' + media3Version
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'androidx.room:room-runtime:2.6.1'
@@ -155,6 +141,21 @@ dependencies {
     implementation(ext: 'aar', name: 'dlna-core-release', group: 'fongmi', version: 'release')
     implementation(ext: 'aar', name: 'dlna-dmc-release', group: 'fongmi', version: 'release')
     implementation(ext: 'aar', name: 'dlna-dmr-release', group: 'fongmi', version: 'release')
+    implementation 'androidx.media3:media3-common:' + media3Version
+    implementation 'androidx.media3:media3-container:' + media3Version
+    implementation 'androidx.media3:media3-database:' + media3Version
+    implementation 'androidx.media3:media3-datasource:' + media3Version
+    implementation 'androidx.media3:media3-datasource-okhttp:' + media3Version
+    implementation 'androidx.media3:media3-datasource-rtmp:' + media3Version
+    implementation 'androidx.media3:media3-decoder:' + media3Version
+    implementation 'androidx.media3:media3-decoder-av1:' + media3Version
+    implementation 'androidx.media3:media3-exoplayer:' + media3Version
+    implementation 'androidx.media3:media3-exoplayer-dash:' + media3Version
+    implementation 'androidx.media3:media3-exoplayer-hls:' + media3Version
+    implementation 'androidx.media3:media3-exoplayer-rtsp:' + media3Version
+    implementation 'androidx.media3:media3-exoplayer-smoothstreaming:' + media3Version
+    implementation 'androidx.media3:media3-extractor:' + media3Version
+    implementation 'androidx.media3:media3-ui:' + media3Version
     leanbackImplementation 'androidx.leanback:leanback:1.2.0-alpha04'
     leanbackImplementation 'com.github.hedzr:android-file-chooser:v1.2.0-final'
     leanbackImplementation 'com.github.JessYanCoding:AndroidAutoSize:1.2.1'
