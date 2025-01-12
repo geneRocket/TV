@@ -163,7 +163,7 @@
 
         <androidx.media3.ui.DefaultTimeBar
             android:id="@+id/seek_bar"
-            android:layout_width="match_parent"
+            android:layout_width="200dp"
             android:layout_height="wrap_content" />
     </LinearLayout>
 
