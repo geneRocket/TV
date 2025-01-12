@@ -1,5 +1,6 @@
 package com.github.catvod.net;
 
+import android.annotation.SuppressLint;
 import android.text.TextUtils;
 
 import androidx.collection.ArrayMap;
@@ -11,9 +12,15 @@ import com.github.catvod.net.interceptor.ResponseInterceptor;
 import com.github.catvod.utils.Path;
 
 import java.net.ProxySelector;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Cache;
 import okhttp3.Call;
@@ -25,15 +32,22 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.dnsoverhttps.DnsOverHttps;
+import okhttp3.logging.HttpLoggingInterceptor;
 
 public class OkHttp {
 
     private static final int TIMEOUT = 30 * 1000;
     private static final int CACHE = 100 * 1024 * 1024;
+    private static final ProxySelector defaultSelector;
 
+    private boolean proxy;
     private DnsOverHttps dns;
     private OkHttpClient client;
     private OkProxySelector selector;
+
+    static {
+        defaultSelector = ProxySelector.getDefault();
+    }
 
     private static class Loader {
         static volatile OkHttp INSTANCE = new OkHttp();
@@ -54,8 +68,9 @@ public class OkHttp {
     }
 
     public void setProxy(String proxy) {
-        ProxySelector.setDefault(selector());
+        ProxySelector.setDefault(TextUtils.isEmpty(proxy) ? defaultSelector : selector());
         if (!TextUtils.isEmpty(proxy)) selector().setProxy(proxy);
+        this.proxy = !TextUtils.isEmpty(proxy);
         client = null;
     }
 
@@ -136,8 +151,37 @@ public class OkHttp {
     }
 
     private static OkHttpClient.Builder getBuilder() {
-        OkHttpClient.Builder builder = new OkHttpClient.Builder().addInterceptor(new RequestInterceptor()).addNetworkInterceptor(new ResponseInterceptor()).addInterceptor(new ProxyRequestInterceptor(selector())).connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS).readTimeout(TIMEOUT, TimeUnit.MILLISECONDS).writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS).dns(dns()).hostnameVerifier((hostname, session) -> true).followRedirects(true).sslSocketFactory(new SSLCompat(), SSLCompat.TM);
-        builder.proxySelector(selector());
+        HttpLoggingInterceptor logging = new HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY);
+        OkHttpClient.Builder builder = new OkHttpClient.Builder().cookieJar(OkCookieJar.get()).addInterceptor(new RequestInterceptor()).addNetworkInterceptor(new ResponseInterceptor()).addInterceptor(new ProxyRequestInterceptor(selector())).connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS).readTimeout(TIMEOUT, TimeUnit.MILLISECONDS).writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS).dns(dns()).hostnameVerifier((hostname, session) -> true).sslSocketFactory(getSSLContext().getSocketFactory(), trustAllCertificates());
+        builder.proxySelector(get().proxy ? selector() : defaultSelector);
         return builder;
+    }
+
+    private static SSLContext getSSLContext() {
+        try {
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(null, new TrustManager[]{trustAllCertificates()}, new SecureRandom());
+            return context;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    @SuppressLint({"TrustAllX509TrustManager", "CustomX509TrustManager"})
+    private static X509TrustManager trustAllCertificates() {
+        return new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
     }
 }

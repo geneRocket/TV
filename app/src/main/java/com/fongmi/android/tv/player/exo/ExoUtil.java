@@ -12,6 +12,7 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
+import androidx.media3.common.util.Util;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -24,11 +25,10 @@ import androidx.media3.ui.CaptionStyleCompat;
 import androidx.media3.ui.PlayerView;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Drm;
 import com.fongmi.android.tv.bean.Sub;
-import com.fongmi.android.tv.player.DynamicVolumeRenderersFactory;
-import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.utils.Sniffer;
 
 import java.util.ArrayList;
@@ -37,6 +37,10 @@ import java.util.Locale;
 import java.util.Map;
 
 public class ExoUtil {
+
+    public static String getUa() {
+        return Util.getUserAgent(App.get(), BuildConfig.APPLICATION_ID);
+    }
 
     public static LoadControl buildLoadControl() {
         return new DefaultLoadControl();
@@ -48,8 +52,8 @@ public class ExoUtil {
         return trackSelector;
     }
 
-    public static RenderersFactory buildRenderersFactory(int decode) {
-        return new DefaultRenderersFactory(App.get());
+    public static RenderersFactory buildRenderersFactory(int renderMode) {
+        return new DefaultRenderersFactory(App.get()).setEnableDecoderFallback(true).setExtensionRendererMode(renderMode);
     }
 
     public static MediaSource.Factory buildMediaSourceFactory() {
@@ -78,12 +82,16 @@ public class ExoUtil {
         setTrackParameters(player, group, trackIndices);
     }
 
+    public static void resetTrack(ExoPlayer player) {
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().clearOverrides().build());
+    }
+
     public static void setSubtitleView(PlayerView exo) {
         exo.getSubtitleView().setStyle(getCaptionStyle());
         exo.getSubtitleView().setApplyEmbeddedFontSizes(false);
         exo.getSubtitleView().setApplyEmbeddedStyles(!Setting.isCaption());
+//        if (Setting.getSubtitlePosition() != 0) exo.getSubtitleView().setBottomPosition(Setting.getSubtitlePosition());
         if (Setting.getSubtitleTextSize() != 0) exo.getSubtitleView().setFractionalTextSize(Setting.getSubtitleTextSize());
-        if (Setting.getSubtitleBottomPadding() != 0) exo.getSubtitleView().setBottomPaddingFraction(Setting.getSubtitleBottomPadding());
     }
 
     public static String getMimeType(String path) {
@@ -95,16 +103,9 @@ public class ExoUtil {
     }
 
     public static String getMimeType(int errorCode) {
+//        if (errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED || errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED) return MimeTypes.APPLICATION_OCTET;
         if (errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED || errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED || errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED) return MimeTypes.APPLICATION_M3U8;
         return null;
-    }
-
-    public static int getRetry(int errorCode) {
-        if (errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED) return 2;
-        if (errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED) return 2;
-        if (errorCode >= PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED && errorCode <= PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED) return 2;
-        if (errorCode >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED && errorCode <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) return 2;
-        return 1;
     }
 
     public static MediaItem getMediaItem(Map<String, String> headers, Uri uri, String mimeType, Drm drm, List<Sub> subs, int decode) {
@@ -113,7 +114,10 @@ public class ExoUtil {
         builder.setSubtitleConfigurations(getSubtitleConfigs(subs));
         if (drm != null) builder.setDrmConfiguration(drm.get());
         if (mimeType != null) builder.setMimeType(mimeType);
+//        builder.setForceUseRtpTcp(Setting.getRtsp() == 1);
+//        builder.setAds(Sniffer.getRegex(uri));
         builder.setMediaId(uri.toString());
+//        builder.setDecode(decode);
         return builder.build();
     }
 

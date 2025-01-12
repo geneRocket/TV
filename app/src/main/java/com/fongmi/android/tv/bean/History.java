@@ -4,6 +4,7 @@ import android.text.TextUtils;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.media3.common.C;
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 
@@ -18,6 +19,7 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Entity
 public class History {
@@ -52,8 +54,6 @@ public class History {
     private long duration;
     @SerializedName("speed")
     private float speed;
-    @SerializedName("player")
-    private int player;
     @SerializedName("scale")
     private int scale;
     @SerializedName("cid")
@@ -72,7 +72,10 @@ public class History {
     public History() {
         this.speed = 1;
         this.scale = -1;
-        this.player = -1;
+        this.ending = C.TIME_UNSET;
+        this.opening = C.TIME_UNSET;
+        this.position = C.TIME_UNSET;
+        this.duration = C.TIME_UNSET;
     }
 
     @NonNull
@@ -188,14 +191,6 @@ public class History {
         this.speed = speed;
     }
 
-    public int getPlayer() {
-        return player;
-    }
-
-    public void setPlayer(int player) {
-        this.player = player;
-    }
-
     public int getScale() {
         return scale;
     }
@@ -244,16 +239,12 @@ public class History {
         return isRevPlay() ? R.string.play_backward_hint : R.string.play_forward_hint;
     }
 
-    public boolean isNew() {
-        return getCreateTime() == 0 && getPosition() == 0;
-    }
-
     public static List<History> get() {
         return get(VodConfig.getCid());
     }
 
     public static List<History> get(int cid) {
-        return AppDatabase.get().getHistoryDao().find(cid);
+        return AppDatabase.get().getHistoryDao().find(cid, System.currentTimeMillis() - TimeUnit.DAYS.toMillis(14));
     }
 
     public static History find(String key) {
@@ -265,8 +256,8 @@ public class History {
     }
 
     private void checkParam(History item) {
-        if (getOpening() == 0) setOpening(item.getOpening());
-        if (getEnding() == 0) setEnding(item.getEnding());
+        if (getOpening() <= 0) setOpening(item.getOpening());
+        if (getEnding() <= 0) setEnding(item.getEnding());
         if (getSpeed() == 1) setSpeed(item.getSpeed());
     }
 
@@ -310,9 +301,9 @@ public class History {
     }
 
     public void findEpisode(List<Flag> flags) {
-        if (flags.size() > 0) {
+        if (!flags.isEmpty()) {
             setVodFlag(flags.get(0).getFlag());
-            if (flags.get(0).getEpisodes().size() > 0) {
+            if (!flags.get(0).getEpisodes().isEmpty()) {
                 setVodRemarks(flags.get(0).getEpisodes().get(0).getName());
             }
         }
