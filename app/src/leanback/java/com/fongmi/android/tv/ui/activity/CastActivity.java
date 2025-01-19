@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.activity;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -55,7 +56,6 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private CustomKeyDownCast mKeyDown;
     private RenderState mState;
     private CastAction mAction;
-    private DIDLParser mParser;
     private Players mPlayers;
     private Runnable mR1;
     private Runnable mR2;
@@ -63,6 +63,10 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private long position;
     private long duration;
     private int scale;
+
+    public static void start(Activity activity) {
+        activity.startActivity(new Intent(activity, CastActivity.class));
+    }
 
     @Override
     protected ViewBinding getBinding() {
@@ -82,11 +86,9 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownCast.create(this);
         mPlayers = Players.create(this);
-        mParser = new DIDLParser();
         mR1 = this::hideControl;
         mR2 = this::setTraffic;
         setVideoView();
-        checkAction();
     }
 
     @Override
@@ -111,7 +113,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     private String getName() {
         try {
-            return mParser.parse(mAction.getCurrentURIMetaData()).getItems().get(0).getId();
+            return new DIDLParser().parse(mAction.getCurrentURIMetaData()).getItems().get(0).getId();
         } catch (Exception e) {
             return mAction.getCurrentURI();
         }
@@ -121,6 +123,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mAction = getIntent().getParcelableExtra(RendererInterfaceKt.keyExtraCastAction);
         mBinding.widget.title.setText(getName());
         position = duration = C.TIME_UNSET;
+        mService.bindRealPlayer(this);
         start();
     }
 
@@ -176,6 +179,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     private void onReset() {
         position = duration = C.TIME_UNSET;
+        if (mPlayers.isEmpty()) return;
         start();
     }
 
@@ -280,7 +284,6 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     public void onPlayerEvent(PlayerEvent event) {
         switch (event.getState()) {
             case PlayerEvent.PREPARE:
-                mPlayers.seekTo(position);
                 setState(RenderState.PREPARING);
                 break;
             case Player.STATE_IDLE:
@@ -348,8 +351,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void onPlay() {
-        if (!mPlayers.isEmpty() && mPlayers.isIdle()) mPlayers.prepare();
-        if (mPlayers.isEnded()) mPlayers.seekTo(C.TIME_UNSET);
+        if (mPlayers.isEmpty()) return;
         setState(RenderState.PLAYING);
         mPlayers.play();
         hideCenter();
@@ -362,7 +364,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void setState(RenderState state) {
-        if (mService != null) mService.notifyAvTransportLastChange(this.mState = state);
+        if (mService != null) mService.notifyAvTransportLastChange(mState = state);
     }
 
     @NonNull
@@ -389,7 +391,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public void onServiceConnected(ComponentName name, IBinder service) {
-        (mService = ((RendererServiceBinder) service).getService()).bindRealPlayer(this);
+        mService = ((RendererServiceBinder) service).getService();
     }
 
     @Override
@@ -436,6 +438,8 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public void onSeeking(int time) {
+        if (mPlayers.isEmpty()) return;
+        mBinding.widget.center.setVisibility(View.VISIBLE);
         mBinding.widget.exoDuration.setText(mPlayers.getDurationTime());
         mBinding.widget.exoPosition.setText(mPlayers.getPositionTime(time));
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
@@ -447,6 +451,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public void onSeekTo(int time) {
+        if (mPlayers.isEmpty()) return;
         mKeyDown.resetTime();
         mPlayers.seekTo(time);
         showProgress();
