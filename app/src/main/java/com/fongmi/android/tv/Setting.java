@@ -439,7 +439,7 @@ public class Setting {
     }
 
     public static boolean isHomeSiteLock() {
-        return Prefers.getBoolean("home_site_lock", false);
+        return Prefers.getBoolean("home_site_lock", true);
     }
 
     public static void putHomeSiteLock(boolean lock) {
