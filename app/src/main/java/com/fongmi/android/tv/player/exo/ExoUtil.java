@@ -49,7 +49,7 @@ public class ExoUtil {
     }
 
     public static RenderersFactory buildRenderersFactory(int decode) {
-        return new DefaultRenderersFactory(App.get());
+        return new DynamicVolumeRenderersFactory(App.get());
     }
 
     public static MediaSource.Factory buildMediaSourceFactory() {
