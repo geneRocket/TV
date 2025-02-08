@@ -90,7 +90,6 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
         return CustomKeyDownVod.getDelta(holdSecond, isMoveAdd);
     }
 
-
     public void resetTime() {
         holdSecond = 0;
     }

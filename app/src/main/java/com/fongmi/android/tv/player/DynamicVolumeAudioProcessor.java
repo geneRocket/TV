@@ -5,7 +5,6 @@ import androidx.media3.common.audio.BaseAudioProcessor;
 import com.fongmi.android.tv.player.pojo.RmsMaxGain;
 
 import java.nio.ByteBuffer;
-import java.util.Optional;
 
 public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
     private static final double maxVolume = 9000;
