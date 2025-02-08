@@ -151,7 +151,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setTitleView() {
-//        mBinding.homeSiteLock.setVisibility(Setting.isHomeSiteLock() ? View.VISIBLE : View.GONE);
         if (Setting.getHomeUI() == 0) {
             mBinding.title.setTextSize(24);
             mBinding.clock.setTextSize(24);
