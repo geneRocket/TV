@@ -12,21 +12,34 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 public class OkProxySelector extends ProxySelector {
 
-    private final List<String> hosts;
+    private final Set<String> hosts;
     private Proxy proxy;
 
     public OkProxySelector() {
-        this.hosts = new ArrayList<>();
+        this.hosts = new ConcurrentSkipListSet<>();
     }
 
     public void addAll(List<String> hosts) {
         this.hosts.addAll(hosts);
+    }
+
+    public void add(String host) {
+        this.hosts.add(host);
+    }
+
+    public void remove(String host) {
+        this.hosts.remove(host);
+    }
+
+    public boolean contains(String host) {
+        return this.hosts.contains(host);
     }
 
     public void clear() {
@@ -39,7 +52,8 @@ public class OkProxySelector extends ProxySelector {
 
     @Override
     public List<Proxy> select(URI uri) {
-        if (proxy == null || hosts.isEmpty() || uri.getHost() == null || "127.0.0.1".equals(uri.getHost())) return Collections.singletonList(Proxy.NO_PROXY);
+        if (proxy == null || hosts.isEmpty() || uri.getHost() == null || "127.0.0.1".equals(uri.getHost()))
+            return Collections.singletonList(Proxy.NO_PROXY);
         for (String host : hosts) if (Util.containOrMatch(uri.getHost(), host)) return Collections.singletonList(proxy);
         return Collections.singletonList(Proxy.NO_PROXY);
     }

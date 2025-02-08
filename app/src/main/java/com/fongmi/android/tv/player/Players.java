@@ -120,7 +120,7 @@ public class Players implements Player.Listener, ParseCallback {
         exoPlayer.setAudioAttributes(AudioAttributes.DEFAULT, true);
         exoPlayer.addAnalyticsListener(new EventLogger());
         exoPlayer.setHandleAudioBecomingNoisy(true);
-        view.setRender(Setting.getRender());
+//        view.setRender(Setting.getRender());
         exoPlayer.setPlayWhenReady(true);
         exoPlayer.addListener(this);
         view.setPlayer(exoPlayer);
@@ -292,10 +292,15 @@ public class Players implements Player.Listener, ParseCallback {
     }
 
     public String getPositionTime(long time) {
+        time = getNewTime(time);
+        return stringToTime(time);
+    }
+
+    public long getNewTime(long time) {
         time = getPosition() + time;
         if (time > getDuration()) time = getDuration();
         else if (time < 0) time = 0;
-        return stringToTime(time);
+        return time;
     }
 
     public String getDurationTime() {

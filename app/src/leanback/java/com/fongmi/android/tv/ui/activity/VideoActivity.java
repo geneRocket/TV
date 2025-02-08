@@ -864,6 +864,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.widget.center.setVisibility(View.VISIBLE);
         mBinding.widget.exoDuration.setText(mPlayers.getDurationTime());
         mBinding.widget.exoPosition.setText(mPlayers.getPositionTime(0));
+        mBinding.widget.seekBar.setPosition(mPlayers.getPosition());
+        mBinding.widget.seekBar.setDuration(mPlayers.getDuration());
     }
 
     private void hideInfo() {
@@ -1314,6 +1316,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.widget.exoDuration.setText(mPlayers.getDurationTime());
         mBinding.widget.exoPosition.setText(mPlayers.getPositionTime(time));
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
+        mBinding.widget.seekBar.setPosition(mPlayers.getNewTime(time));
+        mBinding.widget.seekBar.setDuration(mPlayers.getDuration());
         hideProgress();
     }
 

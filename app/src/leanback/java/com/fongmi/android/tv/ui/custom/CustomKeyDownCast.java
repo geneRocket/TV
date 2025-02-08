@@ -8,7 +8,6 @@ import android.view.MotionEvent;
 import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.utils.KeyUtil;
 
 public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
@@ -16,7 +15,8 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
     private final GestureDetector detector;
     private final Listener listener;
     private boolean changeSpeed;
-    private int holdTime;
+    private int holdSecond;
+    private boolean isMoveAdd;
 
     public static CustomKeyDownCast create(Activity activity) {
         return new CustomKeyDownCast(activity);
@@ -46,7 +46,7 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
         } else if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isRightKey(event)) {
             listener.onSeeking(addTime());
         } else if (event.getAction() == KeyEvent.ACTION_UP && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
-            App.post(() -> listener.onSeekTo(holdTime), 250);
+            App.post(() -> listener.onSeekTo(CustomKeyDownVod.getDelta(holdSecond, isMoveAdd)), 250);
         } else if (event.getAction() == KeyEvent.ACTION_UP && KeyUtil.isUpKey(event)) {
             if (changeSpeed) listener.onSpeedEnd();
             else listener.onKeyUp();
@@ -79,15 +79,20 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
     }
 
     private int addTime() {
-        return holdTime = holdTime + Constant.INTERVAL_SEEK;
+        isMoveAdd = true;
+        holdSecond += 1;
+        return CustomKeyDownVod.getDelta(holdSecond, isMoveAdd);
     }
 
     private int subTime() {
-        return holdTime = holdTime - Constant.INTERVAL_SEEK;
+        isMoveAdd = false;
+        holdSecond += 1;
+        return CustomKeyDownVod.getDelta(holdSecond, isMoveAdd);
     }
 
+
     public void resetTime() {
-        holdTime = 0;
+        holdSecond = 0;
     }
 
     public interface Listener {
