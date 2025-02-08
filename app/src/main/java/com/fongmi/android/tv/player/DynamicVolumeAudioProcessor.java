@@ -24,20 +24,16 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
     @Override
     public void queueInput(ByteBuffer inputBuffer) {
         RmsMaxGain rmsMaxGain = calculateVolume(inputBuffer);
-        if(rmsMaxGain==null){
-            applyGain(inputBuffer, targetGain);
-            return;
-        }
-        double currentVolume = rmsMaxGain.getRms();
-        double maxGain =rmsMaxGain.getMaxGain();
-        if (currentVolume != 0) {
+        Double currentVolume = Optional.ofNullable(rmsMaxGain).map(RmsMaxGain::getRms).orElse(null);
+        Double maxGain = Optional.ofNullable(rmsMaxGain).map(RmsMaxGain::getMaxGain).orElse(9999.0);
+        if (currentVolume != null && currentVolume != 0) {
             double currentVolumeAfterGain = currentVolume * gain;
             if (currentVolumeAfterGain > maxVolume) {
                 gain = Math.max(gain * 0.99, maxVolume / currentVolume);
             } else {
                 if (gain > targetGain) {
                     gain = Math.max(gain * 0.99, targetGain);
-                } else if (gain < targetGain) {
+                } else {
                     gain = Math.min(gain * 1.01, targetGain);
                 }
             }
@@ -63,16 +59,16 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
         double sum = 0;
         double maxGain = 99999;
         for (int i = 0; i < numSamples; i++) {
-            long sample = 0;
+            double sample = 0;
             if (bytesPerSample == 2) {
                 sample = inputBuffer.getShort();
-                maxGain = Math.min(maxGain, (double) Short.MAX_VALUE / Math.max(1, Math.abs(sample)));
+                maxGain = Math.min(maxGain, Short.MAX_VALUE / Math.abs(sample));
             } else if (bytesPerSample == 4) {
                 sample = inputBuffer.getInt();
-                maxGain = Math.min(maxGain, (double) Integer.MAX_VALUE / Math.max(1, Math.abs(sample)));
+                maxGain = Math.min(maxGain, Integer.MAX_VALUE / Math.abs(sample));
             } else if (bytesPerSample == 8) {
                 sample = inputBuffer.getLong();
-                maxGain = Math.min(maxGain, (double) Long.MAX_VALUE / Math.max(1, Math.abs(sample)));
+                maxGain = Math.min(maxGain, Long.MAX_VALUE / Math.abs(sample));
             }
             sum += sample * sample;
         }
