@@ -13,6 +13,7 @@ android {
         minSdk 21
         targetSdk 28
         python {
+            buildPython("/Users/wuwenjun/.pyenv/shims/python3.8")
             version "3.8"
             pip {
                 install "lxml"
