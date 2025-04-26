@@ -7,7 +7,7 @@ import com.fongmi.android.tv.player.pojo.RmsMaxGain;
 import java.nio.ByteBuffer;
 
 public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
-    private static final double maxVolume = 9000;
+    private static final double maxVolume = 4500;
     private static final double targetGain = 1;
 
     AudioFormat audioFormat;
@@ -37,7 +37,7 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
                 if (gain > targetGain) {
                     gain = Math.max(gain * 0.99, targetGain);
                 } else if (gain < targetGain) {
-                    gain = Math.min(gain * 1.01, targetGain);
+                    gain = Math.min(gain * 1.005, targetGain);
                 }
             }
         }
