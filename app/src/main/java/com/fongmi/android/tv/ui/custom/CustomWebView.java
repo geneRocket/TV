@@ -10,6 +10,7 @@ import android.text.TextUtils;
 import android.view.ViewGroup;
 import android.webkit.WebSettings;
 import com.fongmi.android.tv.utils.Notify;
+import com.github.catvod.net.OkHttp;
 import com.tencent.smtt.export.external.interfaces.SslError;
 import com.tencent.smtt.export.external.interfaces.SslErrorHandler;
 import com.tencent.smtt.export.external.interfaces.WebResourceRequest;
@@ -36,10 +37,15 @@ import com.google.common.net.HttpHeaders;
 import com.orhanobut.logger.Logger;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class CustomWebView extends WebView implements DialogInterface.OnDismissListener {
 
@@ -130,7 +136,60 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
                 if (url.contains("challenges.cloudflare.com/turnstile")) App.post(() -> showDialog());
                 if (detect && url.contains("player/?url=")) onParseAdd(headers, url);
                 else if (isVideoFormat(url)) onParseSuccess(headers, url);
-                return super.shouldInterceptRequest(view, request);
+                return shouldInterceptRequestByProxy(view, request);
+            }
+
+            public WebResourceResponse shouldInterceptRequestByProxy(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                try {
+                    Request.Builder builder = new Request.Builder().url(url);
+
+                    // 设置请求头
+                    for (Map.Entry<String, String> header : request.getRequestHeaders().entrySet()) {
+                        builder.addHeader(header.getKey(), header.getValue());
+                    }
+
+                    Response response = OkHttp.client().newCall(builder.build()).execute();
+
+                    if (!response.isSuccessful()) {
+                        return super.shouldInterceptRequest(view, request);
+                    }
+
+                    ResponseBody body = response.body();
+                    if (body == null) {
+                        return super.shouldInterceptRequest(view, request);
+                    }
+
+                    // 获取Content-Type 和 encoding
+                    String contentType = response.header("Content-Type", "text/plain");
+                    String mimeType = getMimeTypeFromContentType(contentType);
+                    String encoding = getEncodingFromContentType(contentType);
+
+                    InputStream inputStream = body.byteStream();
+
+                    return new WebResourceResponse(mimeType, encoding, inputStream);
+                } catch (Exception e) {
+                    Logger.t(TAG).e(e, "OkHttp proxy request failed for url: %s", url);
+                    return super.shouldInterceptRequest(view, request);
+                }
+            }
+
+            private String getMimeTypeFromContentType(String contentType) {
+                if (contentType == null) return "text/plain";
+                String[] parts = contentType.split(";");
+                return parts[0].trim();
+            }
+
+            private String getEncodingFromContentType(String contentType) {
+                if (contentType == null) return "utf-8";
+                String[] parts = contentType.split(";");
+                for (String part : parts) {
+                    part = part.trim().toLowerCase();
+                    if (part.startsWith("charset=")) {
+                        return part.substring(8);
+                    }
+                }
+                return "utf-8";
             }
 
             @Override

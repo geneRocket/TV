@@ -16,11 +16,11 @@ public class Constant {
     //節目爬蟲時間
     public static final int TIMEOUT_XML = 15 * 1000;
     //播放超時時間
-    public static final int TIMEOUT_PLAY = 15 * 1000;
+    public static final int TIMEOUT_PLAY = 60 * 1000;
     //解析預設時間
     public static final int TIMEOUT_PARSE_DEF = 15 * 1000;
     //嗅探超時時間
-    public static final int TIMEOUT_PARSE_WEB = 15 * 1000;
+    public static final int TIMEOUT_PARSE_WEB = 60 * 1000;
     //直播解析時間
     public static final int TIMEOUT_PARSE_LIVE = 10 * 1000;
     //同步超時時間
