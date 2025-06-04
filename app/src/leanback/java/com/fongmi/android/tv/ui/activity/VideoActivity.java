@@ -92,6 +92,7 @@ import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.Traffic;
 import com.github.bassaer.library.MDColor;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.permissionx.guolindev.PermissionX;
@@ -648,13 +649,22 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         SpannableStringBuilder span = SpannableStringBuilder.valueOf(text);
         for (String s : map.keySet()) {
             int index = text.indexOf(s);
-            Result result = Result.type(map.get(s));
-            span.setSpan(getClickSpan(result), index, index + s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            span.setSpan(getClickSpan(s,map.get(s)), index, index + s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         return span;
     }
 
-    private ClickableSpan getClickSpan(Result result) {
+    private ClickableSpan getClickSpan(String key,String value) {
+        String scheme=Json.safeString(Json.safeObject(Json.parse(value)),"scheme");
+        if(Objects.equals("search",scheme)){
+            return new ClickableSpan() {
+                @Override
+                public void onClick(@NonNull View view) {
+                    CollectActivity.start(getActivity(), key);
+                }
+            };
+        }
+        Result result = Result.type(value);
         return new ClickableSpan() {
             @Override
             public void onClick(@NonNull View view) {
