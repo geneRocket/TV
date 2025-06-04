@@ -142,6 +142,9 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
             public WebResourceResponse shouldInterceptRequestByProxy(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 try {
+                    if (url.matches(".*\\.(css|woff|woff2|ttf|otf|eot|svg|mp4|webm|avi|gif)$")) {
+                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
+                    }
                     Request.Builder builder = new Request.Builder().url(url);
 
                     // 设置请求头
@@ -152,12 +155,12 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
                     Response response = OkHttp.client().newCall(builder.build()).execute();
 
                     if (!response.isSuccessful()) {
-                        return super.shouldInterceptRequest(view, request);
+                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
                     ResponseBody body = response.body();
                     if (body == null) {
-                        return super.shouldInterceptRequest(view, request);
+                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
                     // 获取Content-Type 和 encoding
@@ -170,7 +173,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
                     return new WebResourceResponse(mimeType, encoding, inputStream);
                 } catch (Exception e) {
                     Logger.t(TAG).e(e, "OkHttp proxy request failed for url: %s", url);
-                    return super.shouldInterceptRequest(view, request);
+                    return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                 }
             }
 
