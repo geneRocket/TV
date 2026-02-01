@@ -39,11 +39,17 @@ public class OkProxySelector extends ProxySelector {
     }
 
     public boolean contains(String host) {
-        return this.hosts.contains(host);
+        if (host == null) return false;
+        for (String h : hosts) if (Util.containOrMatch(host, h)) return true;
+        return false;
     }
 
     public void clear() {
         this.hosts.clear();
+    }
+
+    public boolean hasProxy() {
+        return proxy != null && proxy != Proxy.NO_PROXY;
     }
 
     public void setProxy(String proxy) {
@@ -52,9 +58,9 @@ public class OkProxySelector extends ProxySelector {
 
     @Override
     public List<Proxy> select(URI uri) {
-        if (proxy == null || hosts.isEmpty() || uri.getHost() == null || "127.0.0.1".equals(uri.getHost()))
+        if (!hasProxy() || hosts.isEmpty() || uri.getHost() == null || "127.0.0.1".equals(uri.getHost()))
             return Collections.singletonList(Proxy.NO_PROXY);
-        for (String host : hosts) if (Util.containOrMatch(uri.getHost(), host)) return Collections.singletonList(proxy);
+        if (contains(uri.getHost())) return Collections.singletonList(proxy);
         return Collections.singletonList(Proxy.NO_PROXY);
     }
 

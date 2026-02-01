@@ -22,23 +22,19 @@ public class ProxyRequestInterceptor implements Interceptor {
     @Override
     public Response intercept(@NonNull Chain chain) throws IOException {
         Request request = chain.request();
-        Response response;
+        String host = request.url().host();
+        if (!selector.hasProxy() || "127.0.0.1".equals(host) || selector.contains(host)) return chain.proceed(request);
         try {
-            response = chain.proceed(request);
-            if (response.isSuccessful()) {
-                return response;
-            }
+            Response response = chain.proceed(request);
+            if (response.isSuccessful()) return response;
             response.close();
-        } catch (Exception e) {
-            if (selector.contains(request.url().host())) {
-                throw e;
-            }
+        } catch (IOException ignored) {
         }
         try {
-            selector.add(request.url().host());
+            selector.add(host);
             return chain.proceed(request);
-        } catch (Exception e) {
-            selector.remove(request.url().host());
+        } catch (IOException e) {
+            selector.remove(host);
             throw e;
         }
     }
