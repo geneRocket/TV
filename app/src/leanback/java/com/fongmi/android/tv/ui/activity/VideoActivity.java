@@ -955,7 +955,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         int max = mEpisodeAdapter.size() - 1;
         current = ++current > max ? max : current;
         Episode item = (Episode) mEpisodeAdapter.get(current);
-        if (item.isActivated()) Notify.show(mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
+        if (item.isActivated()) {
+            if (isFullscreen()) exitFullscreen();
+            Notify.show(mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
+        }
         else setEpisodeActivated(item);
     }
 
