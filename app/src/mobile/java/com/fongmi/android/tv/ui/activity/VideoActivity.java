@@ -857,7 +857,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onTrack(View view) {
-        TrackDialog.create().player(mPlayers).vod(true).type(Integer.parseInt(view.getTag().toString())).show(this);
+        String videoName = getName(); // 获取视频名称
+        TrackDialog.create().name(videoName).player(mPlayers).vod(true).type(Integer.parseInt(view.getTag().toString())).show(this);
         hideControl();
     }
 
@@ -1254,7 +1255,16 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onSubtitleClick() {
         App.post(this::hideControl, 200);
         SubtitleView subtitleView = mPlayers.isIjk() ? getIjk().getSubtitleView() : getExo().getSubtitleView();
-        App.post(() -> SubtitleDialog.create().view(subtitleView).full(isFullscreen()).show(this), 200);
+        String videoName = getName(); // 获取视频名称
+        String finalVideoName;
+        if (videoName.isEmpty() && getEpisode() != null) {
+            finalVideoName = getEpisode().getName();
+        } else if (videoName.isEmpty() && getTitle() != null) {
+            finalVideoName = getTitle().toString();
+        } else {
+            finalVideoName = videoName;
+        }
+        App.post(() -> SubtitleDialog.create().view(subtitleView).name(finalVideoName).full(isFullscreen()).show(this), 200);
     }
 
     @Override

@@ -323,4 +323,15 @@
         <item>TCP</item>
     </string-array>
 
+    <!-- Subtitle Search -->
+    <string name="search_subtitle">Search subtitle</string>
+    <string name="search_subtitle_empty">Please enter a search term</string>
+    <string name="search_subtitle_empty_hint">No search term entered</string>
+    <string name="error_subtitle_search_failed">Subtitle search failed</string>
+    <string name="search">Search</string>
+    <string name="previous_page">Previous</string>
+    <string name="next_page">Next</string>
+    <string name="download">Download</string>
+    <string name="no_results">No results</string>
+
 </resources>

@@ -23,6 +23,7 @@ public final class SubtitleDialog extends BaseDialog {
     private DialogSubtitleBinding binding;
     private SubtitleView subtitleView;
     private boolean full;
+    private String name;
 
     public static SubtitleDialog create() {
         return new SubtitleDialog();
@@ -38,8 +39,13 @@ public final class SubtitleDialog extends BaseDialog {
         return this;
     }
 
+    public SubtitleDialog name(String name) {
+        this.name = name;
+        return this;
+    }
+
     public void show(FragmentActivity activity) {
-        for (Fragment f : activity.getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) return;
+        // Allow search dialog to open even if this dialog is present
         show(activity.getSupportFragmentManager(), null);
     }
 
@@ -66,6 +72,7 @@ public final class SubtitleDialog extends BaseDialog {
         binding.large.setOnClickListener(this::onLarge);
         binding.small.setOnClickListener(this::onSmall);
         binding.reset.setOnClickListener(this::onReset);
+        binding.search.setOnClickListener(this::onSearch);
     }
 
     private void onUp(View view) {
@@ -93,6 +100,23 @@ public final class SubtitleDialog extends BaseDialog {
         Setting.putSubtitleBottomPadding(0);
         subtitleView.setUserDefaultTextSize();
         subtitleView.setBottomPaddingFraction(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION);
+    }
+
+    private void onSearch(View view) {
+        String videoTitle = "";
+        // 优先使用传入的名称，其次从Activity的Intent中获取，最后使用Activity标题
+        if (name != null && !name.isEmpty()) {
+            videoTitle = name;
+        } else if (getActivity() != null && getActivity().getIntent() != null) {
+            // 尝试从Activity的Intent中获取name参数
+            String intentName = getActivity().getIntent().getStringExtra("name");
+            if (intentName != null && !intentName.isEmpty()) {
+                videoTitle = intentName;
+            } else if (getActivity().getTitle() != null && !getActivity().getTitle().toString().isEmpty()) {
+                videoTitle = getActivity().getTitle().toString();
+            }
+        }
+        SearchSubtitleDialog.create().title(videoTitle).show(getActivity());
     }
 
     @Override

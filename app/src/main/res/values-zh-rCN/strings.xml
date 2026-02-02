@@ -312,4 +312,15 @@
         <item>选择字幕</item>
     </string-array>
 
+    <!-- Subtitle Search -->
+    <string name="search_subtitle">搜索字幕</string>
+    <string name="search_subtitle_empty">请输入搜索内容</string>
+    <string name="search_subtitle_empty_hint">未输入搜索内容</string>
+    <string name="error_subtitle_search_failed">字幕搜索失败</string>
+    <string name="search">搜索</string>
+    <string name="previous_page">上一页</string>
+    <string name="next_page">下一页</string>
+    <string name="download">下载</string>
+    <string name="no_results">无结果</string>
+
 </resources>

@@ -17,6 +17,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Sub;
+import com.fongmi.android.tv.bean.Subtitle;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.DialogTrackBinding;
 import com.fongmi.android.tv.player.Players;
@@ -32,7 +33,7 @@ import java.util.List;
 
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 
-public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClickListener {
+public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClickListener, SearchSubtitleDialog.Listener {
 
     private final TrackNameProvider provider;
     private final TrackAdapter adapter;
@@ -40,6 +41,7 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
     private Listener listener;
     private ChooserListener cListener;
     private Players player;
+    private String name;
     private boolean vod;
     private int type;
 
@@ -59,6 +61,11 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
 
     public TrackDialog player(Players player) {
         this.player = player;
+        return this;
+    }
+
+    public TrackDialog name(String name) {
+        this.name = name;
         return this;
     }
 
@@ -90,6 +97,7 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
         binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
         binding.recycler.post(() -> binding.recycler.scrollToPosition(adapter.getSelected()));
         binding.recycler.setVisibility(adapter.getItemCount() == 0 ? View.GONE : View.VISIBLE);
+        binding.search.setVisibility(type == C.TRACK_TYPE_TEXT && vod ? View.VISIBLE : View.GONE);
         binding.choose.setVisibility(type == C.TRACK_TYPE_TEXT && player.isExo() && vod ? View.VISIBLE : View.GONE);
         binding.subtitle.setVisibility(type == C.TRACK_TYPE_TEXT ? View.VISIBLE : View.GONE);
         binding.title.setText(ResUtil.getStringArray(R.array.select_track)[type - 1]);
@@ -97,8 +105,28 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
 
     @Override
     protected void initEvent() {
+        binding.search.setOnClickListener(this::onSearch);
         binding.choose.setOnClickListener(this::showChooser);
         binding.subtitle.setOnClickListener(this::onSubtitle);
+    }
+
+    private void onSearch(View view) {
+        if (name != null && !name.isEmpty()) {
+            SearchSubtitleDialog.create().title(name).listener(this).show(getActivity());
+        } else {
+            // 如果没有传递名字，则尝试从activity获取视频标题
+            String videoTitle = "";
+            if (getActivity() != null && getActivity().getIntent() != null) {
+                String intentName = getActivity().getIntent().getStringExtra("name");
+                if (intentName != null && !intentName.isEmpty()) {
+                    videoTitle = intentName;
+                } else if (getActivity().getTitle() != null && !getActivity().getTitle().toString().isEmpty()) {
+                    videoTitle = getActivity().getTitle().toString();
+                }
+            }
+            SearchSubtitleDialog.create().title(videoTitle).listener(this).show(getActivity());
+        }
+        dismiss();
     }
 
     private void onSubtitle(View view) {
@@ -110,6 +138,14 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
         if (cListener != null) cListener.showChooser(this);
         else FileChooser.from(this).show(new String[]{MimeTypes.APPLICATION_SUBRIP, MimeTypes.TEXT_SSA, MimeTypes.TEXT_VTT, MimeTypes.APPLICATION_TTML, "text/*", "application/octet-stream"});
         player.pause();
+    }
+
+    @Override
+    public void onSubtitleSelected(Subtitle subtitle) {
+        // 将选择的字幕转换为Sub对象并设置到播放器
+        if (player != null) {
+            player.setSub(Sub.from(subtitle.getUrl()));
+        }
     }
 
     private List<Track> getTrack() {
