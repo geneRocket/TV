@@ -145,6 +145,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void onCasted() {
+        // 在投屏前先暂停当前播放的视频，避免与DLNA协议冲突导致绿屏
         listener.onCasted();
         dismiss();
     }
