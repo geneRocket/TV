@@ -82,7 +82,7 @@ public class Config {
     }
 
     public String getUrl() {
-        return url;
+        return url == null ? "" : url;
     }
 
     public void setUrl(String url) {
@@ -90,7 +90,7 @@ public class Config {
     }
 
     public String getJson() {
-        return json;
+        return json == null ? "" : json;
     }
 
     public void setJson(String json) {
@@ -98,7 +98,7 @@ public class Config {
     }
 
     public String getName() {
-        return name;
+        return name == null ? "" : name;
     }
 
     public void setName(String name) {
@@ -106,7 +106,7 @@ public class Config {
     }
 
     public String getLogo() {
-        return logo;
+        return logo == null ? "" : logo;
     }
 
     public void setLogo(String logo) {
@@ -114,7 +114,7 @@ public class Config {
     }
 
     public String getHome() {
-        return home;
+        return home == null ? "" : home;
     }
 
     public void setHome(String home) {
@@ -122,7 +122,7 @@ public class Config {
     }
 
     public String getParse() {
-        return parse;
+        return parse == null ? "" : parse;
     }
 
     public void setParse(String parse) {
@@ -186,6 +186,7 @@ public class Config {
         return "";
     }
 
+    // DB Read operations - Should be called from background thread
     public static List<Config> getAll(int type) {
         return AppDatabase.get().getConfigDao().findByType(type);
     }
@@ -195,13 +196,15 @@ public class Config {
     }
 
     public static void delete(String url) {
-        AppDatabase.get().getConfigDao().delete(url);
+        App.execute(() -> AppDatabase.get().getConfigDao().delete(url));
     }
 
     public static void delete(String url, int type) {
-        if (type == 2) Path.clear(FileUtil.getWall(0));
-        if (type == 2) AppDatabase.get().getConfigDao().delete(type);
-        else AppDatabase.get().getConfigDao().delete(url, type);
+        App.execute(() -> {
+            if (type == 2) Path.clear(FileUtil.getWall(0));
+            if (type == 2) AppDatabase.get().getConfigDao().delete(type);
+            else AppDatabase.get().getConfigDao().delete(url, type);
+        });
     }
 
     public static Config vod() {
@@ -247,6 +250,7 @@ public class Config {
         return item == null ? create(type, depot.getUrl(), depot.getName()) : item.type(type).name(depot.getName());
     }
 
+    // Synchronous write methods (safe if caller is in App.execute())
     public Config insert() {
         if (isEmpty()) return this;
         setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
@@ -267,9 +271,12 @@ public class Config {
     }
 
     public void delete() {
-        AppDatabase.get().getConfigDao().delete(getUrl(), getType());
-        History.delete(getId());
-        Keep.delete(getId());
+        App.execute(() -> {
+            AppDatabase.get().getConfigDao().delete(getUrl(), getType());
+            // Assuming History and Keep also have their own DB accessors
+            History.delete(getId());
+            Keep.delete(getId());
+        });
     }
 
     @NonNull

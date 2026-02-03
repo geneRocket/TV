@@ -14,7 +14,7 @@ public abstract class ConfigDao extends BaseDao<Config> {
     @Query("SELECT * FROM Config WHERE type = :type ORDER BY time DESC")
     public abstract List<Config> findByType(int type);
 
-    @SuppressWarnings(RoomWarnings.CURSOR_MISMATCH)
+    @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
     @Query("SELECT id, name, url, type, time FROM Config WHERE type = :type ORDER BY time DESC")
     public abstract List<Config> findUrlByType(int type);
 
@@ -35,4 +35,7 @@ public abstract class ConfigDao extends BaseDao<Config> {
 
     @Query("DELETE FROM Config WHERE type = :type")
     public abstract void delete(int type);
+
+    @Query("SELECT count(*) FROM Config WHERE type = :type")
+    public abstract int countByType(int type);
 }
