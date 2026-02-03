@@ -39,7 +39,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
         }
         try {
             Renderer renderer = new FfmpegAudioRenderer(eventHandler, eventListener, audioSink);
-            out.add(extensionRendererIndex++, renderer);
+            out.add(Math.max(0, extensionRendererIndex), renderer);
             Log.i(TAG, "Loaded FfmpegAudioRenderer.");
         } catch (Exception e) {
             throw new RuntimeException("Error instantiating Ffmpeg extension", e);
@@ -49,11 +49,13 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
     @Override
     protected void buildVideoRenderers(@NonNull Context context, int extensionRendererMode, @NonNull MediaCodecSelector mediaCodecSelector, boolean enableDecoderFallback, @NonNull Handler eventHandler, @NonNull VideoRendererEventListener eventListener, long allowedVideoJoiningTimeMs, @NonNull ArrayList<Renderer> out) {
         super.buildVideoRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
-        if (extensionRendererMode == EXTENSION_RENDERER_MODE_ON) return;
         int extensionRendererIndex = out.size();
+        if (extensionRendererMode == EXTENSION_RENDERER_MODE_PREFER) {
+            extensionRendererIndex--;
+        }
         try {
             Renderer renderer = new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY);
-            out.add(extensionRendererIndex++, renderer);
+            out.add(Math.max(0, extensionRendererIndex), renderer);
             Log.i(TAG, "Loaded FfmpegVideoRenderer.");
         } catch (Exception e) {
             throw new RuntimeException("Error instantiating Ffmpeg extension", e);
