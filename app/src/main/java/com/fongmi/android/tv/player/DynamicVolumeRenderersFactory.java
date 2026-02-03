@@ -13,8 +13,9 @@ public class DynamicVolumeRenderersFactory extends DefaultRenderersFactory {
     /**
      * @param context A {@link Context}.
      */
-    public DynamicVolumeRenderersFactory(Context context) {
+    public DynamicVolumeRenderersFactory(Context context,int decode) {
         super(context);
+        setExtensionRendererMode(Players.isHard(decode) ? EXTENSION_RENDERER_MODE_ON : EXTENSION_RENDERER_MODE_PREFER);
     }
 
     @Override
