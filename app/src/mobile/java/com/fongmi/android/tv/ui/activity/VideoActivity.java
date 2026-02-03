@@ -779,8 +779,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onCast() {
-        // 在开始投屏前先暂停当前播放的视频，避免与DLNA协议冲突导致绿屏
-        onPaused();
         CastDialog.create().history(mHistory).video(CastVideo.get(mBinding.name.getText().toString(), mPlayers.getUrl())).fm(true).show(this);
     }
 
