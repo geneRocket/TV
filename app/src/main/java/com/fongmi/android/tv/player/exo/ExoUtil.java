@@ -26,9 +26,6 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Drm;
 import com.fongmi.android.tv.bean.Sub;
-import com.fongmi.android.tv.player.DynamicVolumeRenderersFactory;
-import com.fongmi.android.tv.player.Players;
-import com.fongmi.android.tv.utils.Sniffer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +45,7 @@ public class ExoUtil {
     }
 
     public static RenderersFactory buildRenderersFactory(int decode) {
-        return new DynamicVolumeRenderersFactory(App.get(), decode);
+        return new NextRenderersFactory(App.get(), decode);
     }
 
     public static MediaSource.Factory buildMediaSourceFactory() {
