@@ -96,6 +96,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private int retry;
 
     public static Players create(Activity activity) {
+        if (Server.get().getPlayer() != null) Server.get().getPlayer().release();
         Players player = new Players(activity);
         Server.get().setPlayer(player);
         return player;
@@ -151,6 +152,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void initExo(PlayerView view) {
+        view.setPlayer(null);
         exoPlayer = new ExoPlayer.Builder(App.get()).setLoadControl(ExoUtil.buildLoadControl()).setTrackSelector(ExoUtil.buildTrackSelector()).setRenderersFactory(ExoUtil.buildRenderersFactory(decode)).setMediaSourceFactory(ExoUtil.buildMediaSourceFactory()).build();
         exoPlayer.setAudioAttributes(AudioAttributes.DEFAULT, !Setting.isPlayWithOthers());
         exoPlayer.addAnalyticsListener(new EventLogger());
@@ -513,6 +515,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private void releaseExo() {
         if (exoPlayer == null) return;
+        exoPlayer.stop();
+        exoPlayer.clearVideoSurface();
         exoPlayer.removeListener(this);
         exoPlayer.release();
         exoPlayer = null;
