@@ -1619,6 +1619,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         hideCenter();
     }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // 新增：进入后台时主动释放播放器，而不是等待被别人杀掉
+        // 这样可以确保 Decoder 和 Surface 的关系被正确解绑
+        if (mPlayers != null) {
+            mPlayers.stop();
+            mPlayers.release();
+        }
+    }
+
+    // 注意：原来的 onDestroy 中也有 release，保留即可，但逻辑主要由 onStop 承担
+
     public boolean isBackground() {
         return background;
     }

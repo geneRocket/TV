@@ -12,6 +12,7 @@ import android.support.v4.media.session.MediaControllerCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.text.TextUtils;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.media3.common.AudioAttributes;
@@ -153,6 +154,9 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private void initExo(PlayerView view) {
         view.setPlayer(null);
+        // 2. 建议：尝试让 View 不可见再可见，强制触发 Surface 的某些重绘机制（针对顽固的绿屏设备）
+        view.setVisibility(View.GONE);
+        view.setVisibility(View.VISIBLE);
         exoPlayer = new ExoPlayer.Builder(App.get()).setLoadControl(ExoUtil.buildLoadControl()).setTrackSelector(ExoUtil.buildTrackSelector()).setRenderersFactory(ExoUtil.buildRenderersFactory(decode)).setMediaSourceFactory(ExoUtil.buildMediaSourceFactory()).build();
         exoPlayer.setAudioAttributes(AudioAttributes.DEFAULT, !Setting.isPlayWithOthers());
         exoPlayer.addAnalyticsListener(new EventLogger());
