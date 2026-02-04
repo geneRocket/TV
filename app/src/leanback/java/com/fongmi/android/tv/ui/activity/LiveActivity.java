@@ -1069,7 +1069,14 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     protected void onResume() {
         super.onResume();
-        mPlayers.play();
+        if (mPlayers.isRelease()) {
+            mPlayers.init(getExo(), getIjk());
+            setPlayerView();
+            setDecodeView();
+            fetch();
+        } else {
+            mPlayers.play();
+        }
         mClock.start();
     }
 
