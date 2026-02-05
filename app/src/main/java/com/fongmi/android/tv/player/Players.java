@@ -17,6 +17,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -457,6 +458,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (haveDanmu()) danmuView.release();
         removeTimeoutCheck();
         Server.get().setPlayer(null);
+        App.execute(() -> Path.clear(Path.exo()));
         App.execute(() -> Source.get().stop());
     }
 
@@ -561,9 +563,17 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout) {
-        if (isIjk() && ijkPlayer != null) ijkPlayer.setMediaSource(IjkUtil.getSource(this.headers = checkUa(headers), this.url = url), position);
-        if (isExo() && exoPlayer != null) exoPlayer.setMediaItem(ExoUtil.getMediaItem(this.headers = checkUa(headers), UrlUtil.uri(this.url = url), this.format = format, this.drm = drm, checkSub(this.subs = subs), decode), position);
-        if (isExo() && exoPlayer != null) exoPlayer.prepare();
+        this.headers = checkUa(headers);
+        this.url = url;
+        this.format = format;
+        this.drm = drm;
+        this.subs = checkSub(subs);
+        if (isIjk() && ijkPlayer != null) ijkPlayer.setMediaSource(IjkUtil.getSource(this.headers, this.url), position);
+        if (isExo() && exoPlayer != null) {
+            MediaItem item = ExoUtil.getMediaItem(this.headers, UrlUtil.uri(this.url), this.format, this.drm, this.subs, decode);
+            exoPlayer.setMediaItem(item, position);
+            exoPlayer.prepare();
+        }
         App.post(runnable, timeout);
         PlayerEvent.prepare();
         Logger.t(TAG).d(url);
