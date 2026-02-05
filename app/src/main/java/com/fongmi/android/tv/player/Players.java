@@ -48,13 +48,7 @@ import com.github.catvod.utils.Path;
 import com.google.common.net.HttpHeaders;
 import com.orhanobut.logger.Logger;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Formatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 import master.flame.danmaku.controller.DrawHandler;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -622,7 +616,22 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private List<Sub> checkSub(List<Sub> subs) {
         if (sub == null) return subs;
-        subs.add(0, sub);
+        
+        // 检查是否已存在相同URL的字幕
+        boolean exists = false;
+        for (Sub existingSub : subs) {
+            if (existingSub.getUrl().equals(sub.getUrl())) {
+                exists = true;
+                break;
+            }
+        }
+        
+        // 如果不存在相同URL的字幕，则添加新字幕
+        // 这样可以保留历史字幕，实现新老字幕同时展示
+        if (!exists) {
+            subs.add(0, sub);
+        }
+        
         return subs;
     }
 
