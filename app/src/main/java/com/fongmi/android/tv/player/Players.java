@@ -258,11 +258,13 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public int getVideoWidth() {
-        return isExo() ? exoPlayer.getVideoSize().width : ijkPlayer.getVideoWidth();
+        if (isExo()) return exoPlayer != null ? exoPlayer.getVideoSize().width : 0;
+        return ijkPlayer != null ? ijkPlayer.getVideoWidth() : 0;
     }
 
     public int getVideoHeight() {
-        return isExo() ? exoPlayer.getVideoSize().height : ijkPlayer.getVideoHeight();
+        if (isExo()) return exoPlayer != null ? exoPlayer.getVideoSize().height : 0;
+        return ijkPlayer != null ? ijkPlayer.getVideoHeight() : 0;
     }
 
     public float getSpeed() {
@@ -314,7 +316,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public boolean isRelease() {
-        return exoPlayer == null || ijkPlayer == null;
+        return exoPlayer == null && ijkPlayer == null;
     }
 
     public boolean isEmpty() {
@@ -428,6 +430,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (isIjk()) playIjk();
         if (haveDanmu()) danmuView.resume();
         setPlaybackState(PlaybackStateCompat.STATE_PLAYING);
+        PlayerEvent.state(Player.STATE_READY);
     }
 
     public void pause() {
@@ -435,6 +438,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (isIjk()) pauseIjk();
         if (haveDanmu()) danmuView.pause();
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
+        PlayerEvent.state(Player.STATE_READY);
     }
 
     public void stop() {
@@ -619,8 +623,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         
         // 检查是否已存在相同URL的字幕
         boolean exists = false;
+        String subUrl = sub.getUrl();
+        if (TextUtils.isEmpty(subUrl)) return subs;
         for (Sub existingSub : subs) {
-            if (existingSub.getUrl().equals(sub.getUrl())) {
+            if (TextUtils.equals(existingSub.getUrl(), subUrl)) {
                 exists = true;
                 break;
             }
@@ -747,8 +753,21 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     @Override
+    public void onIsPlayingChanged(boolean isPlaying) {
+        PlayerEvent.state(Player.STATE_READY);
+    }
+
+    @Override
     public void onBufferingUpdate(IMediaPlayer mp, int percent) {
         setPlaybackState(isPlaying() ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED);
+    }
+
+    public void onStart(IMediaPlayer mp) {
+        PlayerEvent.state(Player.STATE_READY);
+    }
+
+    public void onPause(IMediaPlayer mp) {
+        PlayerEvent.state(Player.STATE_READY);
     }
 
     @Override

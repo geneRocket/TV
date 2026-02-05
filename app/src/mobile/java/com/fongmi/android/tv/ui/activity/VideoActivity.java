@@ -1547,6 +1547,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void onPlay() {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         checkPlayImg(true);
+        hidePreview();
         mPlayers.play();
     }
 
@@ -1666,6 +1667,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onCasted() {
         onPaused();
+        showPreview(getDefaultArtwork());
     }
 
     @Override

@@ -270,7 +270,15 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
         try {
             this.response = executeCall(call);
             response = this.response;
-            responseBody = Assertions.checkNotNull(response.body());
+            responseBody = response.body();
+            if (responseBody == null) {
+                closeConnectionQuietly();
+                throw new HttpDataSourceException(
+                        "Response body is null",
+                        dataSpec,
+                        PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+                        HttpDataSourceException.TYPE_OPEN);
+            }
             responseByteStream = responseBody.byteStream();
         } catch (IOException e) {
             throw HttpDataSourceException.createForIOException(
@@ -540,7 +548,8 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
     /** Closes the current connection quietly, if there is one. */
     private void closeConnectionQuietly() {
         if (response != null) {
-            Assertions.checkNotNull(response.body()).close();
+            ResponseBody body = response.body();
+            if (body != null) body.close();
         }
         responseByteStream = null;
     }

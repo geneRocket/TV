@@ -34,7 +34,13 @@ public class PlayerAdapter extends RecyclerView.Adapter<PlayerAdapter.ViewHolder
     }
 
     public void setSelected(int player) {
+        if (player < 0 || player >= mItems.size()) return;
+        int old = this.selected;
         this.selected = player;
+        if (old != player) {
+            if (old >= 0 && old < mItems.size()) notifyItemChanged(old);
+            notifyItemChanged(player);
+        }
     }
 
     public int getSelected() {
@@ -71,7 +77,9 @@ public class PlayerAdapter extends RecyclerView.Adapter<PlayerAdapter.ViewHolder
 
         @Override
         public void onClick(View view) {
-            Integer item = mItems.get(getLayoutPosition());
+            int position = getBindingAdapterPosition();
+            if (position == RecyclerView.NO_POSITION) return;
+            Integer item = mItems.get(position);
             mListener.onItemClick(item);
         }
     }

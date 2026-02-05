@@ -8,6 +8,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.HttpDataSource;
+import androidx.media3.datasource.cache.CacheDataSink;
 import androidx.media3.datasource.cache.CacheDataSource;
 import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider;
@@ -29,24 +30,26 @@ import java.util.Map;
 public class MediaSourceFactory implements MediaSource.Factory {
 
     private final DefaultMediaSourceFactory defaultMediaSourceFactory;
-    private HttpDataSource.Factory httpDataSourceFactory;
-    private DataSource.Factory dataSourceFactory;
     private ExtractorsFactory extractorsFactory;
+    private DrmSessionManagerProvider drmSessionManagerProvider;
+    private LoadErrorHandlingPolicy loadErrorHandlingPolicy;
 
     public MediaSourceFactory() {
-        defaultMediaSourceFactory = new DefaultMediaSourceFactory(getDataSourceFactory(), getExtractorsFactory());
+        defaultMediaSourceFactory = new DefaultMediaSourceFactory(buildCacheDataSource(new DefaultDataSource.Factory(App.get(), new MyOkhttpDataSource.Factory(OkHttp.client()))), getExtractorsFactory());
     }
 
     @NonNull
     @Override
     public MediaSource.Factory setDrmSessionManagerProvider(@NonNull DrmSessionManagerProvider drmSessionManagerProvider) {
-        return defaultMediaSourceFactory.setDrmSessionManagerProvider(drmSessionManagerProvider);
+        this.drmSessionManagerProvider = drmSessionManagerProvider;
+        return this;
     }
 
     @NonNull
     @Override
     public MediaSource.Factory setLoadErrorHandlingPolicy(@NonNull LoadErrorHandlingPolicy loadErrorHandlingPolicy) {
-        return defaultMediaSourceFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
+        this.loadErrorHandlingPolicy = loadErrorHandlingPolicy;
+        return this;
     }
 
     @NonNull
@@ -58,25 +61,36 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @NonNull
     @Override
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
+        MediaSource.Factory factory = buildMediaSourceFactory(getHeaders(mediaItem));
+        if (drmSessionManagerProvider != null) factory.setDrmSessionManagerProvider(drmSessionManagerProvider);
+        if (loadErrorHandlingPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
         if (mediaItem.mediaId.contains("***") && mediaItem.mediaId.contains("|||")) {
-            return createConcatenatingMediaSource(setHeader(mediaItem));
+            return createConcatenatingMediaSource(factory, mediaItem);
         } else {
-            return defaultMediaSourceFactory.createMediaSource(setHeader(mediaItem));
+            return factory.createMediaSource(mediaItem);
         }
     }
 
-    private MediaItem setHeader(MediaItem mediaItem) {
+    private Map<String, String> getHeaders(MediaItem mediaItem) {
         Map<String, String> headers = new HashMap<>();
-        for (String key : mediaItem.requestMetadata.extras.keySet()) headers.put(key, mediaItem.requestMetadata.extras.get(key).toString());
-        getHttpDataSourceFactory().setDefaultRequestProperties(headers);
-        return mediaItem;
+        if (mediaItem.requestMetadata == null || mediaItem.requestMetadata.extras == null || mediaItem.requestMetadata.extras.isEmpty()) return headers;
+        for (String key : mediaItem.requestMetadata.extras.keySet()) {
+            Object value = mediaItem.requestMetadata.extras.get(key);
+            if (value != null) headers.put(key, value.toString());
+        }
+        return headers;
     }
 
-    private MediaSource createConcatenatingMediaSource(MediaItem mediaItem) {
+    private MediaSource createConcatenatingMediaSource(MediaSource.Factory factory, MediaItem mediaItem) {
         ConcatenatingMediaSource2.Builder builder = new ConcatenatingMediaSource2.Builder();
         for (String split : mediaItem.mediaId.split("\\*\\*\\*")) {
             String[] info = split.split("\\|\\|\\|");
-            if (info.length >= 2) builder.add(defaultMediaSourceFactory.createMediaSource(mediaItem.buildUpon().setUri(Uri.parse(info[0])).build()), Long.parseLong(info[1]));
+            if (info.length >= 2) {
+                try {
+                    builder.add(factory.createMediaSource(mediaItem.buildUpon().setUri(Uri.parse(info[0])).build()), Long.parseLong(info[1]));
+                } catch (Exception ignored) {
+                }
+            }
         }
         return builder.build();
     }
@@ -86,17 +100,18 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return extractorsFactory;
     }
 
-    private DataSource.Factory getDataSourceFactory() {
-        if (dataSourceFactory == null) dataSourceFactory = buildReadOnlyCacheDataSource(new DefaultDataSource.Factory(App.get(), getHttpDataSourceFactory()));
-        return dataSourceFactory;
+    private MediaSource.Factory buildMediaSourceFactory(Map<String, String> headers) {
+        HttpDataSource.Factory httpFactory = new MyOkhttpDataSource.Factory(OkHttp.client());
+        if (headers != null && !headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
+        DataSource.Factory upstreamFactory = new DefaultDataSource.Factory(App.get(), httpFactory);
+        return new DefaultMediaSourceFactory(buildCacheDataSource(upstreamFactory), getExtractorsFactory());
     }
 
-    private CacheDataSource.Factory buildReadOnlyCacheDataSource(DataSource.Factory upstreamFactory) {
-        return new CacheDataSource.Factory().setCache(CacheManager.get().getCache()).setUpstreamDataSourceFactory(upstreamFactory).setCacheWriteDataSinkFactory(null).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
-    }
-
-    private HttpDataSource.Factory getHttpDataSourceFactory() {
-        if (httpDataSourceFactory == null) httpDataSourceFactory = new MyOkhttpDataSource.Factory(OkHttp.client());
-        return httpDataSourceFactory;
+    private CacheDataSource.Factory buildCacheDataSource(DataSource.Factory upstreamFactory) {
+        return new CacheDataSource.Factory()
+                .setCache(CacheManager.get().getCache())
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setCacheWriteDataSinkFactory(new CacheDataSink.Factory().setCache(CacheManager.get().getCache()))
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
     }
 }

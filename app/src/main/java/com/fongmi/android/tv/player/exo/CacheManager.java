@@ -2,6 +2,7 @@ package com.fongmi.android.tv.player.exo;
 
 import androidx.media3.database.StandaloneDatabaseProvider;
 import androidx.media3.datasource.cache.Cache;
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor;
 import androidx.media3.datasource.cache.NoOpCacheEvictor;
 import androidx.media3.datasource.cache.SimpleCache;
 
@@ -10,6 +11,7 @@ import com.github.catvod.utils.Path;
 
 public class CacheManager {
 
+    private static final long MAX_CACHE_BYTES = 128L * 1024 * 1024;
     private SimpleCache cache;
 
     private static class Loader {
@@ -26,7 +28,6 @@ public class CacheManager {
     }
 
     private void create() {
-        cache = new SimpleCache(Path.exo(), new NoOpCacheEvictor(), new StandaloneDatabaseProvider(App.get()));
+        cache = new SimpleCache(Path.exo(), new LeastRecentlyUsedCacheEvictor(MAX_CACHE_BYTES), new StandaloneDatabaseProvider(App.get()));
     }
 }
-

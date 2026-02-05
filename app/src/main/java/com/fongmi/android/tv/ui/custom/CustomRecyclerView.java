@@ -45,9 +45,11 @@ public class CustomRecyclerView extends RecyclerView {
     }
 
     private int getNewSpec(int heightMeasureSpec) {
-        int newHeight = MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST);
-        if (heightMeasureSpec > newHeight) heightMeasureSpec = newHeight;
-        return heightMeasureSpec;
+        int mode = MeasureSpec.getMode(heightMeasureSpec);
+        int size = MeasureSpec.getSize(heightMeasureSpec);
+        if (size > maxHeight) size = maxHeight;
+        if (mode == MeasureSpec.UNSPECIFIED) mode = MeasureSpec.AT_MOST;
+        return MeasureSpec.makeMeasureSpec(size, mode);
     }
 
     @Override

@@ -24,15 +24,16 @@ public class SearchSubtitleAdapter extends RecyclerView.Adapter<SearchSubtitleAd
     }
 
     public void addAll(List<Subtitle> items) {
-        if (items != null) {
-            this.items.addAll(items);
-            notifyDataSetChanged();
-        }
+        if (items == null || items.isEmpty()) return;
+        int start = this.items.size();
+        this.items.addAll(items);
+        notifyItemRangeInserted(start, items.size());
     }
 
     public void clear() {
+        int count = this.items.size();
         this.items.clear();
-        notifyDataSetChanged();
+        if (count > 0) notifyItemRangeRemoved(0, count);
     }
 
     @NonNull
@@ -45,7 +46,6 @@ public class SearchSubtitleAdapter extends RecyclerView.Adapter<SearchSubtitleAd
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Subtitle item = items.get(position);
         holder.name.setText(item.getName());
-        holder.itemView.setOnClickListener(v -> listener.onItemClick(item, position));
     }
 
     @Override
@@ -59,6 +59,15 @@ public class SearchSubtitleAdapter extends RecyclerView.Adapter<SearchSubtitleAd
         public ViewHolder(android.view.View itemView) {
             super(itemView);
             name = itemView.findViewById(R.id.name);
+            itemView.setOnClickListener(v -> {
+                RecyclerView.Adapter<?> adapter = getBindingAdapter();
+                if (!(adapter instanceof SearchSubtitleAdapter)) return;
+                SearchSubtitleAdapter self = (SearchSubtitleAdapter) adapter;
+                int position = getBindingAdapterPosition();
+                if (position == RecyclerView.NO_POSITION) return;
+                Subtitle item = self.items.get(position);
+                self.listener.onItemClick(item, position);
+            });
         }
     }
 

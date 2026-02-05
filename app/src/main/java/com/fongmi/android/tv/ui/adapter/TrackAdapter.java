@@ -29,8 +29,10 @@ public class TrackAdapter extends RecyclerView.Adapter<TrackAdapter.ViewHolder> 
     }
 
     public TrackAdapter addAll(List<Track> items) {
+        if (items == null || items.isEmpty()) return this;
+        int start = mItems.size();
         mItems.addAll(items);
-        notifyDataSetChanged();
+        notifyItemRangeInserted(start, items.size());
         return this;
     }
 
@@ -69,8 +71,10 @@ public class TrackAdapter extends RecyclerView.Adapter<TrackAdapter.ViewHolder> 
 
         @Override
         public void onClick(View view) {
-            Track item = mItems.get(getLayoutPosition()).toggle();
-            notifyItemChanged(getLayoutPosition());
+            int position = getBindingAdapterPosition();
+            if (position == RecyclerView.NO_POSITION) return;
+            Track item = mItems.get(position).toggle();
+            notifyItemChanged(position);
             mListener.onItemClick(item);
         }
     }

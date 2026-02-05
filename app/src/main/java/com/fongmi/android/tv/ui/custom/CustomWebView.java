@@ -37,8 +37,11 @@ import com.google.common.net.HttpHeaders;
 import com.orhanobut.logger.Logger;
 
 import java.io.ByteArrayInputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -60,6 +63,10 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     private String click;
     private String from;
     private String key;
+    private int vodAdsHash;
+    private int liveAdsHash;
+    private List<Pattern> vodAdPatterns = Collections.emptyList();
+    private List<Pattern> liveAdPatterns = Collections.emptyList();
 
     public static CustomWebView create(@NonNull Context context) {
         initTbs();
@@ -155,11 +162,13 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
                     Response response = OkHttp.client().newCall(builder.build()).execute();
 
                     if (!response.isSuccessful()) {
+                        response.close();
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
                     ResponseBody body = response.body();
                     if (body == null) {
+                        response.close();
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
@@ -168,8 +177,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
                     String mimeType = getMimeTypeFromContentType(contentType);
                     String encoding = getEncodingFromContentType(contentType);
 
-                    InputStream inputStream = body.byteStream();
-
+                    InputStream inputStream = new ResponseInputStream(body.byteStream(), response);
                     return new WebResourceResponse(mimeType, encoding, inputStream);
                 } catch (Exception e) {
                     Logger.t(TAG).e(e, "OkHttp proxy request failed for url: %s", url);
@@ -193,6 +201,25 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
                     }
                 }
                 return "utf-8";
+            }
+
+             class ResponseInputStream extends FilterInputStream {
+
+                private final Response response;
+
+                ResponseInputStream(InputStream in, Response response) {
+                    super(in);
+                    this.response = response;
+                }
+
+                @Override
+                public void close() throws IOException {
+                    try {
+                        super.close();
+                    } finally {
+                        response.close();
+                    }
+                }
             }
 
             @Override
@@ -262,11 +289,41 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     }
 
     private boolean isAd(String host) {
-        for (String ad : VodConfig.get().getAds()) if (host.contains(ad)) return true;
-        for (String ad : LiveConfig.get().getAds()) if (host.contains(ad)) return true;
-        for (String ad : VodConfig.get().getAds()) if (Pattern.compile(ad).matcher(host).find()) return true;
-        for (String ad : LiveConfig.get().getAds()) if (Pattern.compile(ad).matcher(host).find()) return true;
+        List<String> vodAds = VodConfig.get().getAds();
+        List<String> liveAds = LiveConfig.get().getAds();
+        for (String ad : vodAds) if (host.contains(ad)) return true;
+        for (String ad : liveAds) if (host.contains(ad)) return true;
+        ensureAdPatterns(vodAds, liveAds);
+        for (Pattern ad : vodAdPatterns) if (ad.matcher(host).find()) return true;
+        for (Pattern ad : liveAdPatterns) if (ad.matcher(host).find()) return true;
         return false;
+    }
+
+    private void ensureAdPatterns(List<String> vodAds, List<String> liveAds) {
+        int vodHash = vodAds.hashCode();
+        int liveHash = liveAds.hashCode();
+        if (vodHash != vodAdsHash) {
+            vodAdsHash = vodHash;
+            vodAdPatterns = compilePatterns(vodAds);
+        }
+        if (liveHash != liveAdsHash) {
+            liveAdsHash = liveHash;
+            liveAdPatterns = compilePatterns(liveAds);
+        }
+    }
+
+    private List<Pattern> compilePatterns(List<String> ads) {
+        if (ads.isEmpty()) return Collections.emptyList();
+        List<Pattern> patterns = new ArrayList<>(ads.size());
+        for (String ad : ads) {
+            if (TextUtils.isEmpty(ad)) continue;
+            try {
+                patterns.add(Pattern.compile(ad));
+            } catch (Exception e) {
+                patterns.add(Pattern.compile(Pattern.quote(ad)));
+            }
+        }
+        return patterns;
     }
 
     private boolean isVideoFormat(String url) {

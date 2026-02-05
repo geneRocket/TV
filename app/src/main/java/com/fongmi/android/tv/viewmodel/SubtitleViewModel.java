@@ -16,6 +16,7 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -166,7 +167,11 @@ public class SubtitleViewModel extends ViewModel {
                                 String url = "https://assrt.net" + href;
                                 Subtitle one = new Subtitle();
                                 String title = href.substring(href.lastIndexOf("/") + 1);
-                                one.setName(URLDecoder.decode(title));
+                                try {
+                                    one.setName(URLDecoder.decode(title, StandardCharsets.UTF_8.name()));
+                                } catch (IllegalArgumentException e) {
+                                    one.setName(title);
+                                }
                                 one.setUrl(url);
                                 one.setIsZip(false);
                                 data.add(one);

@@ -49,7 +49,9 @@ public class FileUtil {
     }
 
     private static void folderToZip(String parentPath, File folder, ZipOutputStream zipOut) throws Exception {
-        for (File file : folder.listFiles()) {
+        File[] files = folder.listFiles();
+        if (files == null) return;
+        for (File file : files) {
             if (file.isDirectory()) {
                 folderToZip(parentPath + file.getName() + "/", file, zipOut);
                 continue;

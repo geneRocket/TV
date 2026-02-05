@@ -1858,7 +1858,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         super.onResume();
         setBackground(false);
         mClock.start();
-        if (mPlayers.isRelease()) {
+        boolean needInit = mPlayers.isRelease()
+                || (mPlayers.isExo() && mPlayers.exo() == null)
+                || (mPlayers.isIjk() && mPlayers.ijk() == null);
+        if (needInit) {
             mPlayers.init(getExo(), getIjk());
             setPlayerView();
             setDecodeView();
