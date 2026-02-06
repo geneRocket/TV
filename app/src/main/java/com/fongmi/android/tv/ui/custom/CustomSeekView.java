@@ -143,6 +143,7 @@ public class CustomSeekView extends FrameLayout implements TimeBar.OnScrubListen
 
     private void seekToTimeBarPosition(long positionMs) {
         player.seekTo(positionMs);
+        PlayerEvent.state(androidx.media3.common.Player.STATE_BUFFERING);
         refresh();
     }
 

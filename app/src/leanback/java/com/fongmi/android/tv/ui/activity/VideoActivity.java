@@ -1199,7 +1199,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setTraffic() {
         Traffic.setSpeed(mBinding.widget.traffic);
+        if (!isBuffering()) {
+            hideProgress();
+            return;
+        }
         App.post(mR3, Constant.INTERVAL_TRAFFIC);
+    }
+
+    private boolean isBuffering() {
+        long buffered = mPlayers.getBuffered();
+        long position = mPlayers.getPosition();
+        return buffered - position < 1000;
     }
 
     private void setR1Callback() {
@@ -1398,7 +1408,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 setMetadata();
                 resetToggle();
                 resetError();
-                hideProgress();
+                if (isBuffering()) showProgress();
+                else hideProgress();
                 mPlayers.reset();
                 setDefaultTrack();
                 setTrackVisible(true);
