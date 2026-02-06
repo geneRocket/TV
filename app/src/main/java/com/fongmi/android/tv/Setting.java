@@ -314,6 +314,14 @@ public class Setting {
         Prefers.put("caption", caption);
     }
 
+    public static float getVolumeScale() {
+        return Math.min(Math.max(Prefers.getFloat("volume_scale", 1.0f), 0f), 1f);
+    }
+
+    public static void putVolumeScale(float scale) {
+        Prefers.put("volume_scale", Math.min(Math.max(scale, 0f), 1f));
+    }
+
     public static boolean isTunnel() {
         return Prefers.getBoolean("exo_tunnel");
     }

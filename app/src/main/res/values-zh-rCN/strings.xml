@@ -53,6 +53,7 @@
     <string name="play_track_text">字幕</string>
     <string name="play_track_audio">音轨</string>
     <string name="play_track_video">视轨</string>
+    <string name="play_volume">音量</string>
     <string name="play_forward_hint">已切换正序播放</string>
     <string name="play_backward_hint">已切换倒序播放</string>
     <string name="play_now">正在播放：<xliff:g name="name">%s</xliff:g></string>

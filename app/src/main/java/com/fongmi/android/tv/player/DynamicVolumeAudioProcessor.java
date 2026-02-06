@@ -2,6 +2,7 @@ package com.fongmi.android.tv.player;
 
 import androidx.media3.common.audio.BaseAudioProcessor;
 
+import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.player.pojo.RmsMaxGain;
 
 import java.nio.ByteBuffer;
@@ -24,7 +25,7 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
     public void queueInput(ByteBuffer inputBuffer) {
         RmsMaxGain rmsMaxGain = calculateVolume(inputBuffer);
         if(rmsMaxGain==null){
-            applyGain(inputBuffer, targetGain);
+            applyGain(inputBuffer, targetGain * Setting.getVolumeScale());
             return;
         }
         double currentVolume = rmsMaxGain.getRms();
@@ -42,7 +43,7 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
             }
         }
         gain = Math.min(gain, maxGain);
-        applyGain(inputBuffer, gain);
+        applyGain(inputBuffer, gain * Setting.getVolumeScale());
     }
 
     private RmsMaxGain calculateVolume(ByteBuffer inputBuffer) {
