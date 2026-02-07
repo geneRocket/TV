@@ -745,10 +745,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     @Override
     public void onEvents(@NonNull Player player, @NonNull Player.Events events) {
-        if (events.contains(Player.EVENT_IS_LOADING_CHANGED)) {
-            if (player.isLoading()) pauseDanmu();
-            else updateDanmuPlayingState();
-        }
         if (!events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_POSITION_DISCONTINUITY, Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_PLAYBACK_PARAMETERS_CHANGED, Player.EVENT_PLAYER_ERROR)) return;
         switch (player.getPlaybackState()) {
             case Player.STATE_IDLE:
@@ -760,7 +756,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
                 break;
             case Player.STATE_BUFFERING:
                 setPlaybackState(PlaybackStateCompat.STATE_BUFFERING);
-                pauseDanmu();
                 break;
             case Player.STATE_ENDED:
                 setPlaybackState(PlaybackStateCompat.STATE_STOPPED);
@@ -788,7 +783,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public void onPlaybackStateChanged(int state) {
         PlayerEvent.state(state);
-        if (state == Player.STATE_BUFFERING) pauseDanmu();
     }
 
     @Override
@@ -796,7 +790,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         switch (what) {
             case IMediaPlayer.MEDIA_INFO_BUFFERING_START:
                 PlayerEvent.state(Player.STATE_BUFFERING);
-                pauseDanmu();
                 break;
             case IMediaPlayer.MEDIA_INFO_BUFFERING_END:
             case IMediaPlayer.MEDIA_INFO_VIDEO_SEEK_RENDERING_START:
@@ -842,11 +835,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         } else {
             danmuView.pause();
         }
-    }
-
-    private void pauseDanmu() {
-        if (danmuView == null || !danmuView.isPrepared()) return;
-        danmuView.pause();
     }
 
     @Override
