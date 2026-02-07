@@ -578,9 +578,20 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void checkDanmu(String danmu) {
         mBinding.danmaku.release();
-        if (!Setting.isDanmuLoad()) return;
+        if (!Setting.isDanmuLoad()) {
+            mBinding.danmaku.setVisibility(View.GONE);
+            return;
+        }
         mBinding.danmaku.setVisibility(danmu.isEmpty() ? View.GONE : View.VISIBLE);
-        if (danmu.length() > 0) App.execute(() -> mBinding.danmaku.prepare(new Parser(danmu), mDanmakuContext));
+        if (danmu.length() > 0) {
+            App.execute(() -> {
+                Parser parser = new Parser(danmu);
+                App.post(() -> {
+                    mBinding.danmaku.prepare(parser, mDanmakuContext);
+                    showDanmu();
+                });
+            });
+        }
     }
 
     private void setEmpty(boolean finish) {

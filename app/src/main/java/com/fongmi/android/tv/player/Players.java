@@ -765,19 +765,12 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public void onIsPlayingChanged(boolean isPlaying) {
         PlayerEvent.state(Player.STATE_READY);
+        updateDanmuPlayingState();
     }
 
     @Override
     public void onBufferingUpdate(IMediaPlayer mp, int percent) {
         setPlaybackState(isPlaying() ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED);
-    }
-
-    public void onStart(IMediaPlayer mp) {
-        PlayerEvent.state(Player.STATE_READY);
-    }
-
-    public void onPause(IMediaPlayer mp) {
-        PlayerEvent.state(Player.STATE_READY);
     }
 
     @Override
@@ -826,10 +819,20 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void prepared() {
         App.post(() -> {
             if (danmuView == null) return;
-            if (isPlaying() && danmuView.isPrepared()) danmuView.start(getPosition());
-            if (Setting.isDanmu()) danmuView.show();
-            else danmuView.hide();
+            updateDanmuPlayingState();
         });
+    }
+
+    private void updateDanmuPlayingState() {
+        if (danmuView == null) return;
+        if (!danmuView.isPrepared()) return;
+        if (!Setting.isDanmu()) { danmuView.hide(); return; }
+        danmuView.show();
+        if (isPlaying()) {
+            danmuView.start(getPosition());
+        } else {
+            danmuView.pause();
+        }
     }
 
     @Override
