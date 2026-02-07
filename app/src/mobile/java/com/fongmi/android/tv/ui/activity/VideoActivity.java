@@ -458,7 +458,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     public void setDanmuViewSettings() {
         float[] range = {2.4f, 1.8f, 1.2f, 0.8f};
-        float speed = range[Setting.getDanmuSpeed()];
+        float speed = range[Setting.getDanmuSpeed()] / Math.max(mPlayers.getSpeed(), 0.1f);
         float alpha = Setting.getDanmuAlpha() / 100.0f;
         float sizeScale = Setting.getDanmuSize();
         int maxLine = Setting.getDanmuLine(2);
@@ -875,15 +875,46 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void onSpeed() {
         mBinding.control.action.speed.setText(mPlayers.addSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
         setR1Callback();
     }
 
     private boolean onSpeedLong() {
         mBinding.control.action.speed.setText(mPlayers.toggleSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
         setR1Callback();
         return true;
     }
+
+    private void syncDanmuState() {
+        if (!mBinding.danmaku.isPrepared()) return;
+        if (Setting.isDanmu()) mBinding.danmaku.show();
+        else mBinding.danmaku.hide();
+        if (mPlayers.isPlaying()) mBinding.danmaku.start(mPlayers.getPosition());
+        else mBinding.danmaku.pause();
+    }
+
+    private void applyDanmuPlaybackSpeed() {
+        if (!mBinding.danmaku.isPrepared()) return;
+        float speed = mPlayers.getSpeed();
+        try {
+            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeed", float.class);
+            method.invoke(mBinding.danmaku, speed);
+            return;
+        } catch (Exception ignored) {
+        }
+        try {
+            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeedFactor", float.class);
+            method.invoke(mBinding.danmaku, speed);
+        } catch (Exception ignored) {
+        }
+    }
+
 
     private void onRefresh() {
         onReset(false);
@@ -1696,6 +1727,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onSpeedUp() {
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         mBinding.widget.speed.setVisibility(View.VISIBLE);
     }
@@ -1703,6 +1737,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onSpeedEnd() {
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
         mBinding.widget.speed.setVisibility(View.GONE);
         mBinding.widget.speed.clearAnimation();
     }

@@ -470,7 +470,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setDanmuViewSettings() {
         float[] range = {2.4f, 1.8f, 1.2f, 0.8f};
-        float speed = range[Setting.getDanmuSpeed()];
+        float speed = range[Setting.getDanmuSpeed()] / Math.max(mPlayers.getSpeed(), 0.1f);
         float alpha = Setting.getDanmuAlpha() / 100.0f;
         float sizeScale = isFullscreen() ? 1.2f * Setting.getDanmuSize() : 0.8f * Setting.getDanmuSize();
         int maxLine = Setting.getDanmuLine(3);
@@ -993,23 +993,60 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void onSpeed() {
         mBinding.control.speed.setText(mPlayers.addSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
     }
 
     private void onSpeedAdd() {
         mBinding.control.speed.setText(mPlayers.addSpeed(0.25f));
         mHistory.setSpeed(mPlayers.getSpeed());
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
     }
 
     private void onSpeedSub() {
         mBinding.control.speed.setText(mPlayers.subSpeed(0.25f));
         mHistory.setSpeed(mPlayers.getSpeed());
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
     }
 
     private boolean onSpeedLong() {
         mBinding.control.speed.setText(mPlayers.toggleSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
         return true;
     }
+
+    private void syncDanmuState() {
+        if (!mBinding.danmaku.isPrepared()) return;
+        if (Setting.isDanmu()) mBinding.danmaku.show();
+        else mBinding.danmaku.hide();
+        if (mPlayers.isPlaying()) mBinding.danmaku.start(mPlayers.getPosition());
+        else mBinding.danmaku.pause();
+    }
+
+    private void applyDanmuPlaybackSpeed() {
+        if (!mBinding.danmaku.isPrepared()) return;
+        float speed = mPlayers.getSpeed();
+        try {
+            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeed", float.class);
+            method.invoke(mBinding.danmaku, speed);
+            return;
+        } catch (Exception ignored) {
+        }
+        try {
+            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeedFactor", float.class);
+            method.invoke(mBinding.danmaku, speed);
+        } catch (Exception ignored) {
+        }
+    }
+
 
     private void onRefresh() {
         onReset(false);
@@ -1804,6 +1841,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public void onSpeedUp() {
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
         mBinding.control.speed.setText(mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         mBinding.widget.speed.setVisibility(View.VISIBLE);
     }
@@ -1811,6 +1851,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onSpeedEnd() {
         mBinding.control.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
+        setDanmuViewSettings();
+        syncDanmuState();
+        applyDanmuPlaybackSpeed();
         mBinding.widget.speed.setVisibility(View.GONE);
         mBinding.widget.speed.clearAnimation();
     }
