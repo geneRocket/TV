@@ -355,6 +355,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public String setSpeed(float speed) {
         if (exoPlayer != null && !Setting.isTunnel()) exoPlayer.setPlaybackSpeed(speed);
         if (ijkPlayer != null) ijkPlayer.setSpeed(speed);
+        applyDanmuSpeed();
         return getSpeedText();
     }
 
@@ -826,14 +827,36 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void updateDanmuPlayingState() {
-        if (danmuView == null) return;
-        if (!danmuView.isPrepared()) return;
-        if (!Setting.isDanmu()) { danmuView.hide(); return; }
+        if (danmuView == null || !danmuView.isPrepared()) return;
+
+        if (!Setting.isDanmu()) {
+            danmuView.hide();
+            danmuView.pause();
+            return;
+        }
         danmuView.show();
+        applyDanmuSpeed();
         if (isPlaying()) {
             danmuView.start(getPosition());
         } else {
             danmuView.pause();
+        }
+    }
+
+    public void applyDanmuSpeed() {
+        if (danmuView == null) return;
+        if (!danmuView.isPrepared()) return;
+        float speed = getSpeed();
+        try {
+            java.lang.reflect.Method method = danmuView.getClass().getMethod("setSpeed", float.class);
+            method.invoke(danmuView, speed);
+            return;
+        } catch (Exception ignored) {
+        }
+        try {
+            java.lang.reflect.Method method = danmuView.getClass().getMethod("setSpeedFactor", float.class);
+            method.invoke(danmuView, speed);
+        } catch (Exception ignored) {
         }
     }
 

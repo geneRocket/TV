@@ -431,6 +431,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
         getExo().setVisibility(mPlayers.isExo() ? View.VISIBLE : View.GONE);
         getIjk().setVisibility(mPlayers.isIjk() ? View.VISIBLE : View.GONE);
+        setDanmuViewSettings();
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.updatePlayer();
     }
 
@@ -653,7 +654,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void checkDanmu(String danmu) {
         mBinding.danmaku.release();
-        if (!Setting.isDanmuLoad() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode())) return;
+        if (!Setting.isDanmuLoad() || !Setting.isDanmu() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode())) return;
         mBinding.danmaku.setVisibility(danmu.isEmpty() ? View.GONE : View.VISIBLE);
         if (danmu.length() > 0) App.execute(() -> mBinding.danmaku.prepare(new Parser(danmu), mDanmakuContext));
     }
@@ -804,6 +805,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Setting.putDanmu(!Setting.isDanmu());
         checkDanmuImg();
         showDanmu();
+        if (Setting.isDanmu()) mPlayers.prepared();
     }
 
     private void onDanmuSetting() {
@@ -876,8 +878,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.action.speed.setText(mPlayers.addSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
         setR1Callback();
     }
 
@@ -885,35 +887,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.action.speed.setText(mPlayers.toggleSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
         setR1Callback();
         return true;
     }
 
-    private void syncDanmuState() {
-        if (!mBinding.danmaku.isPrepared()) return;
-        if (Setting.isDanmu()) mBinding.danmaku.show();
-        else mBinding.danmaku.hide();
-        if (mPlayers.isPlaying()) mBinding.danmaku.start(mPlayers.getPosition());
-        else mBinding.danmaku.pause();
-    }
-
-    private void applyDanmuPlaybackSpeed() {
-        if (!mBinding.danmaku.isPrepared()) return;
-        float speed = mPlayers.getSpeed();
-        try {
-            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeed", float.class);
-            method.invoke(mBinding.danmaku, speed);
-            return;
-        } catch (Exception ignored) {
-        }
-        try {
-            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeedFactor", float.class);
-            method.invoke(mBinding.danmaku, speed);
-        } catch (Exception ignored) {
-        }
-    }
+  
 
 
     private void onRefresh() {
@@ -1728,8 +1708,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         mBinding.widget.speed.setVisibility(View.VISIBLE);
     }
@@ -1738,8 +1718,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onSpeedEnd() {
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
         mBinding.widget.speed.setVisibility(View.GONE);
         mBinding.widget.speed.clearAnimation();
     }

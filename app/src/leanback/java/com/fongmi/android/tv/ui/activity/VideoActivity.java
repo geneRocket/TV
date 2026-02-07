@@ -519,6 +519,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         getExo().setVisibility(mPlayers.isExo() ? View.VISIBLE : View.GONE);
         getIjk().setVisibility(mPlayers.isIjk() ? View.VISIBLE : View.GONE);
         mBinding.control.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
+        setDanmuViewSettings();
+        
+        
     }
 
     private void setDecodeView() {
@@ -925,6 +928,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         Setting.putDanmu(!Setting.isDanmu());
         mBinding.control.danmu.setActivated(Setting.isDanmu());
         showDanmu();
+        if (Setting.isDanmu()) mPlayers.prepared();
     }
 
     private void showDanmu() {
@@ -994,57 +998,33 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.control.speed.setText(mPlayers.addSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
     }
 
     private void onSpeedAdd() {
         mBinding.control.speed.setText(mPlayers.addSpeed(0.25f));
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
     }
 
     private void onSpeedSub() {
         mBinding.control.speed.setText(mPlayers.subSpeed(0.25f));
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
     }
 
     private boolean onSpeedLong() {
         mBinding.control.speed.setText(mPlayers.toggleSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
         return true;
-    }
-
-    private void syncDanmuState() {
-        if (!mBinding.danmaku.isPrepared()) return;
-        if (Setting.isDanmu()) mBinding.danmaku.show();
-        else mBinding.danmaku.hide();
-        if (mPlayers.isPlaying()) mBinding.danmaku.start(mPlayers.getPosition());
-        else mBinding.danmaku.pause();
-    }
-
-    private void applyDanmuPlaybackSpeed() {
-        if (!mBinding.danmaku.isPrepared()) return;
-        float speed = mPlayers.getSpeed();
-        try {
-            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeed", float.class);
-            method.invoke(mBinding.danmaku, speed);
-            return;
-        } catch (Exception ignored) {
-        }
-        try {
-            java.lang.reflect.Method method = mBinding.danmaku.getClass().getMethod("setSpeedFactor", float.class);
-            method.invoke(mBinding.danmaku, speed);
-        } catch (Exception ignored) {
-        }
     }
 
 
@@ -1730,7 +1710,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         return autoMode;
     }
 
-    private void setAutoMode(boolean autoMode) {
+    public void setAutoMode(boolean autoMode) {
         this.autoMode = autoMode;
     }
 
@@ -1842,8 +1822,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
         mBinding.control.speed.setText(mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         mBinding.widget.speed.setVisibility(View.VISIBLE);
     }
@@ -1852,8 +1832,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public void onSpeedEnd() {
         mBinding.control.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
         setDanmuViewSettings();
-        syncDanmuState();
-        applyDanmuPlaybackSpeed();
+        
+        
         mBinding.widget.speed.setVisibility(View.GONE);
         mBinding.widget.speed.clearAnimation();
     }
