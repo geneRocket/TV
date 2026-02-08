@@ -33,9 +33,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import okhttp3.Call;
 import okhttp3.Response;
@@ -50,7 +55,8 @@ public class SiteViewModel extends ViewModel {
     public MutableLiveData<Result> action;
     public MutableLiveData<Danmu> danmaku;
     public MutableLiveData<Result> download;
-    private ExecutorService executor;
+    private final ExecutorService workExecutor = Executors.newFixedThreadPool(10);
+    private final ExecutorService monitorExecutor = Executors.newCachedThreadPool();
 
     public SiteViewModel() {
         this.ep = new MutableLiveData<>();
@@ -295,16 +301,47 @@ public class SiteViewModel extends ViewModel {
     }
 
     private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
-        if (executor != null) executor.shutdownNow();
-        executor = Executors.newFixedThreadPool(2);
-        executor.execute(() -> {
+        // 1. 将繁重的任务提交给工作线程池，拿到 Future 对象
+        Future<Result> future = workExecutor.submit(callable);
+
+        // 2. 在监控线程池中执行“等待”逻辑，避免阻塞主线程或占用工作线程池
+        monitorExecutor.execute(() -> {
             try {
-                if (Thread.interrupted()) return;
-                result.postValue(executor.submit(callable).get(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS));
-            } catch (Throwable e) {
-                if (e instanceof InterruptedException || Thread.interrupted()) return;
-                if (e.getCause() instanceof ExtractException) result.postValue(Result.error(e.getCause().getMessage()));
-                else result.postValue(Result.empty());
+                // 检查当前监控线程是否被中断
+                if (Thread.currentThread().isInterrupted()) {
+                    future.cancel(true); // 如果监控线程断了，把任务也取消掉
+                    return;
+                }
+
+                // 3. 阻塞等待结果或超时
+                Result data = future.get(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS);
+                result.postValue(data);
+
+            } catch (TimeoutException e) {
+                // A. 超时处理
+                future.cancel(true); // 关键优化：超时后取消正在执行的任务，节省资源
+                result.postValue(Result.empty()); // 或者 Result.timeout()
+                e.printStackTrace();
+
+            } catch (ExecutionException e) {
+                // B. 任务执行内部抛出的异常 (被封装在 ExecutionException 中)
+                Throwable cause = e.getCause();
+                if (cause instanceof ExtractException) {
+                    result.postValue(Result.error(cause.getMessage()));
+                } else {
+                    result.postValue(Result.empty());
+                }
+                cause.printStackTrace();
+
+            } catch (InterruptedException e) {
+                // C. 监控线程被中断
+                future.cancel(true); // 取消任务
+                // 恢复中断状态（好习惯）
+                Thread.currentThread().interrupt();
+
+            } catch (Exception e) {
+                // D. 其他未知异常
+                result.postValue(Result.empty());
                 e.printStackTrace();
             }
         });
@@ -312,6 +349,7 @@ public class SiteViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
-        if (executor != null) executor.shutdownNow();
+        if (monitorExecutor != null) monitorExecutor.shutdownNow();
+        if (workExecutor != null) workExecutor.shutdownNow();
     }
 }
