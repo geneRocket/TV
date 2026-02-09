@@ -33,8 +33,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,8 +53,7 @@ public class SiteViewModel extends ViewModel {
     public MutableLiveData<Result> action;
     public MutableLiveData<Danmu> danmaku;
     public MutableLiveData<Result> download;
-    private final ExecutorService workExecutor = Executors.newFixedThreadPool(10);
-    private final ExecutorService monitorExecutor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newFixedThreadPool(6);
 
     public SiteViewModel() {
         this.ep = new MutableLiveData<>();
@@ -65,6 +62,7 @@ public class SiteViewModel extends ViewModel {
         this.player = new MutableLiveData<>();
         this.search = new MutableLiveData<>();
         this.action = new MutableLiveData<>();
+        this.danmaku = new MutableLiveData<>();
         this.download = new MutableLiveData<>();
     }
 
@@ -274,10 +272,11 @@ public class SiteViewModel extends ViewModel {
     }
 
     private String fetchExt(Site site) throws IOException {
-        Response res = OkHttp.newCall(site.getExt(), site.getHeaders()).execute();
-        if (res.code() != 200) return "";
-        site.setExt(res.body().string());
-        return site.getExt();
+        try (Response res = OkHttp.newCall(site.getExt(), site.getHeaders()).execute()) {
+            if (res.code() != 200) return "";
+            site.setExt(res.body().string());
+            return site.getExt();
+        }
     }
 
     private Result fetchPic(Site site, Result result) throws Exception {
@@ -302,10 +301,10 @@ public class SiteViewModel extends ViewModel {
 
     private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
         // 1. 将繁重的任务提交给工作线程池，拿到 Future 对象
-        Future<Result> future = workExecutor.submit(callable);
+        Future<Result> future = executor.submit(callable);
 
-        // 2. 在监控线程池中执行“等待”逻辑，避免阻塞主线程或占用工作线程池
-        monitorExecutor.execute(() -> {
+        // 2. 复用同一线程池执行“等待”逻辑，避免额外线程池开销
+        executor.execute(() -> {
             try {
                 // 检查当前监控线程是否被中断
                 if (Thread.currentThread().isInterrupted()) {
@@ -331,7 +330,8 @@ public class SiteViewModel extends ViewModel {
                 } else {
                     result.postValue(Result.empty());
                 }
-                cause.printStackTrace();
+                if (cause != null) cause.printStackTrace();
+                else e.printStackTrace();
 
             } catch (InterruptedException e) {
                 // C. 监控线程被中断
@@ -349,7 +349,6 @@ public class SiteViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
-        if (monitorExecutor != null) monitorExecutor.shutdownNow();
-        if (workExecutor != null) workExecutor.shutdownNow();
+        if (executor != null) executor.shutdownNow();
     }
 }
