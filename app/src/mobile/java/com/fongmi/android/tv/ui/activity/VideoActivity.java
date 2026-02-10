@@ -100,6 +100,7 @@ import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PiP;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.Traffic;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -120,7 +121,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -1501,15 +1501,17 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void startSearch(String keyword) {
         mQuickAdapter.clear();
         List<Site> sites = new ArrayList<>();
-        mExecutor = Executors.newFixedThreadPool(Constant.THREAD_POOL * 2);
+        mExecutor = ThreadPools.search();
+        mSearchActive = true;
         for (Site item : VodConfig.get().getSites()) if (isPass(item)) sites.add(item);
         for (Site site : sites) mExecutor.execute(() -> search(site, keyword));
     }
 
     private void stopSearch() {
         if (mExecutor == null) return;
-        mExecutor.shutdownNow();
+        if (mExecutor != ThreadPools.search()) mExecutor.shutdownNow();
         mExecutor = null;
+        mSearchActive = false;
     }
 
     private void search(Site site, String keyword) {

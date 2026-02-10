@@ -161,6 +161,7 @@ public class LiveViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
+        super.onCleared();
         if (executor1 != null) executor1.shutdownNow();
         if (executor2 != null) executor2.shutdownNow();
         if (executor3 != null) executor3.shutdownNow();

@@ -14,6 +14,7 @@ import com.fongmi.android.tv.player.extractor.Thunder;
 import com.fongmi.android.tv.player.extractor.Video;
 import com.fongmi.android.tv.player.extractor.Youtube;
 import com.fongmi.android.tv.player.extractor.ZLive;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 
 import java.util.ArrayList;
@@ -21,7 +22,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -70,12 +70,11 @@ public class Source {
 
     public void parse(List<Flag> flags) throws Exception {
         for (Flag flag : flags) {
-            ExecutorService executor = Executors.newFixedThreadPool(Constant.THREAD_POOL);
+            ExecutorService executor = ThreadPools.parse();
             List<Callable<List<Episode>>> items = new ArrayList<>();
             Iterator<Episode> iterator = flag.getEpisodes().iterator();
             while (iterator.hasNext()) addCallable(iterator, items);
             for (Future<List<Episode>> future : executor.invokeAll(items, 30, TimeUnit.SECONDS)) flag.getEpisodes().addAll(future.get());
-            executor.shutdownNow();
         }
     }
 
