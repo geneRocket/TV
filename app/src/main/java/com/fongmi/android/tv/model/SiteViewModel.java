@@ -33,11 +33,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import okhttp3.Call;
@@ -53,7 +50,7 @@ public class SiteViewModel extends ViewModel {
     public MutableLiveData<Result> action;
     public MutableLiveData<Danmu> danmaku;
     public MutableLiveData<Result> download;
-    private final ExecutorService executor = Executors.newFixedThreadPool(6);
+    private final ExecutorService executor = Executors.newFixedThreadPool(8);
 
     public SiteViewModel() {
         this.ep = new MutableLiveData<>();
@@ -300,47 +297,20 @@ public class SiteViewModel extends ViewModel {
     }
 
     private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
-        // 1. 将繁重的任务提交给工作线程池，拿到 Future 对象
-        Future<Result> future = executor.submit(callable);
-
-        // 2. 复用同一线程池执行“等待”逻辑，避免额外线程池开销
+        // 单线程执行：同一线程内完成 callable 与超时处理
         executor.execute(() -> {
             try {
-                // 检查当前监控线程是否被中断
-                if (Thread.currentThread().isInterrupted()) {
-                    future.cancel(true); // 如果监控线程断了，把任务也取消掉
-                    return;
-                }
-
-                // 3. 阻塞等待结果或超时
-                Result data = future.get(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS);
+                Result data = callable.call();
                 result.postValue(data);
-
             } catch (TimeoutException e) {
-                // A. 超时处理
-                future.cancel(true); // 关键优化：超时后取消正在执行的任务，节省资源
                 result.postValue(Result.empty()); // 或者 Result.timeout()
                 e.printStackTrace();
-
-            } catch (ExecutionException e) {
-                // B. 任务执行内部抛出的异常 (被封装在 ExecutionException 中)
-                Throwable cause = e.getCause();
-                if (cause instanceof ExtractException) {
-                    result.postValue(Result.error(cause.getMessage()));
-                } else {
-                    result.postValue(Result.empty());
-                }
-                if (cause != null) cause.printStackTrace();
-                else e.printStackTrace();
-
+            } catch (ExtractException e) {
+                result.postValue(Result.error(e.getMessage()));
+                e.printStackTrace();
             } catch (InterruptedException e) {
-                // C. 监控线程被中断
-                future.cancel(true); // 取消任务
-                // 恢复中断状态（好习惯）
-                Thread.currentThread().interrupt();
-
+                result.postValue(Result.empty());
             } catch (Exception e) {
-                // D. 其他未知异常
                 result.postValue(Result.empty());
                 e.printStackTrace();
             }
