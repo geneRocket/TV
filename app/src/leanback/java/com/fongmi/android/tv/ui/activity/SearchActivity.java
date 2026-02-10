@@ -45,12 +45,23 @@ import okhttp3.Response;
 
 public class SearchActivity extends BaseActivity implements WordAdapter.OnClickListener, RecordAdapter.OnClickListener, CustomKeyboard.Callback, SiteCallback {
 
+    private static final String EXTRA_KEYWORD = "keyword";
+    private static final String EXTRA_AUTO = "auto";
+
     private ActivitySearchBinding mBinding;
     private RecordAdapter mRecordAdapter;
     private WordAdapter mWordAdapter;
+    private boolean mAutoSearched;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SearchActivity.class));
+    }
+
+    public static void start(Activity activity, String keyword, boolean autoSearch) {
+        Intent intent = new Intent(activity, SearchActivity.class);
+        intent.putExtra(EXTRA_KEYWORD, keyword);
+        intent.putExtra(EXTRA_AUTO, autoSearch);
+        activity.startActivity(intent);
     }
 
     @Override
@@ -91,6 +102,19 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                 mBinding.keyword.setSelection(mBinding.keyword.length());
             }
         });
+        initKeyword();
+    }
+
+    private void initKeyword() {
+        String keyword = getIntent().getStringExtra(EXTRA_KEYWORD);
+        boolean auto = getIntent().getBooleanExtra(EXTRA_AUTO, false);
+        if (TextUtils.isEmpty(keyword)) return;
+        mBinding.keyword.setText(keyword);
+        mBinding.keyword.setSelection(mBinding.keyword.length());
+        if (auto && !mAutoSearched) {
+            mAutoSearched = true;
+            App.post(this::onSearch, 200);
+        }
     }
 
     private void setRecyclerView() {
