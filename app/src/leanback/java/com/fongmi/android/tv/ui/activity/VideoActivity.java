@@ -1390,6 +1390,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistory.setPosition(position = mPlayers.getPosition());
         mHistory.setDuration(duration = mPlayers.getDuration());
         if (position >= 0 && duration > 0 && !Setting.isIncognito()) App.execute(() -> mHistory.update());
+        
+        // 片头跳过检测
+        if (mHistory.getOpening() > 0 && position > 0 && position < mHistory.getOpening()) {
+            mPlayers.seekTo(mHistory.getOpening());
+        }
+        
+        // 片尾跳过检测
         if (mHistory.getEnding() > 0 && duration > 0 && mHistory.getEnding() + position >= duration) {
             mClock.setCallback(null);
             checkNext();
