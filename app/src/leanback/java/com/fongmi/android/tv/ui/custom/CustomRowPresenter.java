@@ -39,5 +39,8 @@ public class CustomRowPresenter extends ListRowPresenter {
         ViewHolder vh = (ViewHolder) holder;
         vh.getGridView().setFocusScrollStrategy(strategy);
         vh.getGridView().setHorizontalSpacing(ResUtil.dp2px(spacing));
+        vh.getGridView().setItemAnimator(null);
+        vh.getGridView().setHasFixedSize(true);
+        vh.getGridView().setItemViewCacheSize(12);
     }
 }

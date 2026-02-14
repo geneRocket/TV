@@ -217,7 +217,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (mAdapter.size() > 1) mAdapter.removeItems(1, mAdapter.size() - 1);
         if (result.getTypes().size() > 0) mAdapter.addAll(1, result.getTypes());
         setPager();
-        mPageAdapter.notifyDataSetChanged();
         getHomeFragment().addVideo(result);
         getHomeFragment().mBinding.progressLayout.showContent();
         App.post(() -> setFocus(), 200);
@@ -603,5 +602,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         @Override
         public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
         }
+
     }
 }

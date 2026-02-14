@@ -138,6 +138,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setHeader(getActivity().findViewById(R.id.recycler));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
+        mBinding.recycler.setItemAnimator(null);
     }
 
     private void setViewModel() {

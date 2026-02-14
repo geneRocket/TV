@@ -8,22 +8,26 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.AdapterSiteBinding;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
 
     private final OnClickListener mListener;
     private final List<Site> mItems;
+    private final AtomicInteger batchVersion;
     private int type;
 
     public SiteAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mItems = VodConfig.get().getSites();
+        this.batchVersion = new AtomicInteger();
     }
 
     public interface OnClickListener {
@@ -88,9 +92,14 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     }
 
     private void setEnable(boolean enable) {
-        if (type == 1) for (Site site : VodConfig.get().getSites()) site.setSearchable(enable).save();
-        if (type == 2) for (Site site : VodConfig.get().getSites()) site.setChangeable(enable).save();
-        notifyItemRangeChanged(0, getItemCount());
+        final int mode = type;
+        final int version = batchVersion.incrementAndGet();
+        App.execute(() -> {
+            if (version != batchVersion.get()) return;
+            if (mode == 1) for (Site site : VodConfig.get().getSites()) site.setSearchable(enable).save();
+            if (mode == 2) for (Site site : VodConfig.get().getSites()) site.setChangeable(enable).save();
+            if (version == batchVersion.get()) App.post(() -> notifyItemRangeChanged(0, getItemCount()));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

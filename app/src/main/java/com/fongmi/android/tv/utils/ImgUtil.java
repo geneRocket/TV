@@ -35,12 +35,12 @@ public class ImgUtil {
     }
 
     public static void load(String url, CustomTarget<Bitmap> target) {
-        if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).skipMemoryCache(true).dontAnimate().signature(getSignature(url)).into(target);
+        if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).dontAnimate().signature(getSignature(url)).into(target);
     }
 
     public static void load(String url, int error, CustomTarget<Drawable> target) {
         if (TextUtils.isEmpty(url)) target.onLoadFailed(ResUtil.getDrawable(error));
-        else Glide.with(App.get()).asDrawable().load(getUrl(url)).error(error).skipMemoryCache(true).dontAnimate().signature(getSignature(url)).into(target);
+        else Glide.with(App.get()).asDrawable().load(getUrl(url)).error(error).dontAnimate().signature(getSignature(url)).into(target);
     }
 
     public static void rect(String text, String url, ImageView view) {
@@ -53,7 +53,7 @@ public class ImgUtil {
 
     public static void load(String text, String url, ImageView view, ImageView.ScaleType scaleType, boolean rect) {
         view.setScaleType(scaleType);
-        if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).placeholder(R.drawable.ic_img_loading).skipMemoryCache(true).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view, scaleType)).into(view);
+        if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).placeholder(R.drawable.ic_img_loading).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view, scaleType)).into(view);
         else if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), rect));
         else view.setImageResource(R.drawable.ic_img_error);
     }
@@ -68,7 +68,7 @@ public class ImgUtil {
     public static void loadLive(String url, ImageView view) {
         view.setVisibility(TextUtils.isEmpty(url) ? View.GONE : View.VISIBLE);
         if (TextUtils.isEmpty(url)) view.setImageResource(R.drawable.ic_img_empty);
-        else Glide.with(App.get()).asBitmap().load(url).error(R.drawable.ic_img_empty).skipMemoryCache(true).dontAnimate().signature(getSignature(url)).into(view);
+        else Glide.with(App.get()).asBitmap().load(url).error(R.drawable.ic_img_empty).dontAnimate().signature(getSignature(url)).into(view);
     }
 
     private static Drawable getTextDrawable(String text, boolean rect) {

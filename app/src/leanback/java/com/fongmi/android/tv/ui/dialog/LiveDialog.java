@@ -6,6 +6,7 @@ import android.view.WindowManager;
 
 import androidx.appcompat.app.AlertDialog;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.databinding.DialogLiveBinding;
@@ -15,12 +16,15 @@ import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class LiveDialog implements LiveAdapter.OnClickListener {
 
     private final DialogLiveBinding binding;
     private final LiveCallback callback;
     private final LiveAdapter adapter;
     private final AlertDialog dialog;
+    private final AtomicInteger batchVersion;
 
     public static LiveDialog create(Activity activity) {
         return new LiveDialog(activity);
@@ -31,6 +35,7 @@ public class LiveDialog implements LiveAdapter.OnClickListener {
         this.callback = (LiveCallback) activity;
         this.binding = DialogLiveBinding.inflate(LayoutInflater.from(activity));
         this.dialog = new MaterialAlertDialogBuilder(activity).setView(binding.getRoot()).create();
+        this.batchVersion = new AtomicInteger();
     }
 
     public LiveDialog action() {
@@ -81,16 +86,24 @@ public class LiveDialog implements LiveAdapter.OnClickListener {
     @Override
     public boolean onBootLongClick(Live item) {
         boolean result = !item.isBoot();
-        for (Live live : LiveConfig.get().getLives()) live.boot(result).save();
-        adapter.notifyItemRangeChanged(0, adapter.getItemCount());
+        int version = batchVersion.incrementAndGet();
+        App.execute(() -> {
+            if (version != batchVersion.get()) return;
+            for (Live live : LiveConfig.get().getLives()) live.boot(result).save();
+            if (version == batchVersion.get()) App.post(() -> adapter.notifyItemRangeChanged(0, adapter.getItemCount()));
+        });
         return true;
     }
 
     @Override
     public boolean onPassLongClick(Live item) {
         boolean result = !item.isPass();
-        for (Live live : LiveConfig.get().getLives()) live.pass(result).save();
-        adapter.notifyItemRangeChanged(0, adapter.getItemCount());
+        int version = batchVersion.incrementAndGet();
+        App.execute(() -> {
+            if (version != batchVersion.get()) return;
+            for (Live live : LiveConfig.get().getLives()) live.pass(result).save();
+            if (version == batchVersion.get()) App.post(() -> adapter.notifyItemRangeChanged(0, adapter.getItemCount()));
+        });
         return true;
     }
 }
