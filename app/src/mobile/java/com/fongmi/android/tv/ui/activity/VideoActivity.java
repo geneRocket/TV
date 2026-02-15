@@ -35,7 +35,6 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
-import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.bumptech.glide.request.target.CustomTarget;
@@ -160,8 +159,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private boolean rotate;
     private boolean stop;
     private boolean lock;
+    private boolean mSearchActive;
     private int toggleCount;
     private int errorCount;
+    private long mLastHistorySaveAt;
     private Runnable mR0;
     private Runnable mR1;
     private Runnable mR2;
@@ -672,8 +673,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onItemClick(Episode item) {
         if (shouldEnterFullscreen(item)) return;
+        int oldPosition = mEpisodeAdapter.getPosition();
         mFlagAdapter.toggle(item);
-        notifyItemChanged(mEpisodeAdapter);
+        int newPosition = mEpisodeAdapter.getPosition();
+        if (oldPosition == newPosition) {
+            mEpisodeAdapter.notifyItemChanged(newPosition);
+        } else {
+            mEpisodeAdapter.notifyItemChanged(oldPosition);
+            mEpisodeAdapter.notifyItemChanged(newPosition);
+        }
         mBinding.episode.scrollToPosition(mEpisodeAdapter.getPosition());
         onRefresh();
     }
@@ -702,8 +710,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void setParse(Parse item) {
+        int oldPosition = mParseAdapter.getPosition();
         VodConfig.get().setParse(item);
-        notifyItemChanged(mParseAdapter);
+        int newPosition = mParseAdapter.getPosition();
+        if (oldPosition == newPosition) {
+            mParseAdapter.notifyItemChanged(newPosition);
+        } else {
+            mParseAdapter.notifyItemChanged(oldPosition);
+            mParseAdapter.notifyItemChanged(newPosition);
+        }
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.updateParse();
     }
 
@@ -1292,7 +1307,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         long position, duration;
         mHistory.setPosition(position = mPlayers.getPosition());
         mHistory.setDuration(duration = mPlayers.getDuration());
-        if (position >= 0 && duration > 0 && !Setting.isIncognito()) App.execute(() -> mHistory.update());
+        if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
+            long now = System.currentTimeMillis();
+            if (now - mLastHistorySaveAt >= 3000) {
+                mLastHistorySaveAt = now;
+                App.execute(() -> mHistory.update());
+            }
+        }
         
         // 片头跳过检测
         if (mHistory.getOpening() > 0 && position > 0 && position < mHistory.getOpening()) {
@@ -1529,6 +1550,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void setSearch(Result result) {
+        if (!mSearchActive) return;
         List<Vod> items = result.getList();
         Iterator<Vod> iterator = items.iterator();
         while (iterator.hasNext()) if (mismatch(iterator.next())) iterator.remove();
@@ -1685,10 +1707,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     public void resetError() {
         this.errorCount = 0;
-    }
-
-    private void notifyItemChanged(RecyclerView.Adapter<?> adapter) {
-        adapter.notifyItemRangeChanged(0, adapter.getItemCount());
     }
 
     private void stopService() {
@@ -1922,5 +1940,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mViewModel.result.removeObserver(mObserveDetail);
         mViewModel.player.removeObserver(mObservePlayer);
         mViewModel.search.removeObserver(mObserveSearch);
+        mViewModel.download.removeObserver(mObserveDownload);
     }
 }

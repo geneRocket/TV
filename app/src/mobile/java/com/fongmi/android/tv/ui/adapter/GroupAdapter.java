@@ -63,8 +63,14 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.ViewHolder> 
     }
 
     public void setSelected(int position) {
+        int oldPosition = getPosition();
         for (int i = 0; i < mItems.size(); i++) mItems.get(i).setSelected(i == position);
-        notifyItemRangeChanged(0, getItemCount());
+        if (oldPosition == position) {
+            notifyItemChanged(position);
+        } else {
+            notifyItemChanged(oldPosition);
+            notifyItemChanged(position);
+        }
         mListener.setWidth(mItems.get(position));
     }
 

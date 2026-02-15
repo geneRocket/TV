@@ -49,6 +49,7 @@ import com.github.catvod.utils.Path;
 import com.google.common.net.HttpHeaders;
 import com.orhanobut.logger.Logger;
 
+import java.lang.reflect.Method;
 import java.util.*;
 
 import master.flame.danmaku.controller.DrawHandler;
@@ -80,6 +81,9 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private ExoPlayer exoPlayer;
     private ParseJob parseJob;
     private List<Sub> subs;
+    private Method danmuSetSpeed;
+    private Method danmuSetSpeedFactor;
+    private boolean danmuMethodResolved;
     private String format;
     private String url;
     private Drm drm;
@@ -170,6 +174,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void setDanmuView(DanmakuView view) {
         view.setCallback(this);
         danmuView = view;
+        danmuMethodResolved = false;
+        danmuSetSpeed = null;
+        danmuSetSpeedFactor = null;
+        resolveDanmuSpeedMethod();
     }
 
     public ExoPlayer exo() {
@@ -454,8 +462,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void release() {
         stopParse();
         session.release();
-        if (isExo()) releaseExo();
-        if (isIjk()) releaseIjk();
+        releaseExo();
+        releaseIjk();
         if (haveDanmu()) danmuView.release();
         removeTimeoutCheck();
         Server.get().setPlayer(null);
@@ -623,6 +631,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public static Map<String, String> checkUa(Map<String, String> headers) {
+        if (headers == null) headers = new HashMap<>();
+        else headers = new HashMap<>(headers);
         if (Setting.getUa().isEmpty()) return headers;
         for (Map.Entry<String, String> header : headers.entrySet()) if (HttpHeaders.USER_AGENT.equalsIgnoreCase(header.getKey())) return headers;
         headers.put(HttpHeaders.USER_AGENT, Setting.getUa());
@@ -630,6 +640,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private List<Sub> checkSub(List<Sub> subs) {
+        if (subs == null) subs = new ArrayList<>();
+        else subs = new ArrayList<>(subs);
         if (sub == null) return subs;
         
         // 检查是否已存在相同URL的字幕
@@ -846,17 +858,33 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void applyDanmuSpeed() {
         if (danmuView == null) return;
         if (!danmuView.isPrepared()) return;
+        if (!danmuMethodResolved) resolveDanmuSpeedMethod();
         float speed = getSpeed();
         try {
-            java.lang.reflect.Method method = danmuView.getClass().getMethod("setSpeed", float.class);
-            method.invoke(danmuView, speed);
-            return;
+            if (danmuSetSpeed != null) {
+                danmuSetSpeed.invoke(danmuView, speed);
+                return;
+            }
         } catch (Exception ignored) {
         }
         try {
-            java.lang.reflect.Method method = danmuView.getClass().getMethod("setSpeedFactor", float.class);
-            method.invoke(danmuView, speed);
+            if (danmuSetSpeedFactor != null) danmuSetSpeedFactor.invoke(danmuView, speed);
         } catch (Exception ignored) {
+        }
+    }
+
+    private void resolveDanmuSpeedMethod() {
+        danmuMethodResolved = true;
+        if (danmuView == null) return;
+        try {
+            danmuSetSpeed = danmuView.getClass().getMethod("setSpeed", float.class);
+        } catch (Exception ignored) {
+            danmuSetSpeed = null;
+        }
+        try {
+            danmuSetSpeedFactor = danmuView.getClass().getMethod("setSpeedFactor", float.class);
+        } catch (Exception ignored) {
+            danmuSetSpeedFactor = null;
         }
     }
 

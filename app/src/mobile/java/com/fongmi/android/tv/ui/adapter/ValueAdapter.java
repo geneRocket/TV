@@ -45,8 +45,16 @@ public class ValueAdapter extends RecyclerView.Adapter<ValueAdapter.ViewHolder> 
     }
 
     private void onItemClick(Value value) {
+        int oldPosition = -1;
+        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).isActivated()) oldPosition = i;
         for (Value item : mItems) item.setActivated(value);
-        notifyItemRangeChanged(0, getItemCount());
+        int newPosition = mItems.indexOf(value);
+        if (oldPosition == newPosition) {
+            if (newPosition >= 0) notifyItemChanged(newPosition);
+        } else {
+            if (oldPosition >= 0) notifyItemChanged(oldPosition);
+            if (newPosition >= 0) notifyItemChanged(newPosition);
+        }
         mListener.setFilter(mKey, value);
     }
 

@@ -154,6 +154,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int toggleCount;
     private int errorCount;
     private int groupSize;
+    private long mLastHistorySaveAt;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
@@ -1389,7 +1390,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         long position, duration;
         mHistory.setPosition(position = mPlayers.getPosition());
         mHistory.setDuration(duration = mPlayers.getDuration());
-        if (position >= 0 && duration > 0 && !Setting.isIncognito()) App.execute(() -> mHistory.update());
+        if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
+            long now = System.currentTimeMillis();
+            if (now - mLastHistorySaveAt >= 3000) {
+                mLastHistorySaveAt = now;
+                App.execute(() -> mHistory.update());
+            }
+        }
         
         // 片头跳过检测
         if (mHistory.getOpening() > 0 && position > 0 && position < mHistory.getOpening()) {

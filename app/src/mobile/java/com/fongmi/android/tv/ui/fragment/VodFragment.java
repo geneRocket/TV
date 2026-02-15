@@ -67,9 +67,9 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.io.IOException;
-import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import okhttp3.Call;
 import okhttp3.Headers;
@@ -82,6 +82,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     private TypeAdapter mAdapter;
     private Runnable mRunnable;
     private List<String> mHots;
+    private final Random mRandom = new Random();
     private Result mResult;
 
     public static VodFragment newInstance() {
@@ -176,7 +177,8 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     private void updateHot() {
         App.post(mRunnable, 10 * 1000);
         if (mHots.isEmpty() || mHots.size() < 10) return;
-        mBinding.hot.setText(mHots.get(new SecureRandom().nextInt(11)));
+        String hot = mHots.get(mRandom.nextInt(mHots.size()));
+        if (!TextUtils.equals(mBinding.hot.getText(), hot)) mBinding.hot.setText(hot);
     }
 
     private Result handle(Result result) {

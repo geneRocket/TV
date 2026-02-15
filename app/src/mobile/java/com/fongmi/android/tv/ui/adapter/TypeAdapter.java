@@ -50,9 +50,16 @@ public class TypeAdapter extends RecyclerView.Adapter<TypeAdapter.ViewHolder> {
     }
 
     public void setActivated(int position) {
+        int oldPosition = 0;
+        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).isActivated()) oldPosition = i;
         for (Class item : mItems) item.setActivated(false);
         mItems.get(position).setActivated(true);
-        notifyItemRangeChanged(0, mItems.size());
+        if (oldPosition == position) {
+            notifyItemChanged(position);
+        } else {
+            notifyItemChanged(oldPosition);
+            notifyItemChanged(position);
+        }
     }
 
     public Class get(int position) {

@@ -56,8 +56,15 @@ public class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.ViewHold
 
     public void setSelected(int position) {
         if (position == -1) return;
+        int oldPosition = -1;
+        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).isSelected()) oldPosition = i;
         for (int i = 0; i < mItems.size(); i++) mItems.get(i).setSelected(i == position);
-        notifyItemRangeChanged(0, getItemCount());
+        if (oldPosition == position) {
+            notifyItemChanged(position);
+        } else {
+            if (oldPosition >= 0) notifyItemChanged(oldPosition);
+            notifyItemChanged(position);
+        }
     }
 
     public int setSelected(Channel channel) {
