@@ -190,7 +190,7 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
     public void onResume() {
         super.onResume();
         setDimAmount(0.5f);
-        getDialog().getWindow().setLayout(ResUtil.dp2px(600), ResUtil.dp2px(600));
+        if (getDialog() != null && getDialog().getWindow() != null) getDialog().getWindow().setLayout(ResUtil.dp2px(600), ResUtil.dp2px(600));
     }
 
     public interface Listener {

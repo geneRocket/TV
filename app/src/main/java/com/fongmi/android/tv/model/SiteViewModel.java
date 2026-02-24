@@ -39,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 
 import okhttp3.Call;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class SiteViewModel extends ViewModel {
 
@@ -91,7 +92,7 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(homeContent);
                 return Result.fromJson(homeContent);
             } else {
-                String homeContent = OkHttp.newCall(site.getApi(), site.getHeaders()).execute().body().string();
+                String homeContent = call(OkHttp.newCall(site.getApi(), site.getHeaders()));
                 SpiderDebug.log(homeContent);
                 return fetchPic(site, Result.fromType(site.getType(), homeContent));
             }
@@ -188,7 +189,7 @@ public class SiteViewModel extends ViewModel {
             } else {
                 Url url = Url.create().add(id);
                 String type = Uri.parse(id).getQueryParameter("type");
-                if ("json".equals(type)) url = Result.fromJson(OkHttp.newCall(id, site.getHeaders()).execute().body().string()).getUrl();
+                if ("json".equals(type)) url = Result.fromJson(call(OkHttp.newCall(id, site.getHeaders()))).getUrl();
                 Result result = new Result();
                 result.setUrl(url);
                 result.setFlag(flag);
@@ -257,7 +258,18 @@ public class SiteViewModel extends ViewModel {
 
     private String call(Site site, ArrayMap<String, String> params, boolean limit) throws IOException {
         Call call = fetchExt(site, params, limit).length() <= 1000 ? OkHttp.newCall(site.getApi(), site.getHeaders(), params) : OkHttp.newCall(site.getApi(), site.getHeaders(), OkHttp.toBody(params));
-        return call.execute().body().string();
+        return call(call);
+    }
+
+    private String call(Call call) throws IOException {
+        try (Response res = call.execute()) {
+            return body(res);
+        }
+    }
+
+    private String body(Response response) throws IOException {
+        ResponseBody body = response.body();
+        return body == null ? "" : body.string();
     }
 
     private String fetchExt(Site site, ArrayMap<String, String> params, boolean limit) throws IOException {
@@ -271,7 +283,7 @@ public class SiteViewModel extends ViewModel {
     private String fetchExt(Site site) throws IOException {
         try (Response res = OkHttp.newCall(site.getExt(), site.getHeaders()).execute()) {
             if (res.code() != 200) return "";
-            site.setExt(res.body().string());
+            site.setExt(body(res));
             return site.getExt();
         }
     }
@@ -285,7 +297,7 @@ public class SiteViewModel extends ViewModel {
         ArrayMap<String, String> params = new ArrayMap<>();
         params.put("ac", site.getType() == 0 ? "videolist" : "detail");
         params.put("ids", TextUtils.join(",", ids));
-        String response = OkHttp.newCall(site.getApi(), site.getHeaders(), params).execute().body().string();
+        String response = call(OkHttp.newCall(site.getApi(), site.getHeaders(), params));
         result.setList(Result.fromType(site.getType(), response).getList());
         return result;
     }
@@ -309,6 +321,7 @@ public class SiteViewModel extends ViewModel {
                 result.postValue(Result.error(e.getMessage()));
                 e.printStackTrace();
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 result.postValue(Result.empty());
             } catch (Exception e) {
                 result.postValue(Result.empty());

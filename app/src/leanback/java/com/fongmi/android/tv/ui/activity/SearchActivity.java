@@ -37,6 +37,7 @@ import com.google.common.net.HttpHeaders;
 
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.util.Collections;
 import java.util.List;
 
 import okhttp3.Call;
@@ -52,6 +53,17 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private RecordAdapter mRecordAdapter;
     private WordAdapter mWordAdapter;
     private boolean mAutoSearched;
+    private Call mSuggestOneCall;
+    private Call mSuggestTwoCall;
+    private String mSuggestKeyword;
+    private int mSuggestRequestId;
+    private final Runnable mSuggestTask = new Runnable() {
+        @Override
+        public void run() {
+            if (TextUtils.isEmpty(mSuggestKeyword)) return;
+            getSuggest(mSuggestKeyword);
+        }
+    };
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SearchActivity.class));
@@ -85,8 +97,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mBinding.keyword.addTextChangedListener(new CustomTextListener() {
             @Override
             public void afterTextChanged(Editable s) {
-                if (s.toString().isEmpty()) getHot();
-                else getSuggest(s.toString());
+                String keyword = s.toString().trim();
+                if (keyword.isEmpty()) {
+                    cancelSuggestTask();
+                    getHot();
+                } else {
+                    mSuggestKeyword = keyword;
+                    App.post(mSuggestTask, 250);
+                }
             }
         });
         mBinding.mic.setListener(this, new CustomTextListener() {
@@ -127,6 +145,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private void getHot() {
+        cancelSuggestRequest();
         mBinding.hint.setText(R.string.search_hot);
         mWordAdapter.addAll(Hot.get(Setting.getHot()));
         OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Headers.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general")).enqueue(new Callback() {
@@ -140,24 +159,47 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private void getSuggest(String text) {
+        int requestId = ++mSuggestRequestId;
+        cancelSuggestRequest();
         mBinding.hint.setText(R.string.search_suggest);
-        mWordAdapter.clear();
-        OkHttp.newCall("https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box?format=json&page_num=0&page_size=10&key=" + URLEncoder.encode(Trans.z2p(text))).enqueue(new Callback() {
+        mWordAdapter.addAll(Collections.emptyList());
+        mSuggestOneCall = OkHttp.newCall("https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box?format=json&page_num=0&page_size=10&key=" + URLEncoder.encode(Trans.z2p(text)));
+        mSuggestOneCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (mBinding.keyword.getText().toString().trim().isEmpty()) return;
+                if (!isSuggestRequestValid(requestId, text)) return;
                 List<String> items = SuggestTwo.get(response.body().string());
-                App.post(() -> mWordAdapter.appendAll(items));
+                App.post(() -> {
+                    if (isSuggestRequestValid(requestId, text)) mWordAdapter.appendAll(items);
+                });
             }
         });
-        OkHttp.newCall("https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(Trans.z2p(text))).enqueue(new Callback() {
+        mSuggestTwoCall = OkHttp.newCall("https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(Trans.z2p(text)));
+        mSuggestTwoCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (mBinding.keyword.getText().toString().trim().isEmpty()) return;
+                if (!isSuggestRequestValid(requestId, text)) return;
                 List<String> items = Suggest.get(response.body().string());
-                App.post(() -> mWordAdapter.appendAll(items), 200);
+                App.post(() -> {
+                    if (isSuggestRequestValid(requestId, text)) mWordAdapter.appendAll(items);
+                });
             }
         });
+    }
+
+    private void cancelSuggestTask() {
+        App.removeCallbacks(mSuggestTask);
+    }
+
+    private void cancelSuggestRequest() {
+        if (mSuggestOneCall != null) mSuggestOneCall.cancel();
+        if (mSuggestTwoCall != null) mSuggestTwoCall.cancel();
+        mSuggestOneCall = null;
+        mSuggestTwoCall = null;
+    }
+
+    private boolean isSuggestRequestValid(int requestId, String requestKeyword) {
+        return requestId == mSuggestRequestId && requestKeyword.equals(mBinding.keyword.getText().toString().trim());
     }
 
     @Override
@@ -209,5 +251,12 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     protected void onResume() {
         super.onResume();
         mBinding.keyword.requestFocus();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        cancelSuggestTask();
+        cancelSuggestRequest();
     }
 }

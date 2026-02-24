@@ -96,7 +96,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private int retry;
 
     public static Players create(Activity activity) {
-        if (Server.get().getPlayer() != null) Server.get().getPlayer().release();
         Players player = new Players(activity);
         Server.get().setPlayer(player);
         return player;
@@ -203,6 +202,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void setSub(Sub sub) {
         this.sub = sub;
         if (isIjk()) return;
+        if (TextUtils.isEmpty(url)) return;
         setPosition(getPosition());
         setMediaSource();
     }
@@ -212,7 +212,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void setMetadata(MediaMetadataCompat metadata) {
-        session.setMetadata(metadata);
+        if (session != null) session.setMetadata(metadata);
     }
 
     public int getPlayer() {
@@ -435,7 +435,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void play() {
         if (isPlaying() || isEnd()) return;
-        session.setActive(true);
+        Server.get().setPlayer(this);
+        if (session != null) session.setActive(true);
         if (isExo()) playExo();
         if (isIjk()) playIjk();
         if (haveDanmu()) danmuView.resume();
@@ -446,6 +447,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void pause() {
         if (isExo()) pauseExo();
         if (isIjk()) pauseIjk();
+        if (session != null) session.setActive(false);
         if (haveDanmu()) danmuView.pause();
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
         PlayerEvent.state(Player.STATE_READY);
@@ -454,21 +456,35 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void stop() {
         if (isExo()) stopExo();
         if (isIjk()) stopIjk();
-        session.setActive(false);
+        if (session != null) session.setActive(false);
         if (haveDanmu()) danmuView.stop();
         setPlaybackState(PlaybackStateCompat.STATE_STOPPED);
     }
 
     public void release() {
+        boolean current = Server.get().getPlayer() == this;
         stopParse();
-        session.release();
+        if (session != null) {
+            session.release();
+            session = null;
+        }
         releaseExo();
         releaseIjk();
         if (haveDanmu()) danmuView.release();
         removeTimeoutCheck();
-        Server.get().setPlayer(null);
-        App.execute(() -> Path.clear(Path.exo()));
-        App.execute(() -> Source.get().stop());
+        if (current) {
+            Server.get().setPlayer(null);
+            App.execute(() -> Path.clear(Path.exo()));
+            App.execute(() -> Source.get().stop());
+        }
+    }
+
+    public void releasePlayer() {
+        stopParse();
+        releaseExo();
+        releaseIjk();
+        removeTimeoutCheck();
+        if (haveDanmu()) danmuView.pause();
     }
 
     public void start(Channel channel, int timeout) {
@@ -552,6 +568,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void setMediaSource() {
+        if (TextUtils.isEmpty(url)) return;
         setMediaSource(headers, url, format, drm, subs, Constant.TIMEOUT_PLAY);
     }
 
@@ -618,6 +635,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void setPlaybackState(int state) {
+        if (session == null) return;
         long actions = PlaybackStateCompat.ACTION_SEEK_TO | PlaybackStateCompat.ACTION_PLAY_PAUSE | PlaybackStateCompat.ACTION_SKIP_TO_NEXT | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS;
         session.setPlaybackState(new PlaybackStateCompat.Builder().setActions(actions).setState(state, getPosition(), getSpeed()).build());
     }
@@ -696,7 +714,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         builder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artUri);
         builder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, artUri);
         builder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, getDuration());
-        session.setMetadata(putBitmap(builder, drawable).build());
+        setMetadata(putBitmap(builder, drawable).build());
         ActionEvent.update();
     }
 

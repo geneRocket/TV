@@ -151,6 +151,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean initAuto;
     private boolean autoMode;
     private boolean useParse;
+    private volatile boolean mSearchActive;
     private int toggleCount;
     private int errorCount;
     private int groupSize;
@@ -1033,6 +1034,22 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         onReset(false);
     }
 
+    private void saveHistoryNow() {
+        if (mHistory == null) return;
+        long position = mPlayers.getPosition();
+        long duration = mPlayers.getDuration();
+        mHistory.setPosition(position);
+        mHistory.setDuration(duration);
+        if (position >= 0 && duration > 0 && !Setting.isIncognito()) App.execute(() -> mHistory.update());
+    }
+
+    private void releaseForCastIfNeeded() {
+        if (!isBackground() || isFinishing() || mPlayers.isRelease()) return;
+        if (!(App.activity() instanceof CastActivity)) return;
+        saveHistoryNow();
+        mPlayers.releasePlayer();
+    }
+
     private void onReset() {
         onReset(isReplay());
     }
@@ -1597,6 +1614,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mQuickAdapter.clear();
         List<Site> sites = new ArrayList<>();
         mExecutor = ThreadPools.search();
+        mSearchActive = true;
         for (Site site : VodConfig.get().getSites()) if (isPass(site)) sites.add(site);
         for (Site site : sites) mExecutor.execute(() -> search(site, keyword));
     }
@@ -1605,6 +1623,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mExecutor == null) return;
         if (mExecutor != ThreadPools.search()) mExecutor.shutdownNow();
         mExecutor = null;
+        mSearchActive = false;
     }
 
     private void search(Site site, String keyword) {
@@ -1615,6 +1634,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setSearch(Result result) {
+        if (!mSearchActive) return;
         List<Vod> items = result.getList();
         Iterator<Vod> iterator = items.iterator();
         while (iterator.hasNext()) if (mismatch(iterator.next())) iterator.remove();
@@ -1674,19 +1694,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.play();
         hideCenter();
     }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        // 新增：进入后台时主动释放播放器，而不是等待被别人杀掉
-        // 这样可以确保 Decoder 和 Surface 的关系被正确解绑
-        if (mPlayers != null) {
-            mPlayers.stop();
-            mPlayers.release();
-        }
-    }
-
-    // 注意：原来的 onDestroy 中也有 release，保留即可，但逻辑主要由 onStop 承担
 
     public boolean isBackground() {
         return background;
@@ -1939,6 +1946,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setBackground(true);
         mPlayers.pause();
         mClock.stop();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        releaseForCastIfNeeded();
     }
 
     @Override

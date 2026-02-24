@@ -149,6 +149,10 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
             public WebResourceResponse shouldInterceptRequestByProxy(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 try {
+                    String scheme = request.getUrl().getScheme();
+                    if (request.isForMainFrame()) return null;
+                    if (!"GET".equalsIgnoreCase(request.getMethod())) return null;
+                    if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) return null;
                     if (url.matches(".*\\.(css|woff|woff2|ttf|otf|eot|svg|mp4|webm|avi|gif)$")) {
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }

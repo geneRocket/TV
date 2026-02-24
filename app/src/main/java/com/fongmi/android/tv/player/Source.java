@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -74,7 +75,14 @@ public class Source {
             List<Callable<List<Episode>>> items = new ArrayList<>();
             Iterator<Episode> iterator = flag.getEpisodes().iterator();
             while (iterator.hasNext()) addCallable(iterator, items);
-            for (Future<List<Episode>> future : executor.invokeAll(items, 30, TimeUnit.SECONDS)) flag.getEpisodes().addAll(future.get());
+            for (Future<List<Episode>> future : executor.invokeAll(items, 30, TimeUnit.SECONDS)) {
+                try {
+                    if (future.isCancelled()) continue;
+                    List<Episode> episodes = future.get();
+                    if (episodes != null) flag.getEpisodes().addAll(episodes);
+                } catch (CancellationException ignored) {
+                }
+            }
         }
     }
 

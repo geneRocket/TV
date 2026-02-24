@@ -123,6 +123,6 @@ public final class SubtitleDialog extends BaseDialog {
     public void onResume() {
         super.onResume();
         if (full) setDimAmount(0.5f);
-        getDialog().getWindow().setLayout(ResUtil.dp2px(248), -1);
+        if (getDialog() != null && getDialog().getWindow() != null) getDialog().getWindow().setLayout(ResUtil.dp2px(248), -1);
     }
 }

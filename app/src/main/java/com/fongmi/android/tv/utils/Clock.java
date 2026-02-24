@@ -35,6 +35,7 @@ public class Clock {
     public Clock() {
         this.date = new Date();
         this.views = new ArrayList<>();
+        this.format = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
     }
 
     public Clock view(TextView view) {
@@ -57,6 +58,7 @@ public class Clock {
     }
 
     public void start() {
+        stop();
         timer = new Timer();
         timer.schedule(new TimerTask() {
             @Override
@@ -79,11 +81,12 @@ public class Clock {
 
     public Clock stop() {
         if (timer != null) timer.cancel();
+        timer = null;
         return this;
     }
 
     public void release() {
-        if (timer != null) timer.cancel();
+        stop();
         if (callback != null) callback = null;
     }
 

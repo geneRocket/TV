@@ -22,12 +22,13 @@ public class CacheManager {
         return Loader.INSTANCE;
     }
 
-    public Cache getCache() {
+    public synchronized Cache getCache() {
         if (cache == null) create();
         return cache;
     }
 
-    private void create() {
+    private synchronized void create() {
+        if (cache != null) return;
         cache = new SimpleCache(Path.exo(), new LeastRecentlyUsedCacheEvictor(MAX_CACHE_BYTES), new StandaloneDatabaseProvider(App.get()));
     }
 }

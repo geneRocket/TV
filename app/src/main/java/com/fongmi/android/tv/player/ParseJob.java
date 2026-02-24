@@ -11,6 +11,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.custom.CustomWebView;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.net.OkHttp;
@@ -27,13 +28,18 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import okhttp3.Headers;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class ParseJob implements ParseCallback {
 
     private final List<CustomWebView> webViews;
+    private final CopyOnWriteArrayList<Future<?>> parseTasks;
     private ExecutorService executor;
     private ExecutorService infinite;
     private ParseCallback callback;
@@ -45,8 +51,9 @@ public class ParseJob implements ParseCallback {
 
     public ParseJob(ParseCallback callback) {
         this.executor = Executors.newFixedThreadPool(2);
-        this.infinite = Executors.newFixedThreadPool(Constant.THREAD_POOL);
+        this.infinite = ThreadPools.parse();
         this.webViews = new ArrayList<>();
+        this.parseTasks = new CopyOnWriteArrayList<>();
         this.callback = callback;
     }
 
@@ -112,12 +119,23 @@ public class ParseJob implements ParseCallback {
     }
 
     private void jsonParse(Parse item, String webUrl, boolean error) throws Exception {
-        String body = OkHttp.newCall(item.getUrl() + webUrl, Headers.of(item.getHeaders())).execute().body().string();
+        String body = requestString(item.getUrl() + webUrl, item.getHeaders());
+        if (TextUtils.isEmpty(body)) {
+            if (error) onParseError();
+            return;
+        }
         JsonObject object = Json.parse(body).getAsJsonObject();
         String url = Json.safeString(object, "url");
         JsonObject data = object.getAsJsonObject("data");
         if (url.isEmpty()) url = Json.safeString(data, "url");
         checkResult(getHeader(object), url, item.getName(), error);
+    }
+
+    private String requestString(String url, Map<String, String> headers) throws Exception {
+        try (Response response = OkHttp.newCall(url, Headers.of(headers)).execute()) {
+            ResponseBody body = response.body();
+            return body == null ? "" : body.string();
+        }
     }
 
     private void jsonExtend(String webUrl) throws Throwable {
@@ -137,7 +155,7 @@ public class ParseJob implements ParseCallback {
         List<Parse> webs = VodConfig.get().getParses(0, flag);
         int count = json.size() + (webs.isEmpty() ? 0 : 1);
         CountDownLatch latch = new CountDownLatch(count);
-        for (Parse item : json) infinite.execute(() -> jsonParse(latch, item, webUrl));
+        for (Parse item : json) parseTasks.add(infinite.submit(() -> jsonParse(latch, item, webUrl)));
         if (!webs.isEmpty()) startWeb(webs, webUrl);
         latch.await();
         onParseError();
@@ -216,7 +234,8 @@ public class ParseJob implements ParseCallback {
 
     public void stop() {
         if (executor != null) executor.shutdownNow();
-        if (infinite != null) infinite.shutdownNow();
+        for (Future<?> task : parseTasks) task.cancel(true);
+        parseTasks.clear();
         infinite = null;
         executor = null;
         callback = null;

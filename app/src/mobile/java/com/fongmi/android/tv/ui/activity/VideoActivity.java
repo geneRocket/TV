@@ -492,10 +492,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result.observeForever(mObserveDetail);
-        mViewModel.player.observeForever(mObservePlayer);
-        mViewModel.search.observeForever(mObserveSearch);
-        mViewModel.download.observeForever(mObserveDownload);
+        mViewModel.result.observe(this, mObserveDetail);
+        mViewModel.player.observe(this, mObservePlayer);
+        mViewModel.search.observe(this, mObserveSearch);
+        mViewModel.download.observe(this, mObserveDownload);
         mViewModel.episode.observe(this, episode -> {
             onItemClick(episode);
             hideSheet();
@@ -1937,9 +1937,5 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Source.get().stop();
         RefreshEvent.history();
         App.removeCallbacks(mR1, mR2, mR3, mR4);
-        mViewModel.result.removeObserver(mObserveDetail);
-        mViewModel.player.removeObserver(mObservePlayer);
-        mViewModel.search.removeObserver(mObserveSearch);
-        mViewModel.download.removeObserver(mObserveDownload);
     }
 }

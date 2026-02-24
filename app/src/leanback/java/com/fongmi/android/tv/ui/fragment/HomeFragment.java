@@ -183,7 +183,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
             mAdapter.add(historyStringIndex, R.string.home_history);
         }
         if (!Setting.isHomeHistory()) {
-            mAdapter.removeItems(historyIndex - 1, 2);
+            if (historyIndex > 0 && mAdapter.size() >= historyIndex + 1) mAdapter.removeItems(historyIndex - 1, 2);
             return;
         }
         historyIndex = getHistoryIndex();

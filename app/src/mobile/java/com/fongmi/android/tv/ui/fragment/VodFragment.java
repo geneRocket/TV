@@ -130,6 +130,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         mBinding.pager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override
             public void onPageSelected(int position) {
+                if (position < 0 || position >= mAdapter.getItemCount()) return;
                 mBinding.type.smoothScrollToPosition(position);
                 mAdapter.setActivated(position);
                 setFabVisible(position);
@@ -169,7 +170,10 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Headers.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general")).enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                mHots = Hot.get(response.body().string());
+                try (Response res = response) {
+                    if (res.body() == null) return;
+                    mHots = Hot.get(res.body().string());
+                }
             }
         });
     }
@@ -198,7 +202,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     }
 
     private void setFabVisible(int position) {
-        if (mAdapter.getItemCount() == 0) {
+        if (mAdapter.getItemCount() == 0 || position < 0 || position >= mAdapter.getItemCount()) {
             mBinding.top.setVisibility(View.INVISIBLE);
             mBinding.link.setVisibility(View.VISIBLE);
             mBinding.filter.setVisibility(View.GONE);
@@ -459,6 +463,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
 
         @Override
         public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
+            super.destroyItem(container, position, object);
         }
     }
 }

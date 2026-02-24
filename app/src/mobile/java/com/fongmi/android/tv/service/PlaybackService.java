@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
+import android.util.LruCache;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
@@ -32,13 +33,20 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Collections;
 import java.util.Objects;
+import java.util.Set;
 
 public class PlaybackService extends Service {
 
-    private final Map<String, Bitmap> cache = new HashMap<>();
+    private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(8 * 1024) {
+        @Override
+        protected int sizeOf(String key, Bitmap value) {
+            return value == null ? 0 : Math.max(value.getByteCount() / 1024, 1);
+        }
+    };
+    private final Set<String> loadingArtwork = Collections.synchronizedSet(new HashSet<>());
     private static Players player;
 
     public static void start(Players player) {
@@ -76,11 +84,15 @@ public class PlaybackService extends Service {
     }
 
     private String getTitle() {
-        return getMetadata() == null || getMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE).isEmpty() ? null : getMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE);
+        if (getMetadata() == null) return null;
+        String title = getMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE);
+        return title == null || title.isEmpty() ? null : title;
     }
 
     private String getArtist() {
-        return getMetadata() == null || getMetadata().getString(MediaMetadataCompat.METADATA_KEY_ARTIST).isEmpty() ? null : getMetadata().getString(MediaMetadataCompat.METADATA_KEY_ARTIST);
+        if (getMetadata() == null) return null;
+        String artist = getMetadata().getString(MediaMetadataCompat.METADATA_KEY_ARTIST);
+        return artist == null || artist.isEmpty() ? null : artist;
     }
 
     private String getArtUri() {
@@ -97,10 +109,15 @@ public class PlaybackService extends Service {
     }
 
     private void setArtwork(NotificationCompat.Builder builder) {
-        if (cache.containsKey(getArtUri())) {
-            setLargeIcon(builder, cache.get(getArtUri()));
+        String artUri = getArtUri();
+        if (artUri == null || artUri.isEmpty()) return;
+        Bitmap cached = cache.get(artUri);
+        if (cached != null) {
+            setLargeIcon(builder, cached);
         } else {
-            ImgUtil.load(getArtUri(), getCallback(builder));
+            if (loadingArtwork.contains(artUri)) return;
+            loadingArtwork.add(artUri);
+            ImgUtil.load(artUri, getCallback(builder, artUri));
         }
     }
 
@@ -127,17 +144,24 @@ public class PlaybackService extends Service {
         return builder.build();
     }
 
-    private CustomTarget<Bitmap> getCallback(NotificationCompat.Builder builder) {
+    private CustomTarget<Bitmap> getCallback(NotificationCompat.Builder builder, String artUri) {
         return new CustomTarget<>() {
             @Override
             public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
-                cache.put(getArtUri(), resource);
+                loadingArtwork.remove(artUri);
+                cache.put(artUri, resource);
                 setLargeIcon(builder, resource);
                 Notify.show(builder.build());
             }
 
             @Override
             public void onLoadCleared(@Nullable Drawable placeholder) {
+                loadingArtwork.remove(artUri);
+            }
+
+            @Override
+            public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                loadingArtwork.remove(artUri);
             }
         };
     }
@@ -170,6 +194,9 @@ public class PlaybackService extends Service {
         EventBus.getDefault().unregister(this);
         getManager().cancel(Notify.ID);
         stopForeground(true);
+        cache.evictAll();
+        loadingArtwork.clear();
+        player = null;
     }
 
     @Nullable

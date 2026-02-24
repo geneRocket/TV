@@ -35,6 +35,7 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
 
     public void clear() {
         mItems.clear();
+        notifyDataSetChanged();
     }
 
     public void appendAll(List<String> items) {

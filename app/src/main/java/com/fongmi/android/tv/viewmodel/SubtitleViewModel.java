@@ -19,6 +19,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,13 +29,25 @@ import okhttp3.Callback;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class SubtitleViewModel extends ViewModel {
 
     public MutableLiveData<SubtitleData> searchResult;
+    private final AtomicInteger requestSeq;
+    private final OkHttpClient subtitleClient;
 
     public SubtitleViewModel() {
         searchResult = new MutableLiveData<>();
+        requestSeq = new AtomicInteger();
+        subtitleClient = OkHttp.client().newBuilder()
+                .readTimeout(15, TimeUnit.SECONDS)
+                .writeTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .retryOnConnectionFailure(true)
+                .build();
     }
 
     public void searchResult(String title, int page) {
@@ -66,8 +79,9 @@ public class SubtitleViewModel extends ViewModel {
 
     private void searchResultFromAssrt(String title, int page) {
         try {
+            int seq = requestSeq.incrementAndGet();
             if (pagesTotal > 0 && page > pagesTotal) {
-                setSearchListData(new ArrayList<>(), page <= 1, true);
+                if (seq == requestSeq.get()) setSearchListData(new ArrayList<>(), page <= 1, true);
                 return;
             }
             if (page == 1) pagesTotal = -1;//第一页时 重置页大小
@@ -78,13 +92,17 @@ public class SubtitleViewModel extends ViewModel {
                 @Override
                 public void onFailure(Call call, IOException e) {
                     e.printStackTrace();
-                    setSearchListData(null, page <= 1, true);
+                    if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
-                    try {
-                        String content = response.body().string();
+                    try (ResponseBody body = response.body()) {
+                        if (body == null) {
+                            if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
+                            return;
+                        }
+                        String content = body.string();
                         Document doc = Jsoup.parse(content);
                         Elements items = doc.select(".resultcard .sublist_box_title a.introtitle");
                         List<Subtitle> data = new ArrayList<>();
@@ -98,16 +116,22 @@ public class SubtitleViewModel extends ViewModel {
                             one.setIsZip(true);
                             data.add(one);
                         }
+                        if (seq != requestSeq.get()) return;
                         setSearchListData(data, page <= 1, true);
                         Elements pages = doc.select(".pagelinkcard a");
                         if (pages.size() > 0) {
                             String[] ps = pages.last().text().split("/", 2);
                             if (ps.length == 2 && !TextUtils.isEmpty(ps[1])) {
-                                pagesTotal = Integer.valueOf(ps[1].trim());
+                                try {
+                                    pagesTotal = Integer.parseInt(ps[1].trim());
+                                } catch (NumberFormatException e) {
+                                    pagesTotal = -1;
+                                }
                             }
                         }
                     } catch (Throwable th) {
                         th.printStackTrace();
+                        if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
                     }
                 }
             });
@@ -120,18 +144,23 @@ public class SubtitleViewModel extends ViewModel {
 
     private void getSearchResultSubtitleUrlsFromAssrt(Subtitle subtitle) {
         try {
+            int seq = requestSeq.incrementAndGet();
             String url = subtitle.getUrl();
             OkHttp.client().newCall(new Request.Builder().url(url).build()).enqueue(new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
                     e.printStackTrace();
-                    setSearchListData(null, true, true);
+                    if (seq == requestSeq.get()) setSearchListData(null, true, true);
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
-                    try {
-                        String content = response.body().string();
+                    try (ResponseBody body = response.body()) {
+                        if (body == null) {
+                            if (seq == requestSeq.get()) setSearchListData(null, true, false);
+                            return;
+                        }
+                        String content = body.string();
                         List<Subtitle> data = new ArrayList<>();
                         Document doc = Jsoup.parse(content);
                         Elements items = doc.select("#detail-filelist .waves-effect");
@@ -150,16 +179,16 @@ public class SubtitleViewModel extends ViewModel {
                                     data.add(one);
                                 }
                             }
-                            setSearchListData(data, true, false);
+                            if (seq == requestSeq.get()) setSearchListData(data, true, false);
                         } else {//有的字幕 不一定是压缩包
                             Element item = doc.selectFirst(".download a#btn_download");
                             if (item == null) {
-                                setSearchListData(null, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(null, true, false);
                                 return;
                             }
                             String href = item.attr("href");
                             if (TextUtils.isEmpty(href)) {
-                                setSearchListData(null, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(null, true, false);
                                 return;
                             }
                             String h2 = href.toLowerCase();
@@ -175,13 +204,14 @@ public class SubtitleViewModel extends ViewModel {
                                 one.setUrl(url);
                                 one.setIsZip(false);
                                 data.add(one);
-                                setSearchListData(data, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(data, true, false);
                             } else {
-                                setSearchListData(null, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(null, true, false);
                             }
                         }
                     } catch (Throwable th) {
                         th.printStackTrace();
+                        if (seq == requestSeq.get()) setSearchListData(null, true, false);
                     }
                 }
             });
@@ -198,15 +228,7 @@ public class SubtitleViewModel extends ViewModel {
                 .addHeader("Referer", "https://secure.assrt.net")
                 .addHeader("User-Agent", ua)
                 .build();
-        OkHttpClient.Builder builder = new OkHttpClient.Builder()
-                .readTimeout(15, TimeUnit.SECONDS)
-                .writeTimeout(15, TimeUnit.SECONDS)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .followRedirects(false)
-                .followSslRedirects(false)
-                .retryOnConnectionFailure(true);
-        OkHttpClient client = builder.build();
-        client.newCall(request).enqueue(new Callback() {
+        subtitleClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 e.printStackTrace();
@@ -214,8 +236,11 @@ public class SubtitleViewModel extends ViewModel {
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
-                subtitle.setUrl(response.header("location"));
-                subtitleLoader.loadSubtitle(subtitle);
+                try (Response res = response) {
+                    String location = res.header("location");
+                    subtitle.setUrl(TextUtils.isEmpty(location) ? subtitle.getUrl() : location);
+                    subtitleLoader.loadSubtitle(subtitle);
+                }
             }
         });
     }
