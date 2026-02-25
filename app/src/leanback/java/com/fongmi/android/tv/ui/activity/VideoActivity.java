@@ -520,7 +520,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.control.speed.setEnabled(mPlayers.canAdjustSpeed());
         getExo().setVisibility(mPlayers.isExo() ? View.VISIBLE : View.GONE);
         getIjk().setVisibility(mPlayers.isIjk() ? View.VISIBLE : View.GONE);
-        mBinding.control.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
+        float speed = mHistory == null ? Setting.getPlaySpeed() : mHistory.getSpeed();
+        mBinding.control.speed.setText(mPlayers.setSpeed(speed));
         setDanmuViewSettings();
         
         
@@ -1474,7 +1475,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 mPlayers.reset();
                 setDefaultTrack();
                 setTrackVisible(true);
-                mHistory.setPlayer(mPlayers.getPlayer());
+                if (mHistory != null) mHistory.setPlayer(mPlayers.getPlayer());
                 mBinding.widget.size.setText(mPlayers.getSizeText());
                 mBinding.display.size.setText(mPlayers.getSizeText());
                 break;
@@ -1509,10 +1510,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setMetadata() {
-        String title = mHistory.getVodName();
-        String episode = getEpisode().getName();
+        String title = mHistory == null ? mBinding.name.getText().toString() : mHistory.getVodName();
+        Episode current = mEpisodeAdapter.size() > 0 ? getEpisode() : null;
+        String episode = current == null ? title : current.getName();
         String artist = title.equals(episode) ? "" : getString(R.string.play_now, episode);
-        mPlayers.setMetadata(title, artist, mHistory.getVodPic(), getDefaultArtwork());
+        String artwork = mHistory == null ? getPic() : mHistory.getVodPic();
+        mPlayers.setMetadata(title, artist, artwork, getDefaultArtwork());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

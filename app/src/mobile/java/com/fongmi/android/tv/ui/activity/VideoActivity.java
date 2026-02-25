@@ -429,7 +429,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         getIjk().setPlayer(mPlayers.getPlayer());
         mBinding.control.action.player.setText(mPlayers.getPlayerText());
         mBinding.control.action.speed.setEnabled(mPlayers.canAdjustSpeed());
-        mBinding.control.action.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
+        float speed = mHistory == null ? Setting.getPlaySpeed() : mHistory.getSpeed();
+        mBinding.control.action.speed.setText(mPlayers.setSpeed(speed));
         getExo().setVisibility(mPlayers.isExo() ? View.VISIBLE : View.GONE);
         getIjk().setVisibility(mPlayers.isIjk() ? View.VISIBLE : View.GONE);
         setDanmuViewSettings();
@@ -1382,7 +1383,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 setDefaultTrack();
                 setTrackVisible(true);
                 checkPlayImg(mPlayers.isPlaying());
-                mHistory.setPlayer(mPlayers.getPlayer());
+                if (mHistory != null) mHistory.setPlayer(mPlayers.getPlayer());
                 mBinding.control.size.setText(mPlayers.getSizeText());
                 mBinding.display.size.setText(mPlayers.getSizeText());
                 if (isVisible(mBinding.control.getRoot())) showControl();
@@ -1426,10 +1427,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void setMetadata() {
-        String title = mHistory.getVodName();
-        String episode = getEpisode().getName();
+        String title = mHistory == null ? mBinding.name.getText().toString() : mHistory.getVodName();
+        Episode current = mEpisodeAdapter.isEmpty() ? null : getEpisode();
+        String episode = current == null ? title : current.getName();
         String artist = title.equals(episode) ? "" : getString(R.string.play_now, episode);
-        mPlayers.setMetadata(title, artist, mHistory.getVodPic(), getDefaultArtwork());
+        String artwork = mHistory == null ? getPic() : mHistory.getVodPic();
+        mPlayers.setMetadata(title, artist, artwork, getDefaultArtwork());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -1743,7 +1746,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onSpeedEnd() {
-        mBinding.control.action.speed.setText(mPlayers.setSpeed(mHistory.getSpeed()));
+        float speed = mHistory == null ? Setting.getPlaySpeed() : mHistory.getSpeed();
+        mBinding.control.action.speed.setText(mPlayers.setSpeed(speed));
         setDanmuViewSettings();
         
         

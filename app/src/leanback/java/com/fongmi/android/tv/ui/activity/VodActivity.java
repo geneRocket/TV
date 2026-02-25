@@ -204,6 +204,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
 
         @Override
         public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
+            super.destroyItem(container, position, object);
         }
     }
 }
