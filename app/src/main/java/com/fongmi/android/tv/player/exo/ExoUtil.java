@@ -34,6 +34,8 @@ import java.util.Map;
 
 public class ExoUtil {
 
+    private static final String EXTRA_FORCE_LIVE = "__force_live";
+
     public static LoadControl buildLoadControl() {
         int bufferMs = Setting.getBuffer() * 1000;
         int minBufferMs = Math.max(2000, bufferMs * 2);
@@ -112,20 +114,34 @@ public class ExoUtil {
         return 1;
     }
 
-    public static MediaItem getMediaItem(Map<String, String> headers, Uri uri, String mimeType, Drm drm, List<Sub> subs, int decode) {
+    public static MediaItem getMediaItem(Map<String, String> headers, Uri uri, String mimeType, Drm drm, List<Sub> subs, int decode, boolean forceLive) {
         MediaItem.Builder builder = new MediaItem.Builder().setUri(uri);
-        builder.setRequestMetadata(getRequestMetadata(headers, uri));
+        builder.setRequestMetadata(getRequestMetadata(headers, uri, forceLive));
         builder.setSubtitleConfigurations(getSubtitleConfigs(subs));
         if (drm != null) builder.setDrmConfiguration(drm.get());
+        if (TextUtils.isEmpty(mimeType) && forceLive) mimeType = guessLiveMimeType(uri);
         if (mimeType != null) builder.setMimeType(mimeType);
+        if (forceLive) builder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder().build());
         builder.setMediaId(uri.toString());
         return builder.build();
     }
 
-    private static MediaItem.RequestMetadata getRequestMetadata(Map<String, String> headers, Uri uri) {
+    private static String guessLiveMimeType(Uri uri) {
+        String value = uri.toString().toLowerCase(Locale.US);
+        if (value.contains(".m3u8")) return MimeTypes.APPLICATION_M3U8;
+        if (value.contains(".mpd")) return MimeTypes.APPLICATION_MPD;
+        return null;
+    }
+
+    private static MediaItem.RequestMetadata getRequestMetadata(Map<String, String> headers, Uri uri, boolean forceLive) {
         Bundle extras = new Bundle();
         for (Map.Entry<String, String> header : headers.entrySet()) extras.putString(header.getKey(), header.getValue());
+        extras.putBoolean(EXTRA_FORCE_LIVE, forceLive);
         return new MediaItem.RequestMetadata.Builder().setMediaUri(uri).setExtras(extras).build();
+    }
+
+    public static boolean isForceLive(MediaItem mediaItem) {
+        return mediaItem.requestMetadata != null && mediaItem.requestMetadata.extras != null && mediaItem.requestMetadata.extras.getBoolean(EXTRA_FORCE_LIVE, false);
     }
 
     private static List<MediaItem.SubtitleConfiguration> getSubtitleConfigs(List<Sub> subs) {

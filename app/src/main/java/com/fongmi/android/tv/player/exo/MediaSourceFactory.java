@@ -61,7 +61,8 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @NonNull
     @Override
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
-        MediaSource.Factory factory = buildMediaSourceFactory(getHeaders(mediaItem));
+        boolean forceLive = ExoUtil.isForceLive(mediaItem);
+        MediaSource.Factory factory = buildMediaSourceFactory(getHeaders(mediaItem), forceLive);
         if (drmSessionManagerProvider != null) factory.setDrmSessionManagerProvider(drmSessionManagerProvider);
         if (loadErrorHandlingPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
         if (mediaItem.mediaId.contains("***") && mediaItem.mediaId.contains("|||")) {
@@ -75,6 +76,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
         Map<String, String> headers = new HashMap<>();
         if (mediaItem.requestMetadata == null || mediaItem.requestMetadata.extras == null || mediaItem.requestMetadata.extras.isEmpty()) return headers;
         for (String key : mediaItem.requestMetadata.extras.keySet()) {
+            if ("__force_live".equals(key)) continue;
             Object value = mediaItem.requestMetadata.extras.get(key);
             if (value != null) headers.put(key, value.toString());
         }
@@ -100,10 +102,11 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return extractorsFactory;
     }
 
-    private MediaSource.Factory buildMediaSourceFactory(Map<String, String> headers) {
+    private MediaSource.Factory buildMediaSourceFactory(Map<String, String> headers, boolean forceLive) {
         HttpDataSource.Factory httpFactory = new MyOkhttpDataSource.Factory(OkHttp.client());
         if (headers != null && !headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
         DataSource.Factory upstreamFactory = new DefaultDataSource.Factory(App.get(), httpFactory);
+        if (forceLive) return new DefaultMediaSourceFactory(upstreamFactory, getExtractorsFactory());
         return new DefaultMediaSourceFactory(buildCacheDataSource(upstreamFactory), getExtractorsFactory());
     }
 

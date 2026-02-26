@@ -88,6 +88,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private String url;
     private Drm drm;
     private Sub sub;
+    private boolean forceLive;
 
     private long position;
     private int decode;
@@ -256,6 +257,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         subs = null;
         drm = null;
         url = null;
+        forceLive = false;
     }
 
     public int addRetry() {
@@ -569,7 +571,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void setMediaSource() {
         if (TextUtils.isEmpty(url)) return;
-        setMediaSource(headers, url, format, drm, subs, Constant.TIMEOUT_PLAY);
+        setMediaSource(headers, url, format, drm, subs, Constant.TIMEOUT_PLAY, this.forceLive);
     }
 
     public void setMediaSource(String url) {
@@ -581,22 +583,28 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void setMediaSource(Channel channel, int timeout) {
-        setMediaSource(channel.getHeaders(), channel.getUrl(), channel.getFormat(), channel.getDrm(), new ArrayList<>(), timeout);
+        boolean forceLive = isLikelyLive(channel.getUrl(), channel.getFormat());
+        setMediaSource(channel.getHeaders(), channel.getUrl(), channel.getFormat(), channel.getDrm(), new ArrayList<>(), timeout, forceLive);
     }
 
     private void setMediaSource(Result result, int timeout) {
-        setMediaSource(result.getHeaders(), result.getRealUrl(), result.getFormat(), result.getDrm(), result.getSubs(), timeout);
+        setMediaSource(result.getHeaders(), result.getRealUrl(), result.getFormat(), result.getDrm(), result.getSubs(), timeout, false);
     }
 
     private void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout) {
+        setMediaSource(headers, url, format, drm, subs, timeout, false);
+    }
+
+    private void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
         this.headers = checkUa(headers);
         this.url = url;
         this.format = format;
         this.drm = drm;
+        this.forceLive = forceLive;
         this.subs = checkSub(subs);
         if (isIjk() && ijkPlayer != null) ijkPlayer.setMediaSource(IjkUtil.getSource(this.headers, this.url), position);
         if (isExo() && exoPlayer != null) {
-            MediaItem item = ExoUtil.getMediaItem(this.headers, UrlUtil.uri(this.url), this.format, this.drm, this.subs, decode);
+            MediaItem item = ExoUtil.getMediaItem(this.headers, UrlUtil.uri(this.url), this.format, this.drm, this.subs, decode, this.forceLive);
             exoPlayer.setMediaItem(item, position);
             exoPlayer.prepare();
         }
@@ -782,6 +790,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
                 setPlaybackState(events.contains(Player.EVENT_PLAYER_ERROR) ? PlaybackStateCompat.STATE_ERROR : PlaybackStateCompat.STATE_NONE);
                 break;
             case Player.STATE_READY:
+                updateLiveDecision();
                 setPlaybackState(player.isPlaying() ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED);
                 updateDanmuPlayingState();
                 break;
@@ -791,6 +800,26 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
             case Player.STATE_ENDED:
                 setPlaybackState(PlaybackStateCompat.STATE_STOPPED);
                 break;
+        }
+    }
+
+    private boolean isLikelyLive(String url, String format) {
+        String value = url == null ? "" : url.toLowerCase(Locale.US);
+        String type = format == null ? "" : format.toLowerCase(Locale.US);
+        if (type.contains("m3u8") || type.contains("hls") || type.contains("mpd") || type.contains("dash")) return true;
+        if (type.contains("mp4") || type.contains("mkv") || type.contains("mov") || type.contains("avi")) return false;
+        if (value.contains(".m3u8") || value.contains(".mpd")) return true;
+        if (value.contains("/live/") || value.contains("playlist") || value.contains("manifest")) return true;
+        return !value.matches(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
+    }
+
+    private void updateLiveDecision() {
+        if (!isExo() || exoPlayer == null) return;
+        boolean runtimeLive = exoPlayer.isCurrentMediaItemLive();
+        if (runtimeLive) {
+            forceLive = true;
+        } else if (getDuration() > 0 && getDuration() != C.TIME_UNSET) {
+            forceLive = false;
         }
     }
 
@@ -808,7 +837,20 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public void onPlayerError(@NonNull PlaybackException error) {
         Logger.t(TAG).e(error.errorCode + "," + url);
+        if (isPlaylistStuck(error)) {
+            ErrorEvent.url(0, error.errorCode);
+            return;
+        }
         ErrorEvent.url(ExoUtil.getRetry(error.errorCode), error.errorCode);
+    }
+
+    private boolean isPlaylistStuck(PlaybackException error) {
+        Throwable cause = error.getCause();
+        while (cause != null) {
+            if (cause.getClass().getName().contains("PlaylistStuckException")) return true;
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     @Override
