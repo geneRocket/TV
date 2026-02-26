@@ -421,6 +421,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             case HISTORY:
                 getHomeFragment().getHistory();
                 break;
+            case KEEP:
+                getHomeFragment().getKeep();
+                break;
             case SIZE:
                 homeContent();
                 break;
@@ -548,6 +551,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             getHomeFragment().mBinding.progressLayout.showContent();
         } else if (mPageAdapter != null && getHomeFragment().inited && getHomeFragment().mPresenter != null && getHomeFragment().mPresenter.isDelete()) {
             getHomeFragment().setHistoryDelete(false);
+        } else if (mPageAdapter != null && getHomeFragment().inited && getHomeFragment().mKeepPresenter != null && getHomeFragment().mKeepPresenter.isDelete()) {
+            getHomeFragment().setKeepDelete(false);
         } else if (getHomeFragment().canBack()) {
             getHomeFragment().goBack();
         } else if (!confirm) {
