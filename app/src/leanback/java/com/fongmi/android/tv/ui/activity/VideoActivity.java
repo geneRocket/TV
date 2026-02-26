@@ -156,6 +156,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int errorCount;
     private int groupSize;
     private long mLastHistorySaveAt;
+    private boolean mShouldSkipOpening;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
@@ -1350,9 +1351,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void updateHistory(Episode item, boolean replay) {
-        replay = replay || !item.equals(mHistory.getEpisode());
+        boolean sameEpisode = item.equals(mHistory.getEpisode());
+        replay = replay || !sameEpisode;
         long position = replay ? 0 : mHistory.getPosition();
         mHistory.setPosition(position);
+        mShouldSkipOpening = replay;
         mHistory.setEpisodeUrl(item.getUrl());
         mHistory.setVodRemarks(item.getName());
         mHistory.setVodFlag(getFlag().getFlag());
@@ -1415,10 +1418,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 App.execute(() -> mHistory.update());
             }
         }
-        
-        // 片头跳过检测
-        if (mHistory.getOpening() > 0 && position > 0 && position < mHistory.getOpening()) {
-            mPlayers.seekTo(mHistory.getOpening());
+
+        // 片头跳过检测（仅在开播阶段执行一次，避免后续手动回拖被再次强制跳过）
+        if (mShouldSkipOpening) {
+            long opening = mHistory.getOpening();
+            if (opening <= 0 || position >= opening) {
+                mShouldSkipOpening = false;
+            } else if (position > 0 && position < opening) {
+                mPlayers.seekTo(opening);
+                mShouldSkipOpening = false;
+            }
         }
         
         // 片尾跳过检测
