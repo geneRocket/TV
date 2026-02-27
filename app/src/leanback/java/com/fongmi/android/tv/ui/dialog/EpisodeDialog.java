@@ -113,6 +113,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
     }
 
     private void setEpisodeChildKeyListener(RecyclerView.ViewHolder child, int position) {
+        if (child == null) return;
         int itemCount = binding.episodeVert.getAdapter().getItemCount();
         if (itemCount <= 0) return;
         int columns = mEpisodePresenter.getNumColumns();

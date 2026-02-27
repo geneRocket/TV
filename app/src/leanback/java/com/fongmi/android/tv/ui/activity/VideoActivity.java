@@ -417,6 +417,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setEpisodeChildKeyListener(RecyclerView.ViewHolder child, int position) {
         if (getEpisodeView() != mBinding.episodeVert) return;
+        if (child == null) return;
         int itemCount = getEpisodeView().getAdapter().getItemCount();
         if (itemCount <= 0) return;
         int columns = mEpisodePresenter.getNumColumns();
@@ -722,7 +723,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
         int numColumns = 10;
         if (episodeNameLength > 40) numColumns = 1;
-        if (episodeNameLength > 30) numColumns = 2;
+        else if (episodeNameLength > 30) numColumns = 2;
         else if (episodeNameLength > 15) numColumns = 3;
         else if (episodeNameLength > 10) numColumns = 4;
         else if (episodeNameLength > 6) numColumns = 6;
@@ -987,7 +988,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         int current = getEpisodePosition();
         current = --current < 0 ? 0 : current;
         Episode item = (Episode) mEpisodeAdapter.get(current);
-        if (item.isActivated()) Notify.show(mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
+        if (item.isActivated()) {
+            if (isFullscreen()) exitFullscreen();
+            Notify.show(mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
+        }
         else setEpisodeActivated(item);
     }
 
