@@ -38,10 +38,13 @@ public class ExoUtil {
 
     public static LoadControl buildLoadControl() {
         int bufferMs = Setting.getBuffer() * 1000;
-        int minBufferMs = Math.max(2000, bufferMs * 2);
+
+        int minBufferMs = Math.max(5000, bufferMs * 2);
         int maxBufferMs = Math.max(minBufferMs, bufferMs * 4);
-        int bufferForPlaybackMs = Math.min(2500, bufferMs);
-        int bufferForPlaybackAfterRebufferMs = Math.min(6000, Math.max(1500, bufferMs));
+
+        int bufferForPlaybackMs = Math.max(2500, bufferMs);
+        int bufferForPlaybackAfterRebufferMs = Math.max(5000, Math.max(1500, bufferMs));
+
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs)
                 .setPrioritizeTimeOverSizeThresholds(true)
@@ -51,7 +54,7 @@ public class ExoUtil {
 
     public static TrackSelector buildTrackSelector() {
         DefaultTrackSelector trackSelector = new DefaultTrackSelector(App.get());
-        trackSelector.setParameters(trackSelector.buildUponParameters().setPreferredTextLanguage(Locale.getDefault().getISO3Language()).setTunnelingEnabled(Setting.isTunnel()));
+        trackSelector.setParameters(trackSelector.buildUponParameters().setPreferredTextLanguage(Locale.getDefault().getISO3Language()).setForceHighestSupportedBitrate(true).setTunnelingEnabled(Setting.isTunnel()));
         return trackSelector;
     }
 
