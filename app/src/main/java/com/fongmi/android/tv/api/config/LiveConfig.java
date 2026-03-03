@@ -20,6 +20,7 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
@@ -173,6 +174,10 @@ public class LiveConfig {
 
     private void parseDepot(JsonObject object, Callback callback) {
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
+        if (items.isEmpty()) {
+            if (callback != null) App.post(() -> callback.error(ResUtil.getString(R.string.error_config_parse)));
+            return;
+        }
         List<Config> configs = new ArrayList<>();
         for (Depot item : items) configs.add(Config.find(item, 1));
         Config.delete(config.getUrl());
@@ -185,10 +190,10 @@ public class LiveConfig {
             initLive(object);
             initOther(object);
             BaseLoader.get().parseJar(Json.safeString(object, "spider"));
+            if (callback != null) App.post(callback::success);
         } catch (Throwable e) {
             e.printStackTrace();
-        } finally {
-            if (callback != null) App.post(callback::success);
+            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
 

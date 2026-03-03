@@ -29,6 +29,7 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Channel;
+import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Drm;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
@@ -80,6 +81,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private DanmakuView danmuView;
     private ExoPlayer exoPlayer;
     private ParseJob parseJob;
+    private List<Danmaku> danmakus;
     private List<Sub> subs;
     private Method danmuSetSpeed;
     private Method danmuSetSpeedFactor;
@@ -90,6 +92,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private Sub sub;
     private boolean forceLive;
     private boolean pendingReady;
+    private int timeout;
 
     private long position;
     private int decode;
@@ -136,6 +139,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         formatter = new Formatter(builder, Locale.getDefault());
         position = C.TIME_UNSET;
         playerState = Player.STATE_IDLE;
+        timeout = Constant.TIMEOUT_PLAY;
+        danmakus = new ArrayList<>();
         createSession(activity);
     }
 
@@ -211,6 +216,34 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         setMediaSource();
     }
 
+    public void setDanmakus(List<Danmaku> items) {
+        danmakus = items == null ? new ArrayList<>() : new ArrayList<>(items);
+    }
+
+    public List<Danmaku> getDanmakus() {
+        return danmakus == null ? new ArrayList<>() : new ArrayList<>(danmakus);
+    }
+
+    public Danmaku getDanmaku() {
+        for (Danmaku item : getDanmakus()) if (item.isSelected()) return item;
+        return danmakus.isEmpty() ? Danmaku.empty() : danmakus.get(0);
+    }
+
+    public void setDanmaku(Danmaku item) {
+        if (item == null) return;
+        if (danmakus == null) danmakus = new ArrayList<>();
+        boolean exists = false;
+        for (Danmaku source : danmakus) {
+            boolean selected = source.getUrl().equals(item.getUrl());
+            source.setSelected(selected);
+            exists |= selected;
+        }
+        if (!exists) {
+            item.setSelected(true);
+            danmakus.add(0, item);
+        }
+    }
+
     public void setFormat(String format) {
         this.format = format;
     }
@@ -260,6 +293,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         headers = null;
         format = null;
         subs = null;
+        danmakus.clear();
         drm = null;
         url = null;
         forceLive = false;
@@ -507,6 +541,9 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void start(Channel channel, int timeout) {
         setPlayer(channel.getPlayerType() != -1 ? channel.getPlayerType() : Setting.getLivePlayer());
         String url = getChannelUrl(channel);
+        boolean forceLive = isLikelyLive(url, channel.getFormat());
+        this.timeout = timeout;
+        this.forceLive = forceLive;
         if (channel.hasMsg()) {
             ErrorEvent.extract(channel.getMsg());
         } else if (channel.getParse() == 1) {
@@ -519,6 +556,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void start(Result result, boolean useParse, int timeout) {
+        this.timeout = timeout;
+        this.forceLive = false;
         if (result.hasMsg()) {
             ErrorEvent.extract(result.getMsg());
         } else if (result.getParse(1) == 1 || result.getJx() == 1) {
@@ -588,7 +627,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void setMediaSource() {
         if (TextUtils.isEmpty(url)) return;
-        setMediaSource(headers, url, format, drm, subs, Constant.TIMEOUT_PLAY, this.forceLive);
+        setMediaSource(headers, url, format, drm, subs, timeout, this.forceLive);
     }
 
     public void setMediaSource(String url) {
@@ -625,6 +664,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         this.drm = drm;
         this.forceLive = forceLive;
         this.subs = checkSub(subs);
+        if (this.drm != null && isIjk()) setPlayer(EXO);
         this.pendingReady = isExo();
         if (isIjk() && ijkPlayer != null) ijkPlayer.setMediaSource(IjkUtil.getSource(this.headers, this.url), position);
         if (isExo() && exoPlayer != null) {
@@ -810,7 +850,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
         if (!TextUtils.isEmpty(from)) Notify.show(ResUtil.getString(R.string.parse_from, from));
-        setMediaSource(headers, url);
+        setMediaSource(headers, url, format, drm, subs, timeout, forceLive);
     }
 
     @Override

@@ -14,6 +14,7 @@ import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.bean.Header;
@@ -165,6 +166,10 @@ public class VodConfig {
 
     private void parseDepot(JsonObject object, Callback callback) {
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
+        if (items.isEmpty()) {
+            if (callback != null) App.post(() -> callback.error(ResUtil.getString(R.string.error_config_parse)));
+            return;
+        }
         List<Config> configs = new ArrayList<>();
         for (Depot item : items) configs.add(Config.find(item, 0));
         Config.delete(config.getUrl());

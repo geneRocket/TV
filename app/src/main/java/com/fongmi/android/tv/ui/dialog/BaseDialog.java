@@ -41,6 +41,10 @@ public abstract class BaseDialog extends BottomSheetDialogFragment {
     protected void initEvent() {
     }
 
+    protected void safeDismiss() {
+        if (isAdded()) dismiss();
+    }
+
     protected boolean transparent() {
         return false;
     }

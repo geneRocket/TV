@@ -1,8 +1,6 @@
-package com.undcover.freedom.pyramid;
+package com.fongmi.chaquo;
 
 import android.content.Context;
-
-import androidx.annotation.Keep;
 
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
@@ -13,13 +11,11 @@ public class Loader {
 
     private PyObject app;
 
-    @Keep
     private void init(Context context) {
         if (!Python.isStarted()) Python.start(new AndroidPlatform(context));
         app = Python.getInstance().getModule("app");
     }
 
-    @Keep
     public Spider spider(Context context, String api) {
         if (app == null) init(context);
         PyObject obj = app.callAttr("spider", Path.py().getAbsolutePath(), api);

@@ -35,7 +35,9 @@ import java.util.HashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
 import okhttp3.Response;
@@ -178,6 +180,7 @@ public class SiteViewModel extends ViewModel {
                 if (result.getFlag().isEmpty()) result.setFlag(flag);
                 result.setUrl(Source.get().fetch(result));
                 result.setHeader(site.getHeader());
+                result.setKey(key);
                 return result;
             } else if (site.isEmpty() && "push_agent".equals(key)) {
                 Result result = new Result();
@@ -187,16 +190,20 @@ public class SiteViewModel extends ViewModel {
                 result.setUrl(Source.get().fetch(result));
                 return result;
             } else {
+                Result result = new Result();
                 Url url = Url.create().add(id);
                 String type = Uri.parse(id).getQueryParameter("type");
-                if ("json".equals(type)) url = Result.fromJson(call(OkHttp.newCall(id, site.getHeaders()))).getUrl();
-                Result result = new Result();
+                if ("json".equals(type)) {
+                    result = Result.fromJson(call(OkHttp.newCall(id, site.getHeaders())));
+                    url = result.getUrl();
+                }
                 result.setUrl(url);
-                result.setFlag(flag);
+                if (result.getFlag().isEmpty()) result.setFlag(flag);
                 result.setHeader(site.getHeader());
-                result.setPlayUrl(site.getPlayUrl());
+                if (result.getPlayUrl().isEmpty()) result.setPlayUrl(site.getPlayUrl());
+                result.setKey(key);
                 result.setUrl(Source.get().fetch(result));
-                result.setParse(Sniffer.isVideoFormat(url.v()) && result.getPlayUrl().isEmpty() ? 0 : 1);
+                if (!"json".equals(type)) result.setParse(Sniffer.isVideoFormat(url.v()) && result.getPlayUrl().isEmpty() ? 0 : 1);
                 SpiderDebug.log(result.toString());
                 return result;
             }
@@ -275,7 +282,6 @@ public class SiteViewModel extends ViewModel {
     private String fetchExt(Site site, ArrayMap<String, String> params, boolean limit) throws IOException {
         String extend = site.getExt();
         if (extend.startsWith("http")) extend = fetchExt(site);
-        if (limit && extend.length() > 1000) extend = extend.substring(0, 1000);
         if (!extend.isEmpty()) params.put("extend", extend);
         return extend;
     }
@@ -309,21 +315,25 @@ public class SiteViewModel extends ViewModel {
     }
 
     private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
-        // 单线程执行：同一线程内完成 callable 与超时处理
-        executor.execute(() -> {
+        App.execute(() -> {
+            Future<Result> future = null;
             try {
-                Result data = callable.call();
+                future = executor.submit(callable);
+                Result data = future.get(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS);
                 result.postValue(data);
             } catch (TimeoutException e) {
-                result.postValue(Result.empty()); // 或者 Result.timeout()
+                if (future != null) future.cancel(true);
+                result.postValue(Result.empty());
                 e.printStackTrace();
             } catch (ExtractException e) {
                 result.postValue(Result.error(e.getMessage()));
                 e.printStackTrace();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                if (future != null) future.cancel(true);
                 result.postValue(Result.empty());
             } catch (Exception e) {
+                if (future != null) future.cancel(true);
                 result.postValue(Result.empty());
                 e.printStackTrace();
             }

@@ -32,6 +32,8 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.ui.dialog.WebDialog;
 import com.fongmi.android.tv.utils.Sniffer;
+import com.fongmi.android.tv.utils.UrlUtil;
+import com.fongmi.android.tv.utils.WebViewUtil;
 import com.github.catvod.crawler.Spider;
 import com.google.common.net.HttpHeaders;
 import com.orhanobut.logger.Logger;
@@ -124,14 +126,20 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
 
     private void start(String url, Map<String, String> headers) {
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true);
-        checkHeader(url, headers);
+        headers = checkHeader(url, headers);
         loadUrl(url, headers);
     }
 
-    private void checkHeader(String url, Map<String, String> headers) {
+    private Map<String, String> checkHeader(String url, Map<String, String> headers) {
+        Uri uri = Uri.parse(url);
+        String host = uri.getHost() == null ? url : uri.getScheme() + "://" + uri.getHost();
+        if (!headers.containsKey("X-Requested-With")) headers.put("X-Requested-With", WebViewUtil.spoof());
+        if (!headers.containsKey(HttpHeaders.REFERER)) headers.put(HttpHeaders.REFERER, host);
+        if (!headers.containsKey(HttpHeaders.ORIGIN)) headers.put(HttpHeaders.ORIGIN, host);
         for (String key : headers.keySet()) {
             if (HttpHeaders.USER_AGENT.equalsIgnoreCase(key)) getSettings().setUserAgentString(headers.get(key));
         }
+        return headers;
     }
 
     private WebViewClient webViewClient() {

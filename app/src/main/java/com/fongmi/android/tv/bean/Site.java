@@ -26,7 +26,9 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import okhttp3.Headers;
 
@@ -307,7 +309,13 @@ public class Site implements Parcelable {
     }
 
     public Headers getHeaders() {
-        return Headers.of(Json.toMap(getHeader()));
+        return Headers.of(fixHeaders(Json.toMap(getHeader())));
+    }
+
+    private Map<String, String> fixHeaders(Map<String, String> headers) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : headers.entrySet()) result.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+        return result;
     }
 
     public Site trans() {

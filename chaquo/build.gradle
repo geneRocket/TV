@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace 'com.undcover.freedom.pyramid'
+    namespace 'com.fongmi.chaquo'
 
     compileSdk 35
     flavorDimensions = ["abi"]
@@ -21,8 +21,8 @@ android {
                 install "pyquery"
                 install "requests"
                 install "jsonpath"
-                install 'pycryptodome'
-                install 'beautifulsoup4'
+                install "pycryptodome"
+                install "beautifulsoup4"
             }
         }
     }

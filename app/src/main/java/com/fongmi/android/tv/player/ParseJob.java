@@ -20,6 +20,7 @@ import com.google.common.net.HttpHeaders;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -69,7 +70,7 @@ public class ParseJob implements ParseCallback {
         if (result.getPlayUrl().startsWith("parse:")) parse = VodConfig.get().getParse(result.getPlayUrl().substring(6));
         if (parse == null || parse.isEmpty()) parse = Parse.get(0, result.getPlayUrl());
         else parse = parse.copy();
-        parse.setHeader(result.getHeader());
+        parse.getExt().setHeader(App.gson().toJsonTree(getMergedHeaders(result.getHeader())));
         parse.setClick(getClick(result));
     }
 
@@ -174,7 +175,7 @@ public class ParseJob implements ParseCallback {
     }
 
     private void checkResult(Map<String, String> headers, String url, String from, boolean error) {
-        if (url.length() > 40) {
+        if (!TextUtils.isEmpty(url)) {
             onParseSuccess(headers, url, from);
         } else if (error) {
             onParseError();
@@ -182,7 +183,7 @@ public class ParseJob implements ParseCallback {
     }
 
     private void checkResult(Result result) {
-        result.setHeader(parse.getExt().getHeader());
+        result.setHeader(App.gson().toJsonTree(getMergedHeaders(result.getHeader())));
         if (result.getUrl().isEmpty()) onParseError();
         else if (result.getParse() == 1) startWeb(result.getHeaders(), UrlUtil.convert(result.getUrl().v()));
         else onParseSuccess(result.getHeaders(), result.getUrl().v(), result.getJxFrom());
@@ -191,7 +192,9 @@ public class ParseJob implements ParseCallback {
     private void startWeb(List<Parse> items, String webUrl) {
         StringBuilder sb = new StringBuilder();
         for (Parse item : items) sb.append(item.getUrl()).append(";");
-        startWeb(new HashMap<>(), Server.get().getAddress("/parse?jxs=" + Util.substring(sb.toString()) + "&url=" + webUrl));
+        String jxs = URLEncoder.encode(Util.substring(sb.toString()));
+        String url = URLEncoder.encode(webUrl);
+        startWeb(new HashMap<>(), Server.get().getAddress("/parse?jxs=" + jxs + "&url=" + url));
     }
 
     private void startWeb(String key, Parse item, String webUrl) {
@@ -210,9 +213,21 @@ public class ParseJob implements ParseCallback {
     }
 
     private Map<String, String> getHeader(JsonObject object) {
-        Map<String, String> headers = new HashMap<>();
+        Map<String, String> headers = new HashMap<>(parse.getHeaders());
+        if (object.has("header") && object.get("header").isJsonObject()) putHeaders(headers, Json.toMap(object.get("header")));
+        JsonObject data = object.has("data") && object.get("data").isJsonObject() ? object.getAsJsonObject("data") : null;
+        if (data != null && data.has("header") && data.get("header").isJsonObject()) putHeaders(headers, Json.toMap(data.get("header")));
         for (Map.Entry<String, JsonElement> entry : object.entrySet()) if (!entry.getValue().isJsonNull() && (entry.getKey().equalsIgnoreCase(HttpHeaders.USER_AGENT) || entry.getKey().equalsIgnoreCase(HttpHeaders.REFERER) || entry.getKey().equalsIgnoreCase("ua"))) headers.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue().getAsString());
-        if (headers.isEmpty()) return parse.getHeaders();
+        return headers;
+    }
+
+    private void putHeaders(Map<String, String> target, Map<String, String> source) {
+        for (Map.Entry<String, String> entry : source.entrySet()) target.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+    }
+
+    private Map<String, String> getMergedHeaders(JsonElement header) {
+        Map<String, String> headers = new HashMap<>(parse.getHeaders());
+        if (header != null && header.isJsonObject()) putHeaders(headers, Json.toMap(header));
         return headers;
     }
 

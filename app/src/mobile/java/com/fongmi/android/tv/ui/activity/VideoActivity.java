@@ -44,6 +44,7 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
@@ -129,6 +130,8 @@ import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
 public class VideoActivity extends BaseActivity implements Clock.Callback, CustomKeyDownVod.Listener, TrackDialog.Listener, PlayerDialog.Listener, ControlDialog.Listener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener {
 
+    private static final int REQUEST_DANMAKU_FILE = 9998;
+
     private ActivityVideoBinding mBinding;
     private ViewGroup.LayoutParams mFrameParams;
     private Observer<Result> mObserveDetail;
@@ -146,6 +149,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private SiteViewModel mViewModel;
     private FlagAdapter mFlagAdapter;
     private List<Dialog> mDialogs;
+    private List<Danmaku> mDanmakus;
     private List<String> mBroken;
     private History mHistory;
     private Players mPlayers;
@@ -646,7 +650,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
         setQualityVisible(result.getUrl().isMulti());
         mBinding.swipeLayout.setRefreshing(false);
-        checkDanmu(result.getDanmaku());
+        setDanmakus(result.getDanmakus());
         mQualityAdapter.addAll(result);
     }
 
@@ -655,10 +659,38 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void checkDanmu(String danmu) {
+        setDanmakus(Danmaku.arrayFrom(danmu));
+    }
+
+    private void setDanmakus(List<Danmaku> items) {
+        mPlayers.setDanmakus(items);
+        mDanmakus = mPlayers.getDanmakus();
+        prepareDanmaku(mPlayers.getDanmaku());
+    }
+
+    public List<Danmaku> getDanmakus() {
+        return mDanmakus == null ? List.of() : new ArrayList<>(mDanmakus);
+    }
+
+    public void setDanmaku(Danmaku item) {
+        mPlayers.setDanmaku(item);
+        mDanmakus = mPlayers.getDanmakus();
+        prepareDanmaku(mPlayers.getDanmaku());
+    }
+
+    public void chooseDanmakuFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.setType("*/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"text/*", "application/xml"});
+        startActivityForResult(Intent.createChooser(intent, ""), REQUEST_DANMAKU_FILE);
+    }
+
+    private void prepareDanmaku(Danmaku item) {
         mBinding.danmaku.release();
         if (!Setting.isDanmuLoad() || !Setting.isDanmu() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode())) return;
-        mBinding.danmaku.setVisibility(danmu.isEmpty() ? View.GONE : View.VISIBLE);
-        if (danmu.length() > 0) App.execute(() -> mBinding.danmaku.prepare(new Parser(danmu), mDanmakuContext));
+        mBinding.danmaku.setVisibility(item == null || item.isEmpty() ? View.GONE : View.VISIBLE);
+        if (item != null && !item.isEmpty()) App.execute(() -> mBinding.danmaku.prepare(new Parser(item.getUrl()), mDanmakuContext));
     }
 
     @Override
@@ -1358,7 +1390,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) checkDanmu(event.getPath());
+        else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) mPlayers.setSub(Sub.from(event.getPath()));
     }
 
@@ -1367,6 +1399,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (isRedirect()) return;
         switch (event.getState()) {
             case 0:
+                setPlayerView();
                 setInitTrack(true);
                 setTrackVisible(false);
                 mClock.setCallback(this);
@@ -1846,7 +1879,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode == RESULT_OK) mPlayers.checkData(data);
+        if (resultCode != RESULT_OK) return;
+        if (requestCode == REQUEST_DANMAKU_FILE && data != null && data.getData() != null) {
+            setDanmaku(Danmaku.from(FileChooser.getPathFromUri(this, data.getData())));
+            return;
+        }
+        mPlayers.checkData(data);
     }
 
     @Override

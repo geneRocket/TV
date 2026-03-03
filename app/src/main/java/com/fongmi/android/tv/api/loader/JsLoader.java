@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.api.loader;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.quickjs.crawler.Loader;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderNull;
 
@@ -10,14 +11,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JsLoader {
 
     private final ConcurrentHashMap<String, Spider> spiders;
+    private final Loader loader;
     private String recent;
 
     public JsLoader() {
         spiders = new ConcurrentHashMap<>();
+        loader = new Loader();
     }
 
     public void clear() {
-        for (Spider spider : spiders.values()) App.execute(spider::destroy);
+        spiders.values().forEach(spider -> App.execute(spider::destroy));
         spiders.clear();
     }
 
@@ -32,11 +35,13 @@ public class JsLoader {
     }
 
     public Spider getSpider(String key, String api, String ext) {
+        return spiders.computeIfAbsent(key, k -> createSpider(k, api, ext));
+    }
+
+    private Spider createSpider(String key, String api, String ext) {
         try {
-            if (spiders.containsKey(key)) return spiders.get(key);
-            Spider spider = new com.fongmi.quickjs.crawler.Spider(key, api);
+            Spider spider = loader.spider(key, api);
             spider.init(App.get(), ext);
-            spiders.put(key, spider);
             return spider;
         } catch (Throwable e) {
             e.printStackTrace();
@@ -46,11 +51,16 @@ public class JsLoader {
 
     public Object[] proxyInvoke(Map<String, String> params) {
         try {
-            if (!params.containsKey("siteKey")) return spiders.get(recent).proxyLocal(params);
-            return BaseLoader.get().getSpider(params).proxyLocal(params);
+            if (!params.containsKey("siteKey")) return recent == null ? null : getSpider(recent).proxy(params);
+            return BaseLoader.get().getSpider(params).proxy(params);
         } catch (Throwable e) {
             e.printStackTrace();
             return null;
         }
+    }
+
+    private Spider getSpider(String key) {
+        Spider spider = spiders.get(key);
+        return spider == null ? new SpiderNull() : spider;
     }
 }

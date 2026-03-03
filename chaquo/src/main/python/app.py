@@ -1,7 +1,8 @@
-import os
-import requests
-from importlib.machinery import SourceFileLoader
 import json
+import os
+from importlib.machinery import SourceFileLoader
+
+import requests
 
 
 def spider(cache, api):
@@ -28,8 +29,7 @@ def redirect(url):
     rsp = requests.get(url, allow_redirects=False, verify=False)
     if 'Location' in rsp.headers:
         return redirect(rsp.headers['Location'])
-    else:
-        return rsp
+    return rsp
 
 
 def str2json(content):
@@ -37,13 +37,11 @@ def str2json(content):
 
 
 def getDependence(ru):
-    result = ru.getDependence()
-    return result
+    return ru.getDependence()
 
 
 def getName(ru):
-    result = ru.getName()
-    return result
+    return ru.getName()
 
 
 def init(ru, extend):
@@ -51,49 +49,35 @@ def init(ru, extend):
 
 
 def homeContent(ru, filter):
-    result = ru.homeContent(filter)
-    formatJo = json.dumps(result, ensure_ascii=False)
-    return formatJo
+    return json.dumps(ru.homeContent(filter), ensure_ascii=False)
 
 
 def homeVideoContent(ru):
-    result = ru.homeVideoContent()
-    formatJo = json.dumps(result, ensure_ascii=False)
-    return formatJo
+    return json.dumps(ru.homeVideoContent(), ensure_ascii=False)
 
 
 def categoryContent(ru, tid, pg, filter, extend):
-    result = ru.categoryContent(tid, pg, filter, str2json(extend))
-    formatJo = json.dumps(result, ensure_ascii=False)
-    return formatJo
+    return json.dumps(ru.categoryContent(tid, pg, filter, str2json(extend)), ensure_ascii=False)
 
 
 def detailContent(ru, array):
-    result = ru.detailContent(str2json(array))
-    formatJo = json.dumps(result, ensure_ascii=False)
-    return formatJo
+    return json.dumps(ru.detailContent(str2json(array)), ensure_ascii=False)
 
 
 def searchContent(ru, key, quick, pg="1"):
-    result = ru.searchContent(key, quick, pg)
-    formatJo = json.dumps(result, ensure_ascii=False)
-    return formatJo
+    return json.dumps(ru.searchContent(key, quick, pg), ensure_ascii=False)
 
 
 def playerContent(ru, flag, id, vipFlags):
-    result = ru.playerContent(flag, id, str2json(vipFlags))
-    formatJo = json.dumps(result, ensure_ascii=False)
-    return formatJo
+    return json.dumps(ru.playerContent(flag, id, str2json(vipFlags)), ensure_ascii=False)
 
 
 def liveContent(ru):
-    result = ru.liveContent()
-    return result
+    return ru.liveContent()
 
 
 def localProxy(ru, param):
-    result = ru.localProxy(str2json(param))
-    return result
+    return ru.localProxy(str2json(param))
 
 
 def destroy(ru):
@@ -101,9 +85,7 @@ def destroy(ru):
 
 
 def action(ru, action):
-    result = ru.action(action)
-    formatJo = json.dumps(result, ensure_ascii=False)
-    return formatJo
+    return json.dumps(ru.action(action), ensure_ascii=False)
 
 
 def run():

@@ -37,20 +37,14 @@ public class ExoUtil {
     private static final String EXTRA_FORCE_LIVE = "__force_live";
 
     public static LoadControl buildLoadControl() {
-        // 用户的设置值 (1 - 15秒)
         int userSettingMs = Setting.getBuffer() * 1000;
 
-        // 1. 保证启动快：首屏和卡顿后的恢复，固定使用较小的值。
-        // 无论用户怎么设置，点开视频只需要下载 2.5 秒就能播，卡顿后只需要下载约 1.2 秒就能恢复。
         int bufferForPlaybackMs = 2500;
         int bufferForPlaybackAfterRebufferMs = 1200;
 
-        // 2. 保证不卡顿：利用用户的设置来控制后台缓冲池的深度。
-        // 我们设定一个合理的底线（例如 15秒），在这个基础上根据用户设置放大。
-        int minBufferMs = Math.max(15000, userSettingMs * 2); // 范围: 15秒 ~ 30秒
+        int minBufferMs = Math.max(15000, userSettingMs * 2);
 
-        // 3. 避免频繁启停下载：max 必须比 min 大出一段距离（例如大 10 秒）。
-        int maxBufferMs = Math.max(minBufferMs + 10000, userSettingMs * 4); // 范围: 25秒 ~ 60秒
+        int maxBufferMs = Math.max(minBufferMs + 10000, userSettingMs * 8);
 
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(

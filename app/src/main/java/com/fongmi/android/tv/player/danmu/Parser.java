@@ -10,6 +10,8 @@ import com.github.catvod.utils.Path;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.io.File;
+
 import master.flame.danmaku.danmaku.model.AlphaValue;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.Duration;
@@ -34,8 +36,10 @@ public class Parser extends BaseDanmakuParser {
     }
 
     private String getContent(String path) {
+        if (TextUtils.isEmpty(path)) return "";
         if (path.startsWith("file")) return Path.read(path);
         if (path.startsWith("http")) return OkHttp.string(path);
+        if (new File(path).exists()) return Path.read(path);
         return path;
     }
 

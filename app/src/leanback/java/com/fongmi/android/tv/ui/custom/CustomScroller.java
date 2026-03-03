@@ -35,6 +35,7 @@ public class CustomScroller extends RecyclerView.OnScrollListener {
     }
 
     public void reset() {
+        enable = true;
         page = 1;
     }
 

@@ -1,4 +1,4 @@
-package com.undcover.freedom.pyramid;
+package com.fongmi.chaquo;
 
 import android.content.Context;
 
@@ -21,21 +21,19 @@ public class Spider extends com.github.catvod.crawler.Spider {
     private final Gson gson;
 
     public Spider(PyObject app, PyObject obj, String api) {
-        this.gson = new Gson();
         this.app = app;
         this.obj = obj;
         this.api = api;
-    }
-
-    @Override
-    public void init(Context context) {
-        app.callAttr("init", obj);
+        this.gson = new Gson();
     }
 
     @Override
     public void init(Context context, String extend) {
-        List<PyObject> items = app.callAttr("getDependence", obj).asList();
-        for (PyObject item : items) download(item + ".py");
+        PyObject dependence = app.callAttr("getDependence", obj);
+        if (dependence != null) {
+            for (PyObject item : dependence.asList()) download(item + ".py");
+        }
+        obj.put("siteKey", siteKey);
         app.callAttr("init", obj, extend);
     }
 
@@ -80,6 +78,11 @@ public class Spider extends com.github.catvod.crawler.Spider {
     }
 
     @Override
+    public String liveContent(String url) {
+        return app.callAttr("liveContent", obj, url).toString();
+    }
+
+    @Override
     public boolean manualVideoCheck() {
         return app.callAttr("manualVideoCheck", obj).toBoolean();
     }
@@ -90,16 +93,14 @@ public class Spider extends com.github.catvod.crawler.Spider {
     }
 
     @Override
-    public Object[] proxyLocal(Map<String, String> params) {
+    public Object[] proxy(Map<String, String> params) {
         List<PyObject> list = app.callAttr("localProxy", obj, gson.toJson(params)).asList();
-        Map<PyObject, PyObject> headers = list.size() > 3 ? list.get(3).asMap() : null;
         boolean base64 = list.size() > 4 && list.get(4).toInt() == 1;
-        PyObject r2 = list.get(2);
         Object[] result = new Object[4];
         result[0] = list.get(0).toInt();
         result[1] = list.get(1).toString();
-        result[2] = r2 == null ? null : getStream(r2, base64);
-        result[3] = headers;
+        result[2] = getStream(list.get(2), base64);
+        result[3] = list.size() > 3 && list.get(3) != null ? getHeader(list.get(3)) : null;
         return result;
     }
 
@@ -110,17 +111,30 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void destroy() {
-        app.callAttr("destroy", obj);
+        try {
+            app.callAttr("destroy", obj);
+        } catch (Exception ignored) {
+        }
     }
 
-    private ByteArrayInputStream getStream(PyObject o, boolean base64) {
-        if (o.type().toString().contains("bytes")) {
-            return new ByteArrayInputStream(o.toJava(byte[].class));
-        } else {
-            String content = o.toString();
-            if (base64 && content.contains("base64,")) content = content.split("base64,")[1];
-            return new ByteArrayInputStream(base64 ? Util.decode(content) : content.getBytes());
+    private Map<String, String> getHeader(PyObject obj) {
+        try {
+            Map<String, String> header = new HashMap<>();
+            for (Map.Entry<PyObject, PyObject> entry : obj.asMap().entrySet()) {
+                header.put(entry.getKey().toString(), entry.getValue().toString());
+            }
+            return header;
+        } catch (Exception e) {
+            return null;
         }
+    }
+
+    private ByteArrayInputStream getStream(PyObject object, boolean base64) {
+        if (object == null) return null;
+        if (object.type().toString().contains("bytes")) return new ByteArrayInputStream(object.toJava(byte[].class));
+        String content = object.toString();
+        if (base64 && content.contains("base64,")) content = content.split("base64,")[1];
+        return new ByteArrayInputStream(base64 ? Util.decode(content) : content.getBytes());
     }
 
     private void download(String name) {

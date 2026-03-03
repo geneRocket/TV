@@ -42,6 +42,7 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
@@ -127,6 +128,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private static final long SEEK_READY_STABLE_MS = 300;
     private static final long SEEK_BOUNCE_WINDOW_MS = 1500;
+    private static final int REQUEST_DANMAKU_FILE = 9998;
 
     private static class RecoveryState {
 
@@ -570,6 +572,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private CustomKeyDownVod mKeyDown;
     private ExecutorService mExecutor;
     private SiteViewModel mViewModel;
+    private List<Danmaku> mDanmakus;
     private List<String> mBroken;
     private History mHistory;
     private Players mPlayers;
@@ -799,6 +802,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.control.text.setDownListener(this::onSubtitleClick);
         mBinding.control.loop.setOnClickListener(view -> onLoop());
         mBinding.control.danmu.setOnClickListener(view -> onDanmu());
+        mBinding.control.danmu.setOnLongClickListener(view -> onDanmakuSource());
         mBinding.control.danmu.setUpListener(this::onDanmuAdd);
         mBinding.control.danmu.setDownListener(this::onDanmuSub);
         mBinding.control.next.setOnClickListener(view -> checkNext());
@@ -994,20 +998,36 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
         mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
         setQualityVisible(result.getUrl().isMulti());
-        checkDanmu(result.getDanmaku());
+        setDanmakus(result.getDanmakus());
         mQualityAdapter.addAll(result);
     }
 
     private void checkDanmu(String danmu) {
+        setDanmakus(Danmaku.arrayFrom(danmu));
+    }
+
+    private void setDanmakus(List<Danmaku> items) {
+        mPlayers.setDanmakus(items);
+        mDanmakus = mPlayers.getDanmakus();
+        prepareDanmaku(mPlayers.getDanmaku());
+    }
+
+    private void setDanmaku(Danmaku item) {
+        mPlayers.setDanmaku(item);
+        mDanmakus = mPlayers.getDanmakus();
+        prepareDanmaku(mPlayers.getDanmaku());
+    }
+
+    private void prepareDanmaku(Danmaku item) {
         mBinding.danmaku.release();
         if (!Setting.isDanmuLoad()) {
             mBinding.danmaku.setVisibility(View.GONE);
             return;
         }
-        mBinding.danmaku.setVisibility(danmu.isEmpty() ? View.GONE : View.VISIBLE);
-        if (danmu.length() > 0) {
+        mBinding.danmaku.setVisibility(item == null || item.isEmpty() ? View.GONE : View.VISIBLE);
+        if (item != null && !item.isEmpty()) {
             App.execute(() -> {
-                Parser parser = new Parser(danmu);
+                Parser parser = new Parser(item.getUrl());
                 App.post(() -> {
                     mBinding.danmaku.prepare(parser, mDanmakuContext);
                     showDanmu();
@@ -1306,6 +1326,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         Setting.putDanmuLine(line);
         mBinding.control.danmu.setText(line + ResUtil.getString(R.string.lines));
         setDanmuViewSettings();
+    }
+
+    private boolean onDanmakuSource() {
+        if (mDanmakus == null || mDanmakus.isEmpty()) {
+            FileChooserDialog.create().player(mPlayers).mode(FileChooserDialog.MODE_DANMAKU).show(this);
+            return true;
+        }
+        int current = 0;
+        for (int i = 0; i < mDanmakus.size(); i++) if (mDanmakus.get(i).isSelected()) current = i;
+        int next = (current + 1) % mDanmakus.size();
+        setDanmaku(mDanmakus.get(next));
+        Notify.show(mDanmakus.get(next).getName());
+        return true;
     }
 
     private void onEpisodes() {
@@ -1778,7 +1811,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (isBackground()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) mContent.requestDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) checkDanmu(event.getPath());
+        else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) mPlayers.setSub(Sub.from(event.getPath()));
     }
 
@@ -1787,6 +1820,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (isBackground()) return;
         switch (event.getState()) {
             case 0:
+                setPlayerView();
                 mPlaybackState.onPreparing();
                 break;
             case Player.STATE_IDLE:
@@ -2097,6 +2131,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 break;
             case 1001:
                 mPlayers.checkData(data);
+                break;
+            case REQUEST_DANMAKU_FILE:
+                if (data != null && data.getData() != null) setDanmaku(Danmaku.from(FileChooser.getPathFromUri(this, data.getData())));
                 break;
         }
     }

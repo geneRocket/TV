@@ -10,6 +10,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.gson.FilterAdapter;
 import com.fongmi.android.tv.gson.MsgAdapter;
 import com.fongmi.android.tv.gson.UrlAdapter;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
 import com.google.gson.JsonElement;
@@ -74,8 +75,14 @@ public class Result implements Parcelable {
     private String js;
     @SerializedName("key")
     private String key;
+    @SerializedName("page")
+    private Integer page;
     @SerializedName("pagecount")
     private Integer pagecount;
+    @SerializedName("limit")
+    private Integer limit;
+    @SerializedName("total")
+    private Integer total;
     @SerializedName("parse")
     private Integer parse;
     @SerializedName("code")
@@ -187,7 +194,7 @@ public class Result implements Parcelable {
     }
 
     public String getMsg() {
-        return TextUtils.isEmpty(msg) || getCode() != 0 ? "" : msg;
+        return TextUtils.isEmpty(msg) ? "" : msg;
     }
 
     public void setMsg(String msg) {
@@ -230,6 +237,10 @@ public class Result implements Parcelable {
         return TextUtils.isEmpty(danmaku) ? "" : danmaku;
     }
 
+    public List<Danmaku> getDanmakus() {
+        return Danmaku.arrayFrom(getDanmaku());
+    }
+
     public void setDanmaku(String danmaku) {
         this.danmaku = danmaku;
     }
@@ -267,7 +278,9 @@ public class Result implements Parcelable {
     }
 
     public Integer getPageCount() {
-        return pagecount == null ? 0 : pagecount;
+        if (pagecount != null && pagecount > 0) return pagecount;
+        if (limit != null && limit > 0 && total != null && total >= 0) return (total + limit - 1) / limit;
+        return 0;
     }
 
     public Integer getParse(Integer def) {
@@ -307,7 +320,13 @@ public class Result implements Parcelable {
     }
 
     public Map<String, String> getHeaders() {
-        return Json.toMap(getHeader());
+        return fixHeaders(Json.toMap(getHeader()));
+    }
+
+    private Map<String, String> fixHeaders(Map<String, String> headers) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : headers.entrySet()) result.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+        return result;
     }
 
     public Style getStyle(Style style) {

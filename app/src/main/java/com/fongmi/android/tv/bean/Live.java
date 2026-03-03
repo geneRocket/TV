@@ -25,6 +25,7 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -364,11 +365,17 @@ public class Live {
     }
 
     public Map<String, String> getHeaders() {
-        Map<String, String> headers = Json.toMap(getHeader());
+        Map<String, String> headers = fixHeaders(Json.toMap(getHeader()));
         if (!getUa().isEmpty()) headers.put(HttpHeaders.USER_AGENT, getUa());
         if (!getOrigin().isEmpty()) headers.put(HttpHeaders.ORIGIN, getOrigin());
         if (!getReferer().isEmpty()) headers.put(HttpHeaders.REFERER, getReferer());
         return headers;
+    }
+
+    private Map<String, String> fixHeaders(Map<String, String> headers) {
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, String> entry : headers.entrySet()) result.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+        return result;
     }
 
     public static Live find(String name) {

@@ -61,6 +61,7 @@
     <string name="play_switch_parse">Switching parse to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_flag">Switching flag to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_site">Switching site to <xliff:g name="name">%s</xliff:g></string>
+    <string name="danmaku_select">Select danmaku</string>
 
     <!-- Parse -->
     <string name="parse">Parse</string>
@@ -104,6 +105,7 @@
     <string name="setting_version">Version</string>
     <string name="setting_about">About</string>
     <string name="setting_storage">Permission</string>
+    <string name="setting_choose">Choose</string>
     <string name="setting_off">Off</string>
     <string name="setting_on">On</string>
 

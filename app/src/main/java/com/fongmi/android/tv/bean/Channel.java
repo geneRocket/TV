@@ -11,6 +11,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.gson.HeaderAdapter;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
 import com.google.common.net.HttpHeaders;
@@ -378,7 +379,6 @@ public class Channel {
     }
 
     private String getPlayUrl(String url) {
-        if (getDrm() != null) return url;
         int index = getLineIndex(url);
         return index == -1 ? url : url.substring(0, index);
     }
@@ -397,11 +397,17 @@ public class Channel {
     }
 
     public Map<String, String> getHeaders() {
-        Map<String, String> headers = new HashMap<>(getHeader());
+        Map<String, String> headers = fixHeaders(new HashMap<>(getHeader()));
         if (!getUa().isEmpty()) headers.put(HttpHeaders.USER_AGENT, getUa());
         if (!getOrigin().isEmpty()) headers.put(HttpHeaders.ORIGIN, getOrigin());
         if (!getReferer().isEmpty()) headers.put(HttpHeaders.REFERER, getReferer());
         return headers;
+    }
+
+    private Map<String, String> fixHeaders(Map<String, String> headers) {
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, String> entry : headers.entrySet()) result.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+        return result;
     }
 
     public Channel copy(Channel item) {

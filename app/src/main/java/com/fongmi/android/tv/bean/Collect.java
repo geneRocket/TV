@@ -15,6 +15,7 @@ public class Collect implements Parcelable {
     private List<Vod> list;
     private Site site;
     private int page;
+    private int pageCount;
 
     public static Collect all() {
         Collect item = new Collect(Site.get("all", ResUtil.getString(R.string.all)), new ArrayList<>());
@@ -58,6 +59,14 @@ public class Collect implements Parcelable {
         this.page = page;
     }
 
+    public int getPageCount() {
+        return Math.max(0, pageCount);
+    }
+
+    public void setPageCount(int pageCount) {
+        this.pageCount = pageCount;
+    }
+
     @Override
     public int describeContents() {
         return 0;
@@ -69,6 +78,7 @@ public class Collect implements Parcelable {
         dest.writeTypedList(this.list);
         dest.writeParcelable(this.site, flags);
         dest.writeInt(this.page);
+        dest.writeInt(this.pageCount);
     }
 
     protected Collect(Parcel in) {
@@ -76,6 +86,7 @@ public class Collect implements Parcelable {
         this.list = in.createTypedArrayList(Vod.CREATOR);
         this.site = in.readParcelable(Site.class.getClassLoader());
         this.page = in.readInt();
+        this.pageCount = in.readInt();
     }
 
     public static final Creator<Collect> CREATOR = new Creator<>() {

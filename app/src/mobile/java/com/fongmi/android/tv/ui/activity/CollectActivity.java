@@ -154,14 +154,19 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.search.observe(this, result -> {
             if (mCollectAdapter.getPosition() == 0) mSearchAdapter.addAll(result.getList());
-            mCollectAdapter.add(Collect.create(result.getList()));
+            if (result.getList().isEmpty()) return;
+            Collect collect = Collect.create(result.getList());
+            collect.setPageCount(result.getPageCount());
+            mCollectAdapter.add(collect);
             mCollectAdapter.add(result.getList());
         });
         mViewModel.result.observe(this, result -> {
             boolean same = result.getList().size() > 0 && mCollectAdapter.getActivated().getSite().equals(result.getList().get(0).getSite());
             if (same) mCollectAdapter.getActivated().getList().addAll(result.getList());
+            if (same) mCollectAdapter.getActivated().setPageCount(result.getPageCount());
             if (same) mSearchAdapter.addAll(result.getList());
             mScroller.endLoading(result);
+            mCollectAdapter.getActivated().setPage(mScroller.getPage());
         });
     }
 
@@ -292,6 +297,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mCollectAdapter.setActivated(position);
         mSearchAdapter.setAll(item.getList());
         mScroller.setPage(item.getPage());
+        mScroller.setEnable(item.getPageCount());
     }
 
     @Override
