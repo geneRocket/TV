@@ -64,10 +64,10 @@ import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.SiteCategoryUtil;
 import com.fongmi.android.tv.utils.Tbs;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.utils.Prefers;
-import com.github.catvod.utils.Trans;
 import com.permissionx.guolindev.PermissionX;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -90,6 +90,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private boolean confirm;
     private Clock mClock;
     private View mFocus;
+    private int mLastPagePosition;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -127,6 +128,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mBinding.pager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override
             public void onPageSelected(int position) {
+                notifyPageHidden(mLastPagePosition, position);
+                mLastPagePosition = position;
                 mBinding.recycler.setSelectedPosition(position);
             }
         });
@@ -180,9 +183,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private List<Class> getTypes(Result result) {
-        List<Class> items = new ArrayList<>();
-        for (String cate : getHome().getCategories()) for (Class item : result.getTypes()) if (Trans.s2t(cate).equals(item.getTypeName())) items.add(item);
-        return items;
+        return SiteCategoryUtil.filter(getHome().getCategories(), result.getTypes());
     }
 
     private String getKey() {
@@ -202,29 +203,48 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     public void homeContent() {
         mResult = Result.empty();
-        String title = getHome().getName();
-        mBinding.title.setText(title.isEmpty() ? ResUtil.getString(R.string.app_name) : title);
+        updateHomeTitle();
         if (getHome().getKey().isEmpty()) return;
         mFocus = getCurrentFocus();
         getHomeFragment().mBinding.progressLayout.showProgress();
         mViewModel.homeContent();
     }
 
+    private void updateHomeTitle() {
+        String title = getHome().getName();
+        mBinding.title.setText(title.isEmpty() ? ResUtil.getString(R.string.app_name) : title);
+    }
+
     public void setTypes(Result result) {
         result.setTypes(getTypes(result));
-        for (Map.Entry<String, List<Filter>> entry : result.getFilters().entrySet()) Prefers.put("filter_" + getKey() + "_" + entry.getKey(), App.gson().toJson(entry.getValue()));
+        updateTypeFilters(result);
+        updateTypeAdapter(result);
+        refreshHomePage(result);
+        App.post(() -> setFocus(), 200);
+    }
+
+    private void updateTypeFilters(Result result) {
+        for (Map.Entry<String, List<Filter>> entry : result.getFilters().entrySet()) {
+            Prefers.put("filter_" + getKey() + "_" + entry.getKey(), App.gson().toJson(entry.getValue()));
+        }
         for (Class item : result.getTypes()) item.setFilters(getFilter(item.getTypeId()));
+    }
+
+    private void updateTypeAdapter(Result result) {
         if (mAdapter.size() > 1) mAdapter.removeItems(1, mAdapter.size() - 1);
-        if (result.getTypes().size() > 0) mAdapter.addAll(1, result.getTypes());
+        if (!result.getTypes().isEmpty()) mAdapter.addAll(1, result.getTypes());
+    }
+
+    private void refreshHomePage(Result result) {
         setPager();
         getHomeFragment().addVideo(result);
         getHomeFragment().mBinding.progressLayout.showContent();
-        App.post(() -> setFocus(), 200);
     }
 
     private void setPager() {
         mBinding.pager.setAdapter(mPageAdapter = new HomeActivity.PageAdapter(getSupportFragmentManager()));
         mBinding.pager.setNoScrollItem(0);
+        mLastPagePosition = mBinding.pager.getCurrentItem();
     }
 
     private void onChildSelected(@Nullable RecyclerView.ViewHolder child) {
@@ -232,6 +252,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (child == null) return;
         mOldView = child.itemView;
         mOldView.setActivated(true);
+        App.removeCallbacks(mRunnable);
         App.post(mRunnable, 100);
     }
 
@@ -251,6 +272,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mAdapter.notifyArrayItemRangeChanged(1, mAdapter.size() - 1);
     }
 
+    private boolean isHomePageSelected() {
+        return mBinding.pager.getCurrentItem() == 0;
+    }
+
     public void hideToolBar() {
         mBinding.toolbar.setVisibility(View.GONE);
         if (mBinding.recycler.getVisibility() == View.VISIBLE) mBinding.blank.setVisibility(View.VISIBLE);
@@ -267,7 +292,17 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private VodFragment getFragment() {
-        return (VodFragment) mPageAdapter.instantiateItem(mBinding.pager, mBinding.pager.getCurrentItem());
+        return getFragment(mBinding.pager.getCurrentItem());
+    }
+
+    private VodFragment getFragment(int position) {
+        return (VodFragment) mPageAdapter.instantiateItem(mBinding.pager, position);
+    }
+
+    private void notifyPageHidden(int fromPosition, int toPosition) {
+        if (fromPosition == toPosition || mPageAdapter == null || fromPosition == 0) return;
+        if (fromPosition < 0 || fromPosition >= mPageAdapter.getCount()) return;
+        getFragment(fromPosition).onPageHidden();
     }
 
     private void setCoolDown() {
@@ -281,7 +316,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onItemClick(Class item) {
-        if (mBinding.pager.getCurrentItem() == 0) {
+        if (isHomePageSelected()) {
             SiteDialog.create(this).show();
         } else {
             updateFilter(item);
@@ -290,7 +325,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void onRefresh(Class item) {
-        if (mBinding.pager.getCurrentItem() == 0) mBinding.title.requestFocus();
+        if (isHomePageSelected()) mBinding.title.requestFocus();
         else getFragment().onRefresh();
     }
 
@@ -588,7 +623,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     class PageAdapter extends FragmentStatePagerAdapter {
         public PageAdapter(@NonNull FragmentManager fm) {
-            super(fm);
+            super(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT);
         }
 
         @NonNull

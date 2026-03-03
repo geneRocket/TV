@@ -34,6 +34,7 @@ public class CustomLiveListView extends VerticalGridView {
     }
 
     private boolean onKeyDown() {
+        if (getAdapter() == null || getAdapter().getItemCount() == 0) return false;
         if (getSelectedPosition() != getAdapter().getItemCount() - 1) return false;
         if (getId() == R.id.channel) setSelectedPosition(0);
         else if (listener != null) listener.nextGroup(false);
@@ -41,8 +42,9 @@ public class CustomLiveListView extends VerticalGridView {
     }
 
     private boolean onKeyUp() {
+        if (getAdapter() == null || getAdapter().getItemCount() == 0) return false;
         if (getSelectedPosition() != 0) return false;
-        if (getId() == R.id.channel) setSelectedPosition(getAdapter().getItemCount());
+        if (getId() == R.id.channel) setSelectedPosition(getAdapter().getItemCount() - 1);
         else if (listener != null) listener.prevGroup(false);
         return true;
     }

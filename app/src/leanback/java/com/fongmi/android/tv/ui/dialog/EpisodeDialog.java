@@ -155,14 +155,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
         setEpisodeView(items);
         setArrayAdapter(items.size());
         mEpisodeAdapter.setItems(items, null);
-        this.binding.episodeVert.postDelayed(() -> {
-            int position = getEpisodePosition();
-            setEpisodeSelectedPosition(position);
-            binding.episodeVert.postDelayed(() -> {
-                View selectedItem = binding.episodeVert.getLayoutManager().findViewByPosition(position);
-                if (selectedItem != null) selectedItem.requestFocus();
-            }, 300);
-        }, 1000);
+        this.binding.episodeVert.post(() -> setEpisodeSelectedPosition(getEpisodePosition()));
     }
 
     private void setArrayAdapter(int size) {

@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.text.Editable;
 import android.text.TextUtils;
-import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -53,10 +52,12 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private RecordAdapter mRecordAdapter;
     private WordAdapter mWordAdapter;
     private boolean mAutoSearched;
+    private Call mHotCall;
     private Call mSuggestOneCall;
     private Call mSuggestTwoCall;
     private String mSuggestKeyword;
     private int mSuggestRequestId;
+    private int mWordRequestId;
     private final Runnable mSuggestTask = new Runnable() {
         @Override
         public void run() {
@@ -102,6 +103,9 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                     cancelSuggestTask();
                     getHot();
                 } else {
+                    cancelHotRequest();
+                    cancelSuggestTask();
+                    cancelSuggestRequest();
                     mSuggestKeyword = keyword;
                     App.post(mSuggestTask, 250);
                 }
@@ -145,15 +149,23 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private void getHot() {
+        int requestId = ++mWordRequestId;
+        cancelHotRequest();
         cancelSuggestRequest();
         mBinding.hint.setText(R.string.search_hot);
-        mWordAdapter.addAll(Hot.get(Setting.getHot()));
-        OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Headers.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general")).enqueue(new Callback() {
+        List<String> items = Hot.get(Setting.getHot());
+        mWordAdapter.addAll(items);
+        if (!items.isEmpty()) return;
+        mHotCall = OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Headers.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general"));
+        mHotCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                List<String> items = Hot.get(response.body().string());
-                if (mWordAdapter.getItemCount() > 0) return;
-                App.post(() -> mWordAdapter.addAll(items));
+                if (!isHotRequestValid(requestId, call)) return;
+                List<String> remote = Hot.get(response.body().string());
+                App.post(() -> {
+                    if (!isHotRequestValid(requestId, call)) return;
+                    mWordAdapter.addAll(remote);
+                });
             }
         });
     }
@@ -198,8 +210,17 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mSuggestTwoCall = null;
     }
 
+    private void cancelHotRequest() {
+        if (mHotCall != null) mHotCall.cancel();
+        mHotCall = null;
+    }
+
     private boolean isSuggestRequestValid(int requestId, String requestKeyword) {
         return requestId == mSuggestRequestId && requestKeyword.equals(mBinding.keyword.getText().toString().trim());
+    }
+
+    private boolean isHotRequestValid(int requestId, Call call) {
+        return requestId == mWordRequestId && call == mHotCall && TextUtils.isEmpty(mBinding.keyword.getText().toString().trim());
     }
 
     @Override
@@ -219,6 +240,9 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mBinding.keyword.setSelection(mBinding.keyword.length());
         Util.hideKeyboard(mBinding.keyword);
         if (TextUtils.isEmpty(keyword)) return;
+        cancelHotRequest();
+        cancelSuggestTask();
+        cancelSuggestRequest();
         CollectActivity.start(this, keyword);
         App.post(() -> mRecordAdapter.add(keyword), 250);
     }
@@ -256,6 +280,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        cancelHotRequest();
         cancelSuggestTask();
         cancelSuggestRequest();
     }

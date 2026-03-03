@@ -71,6 +71,8 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private long position;
     private long duration;
     private int scale;
+    private boolean mResumeOnForeground = true;
+    private boolean mServiceBound;
 
     private PlayerView getExo() {
         return mBinding.exo;
@@ -99,7 +101,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     protected void initView() {
-        bindService(new Intent(this, DLNARendererService.class), this, Context.BIND_AUTO_CREATE);
+        mServiceBound = bindService(new Intent(this, DLNARendererService.class), this, Context.BIND_AUTO_CREATE);
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownCast.create(this);
         mPlayers = Players.create(this);
@@ -290,6 +292,10 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     private void setTraffic() {
         Traffic.setSpeed(mBinding.widget.traffic);
+        if (!mPlayers.isBuffering()) {
+            hideProgress();
+            return;
+        }
         App.post(mR2, Constant.INTERVAL_TRAFFIC);
     }
 
@@ -331,7 +337,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
                 hideProgress();
                 mPlayers.reset();
                 setTrackVisible(true);
-                setState(RenderState.PLAYING);
+                setState(mPlayers.isPlaying() ? RenderState.PLAYING : RenderState.PAUSED);
                 mBinding.widget.size.setText(mPlayers.getSizeText());
                 break;
             case Player.STATE_ENDED:
@@ -376,12 +382,14 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mBinding.widget.seekBar.setPosition(mPlayers.getPosition());
         mBinding.widget.seekBar.setDuration(mPlayers.getDuration());
         setState(RenderState.PAUSED);
+        mResumeOnForeground = false;
         mPlayers.pause();
         showInfo();
     }
 
     private void onPlay() {
         setState(RenderState.PLAYING);
+        mResumeOnForeground = true;
         mPlayers.play();
         hideCenter();
     }
@@ -421,11 +429,14 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public void onServiceConnected(ComponentName name, IBinder service) {
+        mServiceBound = true;
         (mService = ((RendererServiceBinder) service).getService()).bindRealPlayer(this);
     }
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
+        mServiceBound = false;
+        mService = null;
     }
 
     @Override
@@ -544,7 +555,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     protected void onResume() {
         super.onResume();
         mClock.start();
-        onPlay();
+        if (mResumeOnForeground) onPlay();
     }
 
     @Override
@@ -567,11 +578,15 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     protected void onDestroy() {
+        if (mService != null) mService.bindRealPlayer(null);
+        if (mServiceBound) {
+            unbindService(this);
+            mServiceBound = false;
+        }
         super.onDestroy();
         mClock.release();
         mPlayers.release();
-        unbindService(this);
-        mService.bindRealPlayer(null);
+        mService = null;
         App.removeCallbacks(mR1, mR2);
     }
 }

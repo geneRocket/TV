@@ -1159,9 +1159,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private boolean isBuffering() {
-        long buffered = mPlayers.getBuffered();
-        long position = mPlayers.getPosition();
-        return buffered - position < 1000;
+        return mPlayers.isBuffering();
     }
 
     private void setOrient() {

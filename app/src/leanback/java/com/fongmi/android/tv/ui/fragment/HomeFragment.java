@@ -80,7 +80,6 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         mBinding.progressLayout.showProgress();
         setRecyclerView();
         setAdapter();
-        initEvent();
         inited = true;
     }
 

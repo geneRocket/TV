@@ -10,10 +10,12 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.databinding.AdapterSearchWordBinding;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
 
+    private static final int MAX_SIZE = 20;
     private final OnClickListener mListener;
     private final List<String> mItems;
 
@@ -28,19 +30,37 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
     }
 
     public void addAll(List<String> items) {
-        mItems.clear();
-        mItems.addAll(items);
-        notifyDataSetChanged();
+        replaceItems(normalize(items, new LinkedHashSet<>()));
     }
 
     public void clear() {
+        if (mItems.isEmpty()) return;
         mItems.clear();
         notifyDataSetChanged();
     }
 
     public void appendAll(List<String> items) {
-        mItems.addAll(items.subList(0, Math.min(items.size(), 20)));
+        replaceItems(normalize(items, new LinkedHashSet<>(mItems)));
+    }
+
+    private void replaceItems(List<String> items) {
+        if (mItems.equals(items)) return;
+        mItems.clear();
+        mItems.addAll(items);
         notifyDataSetChanged();
+    }
+
+    private List<String> normalize(List<String> items, LinkedHashSet<String> set) {
+        if (items != null) {
+            for (String item : items) {
+                if (item == null) continue;
+                String text = item.trim();
+                if (text.isEmpty()) continue;
+                set.add(text);
+                if (set.size() >= MAX_SIZE) break;
+            }
+        }
+        return new ArrayList<>(set);
     }
 
     @Override

@@ -55,13 +55,17 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     }
 
     private void getHistory() {
-        mBinding.delete.setFocusable(false);
         mAdapter.addAll(History.get());
-        App.post(() -> {
-            mBinding.delete.setVisibility(mAdapter.getItemCount() > 0 ? View.VISIBLE : View.GONE);
-            mBinding.delete.setFocusable(true);
-        }, 500);
-        mBinding.recycler.requestFocus();
+        updateDeleteView();
+        mBinding.recycler.post(() -> {
+            if (!isFinishing()) mBinding.recycler.requestFocus();
+        });
+    }
+
+    private void updateDeleteView() {
+        boolean visible = mAdapter.getItemCount() > 0;
+        mBinding.delete.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.delete.setFocusable(visible);
     }
 
     private void onDelete(View view) {
@@ -81,17 +85,17 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemDelete(History item) {
-        mBinding.delete.setFocusable(false);
         int index = mAdapter.delete(item.delete());
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
-        App.post(() -> {
-            mBinding.delete.setFocusable(true);
-        }, 300);
+        updateDeleteView();
         if (mAdapter.getItemCount() > 0) {
             int nextIndex = index + 1;
             if (index == mAdapter.getItemCount()) nextIndex = index - 1;
-            View view  = mBinding.recycler.getLayoutManager().findViewByPosition(nextIndex);
-            if (view != null) view.requestFocus();
+            int targetIndex = nextIndex;
+            mBinding.recycler.post(() -> {
+                View view = mBinding.recycler.getLayoutManager() == null ? null : mBinding.recycler.getLayoutManager().findViewByPosition(targetIndex);
+                if (view != null) view.requestFocus();
+            });
         }
     }
 

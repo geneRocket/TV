@@ -30,9 +30,9 @@ import com.fongmi.android.tv.ui.fragment.VodFragment;
 import com.fongmi.android.tv.ui.presenter.TypePresenter;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.SiteCategoryUtil;
 import com.github.catvod.utils.Prefers;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -43,6 +43,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     private PageAdapter mPageAdapter;
     private boolean coolDown;
     private View mOldView;
+    private int mLastPagePosition;
 
     public static void start(Activity activity, Result result) {
         start(activity, VodConfig.get().getHome().getKey(), result);
@@ -90,6 +91,8 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         mBinding.pager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override
             public void onPageSelected(int position) {
+                notifyPageHidden(mLastPagePosition, position);
+                mLastPagePosition = position;
                 mBinding.recycler.setSelectedPosition(position);
             }
         });
@@ -108,9 +111,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     }
 
     private List<Class> getTypes(Result result) {
-        List<Class> items = new ArrayList<>();
-        for (String cate : getSite().getCategories()) for (Class item : result.getTypes()) if (cate.equals(item.getTypeName())) items.add(item);
-        return items;
+        return SiteCategoryUtil.filter(getSite().getCategories(), result.getTypes());
     }
 
     private void setTypes() {
@@ -122,6 +123,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
 
     private void setPager() {
         mBinding.pager.setAdapter(mPageAdapter = new PageAdapter(getSupportFragmentManager()));
+        mLastPagePosition = mBinding.pager.getCurrentItem();
     }
 
     private void onChildSelected(@Nullable RecyclerView.ViewHolder child) {
@@ -129,6 +131,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         if (child == null) return;
         mOldView = child.itemView;
         mOldView.setActivated(true);
+        App.removeCallbacks(mRunnable);
         App.post(mRunnable, 100);
     }
 
@@ -146,7 +149,17 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     }
 
     private VodFragment getFragment() {
-        return (VodFragment) mPageAdapter.instantiateItem(mBinding.pager, mBinding.pager.getCurrentItem());
+        return getFragment(mBinding.pager.getCurrentItem());
+    }
+
+    private VodFragment getFragment(int position) {
+        return (VodFragment) mPageAdapter.instantiateItem(mBinding.pager, position);
+    }
+
+    private void notifyPageHidden(int fromPosition, int toPosition) {
+        if (fromPosition == toPosition || mPageAdapter == null) return;
+        if (fromPosition < 0 || fromPosition >= mPageAdapter.getCount()) return;
+        getFragment(fromPosition).onPageHidden();
     }
 
     private void setCoolDown() {
@@ -187,7 +200,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     class PageAdapter extends FragmentStatePagerAdapter {
 
         public PageAdapter(@NonNull FragmentManager fm) {
-            super(fm);
+            super(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT);
         }
 
         @NonNull

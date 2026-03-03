@@ -14,7 +14,8 @@ public abstract class BaseFragment extends Fragment {
 
     protected abstract ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container);
 
-    private boolean init;
+    private boolean initialized;
+    private boolean viewCreated;
 
     @Nullable
     @Override
@@ -24,30 +25,37 @@ public abstract class BaseFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        viewCreated = true;
         initView();
+        initEvent();
+        tryInitData();
     }
 
     protected void initView() {
     }
 
+    protected void initEvent() {
+    }
+
     protected void initData() {
     }
 
-    private void onVisible() {
-        if (init) return;
+    private void tryInitData() {
+        if (initialized || !viewCreated || !isResumed()) return;
         initData();
-        init = true;
-    }
-
-    @Override
-    public void setUserVisibleHint(boolean isVisibleToUser) {
-        super.setUserVisibleHint(isVisibleToUser);
-        if (isVisibleToUser) if (isResumed()) onVisible();
+        initialized = true;
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if (getUserVisibleHint()) onVisible();
+        tryInitData();
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        viewCreated = false;
+        initialized = false;
     }
 }

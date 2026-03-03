@@ -41,9 +41,9 @@ public class ExoUtil {
         int userSettingMs = Setting.getBuffer() * 1000;
 
         // 1. 保证启动快：首屏和卡顿后的恢复，固定使用较小的值。
-        // 无论用户怎么设置，点开视频只需要下载 2.5 秒就能播，卡顿后只需要下载 5 秒就能恢复。
+        // 无论用户怎么设置，点开视频只需要下载 2.5 秒就能播，卡顿后只需要下载约 1.2 秒就能恢复。
         int bufferForPlaybackMs = 2500;
-        int bufferForPlaybackAfterRebufferMs = 5000;
+        int bufferForPlaybackAfterRebufferMs = 1200;
 
         // 2. 保证不卡顿：利用用户的设置来控制后台缓冲池的深度。
         // 我们设定一个合理的底线（例如 15秒），在这个基础上根据用户设置放大。
