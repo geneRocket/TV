@@ -63,6 +63,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     private String click;
     private String from;
     private String key;
+    private volatile boolean stopped;
     private int vodAdsHash;
     private int liveAdsHash;
     private List<Pattern> vodAdPatterns = Collections.emptyList();
@@ -110,6 +111,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     }
 
     public CustomWebView start(String key, String from, Map<String, String> headers, String url, String click, ParseCallback callback, boolean detect) {
+        stopped = false;
         App.post(timer, Constant.TIMEOUT_PARSE_WEB);
         this.callback = callback;
         this.detect = detect;
@@ -342,21 +344,29 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     }
 
     private void onParseAdd(Map<String, String> headers, String url) {
-        App.post(() -> CustomWebView.create(App.get()).start(key, from, headers, url, click, callback, false));
+        if (stopped || callback == null) return;
+        App.post(() -> {
+            if (stopped || callback == null) return;
+            CustomWebView.create(App.get()).start(key, from, headers, url, click, callback, false);
+        });
     }
 
     private void onParseSuccess(Map<String, String> headers, String url) {
+        if (stopped) return;
         if (callback != null) callback.onParseSuccess(headers, url, from);
         App.post(() -> stop(false));
         callback = null;
     }
 
     private void onParseError() {
+        if (stopped) return;
         if (callback != null) callback.onParseError();
         callback = null;
     }
 
     public void stop(boolean error) {
+        if (stopped) return;
+        stopped = true;
         hideDialog();
         stopLoading();
         loadUrl(BLANK);

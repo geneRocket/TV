@@ -69,7 +69,7 @@ public class LiveParser {
     }
 
     private static void spider(Live live, String text) throws Exception {
-        if (text.isEmpty()) text = live.spider().liveContent();
+        if (text.isEmpty()) text = live.spider().liveContent(live.getUrl());
         if (Json.valid(text)) json(live, text);
         else text(live, text);
     }
@@ -183,7 +183,7 @@ public class LiveParser {
             if (origin != null) channel.setOrigin(origin);
             if (referer != null) channel.setReferer(referer);
             if (player != null) channel.setPlayerType(player);
-            if (header != null) channel.setHeader(Json.toObject(header));
+            if (header != null) channel.setHeader(header);
             if (key != null && type != null) channel.setDrm(Drm.create(key, type));
             return this;
         }

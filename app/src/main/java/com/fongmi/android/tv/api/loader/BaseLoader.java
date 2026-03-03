@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.api.loader;
 
+import android.text.TextUtils;
+
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Live;
@@ -13,6 +15,8 @@ import org.json.JSONObject;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import dalvik.system.DexClassLoader;
 
 public class BaseLoader {
 
@@ -34,10 +38,28 @@ public class BaseLoader {
         this.jsLoader = new JsLoader();
     }
 
+    private String siteKey(String key, String api, String ext) {
+        return "site:" + key + ":" + Util.md5(api + '\n' + ext);
+    }
+
+    private String liveKey(String key, String api, String ext) {
+        return "live:" + key + ":" + Util.md5(api + '\n' + ext);
+    }
+
     public void clear() {
         this.jarLoader.clear();
         this.pyLoader.clear();
         this.jsLoader.clear();
+    }
+
+    public void clear(String key) {
+        this.jarLoader.clear(key);
+        this.pyLoader.clear(key);
+        this.jsLoader.clear(key);
+    }
+
+    public void clearLive(String key, String api, String ext, String jar) {
+        clear(liveKey(key, api, ext));
     }
 
     public Spider getSpider(String key, String api, String ext, String jar) {
@@ -50,10 +72,22 @@ public class BaseLoader {
         else return new SpiderNull();
     }
 
+    public Spider getSiteSpider(String key, String api, String ext, String jar) {
+        return getSpider(siteKey(key, api, ext), api, ext, jar);
+    }
+
+    public Spider getLiveSpider(String key, String api, String ext, String jar) {
+        return getSpider(liveKey(key, api, ext), api, ext, jar);
+    }
+
     public Spider getSpider(Map<String, String> params) {
         if (!params.containsKey("siteKey")) return new SpiderNull();
-        Live live = LiveConfig.get().getLive(params.get("siteKey"));
-        Site site = VodConfig.get().getSite(params.get("siteKey"));
+        return getSpider(params.get("siteKey"));
+    }
+
+    public Spider getSpider(String key) {
+        Site site = VodConfig.get().getSite(key);
+        Live live = LiveConfig.get().getLive(key);
         if (!site.isEmpty()) return site.spider();
         if (!live.isEmpty()) return live.spider();
         return new SpiderNull();
@@ -65,21 +99,41 @@ public class BaseLoader {
         boolean csp = api.startsWith("csp_");
         if (js) jsLoader.setRecent(key);
         else if (py) pyLoader.setRecent(key);
-        else if (csp) jarLoader.setRecent(jar);
+        else if (csp) jarLoader.setRecent(Util.md5(jar));
+    }
+
+    public void setSiteRecent(String key, String api, String ext, String jar) {
+        setRecent(siteKey(key, api, ext), api, jar);
+    }
+
+    public void setLiveRecent(String key, String api, String ext, String jar) {
+        setRecent(liveKey(key, api, ext), api, jar);
     }
 
     public Object[] proxyLocal(Map<String, String> params) {
-        if ("js".equals(params.get("do"))) {
-            return jsLoader.proxyInvoke(params);
-        } else if ("py".equals(params.get("do"))) {
-            return pyLoader.proxyInvoke(params);
-        } else {
+        try {
+            if (params.containsKey("siteKey")) return getSpider(params.get("siteKey")).proxy(params);
+            if ("js".equals(params.get("do"))) return jsLoader.proxyInvoke(params);
+            if ("py".equals(params.get("do"))) return pyLoader.proxyInvoke(params);
             return jarLoader.proxyInvoke(params);
+        } catch (Throwable e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
     public void parseJar(String jar) {
+        parseJar(jar, false);
+    }
+
+    public void parseJar(String jar, boolean recent) {
+        if (TextUtils.isEmpty(jar)) return;
         jarLoader.parseJar(Util.md5(jar), jar);
+        if (recent) jarLoader.setRecent(Util.md5(jar));
+    }
+
+    public DexClassLoader dex(String jar) {
+        return jarLoader.dex(jar);
     }
 
     public JSONObject jsonExt(String key, LinkedHashMap<String, String> jxs, String url) throws Throwable {

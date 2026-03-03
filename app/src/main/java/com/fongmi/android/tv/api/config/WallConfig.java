@@ -22,6 +22,8 @@ import com.github.catvod.utils.Path;
 import java.io.File;
 import java.io.FileOutputStream;
 
+import okhttp3.Response;
+
 public class WallConfig {
 
     private Config config;
@@ -88,18 +90,26 @@ public class WallConfig {
     private File write(File file) throws Exception {
         if (getUrl().startsWith("file")) Path.copy(Path.local(getUrl()), file);
         else if (getUrl().startsWith("assets")) Path.copy(Asset.open(getUrl()), file);
-        else if (getUrl().startsWith("http")) Path.write(file, OkHttp.newCall(getUrl()).execute().body().bytes());
+        else if (getUrl().startsWith("http")) {
+            try (Response response = OkHttp.newCall(getUrl()).execute()) {
+                if (response.body() != null) Path.write(file, response.body().bytes());
+            }
+        }
         return resize(file);
     }
 
     private File resize(File file) {
+        Bitmap bitmap = null;
         try {
-            Bitmap bitmap = Glide.with(App.get()).asBitmap().load(file).centerCrop().override(ResUtil.getScreenWidth(), ResUtil.getScreenHeight()).skipMemoryCache(true).diskCacheStrategy(DiskCacheStrategy.NONE).submit().get();
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, new FileOutputStream(file));
-            bitmap.recycle();
+            bitmap = Glide.with(App.get()).asBitmap().load(file).centerCrop().override(ResUtil.getScreenWidth(), ResUtil.getScreenHeight()).skipMemoryCache(true).diskCacheStrategy(DiskCacheStrategy.NONE).submit().get();
+            try (FileOutputStream output = new FileOutputStream(file)) {
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, output);
+            }
             return file;
         } catch (Exception e) {
             return file;
+        } finally {
+            if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
         }
     }
 

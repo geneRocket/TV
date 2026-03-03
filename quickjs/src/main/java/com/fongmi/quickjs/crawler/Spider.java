@@ -109,6 +109,11 @@ public class Spider extends com.github.catvod.crawler.Spider {
     }
 
     @Override
+    public String liveContent(String url) throws Exception {
+        return (String) call("live", url);
+    }
+
+    @Override
     public boolean manualVideoCheck() throws Exception {
         return (Boolean) call("sniffer");
     }
@@ -122,6 +127,11 @@ public class Spider extends com.github.catvod.crawler.Spider {
     public Object[] proxyLocal(Map<String, String> params) throws Exception {
         if ("catvod".equals(params.get("from"))) return proxy2(params);
         else return submit(() -> proxy1(params)).get();
+    }
+
+    @Override
+    public Object[] proxy(Map<String, String> params) throws Exception {
+        return proxyLocal(params);
     }
 
     @Override

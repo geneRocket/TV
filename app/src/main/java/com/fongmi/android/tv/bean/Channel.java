@@ -4,20 +4,27 @@ import android.text.TextUtils;
 import android.view.View;
 import android.widget.ImageView;
 
+import androidx.annotation.Nullable;
+
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.gson.HeaderAdapter;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.utils.Json;
+import com.github.catvod.utils.Trans;
 import com.google.common.net.HttpHeaders;
 import com.google.gson.JsonElement;
+import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public class Channel {
 
@@ -43,10 +50,13 @@ public class Channel {
     private String origin;
     @SerializedName("referer")
     private String referer;
+    @SerializedName("tvgId")
+    private String tvgId;
     @SerializedName("catchup")
     private Catchup catchup;
     @SerializedName("header")
-    private JsonElement header;
+    @JsonAdapter(HeaderAdapter.class)
+    private Map<String, String> header;
     @SerializedName("playerType")
     private Integer playerType;
     @SerializedName("parse")
@@ -92,6 +102,14 @@ public class Channel {
 
     public String getTvgName() {
         return TextUtils.isEmpty(tvgName) ? getName() : tvgName;
+    }
+
+    public String getTvgId() {
+        return TextUtils.isEmpty(tvgId) ? getTvgName() : tvgId;
+    }
+
+    public void setTvgId(String tvgId) {
+        this.tvgId = tvgId;
     }
 
     public void setTvgName(String tvgName) {
@@ -186,11 +204,11 @@ public class Channel {
         this.catchup = catchup;
     }
 
-    public JsonElement getHeader() {
-        return header;
+    public Map<String, String> getHeader() {
+        return header == null ? new HashMap<>() : header;
     }
 
-    public void setHeader(JsonElement header) {
+    public void setHeader(Map<String, String> header) {
         this.header = header;
     }
 
@@ -234,6 +252,10 @@ public class Channel {
         this.url = url;
     }
 
+    public void clearUrl() {
+        this.url = null;
+    }
+
     public String getMsg() {
         return TextUtils.isEmpty(msg) ? "" : msg;
     }
@@ -259,7 +281,9 @@ public class Channel {
     }
 
     public void setLine(int line) {
-        this.line = Math.max(line, 0);
+        int next = Math.max(line, 0);
+        if (this.line != next) clearUrl();
+        this.line = next;
     }
 
     public boolean isSelected() {
@@ -295,7 +319,8 @@ public class Channel {
     }
 
     public String getCurrent() {
-        return getUrls().isEmpty() ? "" : getUrls().get(getLine());
+        if (getUrls().isEmpty()) return "";
+        return getPlayUrl(getUrls().get(getLine()));
     }
 
     public boolean isOnly() {
@@ -314,7 +339,9 @@ public class Channel {
 
     public String getLineText() {
         if (getUrls().size() <= 1) return "";
-        if (getCurrent().contains("$")) return getCurrent().split("\\$")[1];
+        String current = getUrls().get(getLine());
+        String line = getLineName(current);
+        if (!line.isEmpty()) return line;
         return ResUtil.getString(R.string.live_line, getLine() + 1);
     }
 
@@ -330,22 +357,47 @@ public class Channel {
 
     public void live(Live live) {
         if (!live.getUa().isEmpty() && getUa().isEmpty()) setUa(live.getUa());
-        if (live.getHeader() != null && getHeader() == null) setHeader(live.getHeader());
+        if (live.getHeader() != null && getHeader().isEmpty()) setHeader(Json.toMap(live.getHeader()));
         if (!live.getClick().isEmpty() && getClick().isEmpty()) setClick(live.getClick());
         if (!live.getOrigin().isEmpty() && getOrigin().isEmpty()) setOrigin(live.getOrigin());
         if (!live.getCatchup().isEmpty() && getCatchup().isEmpty()) setCatchup(live.getCatchup());
         if (!live.getReferer().isEmpty() && getReferer().isEmpty()) setReferer(live.getReferer());
         if (live.getPlayerType() != -1 && getPlayerType() == -1) setPlayerType(live.getPlayerType());
-        if (live.getEpg().contains("{") && !getEpg().startsWith("http")) setEpg(live.getEpg().replace("{name}", getTvgName()).replace("{epg}", getEpg()));
-        if (live.getLogo().contains("{") && !getLogo().startsWith("http")) setLogo(live.getLogo().replace("{name}", getTvgName()).replace("{logo}", getLogo()));
+        if (live.getEpg().contains("{") && !getEpg().startsWith("http")) setEpg(live.getEpgApi().replace("{id}", getTvgId()).replace("{name}", getTvgName()).replace("{epg}", getEpg()));
+        if (live.getLogo().contains("{") && !getLogo().startsWith("http")) setLogo(live.getLogo().replace("{id}", getTvgId()).replace("{name}", getTvgName()).replace("{logo}", getLogo()));
     }
 
     public void setLine(String line) {
-        setLine(getUrls().indexOf(line));
+        for (int i = 0; i < getUrls().size(); i++) {
+            String url = getUrls().get(i);
+            if (url.equals(line) || getPlayUrl(url).equals(line)) {
+                setLine(i);
+                break;
+            }
+        }
+    }
+
+    private String getPlayUrl(String url) {
+        if (getDrm() != null) return url;
+        int index = getLineIndex(url);
+        return index == -1 ? url : url.substring(0, index);
+    }
+
+    private String getLineName(String url) {
+        int index = getLineIndex(url);
+        return index == -1 ? "" : url.substring(index + 1);
+    }
+
+    private int getLineIndex(String url) {
+        int index = url.lastIndexOf('$');
+        if (index <= 0 || index >= url.length() - 1) return -1;
+        String line = url.substring(index + 1);
+        if (line.contains("://") || line.contains("/") || line.contains("?") || line.contains("&") || line.contains("=") || line.contains("#")) return -1;
+        return index;
     }
 
     public Map<String, String> getHeaders() {
-        Map<String, String> headers = Json.toMap(getHeader());
+        Map<String, String> headers = new HashMap<>(getHeader());
         if (!getUa().isEmpty()) headers.put(HttpHeaders.USER_AGENT, getUa());
         if (!getOrigin().isEmpty()) headers.put(HttpHeaders.ORIGIN, getOrigin());
         if (!getReferer().isEmpty()) headers.put(HttpHeaders.REFERER, getReferer());
@@ -356,6 +408,7 @@ public class Channel {
         setPlayerType(item.getPlayerType());
         setCatchup(item.getCatchup());
         setReferer(item.getReferer());
+        setTvgId(item.getTvgId());
         setTvgName(item.getTvgName());
         setHeader(item.getHeader());
         setNumber(item.getNumber());
@@ -373,19 +426,34 @@ public class Channel {
         return this;
     }
 
+    public Channel trans() {
+        if (Trans.pass()) return this;
+        this.name = Trans.s2t(name);
+        return this;
+    }
+
     public Result result() {
         Result result = new Result();
+        result.setDrm(getDrm());
+        result.setParse(getParse());
+        result.setFormat(getFormat());
+        result.setUrl(TextUtils.isEmpty(getUrl()) ? getCurrent() : getUrl());
         result.setClick(getClick());
-        result.setUrl(Url.create().add(getUrl()));
         result.setHeader(Json.toObject(getHeaders()));
         return result;
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(@Nullable Object obj) {
         if (this == obj) return true;
         if (!(obj instanceof Channel)) return false;
         Channel it = (Channel) obj;
-        return getName().equals(it.getName()) || (!getNumber().isEmpty() && getNumber().equals(it.getNumber()));
+        if (!getNumber().isEmpty() && !it.getNumber().isEmpty()) return getNumber().equals(it.getNumber());
+        return getName().equals(it.getName());
+    }
+
+    @Override
+    public int hashCode() {
+        return !getNumber().isEmpty() ? Objects.hash(getNumber()) : Objects.hash(getName());
     }
 }

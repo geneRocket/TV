@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.player.extractor;
 
+import android.net.Uri;
 import android.os.SystemClock;
 
 import com.fongmi.android.tv.App;
@@ -9,8 +10,8 @@ import com.fongmi.android.tv.ui.activity.VideoActivity;
 public class Push implements Source.Extractor {
 
     @Override
-    public boolean match(String scheme, String host) {
-        return "push".equals(scheme);
+    public boolean match(Uri uri) {
+        return "push".equals(uri.getScheme());
     }
 
     @Override

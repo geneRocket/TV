@@ -32,8 +32,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import okhttp3.Headers;
-import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class ParseJob implements ParseCallback {
@@ -44,6 +42,7 @@ public class ParseJob implements ParseCallback {
     private ExecutorService infinite;
     private ParseCallback callback;
     private Parse parse;
+    private volatile boolean stopped;
 
     public static ParseJob create(ParseCallback callback) {
         return new ParseJob(callback);
@@ -58,6 +57,7 @@ public class ParseJob implements ParseCallback {
     }
 
     public ParseJob start(Result result, boolean useParse) {
+        stopped = false;
         setParse(result, useParse);
         execute(result);
         return this;
@@ -68,6 +68,7 @@ public class ParseJob implements ParseCallback {
         if (result.getPlayUrl().startsWith("json:")) parse = Parse.get(1, result.getPlayUrl().substring(5));
         if (result.getPlayUrl().startsWith("parse:")) parse = VodConfig.get().getParse(result.getPlayUrl().substring(6));
         if (parse == null || parse.isEmpty()) parse = Parse.get(0, result.getPlayUrl());
+        else parse = parse.copy();
         parse.setHeader(result.getHeader());
         parse.setClick(getClick(result));
     }
@@ -132,10 +133,7 @@ public class ParseJob implements ParseCallback {
     }
 
     private String requestString(String url, Map<String, String> headers) throws Exception {
-        try (Response response = OkHttp.newCall(url, Headers.of(headers)).execute()) {
-            ResponseBody body = response.body();
-            return body == null ? "" : body.string();
-        }
+        return OkHttp.string(url, headers);
     }
 
     private void jsonExtend(String webUrl) throws Throwable {
@@ -153,12 +151,16 @@ public class ParseJob implements ParseCallback {
     private void godParse(String webUrl, String flag) throws Exception {
         List<Parse> json = VodConfig.get().getParses(1, flag);
         List<Parse> webs = VodConfig.get().getParses(0, flag);
-        int count = json.size() + (webs.isEmpty() ? 0 : 1);
-        CountDownLatch latch = new CountDownLatch(count);
+        if (json.isEmpty()) {
+            if (!webs.isEmpty()) startWeb(webs, webUrl);
+            else onParseError();
+            return;
+        }
+        CountDownLatch latch = new CountDownLatch(json.size());
         for (Parse item : json) parseTasks.add(infinite.submit(() -> jsonParse(latch, item, webUrl)));
         if (!webs.isEmpty()) startWeb(webs, webUrl);
         latch.await();
-        onParseError();
+        if (webs.isEmpty()) onParseError();
     }
 
     private void jsonParse(CountDownLatch latch, Parse item, String webUrl) {
@@ -201,7 +203,10 @@ public class ParseJob implements ParseCallback {
     }
 
     private void startWeb(String key, String from, Map<String, String> headers, String url, String click) {
-        App.post(() -> webViews.add(CustomWebView.create(App.get()).start(key, from, headers, url, click, this, !url.contains("player/?url="))));
+        App.post(() -> {
+            if (stopped) return;
+            webViews.add(CustomWebView.create(App.get()).start(key, from, headers, url, click, this, !url.contains("player/?url=")));
+        });
     }
 
     private Map<String, String> getHeader(JsonObject object) {
@@ -214,6 +219,7 @@ public class ParseJob implements ParseCallback {
     @Override
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
         App.post(() -> {
+            if (stopped) return;
             if (callback != null) callback.onParseSuccess(headers, url, from);
             stop();
         });
@@ -222,6 +228,7 @@ public class ParseJob implements ParseCallback {
     @Override
     public void onParseError() {
         App.post(() -> {
+            if (stopped) return;
             if (callback != null) callback.onParseError();
             stop();
         });
@@ -233,6 +240,7 @@ public class ParseJob implements ParseCallback {
     }
 
     public void stop() {
+        stopped = true;
         if (executor != null) executor.shutdownNow();
         for (Future<?> task : parseTasks) task.cancel(true);
         parseTasks.clear();

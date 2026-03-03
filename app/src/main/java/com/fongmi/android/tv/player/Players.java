@@ -89,6 +89,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private Drm drm;
     private Sub sub;
     private boolean forceLive;
+    private boolean pendingReady;
 
     private long position;
     private int decode;
@@ -227,6 +228,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (this.player != player) stop();
         this.player = player;
         this.decode = getDecode(player);
+        if (ijkPlayer != null) ijkPlayer.setPlayer(player);
     }
 
     public int getDecode(int player) {
@@ -251,6 +253,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         stopParse();
         count = 0;
         retry = 0;
+        pendingReady = false;
     }
 
     public void clear() {
@@ -260,6 +263,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         drm = null;
         url = null;
         forceLive = false;
+        pendingReady = false;
     }
 
     public int addRetry() {
@@ -501,11 +505,13 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void start(Channel channel, int timeout) {
+        setPlayer(channel.getPlayerType() != -1 ? channel.getPlayerType() : Setting.getLivePlayer());
+        String url = getChannelUrl(channel);
         if (channel.hasMsg()) {
             ErrorEvent.extract(channel.getMsg());
         } else if (channel.getParse() == 1) {
             startParse(channel.result(), false);
-        } else if (isIllegal(channel.getUrl())) {
+        } else if (isIllegal(url)) {
             ErrorEvent.url(0);
         } else {
             setMediaSource(channel, timeout);
@@ -594,8 +600,13 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void setMediaSource(Channel channel, int timeout) {
-        boolean forceLive = isLikelyLive(channel.getUrl(), channel.getFormat());
-        setMediaSource(channel.getHeaders(), channel.getUrl(), channel.getFormat(), channel.getDrm(), new ArrayList<>(), timeout, forceLive);
+        String url = getChannelUrl(channel);
+        boolean forceLive = isLikelyLive(url, channel.getFormat());
+        setMediaSource(channel.getHeaders(), url, channel.getFormat(), channel.getDrm(), new ArrayList<>(), timeout, forceLive);
+    }
+
+    private String getChannelUrl(Channel channel) {
+        return TextUtils.isEmpty(channel.getUrl()) ? channel.getCurrent() : channel.getUrl();
     }
 
     private void setMediaSource(Result result, int timeout) {
@@ -614,6 +625,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         this.drm = drm;
         this.forceLive = forceLive;
         this.subs = checkSub(subs);
+        this.pendingReady = isExo();
         if (isIjk() && ijkPlayer != null) ijkPlayer.setMediaSource(IjkUtil.getSource(this.headers, this.url), position);
         if (isExo() && exoPlayer != null) {
             MediaItem item = ExoUtil.getMediaItem(this.headers, UrlUtil.uri(this.url), this.format, this.drm, this.subs, decode, this.forceLive);
@@ -634,6 +646,11 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (playerState == state) return;
         playerState = state;
         PlayerEvent.state(state);
+    }
+
+    private void dispatchReadyState() {
+        pendingReady = false;
+        setPlayerState(Player.STATE_READY);
     }
 
     public void setTrack(List<Track> tracks) {
@@ -810,7 +827,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
                 setPlaybackState(events.contains(Player.EVENT_PLAYER_ERROR) ? PlaybackStateCompat.STATE_ERROR : PlaybackStateCompat.STATE_NONE);
                 break;
             case Player.STATE_READY:
-                setPlayerState(Player.STATE_READY);
+                if (!pendingReady || !isExo() || !player.getPlayWhenReady()) dispatchReadyState();
                 updateLiveDecision();
                 setPlaybackState(player.isPlaying() ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED);
                 updateDanmuPlayingState();
@@ -848,7 +865,13 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     @Override
     public void onIsPlayingChanged(boolean isPlaying) {
+        if (isPlaying) dispatchReadyState();
         updateDanmuPlayingState();
+    }
+
+    @Override
+    public void onRenderedFirstFrame() {
+        if (isExo() && pendingReady) dispatchReadyState();
     }
 
     @Override
@@ -886,9 +909,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
                 setPlayerState(Player.STATE_BUFFERING);
                 break;
             case IMediaPlayer.MEDIA_INFO_BUFFERING_END:
+            case IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_VIDEO_SEEK_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_AUDIO_SEEK_RENDERING_START:
-                setPlayerState(Player.STATE_READY);
+                dispatchReadyState();
                 updateDanmuPlayingState();
                 break;
         }
@@ -903,7 +927,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     @Override
     public void onPrepared(IMediaPlayer mp) {
-        setPlayerState(Player.STATE_READY);
+        if (!pendingReady) setPlayerState(Player.STATE_READY);
     }
 
     @Override

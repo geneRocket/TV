@@ -10,6 +10,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
@@ -164,11 +165,11 @@ public class Path {
     }
 
     public static String read(InputStream is) {
-        try {
-            byte[] data = new byte[is.available()];
-            is.read(data);
-            is.close();
-            return new String(data, StandardCharsets.UTF_8);
+        try (InputStream input = is; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] data = new byte[8192];
+            int read;
+            while ((read = input.read(data)) != -1) output.write(data, 0, read);
+            return output.toString(StandardCharsets.UTF_8.name());
         } catch (IOException e) {
             e.printStackTrace();
             return "";
@@ -176,12 +177,11 @@ public class Path {
     }
 
     public static byte[] readToByte(File file) {
-        try {
-            FileInputStream is = new FileInputStream(file);
-            byte[] data = new byte[is.available()];
-            is.read(data);
-            is.close();
-            return data;
+        try (FileInputStream is = new FileInputStream(file); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] data = new byte[8192];
+            int read;
+            while ((read = is.read(data)) != -1) output.write(data, 0, read);
+            return output.toByteArray();
         } catch (IOException e) {
             e.printStackTrace();
             return new byte[0];
@@ -190,10 +190,10 @@ public class Path {
 
     public static File write(File file, byte[] data) {
         try {
-            FileOutputStream fos = new FileOutputStream(create(file));
-            fos.write(data);
-            fos.flush();
-            fos.close();
+            try (FileOutputStream fos = new FileOutputStream(create(file))) {
+                fos.write(data);
+                fos.flush();
+            }
             return file;
         } catch (Exception ignored) {
             ignored.printStackTrace();
@@ -214,13 +214,10 @@ public class Path {
     }
 
     public static void copy(InputStream in, File out) {
-        try {
+        try (InputStream input = in; FileOutputStream fos = new FileOutputStream(create(out))) {
             int read;
             byte[] buffer = new byte[8192];
-            FileOutputStream fos = new FileOutputStream(create(out));
-            while ((read = in.read(buffer)) != -1) fos.write(buffer, 0, read);
-            fos.close();
-            in.close();
+            while ((read = input.read(buffer)) != -1) fos.write(buffer, 0, read);
         } catch (Exception ignored) {
         }
     }

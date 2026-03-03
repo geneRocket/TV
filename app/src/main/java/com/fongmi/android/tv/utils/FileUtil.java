@@ -39,10 +39,8 @@ public class FileUtil {
     }
 
     public static void zipFolder(File folder, File zip) {
-        try {
-            ZipOutputStream zipOut = new ZipOutputStream(new FileOutputStream(zip));
+        try (ZipOutputStream zipOut = new ZipOutputStream(new FileOutputStream(zip))) {
             folderToZip("", folder, zipOut);
-            zipOut.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -59,13 +57,13 @@ public class FileUtil {
             ZipEntry zipEntry = new ZipEntry(parentPath + file.getName());
             zipOut.putNextEntry(zipEntry);
 
-            FileInputStream in = new FileInputStream(file);
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = in.read(buffer)) != -1) {
-                zipOut.write(buffer, 0, bytesRead);
+            try (FileInputStream in = new FileInputStream(file)) {
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    zipOut.write(buffer, 0, bytesRead);
+                }
             }
-            in.close();
         }
     }
     public static void extractGzip(File target, File path) {

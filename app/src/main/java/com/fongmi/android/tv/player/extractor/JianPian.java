@@ -18,7 +18,8 @@ public class JianPian implements Source.Extractor {
     private Map<String, Boolean> pathPaused;
 
     @Override
-    public boolean match(String scheme, String host) {
+    public boolean match(Uri uri) {
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme();
         return "tvbox-xg".equals(scheme) || "jianpian".equals(scheme) || "ftp".equals(scheme);
     }
 

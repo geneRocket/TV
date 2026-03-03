@@ -34,24 +34,37 @@ public class Download {
 
     public void start() {
         if (url.startsWith("file")) return;
-        if (callback == null) doInBackground();
-        else App.execute(this::doInBackground);
+        if (callback == null) App.execute(() -> {
+            try {
+                runDownload();
+            } catch (Exception ignored) {
+            }
+        });
+        else App.execute(() -> {
+            try {
+                runDownload();
+                App.post(() -> callback.success(file));
+            } catch (Exception e) {
+                App.post(() -> callback.error(e.getMessage()));
+            }
+        });
     }
 
-    private void doInBackground() {
-        try {
-            Path.create(file);
-            Response response = OkHttp.newCall(url).execute();
+    public void sync() throws Exception {
+        if (url.startsWith("file")) return;
+        runDownload();
+    }
+
+    private void runDownload() throws Exception {
+        Path.create(file);
+        try (Response response = OkHttp.newCall(url).execute()) {
+            if (response.body() == null) throw new IllegalStateException("Empty download body");
             download(response.body().byteStream(), Double.parseDouble(response.header(HttpHeaders.CONTENT_LENGTH, "1")));
-            if (callback != null) App.post(() -> callback.success(file));
-        } catch (Exception e) {
-            if (callback != null) App.post(() -> callback.error(e.getMessage()));
         }
     }
 
     private void download(InputStream is, double length) throws Exception {
-        FileOutputStream os = new FileOutputStream(file);
-        try (BufferedInputStream input = new BufferedInputStream(is)) {
+        try (BufferedInputStream input = new BufferedInputStream(is); FileOutputStream os = new FileOutputStream(file)) {
             byte[] buffer = new byte[4096];
             int readBytes;
             long totalBytes = 0;

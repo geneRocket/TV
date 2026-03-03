@@ -7,11 +7,13 @@ import com.github.catvod.net.OkHttp;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import okhttp3.OkHttpClient;
+import okhttp3.Response;
 
 public class ScanTask {
 
@@ -26,7 +28,7 @@ public class ScanTask {
     public ScanTask(Listener listener) {
         this.listener = listener;
         this.client = OkHttp.client(1000);
-        this.devices = new ArrayList<>();
+        this.devices = Collections.synchronizedList(new ArrayList<>());
     }
 
     public void start(List<String> ips) {
@@ -49,7 +51,7 @@ public class ScanTask {
 
     private void getDevice(List<String> urls) throws Exception {
         CountDownLatch cd = new CountDownLatch(urls.size());
-        for (String url : urls) new Thread(() -> findDevice(cd, url)).start();
+        for (String url : urls) ThreadPools.search().execute(() -> findDevice(cd, url));
         cd.await();
     }
 
@@ -64,7 +66,10 @@ public class ScanTask {
     private void findDevice(CountDownLatch cd, String url) {
         try {
             if (url.contains(Server.get().getAddress())) return;
-            String result = OkHttp.newCall(client, url.concat("/device")).execute().body().string();
+            String result;
+            try (Response response = OkHttp.newCall(client, url.concat("/device")).execute()) {
+                result = response.body() == null ? "" : response.body().string();
+            }
             Device device = Device.objectFrom(result);
             if (device == null) return;
             devices.add(device.save());

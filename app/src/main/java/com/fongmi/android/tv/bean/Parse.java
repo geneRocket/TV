@@ -104,8 +104,16 @@ public class Parse {
         this.click = click;
     }
 
+    public Parse copy() {
+        return App.gson().fromJson(App.gson().toJsonTree(this), Parse.class);
+    }
+
     public Map<String, String> getHeaders() {
         return Json.toMap(getExt().getHeader());
+    }
+
+    public Map<String, String> getHeader() {
+        return getHeaders();
     }
 
     public void setHeader(JsonElement header) {

@@ -21,6 +21,8 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.UrlUtil;
+import com.github.catvod.bean.Header;
+import com.github.catvod.bean.Proxy;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonElement;
@@ -36,6 +38,10 @@ public class LiveConfig {
     private List<Live> lives;
     private List<Rule> rules;
     private List<String> ads;
+    private List<Header> headers;
+    private List<Proxy> proxy;
+    private List<String> hosts;
+    private List<String> ruleHosts;
     private Config config;
     private boolean sync;
     private Live home;
@@ -83,7 +89,11 @@ public class LiveConfig {
     public LiveConfig init() {
         this.home = null;
         this.ads = new ArrayList<>();
+        this.hosts = new ArrayList<>();
+        this.proxy = new ArrayList<>();
         this.rules = new ArrayList<>();
+        this.headers = new ArrayList<>();
+        this.ruleHosts = new ArrayList<>();
         this.lives = new ArrayList<>();
         return config(Config.live());
     }
@@ -96,9 +106,14 @@ public class LiveConfig {
     }
 
     public LiveConfig clear() {
+        for (Live live : lives) BaseLoader.get().clearLive(live.getName(), live.getApi(), live.getExt(), live.getJar());
         this.home = null;
         this.ads.clear();
+        this.hosts.clear();
+        this.proxy.clear();
         this.rules.clear();
+        this.headers.clear();
+        this.ruleHosts.clear();
         this.lives.clear();
         return this;
     }
@@ -180,10 +195,8 @@ public class LiveConfig {
     private void initLive(JsonObject object) {
         String spider = Json.safeString(object, "spider");
         for (JsonElement element : Json.safeListElement(object, "lives")) {
-            Live live = Live.objectFrom(element);
+            Live live = Live.objectFrom(element, spider);
             if (lives.contains(live)) continue;
-            live.setApi(parseApi(live.getApi()));
-            live.setExt(parseExt(live.getExt()));
             live.setJar(parseJar(live, spider));
             lives.add(live.sync());
         }
@@ -196,7 +209,11 @@ public class LiveConfig {
 
     private void initOther(JsonObject object) {
         if (home == null) setHome(lives.isEmpty() ? new Live() : lives.get(0), true);
+        setHeaders(Header.arrayFrom(object.get("headers")));
+        setProxy(Proxy.arrayFrom(object.get("proxy")));
+        setHosts(Json.safeListString(object, "hosts"));
         setRules(Rule.arrayFrom(object.getAsJsonArray("rules")));
+        VodConfig.refreshNetwork();
         setAds(Json.safeListString(object, "ads"));
     }
 
@@ -214,6 +231,18 @@ public class LiveConfig {
     private String parseJar(Live live, String spider) {
         if (live.getJar().isEmpty() && live.getApi().startsWith("csp_")) return spider;
         return live.getJar();
+    }
+
+    private void setHeaders(List<Header> headers) {
+        this.headers = headers == null ? new ArrayList<>() : new ArrayList<>(headers);
+    }
+
+    private void setProxy(List<Proxy> proxy) {
+        this.proxy = proxy == null ? new ArrayList<>() : new ArrayList<>(proxy);
+    }
+
+    private void setHosts(List<String> hosts) {
+        this.hosts = hosts == null ? new ArrayList<>() : new ArrayList<>(hosts);
     }
 
     private void bootLive() {
@@ -274,13 +303,31 @@ public class LiveConfig {
     }
 
     public void setRules(List<Rule> rules) {
-        for (Rule rule : rules) if ("proxy".equals(rule.getName())) OkHttp.selector().addAll(rule.getHosts());
-        rules.remove(Rule.create("proxy"));
-        this.rules = rules;
+        this.ruleHosts = new ArrayList<>();
+        List<Rule> items = rules == null ? new ArrayList<>() : new ArrayList<>(rules);
+        for (Rule rule : items) if ("proxy".equals(rule.getName())) ruleHosts.addAll(rule.getHosts());
+        items.remove(Rule.create("proxy"));
+        this.rules = items;
     }
 
     public List<String> getAds() {
         return ads == null ? Collections.emptyList() : ads;
+    }
+
+    public List<Header> getHeaders() {
+        return headers == null ? Collections.emptyList() : headers;
+    }
+
+    public List<Proxy> getProxy() {
+        return proxy == null ? Collections.emptyList() : proxy;
+    }
+
+    public List<String> getHosts() {
+        return hosts == null ? Collections.emptyList() : hosts;
+    }
+
+    public List<String> getRuleHosts() {
+        return ruleHosts == null ? Collections.emptyList() : ruleHosts;
     }
 
     private void setAds(List<String> ads) {

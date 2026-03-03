@@ -20,7 +20,8 @@ public class IjkUtil {
     }
 
     public static MediaSource getSource(Channel channel) {
-        return getSource(channel.getHeaders(), channel.getUrl());
+        String url = channel.getUrl().isEmpty() ? channel.getCurrent() : channel.getUrl();
+        return getSource(channel.getHeaders(), url);
     }
 
     public static MediaSource getSource(Map<String, String> headers, String url) {

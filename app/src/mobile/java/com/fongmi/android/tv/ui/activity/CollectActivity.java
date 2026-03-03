@@ -66,6 +66,9 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     private SiteViewModel mViewModel;
     private PauseExecutor mExecutor;
     private List<Site> mSites;
+    private final Runnable mAddRecord = () -> mRecordAdapter.add(mBinding.keyword.getText().toString().trim());
+    private final Runnable mShowSite = () -> SiteDialog.create(this).search().show();
+    private final Runnable mRequestRecordLayout = () -> mBinding.recordRecycler.requestLayout();
 
     public static void start(Activity activity) {
         start(activity, "");
@@ -182,6 +185,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
 
     private void search() {
         if (empty()) return;
+        App.removeCallbacks(mAddRecord);
         mSearchAdapter.clear();
         mCollectAdapter.clear();
         Util.hideKeyboard(mBinding.keyword);
@@ -193,7 +197,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mExecutor = new PauseExecutor(Constant.THREAD_POOL * 2);
         String keyword = mBinding.keyword.getText().toString().trim();
         for (Site site : mSites) mExecutor.execute(() -> search(site, keyword));
-        App.post(() -> mRecordAdapter.add(keyword), 250);
+        App.post(mAddRecord, 250);
     }
 
     private void search(Site site, String keyword) {
@@ -214,24 +218,33 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         OkHttp.newCall("https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box?format=json&page_num=0&page_size=20&key=" + URLEncoder.encode(text)).enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (mBinding.keyword.getText().toString().trim().isEmpty()) return;
-                List<String> items = SuggestTwo.get(response.body().string());
-                App.post(() -> mWordAdapter.appendAll(items));
+                try (response) {
+                    if (!text.equals(mBinding.keyword.getText().toString().trim())) return;
+                    List<String> items = SuggestTwo.get(response.body().string());
+                    App.post(() -> {
+                        if (text.equals(mBinding.keyword.getText().toString().trim())) mWordAdapter.appendAll(items);
+                    });
+                }
             }
         });
         OkHttp.newCall("https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(text)).enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (mBinding.keyword.getText().toString().trim().isEmpty()) return;
-                List<String> items = Suggest.get(response.body().string());
-                App.post(() -> mWordAdapter.appendAll(items), 200);
+                try (response) {
+                    if (!text.equals(mBinding.keyword.getText().toString().trim())) return;
+                    List<String> items = Suggest.get(response.body().string());
+                    App.post(() -> {
+                        if (text.equals(mBinding.keyword.getText().toString().trim())) mWordAdapter.appendAll(items);
+                    }, 200);
+                }
             }
         });
     }
 
     private void onSite(View view) {
         Util.hideKeyboard(mBinding.keyword);
-        App.post(() -> SiteDialog.create(this).search().show(), 50);
+        App.removeCallbacks(mShowSite);
+        App.post(mShowSite, 50);
     }
 
     private void toggleView(View view) {
@@ -269,7 +282,8 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     public void onDataChanged(int size) {
         mBinding.record.setVisibility(size == 0 ? View.GONE : View.VISIBLE);
         mBinding.recordRecycler.setVisibility(size == 0 ? View.GONE : View.VISIBLE);
-        App.post(() -> mBinding.recordRecycler.requestLayout(), 250);
+        App.removeCallbacks(mRequestRecordLayout);
+        App.post(mRequestRecordLayout, 250);
     }
 
     @Override
@@ -310,6 +324,16 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     protected void onPause() {
         super.onPause();
         if (mExecutor != null) mExecutor.pause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        App.removeCallbacks(mAddRecord);
+        App.removeCallbacks(mShowSite);
+        App.removeCallbacks(mRequestRecordLayout);
+        if (mExecutor != null) mExecutor.shutdownNow();
+        mExecutor = null;
     }
 
     @Override

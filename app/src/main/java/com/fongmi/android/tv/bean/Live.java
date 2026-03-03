@@ -13,6 +13,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.gson.ExtAdapter;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.utils.Json;
 import com.google.common.net.HttpHeaders;
@@ -81,6 +82,14 @@ public class Live {
     private Integer type;
 
     @Ignore
+    @SerializedName("timeZone")
+    private String timeZone;
+
+    @Ignore
+    @SerializedName("keep")
+    private String keep;
+
+    @Ignore
     @SerializedName("timeout")
     private Integer timeout;
 
@@ -117,7 +126,19 @@ public class Live {
     private int width;
 
     public static Live objectFrom(JsonElement element) {
-        return App.gson().fromJson(element, Live.class);
+        return objectFrom(element, "");
+    }
+
+    public static Live objectFrom(JsonElement element, String spider) {
+        try {
+            Live live = App.gson().fromJson(element, Live.class);
+            if (live.getJar().isEmpty()) live.setJar(spider);
+            live.setApi(UrlUtil.convert(live.getApi()));
+            live.setExt(UrlUtil.convert(live.getExt()));
+            return live;
+        } catch (Exception e) {
+            return new Live();
+        }
     }
 
     public static List<Live> arrayFrom(String str) {
@@ -150,6 +171,10 @@ public class Live {
 
     public String getUrl() {
         return TextUtils.isEmpty(url) ? "" : url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
     }
 
     public String getApi() {
@@ -206,6 +231,18 @@ public class Live {
 
     public Integer getType() {
         return type == null ? 0 : type;
+    }
+
+    public String getTimeZone() {
+        return TextUtils.isEmpty(timeZone) ? "" : timeZone;
+    }
+
+    public String getKeep() {
+        return TextUtils.isEmpty(keep) ? "" : keep;
+    }
+
+    public void setKeep(String keep) {
+        this.keep = keep;
     }
 
     public Integer getTimeout() {
@@ -268,6 +305,17 @@ public class Live {
         this.width = width;
     }
 
+    public String getEpgApi() {
+        for (String url : getEpg().split(",")) if (url.contains("{")) return url;
+        return getEpg();
+    }
+
+    public List<String> getEpgXml() {
+        List<String> items = new ArrayList<>();
+        for (String epg : getEpg().split(",")) if (!epg.contains("{") && (epg.contains("xml") || epg.contains("gz"))) items.add(epg);
+        return items;
+    }
+
     public boolean isEmpty() {
         return getName().isEmpty();
     }
@@ -302,16 +350,17 @@ public class Live {
         if (item == null) return this;
         setBoot(item.isBoot());
         setPass(item.isPass());
+        setKeep(item.getKeep());
         return this;
     }
 
     public Live recent() {
-        BaseLoader.get().setRecent(getName(), getApi(), getJar());
+        BaseLoader.get().setLiveRecent(getName(), getApi(), getExt(), getJar());
         return this;
     }
 
     public Spider spider() {
-        return BaseLoader.get().getSpider(getName(), getApi(), getExt(), getJar());
+        return BaseLoader.get().getLiveSpider(getName(), getApi(), getExt(), getJar());
     }
 
     public Map<String, String> getHeaders() {

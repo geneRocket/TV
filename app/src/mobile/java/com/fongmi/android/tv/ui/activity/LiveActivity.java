@@ -1288,4 +1288,5 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mViewModel.url.removeObserver(mObserveUrl);
         mViewModel.epg.removeObserver(mObserveEpg);
     }
+
 }

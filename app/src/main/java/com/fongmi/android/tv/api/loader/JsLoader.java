@@ -21,6 +21,12 @@ public class JsLoader {
         spiders.clear();
     }
 
+    public void clear(String key) {
+        Spider spider = spiders.remove(key);
+        if (spider != null) App.execute(spider::destroy);
+        if (key != null && key.equals(recent)) recent = null;
+    }
+
     public void setRecent(String recent) {
         this.recent = recent;
     }

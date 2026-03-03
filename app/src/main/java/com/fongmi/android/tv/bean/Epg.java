@@ -3,7 +3,9 @@ package com.fongmi.android.tv.bean;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.api.EpgParser;
 import com.fongmi.android.tv.utils.Util;
+import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
 
@@ -33,6 +35,14 @@ public class Epg {
         } catch (Exception e) {
             return new Epg();
         }
+    }
+
+    public static Epg objectFrom(String str, String key, List<SimpleDateFormat> formats) throws Exception {
+        if (!Json.valid(str)) return EpgParser.getEpg(str, key);
+        Epg item = App.gson().fromJson(str, Epg.class);
+        item.setTime(formats);
+        item.setKey(key);
+        return item;
     }
 
     public static Epg create(String key, String date) {
@@ -86,6 +96,24 @@ public class Epg {
             item.setEndTime(Util.format(format, getDate().concat(item.getEnd())));
             item.setTitle(Trans.s2t(item.getTitle()));
         }
+    }
+
+    private void setTime(List<SimpleDateFormat> formats) {
+        setList(new ArrayList<>(new LinkedHashSet<>(getList())));
+        for (EpgData item : getList()) {
+            item.setStartTime(parse(formats, getDate().concat(item.getStart())));
+            item.setEndTime(parse(formats, getDate().concat(item.getEnd())));
+            if (item.getEndTime() < item.getStartTime()) item.checkDay();
+            item.trans();
+        }
+    }
+
+    private long parse(List<SimpleDateFormat> formats, String value) {
+        for (SimpleDateFormat format : formats) {
+            long time = Util.format(format, value);
+            if (time > 0) return time;
+        }
+        return 0;
     }
 
     public String getEpg() {

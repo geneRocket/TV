@@ -1,6 +1,9 @@
 package com.fongmi.android.tv.player.extractor;
 
+import android.net.Uri;
+
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Core;
@@ -10,15 +13,19 @@ import com.google.gson.JsonObject;
 import com.tvbus.engine.Listener;
 import com.tvbus.engine.TVCore;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 public class TVBus implements Source.Extractor, Listener {
 
     private TVCore tvcore;
     private String hls;
     private Core core;
+    private CountDownLatch latch;
 
     @Override
-    public boolean match(String scheme, String host) {
-        return "tvbus".equals(scheme);
+    public boolean match(Uri uri) {
+        return "tvbus".equals(uri.getScheme());
     }
 
     private void init(Core core) {
@@ -35,6 +42,8 @@ public class TVBus implements Source.Extractor, Listener {
     public String fetch(String url) throws Exception {
         if (core != null && !core.equals(LiveConfig.get().getHome().getCore())) change();
         if (tvcore == null) init(core = LiveConfig.get().getHome().getCore());
+        hls = null;
+        latch = new CountDownLatch(1);
         tvcore.start(url);
         onWait();
         onCheck();
@@ -42,19 +51,16 @@ public class TVBus implements Source.Extractor, Listener {
     }
 
     private void onCheck() throws Exception {
+        if (hls == null) throw new ExtractException("TVBus prepare timeout");
         if (hls.startsWith("-")) throw new ExtractException("Error Code : " + hls);
     }
 
     private void onWait() throws InterruptedException {
-        synchronized (this) {
-            wait();
-        }
+        if (latch != null) latch.await(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS);
     }
 
     private void onNotify() {
-        synchronized (this) {
-            notify();
-        }
+        if (latch != null) latch.countDown();
     }
 
     private void change() {

@@ -1,7 +1,9 @@
 package com.fongmi.android.tv.player.extractor;
 
+import android.net.Uri;
 import android.os.SystemClock;
 
+import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
@@ -18,16 +20,19 @@ public class ZLive implements Source.Extractor {
     }
 
     @Override
-    public boolean match(String scheme, String host) {
-        return "zlive".equals(scheme);
+    public boolean match(Uri uri) {
+        return "zlive".equals(uri.getScheme());
     }
 
     @Override
     public String fetch(String url) throws Exception {
         if (!init) init();
-        String[] split = url.split("/");
-        OkHttp.newCall(String.format("http://127.0.0.1:%s/stream/open?uuid=%s", PORT, split[3])).execute();
-        return String.format("http://127.0.0.1:%s/stream/live?uuid=%s&server=%s&group=5850&mac=00:00:00:00:00:00&dir=%s", PORT, split[3], split[2], Path.cache());
+        Uri uri = Uri.parse(url);
+        String uuid = uri.getLastPathSegment();
+        String server = uri.getHost();
+        if (uuid == null || server == null || server.isEmpty()) throw new ExtractException("Invalid zlive url");
+        OkHttp.string(String.format("http://127.0.0.1:%s/stream/open?uuid=%s", PORT, uuid));
+        return String.format("http://127.0.0.1:%s/stream/live?uuid=%s&server=%s&group=5850&mac=00:00:00:00:00:00&dir=%s", PORT, uuid, server, Path.cache());
     }
 
     @Override

@@ -15,6 +15,8 @@ import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.gson.ExtAdapter;
+import com.fongmi.android.tv.utils.UrlUtil;
+import com.github.catvod.net.OkHttp;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
@@ -66,6 +68,10 @@ public class Site implements Parcelable {
     private Integer type;
 
     @Ignore
+    @SerializedName("hide")
+    private Integer hide;
+
+    @Ignore
     @SerializedName("indexs")
     private Integer indexs;
 
@@ -84,6 +90,10 @@ public class Site implements Parcelable {
     private Integer changeable;
 
     @Ignore
+    @SerializedName("quickSearch")
+    private Integer quickSearch;
+
+    @Ignore
     @SerializedName("categories")
     private List<String> categories;
 
@@ -99,8 +109,16 @@ public class Site implements Parcelable {
     private boolean activated;
 
     public static Site objectFrom(JsonElement element) {
+        return objectFrom(element, "");
+    }
+
+    public static Site objectFrom(JsonElement element, String spider) {
         try {
-            return App.gson().fromJson(element, Site.class);
+            Site site = App.gson().fromJson(element, Site.class);
+            if (site.getJar().isEmpty()) site.setJar(spider);
+            site.setApi(UrlUtil.convert(site.getApi()));
+            site.setExt(UrlUtil.convert(site.getExt()));
+            return site;
         } catch (Exception e) {
             return new Site();
         }
@@ -174,6 +192,10 @@ public class Site implements Parcelable {
         return type == null ? 0 : type;
     }
 
+    public Integer getHide() {
+        return hide == null ? 0 : hide;
+    }
+
     public Integer getTimeout() {
         return timeout == null ? Constant.TIMEOUT_PLAY : Math.max(timeout, 1) * 1000;
     }
@@ -202,9 +224,17 @@ public class Site implements Parcelable {
         return getIndexs() == 1;
     }
 
+    public boolean isIndex() {
+        return isIndexs();
+    }
+
     public Integer getIndexs() {
         if (Setting.isAggregatedSearch() && (indexs == null || indexs == 1)) return 1;
         return indexs == null ? 0 : indexs;
+    }
+
+    public Integer getQuickSearch() {
+        return quickSearch == null ? 1 : quickSearch;
     }
 
     public List<String> getCategories() {
@@ -239,6 +269,10 @@ public class Site implements Parcelable {
         this.activated = item.equals(this);
     }
 
+    public boolean isHide() {
+        return getHide() == 1;
+    }
+
     public boolean isSearchable() {
         return getSearchable() == 1;
     }
@@ -257,8 +291,19 @@ public class Site implements Parcelable {
         return this;
     }
 
+    public boolean isQuickSearch() {
+        return getQuickSearch() == 1;
+    }
+
     public boolean isEmpty() {
         return getKey().isEmpty() && getName().isEmpty();
+    }
+
+    public Site fetchExt() {
+        if (!getExt().startsWith("http")) return this;
+        String extend = OkHttp.string(getExt());
+        if (!extend.isEmpty()) setExt(extend);
+        return this;
     }
 
     public Headers getHeaders() {
@@ -282,12 +327,12 @@ public class Site implements Parcelable {
     }
 
     public Site recent() {
-        BaseLoader.get().setRecent(getKey(), getApi(), getJar());
+        BaseLoader.get().setSiteRecent(getKey(), getApi(), getExt(), getJar());
         return this;
     }
 
     public Spider spider() {
-        return BaseLoader.get().getSpider(getKey(), getApi(), getExt(), getJar());
+        return BaseLoader.get().getSiteSpider(getKey(), getApi(), getExt(), getJar());
     }
 
     public static Site find(String key) {

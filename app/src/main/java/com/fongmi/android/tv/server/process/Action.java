@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import fi.iki.elonen.NanoHTTPD;
+import okhttp3.Response;
 import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -133,7 +134,9 @@ public class Action implements Process {
             FormBody.Builder body = new FormBody.Builder();
             body.add("config", config.toString());
             body.add("targets", App.gson().toJson(History.get(config.getId())));
-            OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=history"), body.build()).execute();
+            try (Response response = OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=history"), body.build()).execute()) {
+                if (response.body() != null) response.body().close();
+            }
         } catch (Exception e) {
             App.post(() -> Notify.show(e.getMessage()));
         }
@@ -144,7 +147,9 @@ public class Action implements Process {
             FormBody.Builder body = new FormBody.Builder();
             body.add("targets", App.gson().toJson(Keep.getVod()));
             body.add("configs", App.gson().toJson(Config.findUrls()));
-            OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=keep"), body.build()).execute();
+            try (Response response = OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=keep"), body.build()).execute()) {
+                if (response.body() != null) response.body().close();
+            }
         } catch (Exception e) {
             App.post(() -> Notify.show(e.getMessage()));
         }

@@ -18,21 +18,25 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import dalvik.system.DexClassLoader;
+import okhttp3.Response;
 
 public class JarLoader {
 
     private final ConcurrentHashMap<String, DexClassLoader> loaders;
     private final ConcurrentHashMap<String, Method> methods;
     private final ConcurrentHashMap<String, Spider> spiders;
+    private final ConcurrentHashMap<String, Object> locks;
     private String recent;
 
     public JarLoader() {
         loaders = new ConcurrentHashMap<>();
         methods = new ConcurrentHashMap<>();
         spiders = new ConcurrentHashMap<>();
+        locks = new ConcurrentHashMap<>();
     }
 
     public void clear() {
@@ -40,6 +44,27 @@ public class JarLoader {
         loaders.clear();
         methods.clear();
         spiders.clear();
+        locks.clear();
+        recent = null;
+    }
+
+    public void clear(String key) {
+        ConcurrentHashMap<String, Boolean> jars = new ConcurrentHashMap<>();
+        spiders.entrySet().removeIf(entry -> {
+            Spider spider = entry.getValue();
+            if (spider == null || !key.equals(spider.siteKey)) return false;
+            if (entry.getKey().length() > 32) jars.put(entry.getKey().substring(0, 32), true);
+            App.execute(spider::destroy);
+            return true;
+        });
+        for (String jarKey : jars.keySet()) {
+            if (spiders.keySet().stream().noneMatch(spiderKey -> spiderKey.startsWith(jarKey))) {
+                loaders.remove(jarKey);
+                methods.remove(jarKey);
+                locks.remove(jarKey);
+                if (jarKey.equals(recent)) recent = null;
+            }
+        }
     }
 
     public void setRecent(String recent) {
@@ -47,14 +72,19 @@ public class JarLoader {
     }
 
     private void load(String key, File file) {
-        loaders.put(key, new DexClassLoader(file.getAbsolutePath(), Path.jar().getAbsolutePath(), null, App.get().getClassLoader()));
-        invokeInit(key);
-        putProxy(key);
+        if (Thread.interrupted()) return;
+        if (!file.exists()) return;
+        file.setReadOnly();
+        String cachePath = Path.jar().getAbsolutePath();
+        DexClassLoader loader = new DexClassLoader(file.getAbsolutePath(), cachePath, cachePath, App.get().getClassLoader());
+        invokeInit(loader);
+        putProxy(key, loader);
+        loaders.put(key, loader);
     }
 
-    private void invokeInit(String key) {
+    private void invokeInit(DexClassLoader loader) {
         try {
-            Class<?> clz = loaders.get(key).loadClass("com.github.catvod.spider.Init");
+            Class<?> clz = loader.loadClass("com.github.catvod.spider.Init");
             Method method = clz.getMethod("init", Context.class);
             method.invoke(clz, App.get());
         } catch (Throwable e) {
@@ -62,9 +92,9 @@ public class JarLoader {
         }
     }
 
-    private void putProxy(String key) {
+    private void putProxy(String key, DexClassLoader loader) {
         try {
-            Class<?> clz = loaders.get(key).loadClass("com.github.catvod.spider.Proxy");
+            Class<?> clz = loader.loadClass("com.github.catvod.spider.Proxy");
             Method method = clz.getMethod("proxy", Map.class);
             methods.put(key, method);
         } catch (Throwable e) {
@@ -74,39 +104,60 @@ public class JarLoader {
 
     private File download(String url) {
         try {
-            return Path.write(Path.jar(url), OkHttp.newCall(url).execute().body().bytes());
+            try (Response response = OkHttp.newCall(url).execute()) {
+                return response.body() == null ? Path.jar(url) : Path.write(Path.jar(url), response.body().bytes());
+            }
         } catch (Exception e) {
             return Path.jar(url);
         }
     }
 
-    public synchronized void parseJar(String key, String jar) {
-        if (loaders.containsKey(key)) return;
-        String[] texts = jar.split(";md5;");
-        String md5 = texts.length > 1 ? texts[1].trim() : "";
-        jar = texts[0];
-        if (md5.length() > 0 && Util.equals(jar, md5)) {
-            load(key, Path.jar(jar));
-        } else if (jar.startsWith("img+")) {
-            load(key, Decoder.getSpider(jar));
-        } else if (jar.startsWith("http")) {
-            load(key, download(jar));
-        } else if (jar.startsWith("file")) {
-            load(key, Path.local(jar));
-        } else if (jar.startsWith("assets")) {
-            parseJar(key, UrlUtil.convert(jar));
-        } else if (!jar.isEmpty()) {
-            parseJar(key, UrlUtil.convert(jar));
+    public void parseJar(String key, String jar) {
+        if (loaders.containsKey(key) || jar.isEmpty()) return;
+        if (jar.startsWith("assets")) jar = UrlUtil.convert(jar);
+        Object lock = locks.computeIfAbsent(key, k -> new Object());
+        synchronized (lock) {
+            if (loaders.containsKey(key)) return;
+            String[] texts = jar.split(";md5;");
+            String md5 = texts.length > 1 ? texts[1].trim() : "";
+            if (md5.startsWith("http")) md5 = OkHttp.string(md5).trim();
+            jar = texts[0];
+            if (md5.length() > 0 && Util.equals(jar, md5)) {
+                load(key, Path.jar(jar));
+            } else if (jar.startsWith("img+")) {
+                load(key, Decoder.getSpider(jar));
+            } else if (jar.startsWith("http")) {
+                load(key, download(jar));
+            } else if (jar.startsWith("file")) {
+                load(key, Path.local(jar));
+            } else {
+                parseJar(key, UrlUtil.convert(jar));
+            }
+        }
+    }
+
+    public DexClassLoader dex(String jar) {
+        try {
+            String key = Util.md5(jar);
+            parseJar(key, jar);
+            return loaders.get(key);
+        } catch (Throwable e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
     public Spider getSpider(String key, String api, String ext, String jar) {
+        String jaKey = Util.md5(jar);
+        String spKey = jaKey + key;
+        Spider cached = spiders.get(spKey);
+        if (cached != null) return cached;
         try {
-            String jaKey = Util.md5(jar);
-            String spKey = jaKey + key;
-            if (spiders.containsKey(spKey)) return spiders.get(spKey);
-            if (!loaders.containsKey(jaKey)) parseJar(jaKey, jar);
-            Spider spider = (Spider) loaders.get(jaKey).loadClass("com.github.catvod.spider." + api.split("csp_")[1]).newInstance();
+            parseJar(jaKey, jar);
+            DexClassLoader loader = loaders.get(jaKey);
+            if (loader == null) return new SpiderNull();
+            Spider spider = (Spider) loader.loadClass("com.github.catvod.spider." + api.split("csp_")[1]).newInstance();
+            spider.siteKey = key;
             spider.init(App.get(), ext);
             spiders.put(spKey, spider);
             return spider;
@@ -117,22 +168,35 @@ public class JarLoader {
     }
 
     public JSONObject jsonExt(String key, LinkedHashMap<String, String> jxs, String url) throws Throwable {
-        Class<?> clz = loaders.get(recent).loadClass("com.github.catvod.parser.Json" + key);
+        DexClassLoader loader = loaders.get(recent);
+        if (loader == null) throw new IllegalStateException("Missing jar loader for recent key: " + recent);
+        Class<?> clz = loader.loadClass("com.github.catvod.parser.Json" + key);
         Method method = clz.getMethod("parse", LinkedHashMap.class, String.class);
         return (JSONObject) method.invoke(null, jxs, url);
     }
 
     public JSONObject jsonExtMix(String flag, String key, String name, LinkedHashMap<String, HashMap<String, String>> jxs, String url) throws Throwable {
-        Class<?> clz = loaders.get(recent).loadClass("com.github.catvod.parser.Mix" + key);
+        DexClassLoader loader = loaders.get(recent);
+        if (loader == null) throw new IllegalStateException("Missing jar loader for recent key: " + recent);
+        Class<?> clz = loader.loadClass("com.github.catvod.parser.Mix" + key);
         Method method = clz.getMethod("parse", LinkedHashMap.class, String.class, String.class, String.class);
         return (JSONObject) method.invoke(null, jxs, name, flag, url);
     }
 
     public Object[] proxyInvoke(Map<String, String> params) {
+        Method method = recent != null ? methods.get(recent) : null;
+        Object[] result = proxyInvoke(method, params);
+        if (result != null) return result;
+        return tryOthers(params);
+    }
+
+    private Object[] tryOthers(Map<String, String> params) {
+        return methods.entrySet().stream().filter(e -> !e.getKey().equals(recent)).map(e -> proxyInvoke(e.getValue(), params)).filter(Objects::nonNull).findFirst().orElse(null);
+    }
+
+    private Object[] proxyInvoke(Method method, Map<String, String> params) {
         try {
-            Method method = methods.get(Util.md5(recent));
-            if (method == null) return null;
-            return (Object[]) method.invoke(null, params);
+            return method == null ? null : (Object[]) method.invoke(null, params);
         } catch (Throwable e) {
             e.printStackTrace();
             return null;

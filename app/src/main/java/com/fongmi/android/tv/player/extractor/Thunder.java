@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player.extractor;
 import android.net.Uri;
 import android.os.SystemClock;
 
+import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
@@ -28,7 +29,8 @@ public class Thunder implements Source.Extractor {
     private GetTaskId taskId;
 
     @Override
-    public boolean match(String scheme, String host) {
+    public boolean match(Uri uri) {
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme();
         return "magnet".equals(scheme) || "ed2k".equals(scheme);
     }
 
@@ -42,9 +44,11 @@ public class Thunder implements Source.Extractor {
         String name = uri.getQueryParameter("name");
         int index = Integer.parseInt(uri.getQueryParameter("index"));
         taskId = XLTaskHelper.get().addTorrentTask(torrent, Objects.requireNonNull(torrent.getParentFile()), index);
+        long start = SystemClock.elapsedRealtime();
         while (true) {
             XLTaskInfo taskInfo = XLTaskHelper.get().getBtSubTaskInfo(taskId, index).mTaskInfo;
             if (taskInfo.mTaskStatus == 3) throw new ExtractException(taskInfo.getErrorMsg());
+            if (SystemClock.elapsedRealtime() - start > Constant.TIMEOUT_PARSE_LIVE) throw new ExtractException("Thunder task timeout");
             if (taskInfo.mTaskStatus != 0) return XLTaskHelper.get().getLocalUrl(new File(torrent.getParent(), name));
             else SystemClock.sleep(300);
         }
@@ -96,12 +100,12 @@ public class Thunder implements Source.Extractor {
         }
 
         @Override
-        public List<Episode> call() {
+        public List<Episode> call() throws Exception {
             boolean torrent = isTorrent(url);
             List<Episode> episodes = new ArrayList<>();
             GetTaskId taskId = XLTaskHelper.get().parse(url, Path.thunder(Util.md5(url)));
             if (!torrent && !taskId.getRealUrl().startsWith("magnet")) return Arrays.asList(Episode.create(taskId.getFileName(), taskId.getRealUrl()));
-            if (torrent) Download.create(url, taskId.getSaveFile()).start();
+            if (torrent) Download.create(url, taskId.getSaveFile()).sync();
             else while (XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus() != 2 && time < 5000) sleep();
             List<TorrentFileInfo> medias = XLTaskHelper.get().getTorrentInfo(taskId.getSaveFile()).getMedias();
             for (TorrentFileInfo media : medias) episodes.add(Episode.create(media.getFileName(), media.getSize(), media.getPlayUrl()));

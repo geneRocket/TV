@@ -4,6 +4,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.Decoder;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.bean.Config;
@@ -15,6 +16,8 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Doh;
+import com.github.catvod.bean.Header;
+import com.github.catvod.bean.Proxy;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonElement;
@@ -32,6 +35,10 @@ public class VodConfig {
     private List<Parse> parses;
     private List<String> flags;
     private List<String> ads;
+    private List<Header> headers;
+    private List<Proxy> proxy;
+    private List<String> hosts;
+    private List<String> ruleHosts;
     private boolean loadLive;
     private Config config;
     private Parse parse;
@@ -81,7 +88,11 @@ public class VodConfig {
         this.config = Config.vod();
         this.ads = new ArrayList<>();
         this.doh = new ArrayList<>();
+        this.hosts = new ArrayList<>();
+        this.proxy = new ArrayList<>();
         this.rules = new ArrayList<>();
+        this.headers = new ArrayList<>();
+        this.ruleHosts = new ArrayList<>();
         this.sites = new ArrayList<>();
         this.flags = new ArrayList<>();
         this.parses = new ArrayList<>();
@@ -100,7 +111,11 @@ public class VodConfig {
         this.parse = null;
         this.ads.clear();
         this.doh.clear();
+        this.hosts.clear();
+        this.proxy.clear();
         this.rules.clear();
+        this.headers.clear();
+        this.ruleHosts.clear();
         this.sites.clear();
         this.flags.clear();
         this.parses.clear();
@@ -182,10 +197,8 @@ public class VodConfig {
         }
         String spider = Json.safeString(object, "spider");
         for (JsonElement element : Json.safeListElement(object, "sites")) {
-            Site site = Site.objectFrom(element);
+            Site site = Site.objectFrom(element, spider);
             if (sites.contains(site)) continue;
-            site.setApi(parseApi(site.getApi()));
-            site.setExt(parseExt(site.getExt()));
             site.setJar(parseJar(site, spider));
             sites.add(site.trans().sync());
         }
@@ -214,8 +227,12 @@ public class VodConfig {
         if (parses.size() > 0) parses.add(0, Parse.god());
         if (home == null) setHome(sites.isEmpty() ? new Site() : sites.get(0));
         if (parse == null) setParse(parses.isEmpty() ? new Parse() : parses.get(0));
+        setHeaders(Header.arrayFrom(object.get("headers")));
+        setProxy(Proxy.arrayFrom(object.get("proxy")));
+        setHosts(Json.safeListString(object, "hosts"));
         setRules(Rule.arrayFrom(object.getAsJsonArray("rules")));
         setDoh(Doh.arrayFrom(object.getAsJsonArray("doh")));
+        refreshNetwork();
         setFlags(Json.safeListString(object, "flags"));
         setWall(Json.safeString(object, "wallpaper"));
         setAds(Json.safeListString(object, "ads"));
@@ -237,6 +254,34 @@ public class VodConfig {
         return site.getJar();
     }
 
+    private void setHeaders(List<Header> headers) {
+        this.headers = headers == null ? new ArrayList<>() : new ArrayList<>(headers);
+    }
+
+    private void setProxy(List<Proxy> proxy) {
+        this.proxy = proxy == null ? new ArrayList<>() : new ArrayList<>(proxy);
+    }
+
+    private void setHosts(List<String> hosts) {
+        this.hosts = hosts == null ? new ArrayList<>() : new ArrayList<>(hosts);
+    }
+
+    static void refreshNetwork() {
+        OkHttp.clearConfig();
+        OkHttp.get().setProxy(Setting.getProxy());
+        OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
+        OkHttp.responseInterceptor().addAll(get().getHeaders());
+        OkHttp.responseInterceptor().addAll(LiveConfig.get().getHeaders());
+        OkHttp.authenticator().addAll(get().getProxy());
+        OkHttp.authenticator().addAll(LiveConfig.get().getProxy());
+        OkHttp.selector().addProxyAll(get().getProxy());
+        OkHttp.selector().addProxyAll(LiveConfig.get().getProxy());
+        OkHttp.dns().addAll(get().getHosts());
+        OkHttp.dns().addAll(LiveConfig.get().getHosts());
+        OkHttp.selector().addAll(get().getRuleHosts());
+        OkHttp.selector().addAll(LiveConfig.get().getRuleHosts());
+    }
+
     public List<Doh> getDoh() {
         List<Doh> items = Doh.get(App.get());
         if (doh == null) return items;
@@ -254,9 +299,27 @@ public class VodConfig {
     }
 
     public void setRules(List<Rule> rules) {
-        for (Rule rule : rules) if ("proxy".equals(rule.getName())) OkHttp.selector().addAll(rule.getHosts());
-        rules.remove(Rule.create("proxy"));
-        this.rules = rules;
+        this.ruleHosts = new ArrayList<>();
+        List<Rule> items = rules == null ? new ArrayList<>() : new ArrayList<>(rules);
+        for (Rule rule : items) if ("proxy".equals(rule.getName())) ruleHosts.addAll(rule.getHosts());
+        items.remove(Rule.create("proxy"));
+        this.rules = items;
+    }
+
+    public List<Header> getHeaders() {
+        return headers == null ? Collections.emptyList() : headers;
+    }
+
+    public List<Proxy> getProxy() {
+        return proxy == null ? Collections.emptyList() : proxy;
+    }
+
+    public List<String> getHosts() {
+        return hosts == null ? Collections.emptyList() : hosts;
+    }
+
+    public List<String> getRuleHosts() {
+        return ruleHosts == null ? Collections.emptyList() : ruleHosts;
     }
 
     public List<Site> getSites() {

@@ -1133,8 +1133,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void hideSheet() {
-        for (Dialog dialog : mDialogs) dialog.dismiss();
-        for (Fragment fragment : getSupportFragmentManager().getFragments()) if (fragment instanceof BottomSheetDialogFragment) ((BottomSheetDialogFragment) fragment).dismiss();
+        for (Dialog dialog : mDialogs) {
+            try {
+                if (dialog != null && dialog.isShowing()) dialog.dismiss();
+            } catch (Exception ignored) {
+            }
+        }
+        for (Fragment fragment : getSupportFragmentManager().getFragments()) {
+            if (fragment instanceof BottomSheetDialogFragment) ((BottomSheetDialogFragment) fragment).dismissAllowingStateLoss();
+        }
         mDialogs.clear();
     }
 
@@ -1940,4 +1947,5 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         RefreshEvent.history();
         App.removeCallbacks(mR1, mR2, mR3, mR4);
     }
+
 }

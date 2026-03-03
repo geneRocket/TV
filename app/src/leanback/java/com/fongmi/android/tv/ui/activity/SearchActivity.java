@@ -56,8 +56,6 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private Call mSuggestOneCall;
     private Call mSuggestTwoCall;
     private String mSuggestKeyword;
-    private int mSuggestRequestId;
-    private int mWordRequestId;
     private final Runnable mSuggestTask = new Runnable() {
         @Override
         public void run() {
@@ -149,7 +147,6 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private void getHot() {
-        int requestId = ++mWordRequestId;
         cancelHotRequest();
         cancelSuggestRequest();
         mBinding.hint.setText(R.string.search_hot);
@@ -160,10 +157,10 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mHotCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (!isHotRequestValid(requestId, call)) return;
+                if (!isHotRequestValid(call)) return;
                 List<String> remote = Hot.get(response.body().string());
                 App.post(() -> {
-                    if (!isHotRequestValid(requestId, call)) return;
+                    if (!isHotRequestValid(call)) return;
                     mWordAdapter.addAll(remote);
                 });
             }
@@ -171,7 +168,6 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private void getSuggest(String text) {
-        int requestId = ++mSuggestRequestId;
         cancelSuggestRequest();
         mBinding.hint.setText(R.string.search_suggest);
         mWordAdapter.addAll(Collections.emptyList());
@@ -179,10 +175,10 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mSuggestOneCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (!isSuggestRequestValid(requestId, text)) return;
+                if (!isSuggestRequestValid(call, text)) return;
                 List<String> items = SuggestTwo.get(response.body().string());
                 App.post(() -> {
-                    if (isSuggestRequestValid(requestId, text)) mWordAdapter.appendAll(items);
+                    if (isSuggestRequestValid(call, text)) mWordAdapter.appendAll(items);
                 });
             }
         });
@@ -190,10 +186,10 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mSuggestTwoCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (!isSuggestRequestValid(requestId, text)) return;
+                if (!isSuggestRequestValid(call, text)) return;
                 List<String> items = Suggest.get(response.body().string());
                 App.post(() -> {
-                    if (isSuggestRequestValid(requestId, text)) mWordAdapter.appendAll(items);
+                    if (isSuggestRequestValid(call, text)) mWordAdapter.appendAll(items);
                 });
             }
         });
@@ -215,12 +211,13 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mHotCall = null;
     }
 
-    private boolean isSuggestRequestValid(int requestId, String requestKeyword) {
-        return requestId == mSuggestRequestId && requestKeyword.equals(mBinding.keyword.getText().toString().trim());
+    private boolean isSuggestRequestValid(Call call, String requestKeyword) {
+        boolean currentCall = call == mSuggestOneCall || call == mSuggestTwoCall;
+        return currentCall && requestKeyword.equals(mBinding.keyword.getText().toString().trim());
     }
 
-    private boolean isHotRequestValid(int requestId, Call call) {
-        return requestId == mWordRequestId && call == mHotCall && TextUtils.isEmpty(mBinding.keyword.getText().toString().trim());
+    private boolean isHotRequestValid(Call call) {
+        return call == mHotCall && TextUtils.isEmpty(mBinding.keyword.getText().toString().trim());
     }
 
     @Override

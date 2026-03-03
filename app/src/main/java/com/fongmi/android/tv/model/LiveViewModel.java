@@ -20,8 +20,10 @@ import com.fongmi.android.tv.player.Source;
 import com.github.catvod.net.OkHttp;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
@@ -38,6 +40,8 @@ public class LiveViewModel extends ViewModel {
 
     private final SimpleDateFormat formatDate;
     private final SimpleDateFormat formatTime;
+    private final List<SimpleDateFormat> formatTimeList;
+    private final TimeZone defaultTimeZone;
 
     public MutableLiveData<Channel> url;
     public MutableLiveData<Boolean> xml;
@@ -52,6 +56,10 @@ public class LiveViewModel extends ViewModel {
     public LiveViewModel() {
         this.formatTime = new SimpleDateFormat("yyyy-MM-ddHH:mm", Locale.getDefault());
         this.formatDate = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        this.formatTimeList = new ArrayList<>();
+        this.defaultTimeZone = TimeZone.getDefault();
+        this.formatTimeList.add(formatTime);
+        this.formatTimeList.add(new SimpleDateFormat("yyyy-MM-ddHH:mm:ss", Locale.getDefault()));
         this.live = new MutableLiveData<>();
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
@@ -61,7 +69,7 @@ public class LiveViewModel extends ViewModel {
     public void getLive(Live item) {
         execute(LIVE, () -> {
             LiveParser.start(item.recent());
-            setTimeZone(item.getEpg());
+            setTimeZone(item);
             verify(item);
             return item;
         });
@@ -75,7 +83,8 @@ public class LiveViewModel extends ViewModel {
         String date = formatDate.format(new Date());
         String url = item.getEpg().replace("{date}", date);
         execute(EPG, () -> {
-            if (!item.getData().equal(date)) item.setData(Epg.objectFrom(OkHttp.string(url), item.getTvgName(), formatTime));
+            if (!url.startsWith("http")) return item.getData().selected();
+            if (!item.getData().equal(date)) item.setData(Epg.objectFrom(OkHttp.string(url), item.getTvgId(), formatTimeList));
             return item.getData().selected();
         });
     }
@@ -96,13 +105,18 @@ public class LiveViewModel extends ViewModel {
         });
     }
 
-    private void setTimeZone(String url) {
+    private void setTimeZone(Live item) {
         try {
-            if (!url.contains("serverTimeZone=")) return;
-            TimeZone timeZone = TimeZone.getTimeZone(Uri.parse(url).getQueryParameter("serverTimeZone"));
+            String value = item.getTimeZone();
+            if (value.isEmpty() && item.getEpg().contains("serverTimeZone=")) value = Uri.parse(item.getEpg()).getQueryParameter("serverTimeZone");
+            TimeZone timeZone = value == null || value.isEmpty() ? defaultTimeZone : TimeZone.getTimeZone(value);
             formatDate.setTimeZone(timeZone);
             formatTime.setTimeZone(timeZone);
+            for (SimpleDateFormat itemFormat : formatTimeList) itemFormat.setTimeZone(timeZone);
         } catch (Exception ignored) {
+            formatDate.setTimeZone(defaultTimeZone);
+            formatTime.setTimeZone(defaultTimeZone);
+            for (SimpleDateFormat itemFormat : formatTimeList) itemFormat.setTimeZone(defaultTimeZone);
         }
     }
 

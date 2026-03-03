@@ -6,6 +6,8 @@ import com.github.catvod.net.OkHttp;
 
 import java.io.File;
 
+import okhttp3.Response;
+
 public class Github {
 
     public static final String URL = "https://my.t4tv.hz.cz";
@@ -25,7 +27,11 @@ public class Github {
     public static String getSo(String url) {
         try {
             File file = new File(Path.so(), Uri.parse(url).getLastPathSegment());
-            if (file.length() < 300) Path.write(file, OkHttp.newCall(url).execute().body().bytes());
+            if (file.length() < 300) {
+                try (Response response = OkHttp.newCall(url).execute()) {
+                    if (response.body() != null) Path.write(file, response.body().bytes());
+                }
+            }
             return file.getAbsolutePath();
         } catch (Exception e) {
             e.printStackTrace();
