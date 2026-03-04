@@ -788,6 +788,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.keep.setOnClickListener(view -> onKeep());
         mBinding.video.setOnClickListener(view -> onVideo());
         mBinding.change1.setOnClickListener(view -> onChange());
+        mBinding.search1.setOnClickListener(view -> onSearchPage());
         mBinding.control.text.setOnClickListener(this::onTrack);
         mBinding.control.volume.setOnClickListener(view -> VolumeDialog.create(this).show());
         mBinding.control.audio.setOnClickListener(this::onTrack);
@@ -1687,22 +1688,29 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 List<String> items = Part.get(response.body().string());
-                if (!items.contains(source)) items.add(0, source);
+                items.removeIf(source::equals);
                 App.post(() -> setPartAdapter(items), 1000);
             }
 
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                List<String> items = Arrays.asList(source);
+                List<String> items = Collections.emptyList();
                 App.post(() -> setPartAdapter(items), 1000);
             }
         });
     }
 
     private void setPartAdapter(List<String> items) {
-        mBinding.part.setVisibility(View.VISIBLE);
+        mBinding.part.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
         mPartAdapter.setItems(items, null);
         setR2Callback(1000);
+    }
+
+    private void onSearchPage() {
+        String keyword = mHistory == null ? mBinding.name.getText().toString().trim() : mHistory.getVodName();
+        if (TextUtils.isEmpty(keyword)) keyword = getName();
+        if (TextUtils.isEmpty(keyword)) return;
+        SearchActivity.start(this, keyword, true);
     }
 
     private void updateHistory(Episode item, boolean replay) {

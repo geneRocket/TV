@@ -233,18 +233,36 @@
             android:id="@+id/change1"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
             android:background="@drawable/selector_item"
             android:drawablePadding="6dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
-            android:nextFocusRight="@id/change1"
+            android:nextFocusRight="@id/search1"
             android:nextFocusDown="@id/flag"
             android:singleLine="true"
             android:text="@string/play_change"
             android:textColor="@color/white"
             android:textSize="16sp"
             app:drawableStartCompat="@drawable/ic_detail_change" />
+
+        <TextView
+            android:id="@+id/search1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/selector_item"
+            android:drawablePadding="6dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:nextFocusRight="@id/search1"
+            android:nextFocusDown="@id/flag"
+            android:singleLine="true"
+            android:text="@string/home_search"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            app:drawableStartCompat="@drawable/ic_site_search" />
 
     </LinearLayout>
 
