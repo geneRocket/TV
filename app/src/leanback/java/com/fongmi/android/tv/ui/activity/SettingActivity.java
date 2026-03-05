@@ -80,8 +80,8 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     @Override
     protected void initView() {
         mBinding.vod.requestFocus();
-        mBinding.vodUrl.setText(VodConfig.getDesc());
-        mBinding.liveUrl.setText(LiveConfig.getDesc());
+        mBinding.vodUrl.setText(getVodConfigDesc());
+        mBinding.liveUrl.setText(getLiveConfigDesc());
         mBinding.wallUrl.setText(WallConfig.getDesc());
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.versionText.setText(BuildConfig.VERSION_NAME);
@@ -138,22 +138,64 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         }
     }
 
+    @Override
+    public void setConfigs(List<Config> configs) {
+        if (configs == null || configs.isEmpty()) return;
+        boolean needStorage = false;
+        for (Config config : configs) if (config.getUrl().startsWith("file")) needStorage = true;
+        if (needStorage && !PermissionX.isGranted(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(configs));
+        } else {
+            load(configs);
+        }
+    }
+
     private void load(Config config) {
         switch (config.getType()) {
             case 0:
                 Notify.progress(this);
                 VodConfig.load(config, getCallback());
+                Setting.putVodConfigDesc(config.getDesc());
+                Setting.putVodConfigUrls(config.getUrl());
                 mBinding.vodUrl.setText(config.getDesc());
                 break;
             case 1:
                 Notify.progress(this);
                 LiveConfig.load(config, getCallback());
+                Setting.putLiveConfigDesc(config.getDesc());
+                Setting.putLiveConfigUrls(config.getUrl());
                 mBinding.liveUrl.setText(config.getDesc());
                 break;
             case 2:
                 Notify.progress(this);
                 WallConfig.load(config, getCallback());
                 mBinding.wallUrl.setText(config.getDesc());
+                break;
+        }
+    }
+
+    private void load(List<Config> configs) {
+        Config first = configs.get(0);
+        type = first.getType();
+        switch (first.getType()) {
+            case 0:
+                Notify.progress(this);
+                VodConfig.load(configs, getCallback());
+                Setting.putVodConfigDesc(getConfigsDesc(configs));
+                Setting.putVodConfigUrls(getConfigsUrls(configs));
+                mBinding.vodUrl.setText(getVodConfigDesc());
+                break;
+            case 1:
+                Notify.progress(this);
+                LiveConfig.load(configs, getCallback());
+                Setting.putLiveConfigDesc(getConfigsDesc(configs));
+                Setting.putLiveConfigUrls(getConfigsUrls(configs));
+                mBinding.liveUrl.setText(getLiveConfigDesc());
+                break;
+            case 2:
+                Notify.progress(this);
+                WallConfig.load(first, getCallback());
+                mBinding.wallUrl.setText(first.getDesc());
                 break;
         }
     }
@@ -197,6 +239,31 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         }
     }
 
+    private String getVodConfigDesc() {
+        String desc = Setting.getVodConfigDesc();
+        return desc.isEmpty() ? VodConfig.getDesc() : desc;
+    }
+
+    private String getLiveConfigDesc() {
+        String desc = Setting.getLiveConfigDesc();
+        return desc.isEmpty() ? LiveConfig.getDesc() : desc;
+    }
+
+    private String getConfigsDesc(List<Config> configs) {
+        if (configs.size() == 1) return configs.get(0).getDesc();
+        if (configs.size() == 2) return configs.get(0).getDesc() + " + " + configs.get(1).getDesc();
+        return configs.get(0).getDesc() + " +" + (configs.size() - 1);
+    }
+
+    private String getConfigsUrls(List<Config> configs) {
+        StringBuilder sb = new StringBuilder();
+        for (Config config : configs) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(config.getUrl());
+        }
+        return sb.toString();
+    }
+
     @Override
     public void setSite(Site item) {
         VodConfig.get().setHome(item);
@@ -213,11 +280,13 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     }
 
     private void onVod(View view) {
-        ConfigDialog.create(this).type(type = 0).show();
+        type = 0;
+        HistoryDialog.create(this).type(type).add(() -> ConfigDialog.create(this).type(type).show()).show();
     }
 
     private void onLive(View view) {
-        ConfigDialog.create(this).type(type = 1).show();
+        type = 1;
+        HistoryDialog.create(this).type(type).add(() -> ConfigDialog.create(this).type(type).show()).show();
     }
 
     private void onWall(View view) {
@@ -396,8 +465,8 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         switch (event.getType()) {
             case CONFIG:
                 setCacheText();
-                mBinding.vodUrl.setText(VodConfig.getDesc());
-                mBinding.liveUrl.setText(LiveConfig.getDesc());
+                mBinding.vodUrl.setText(getVodConfigDesc());
+                mBinding.liveUrl.setText(getLiveConfigDesc());
                 mBinding.wallUrl.setText(WallConfig.getDesc());
                 break;
         }

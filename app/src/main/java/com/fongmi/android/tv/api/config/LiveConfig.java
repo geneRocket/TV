@@ -26,6 +26,7 @@ import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -84,7 +85,12 @@ public class LiveConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().clear().config(config).load(callback);
+        get().init().clear().config(config).load(callback);
+    }
+
+    public static void load(List<Config> configs, Callback callback) {
+        if (configs == null || configs.isEmpty()) return;
+        get().init().clear().config(configs.get(0)).loadMulti(configs, callback);
     }
 
     public LiveConfig init() {
@@ -127,6 +133,10 @@ public class LiveConfig {
         App.execute(() -> loadConfig(callback));
     }
 
+    public void loadMulti(List<Config> configs, Callback callback) {
+        App.execute(() -> loadConfigs(configs, callback));
+    }
+
     private void loadConfig(Callback callback) {
         try {
             parseConfig(Decoder.getJson(config.getUrl()), callback);
@@ -135,6 +145,69 @@ public class LiveConfig {
             else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
             e.printStackTrace();
         }
+    }
+
+    private void loadConfigs(List<Config> configs, Callback callback) {
+        JsonObject merged = new JsonObject();
+        Throwable error = null;
+        int success = 0;
+        for (Config item : configs) {
+            try {
+                String text = Decoder.getJson(item.getUrl());
+                if (Json.invalid(text)) {
+                    parseText(item.getUrl(), text);
+                    success++;
+                    continue;
+                }
+                JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
+                mergeConfig(merged, object);
+                success++;
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        if (merged.has("lives") || merged.has("headers") || merged.has("proxy") || merged.has("hosts") || merged.has("rules") || merged.has("ads")) parseConfig(merged, null);
+        if (success > 0) App.post(callback::success);
+        else {
+            Throwable cause = error == null ? new Throwable("No valid config") : error;
+            App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+        }
+    }
+
+    private JsonObject loadObject(JsonObject object, int depth) throws Throwable {
+        if (depth > 5) throw new IllegalStateException("Too many redirects.");
+        if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
+        if (!object.has("urls")) return object;
+        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
+        if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
+        return loadObject(Json.parse(Decoder.getJson(items.get(0).getUrl())).getAsJsonObject(), depth + 1);
+    }
+
+    private void mergeConfig(JsonObject target, JsonObject source) {
+        String spider = Json.safeString(source, "spider");
+        JsonArray lives = source.has("lives") ? source.getAsJsonArray("lives") : new JsonArray();
+        if (!target.has("lives")) target.add("lives", new JsonArray());
+        JsonArray targetLives = target.getAsJsonArray("lives");
+        for (JsonElement element : lives) {
+            JsonObject item = element.getAsJsonObject().deepCopy();
+            String api = Json.safeString(item, "api");
+            String jar = Json.safeString(item, "jar");
+            if (TextUtils.isEmpty(jar) && api.startsWith("csp_")) item.addProperty("jar", spider);
+            targetLives.add(item);
+        }
+        appendArray(target, source, "rules");
+        appendArray(target, source, "headers");
+        appendArray(target, source, "proxy");
+        appendArray(target, source, "hosts");
+        appendArray(target, source, "ads");
+    }
+
+    private void appendArray(JsonObject target, JsonObject source, String key) {
+        if (!source.has(key)) return;
+        if (!target.has(key)) target.add(key, new JsonArray());
+        JsonArray targetArray = target.getAsJsonArray(key);
+        for (JsonElement element : source.getAsJsonArray(key)) targetArray.add(element.deepCopy());
     }
 
     private void parseConfig(String text, Callback callback) {
@@ -151,6 +224,14 @@ public class LiveConfig {
         lives.add(live);
         setHome(live, true);
         App.post(callback::success);
+    }
+
+    private void parseText(String url, String text) {
+        Live live = new Live(parseName(url), url).sync();
+        LiveParser.text(live, text);
+        if (lives.contains(live)) return;
+        lives.add(live);
+        if (home == null) setHome(live, true);
     }
 
     private String parseName(String url) {

@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -16,8 +17,13 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Entity
 public class History {
@@ -252,8 +258,28 @@ public class History {
         return get(VodConfig.getCid());
     }
 
+    public static List<History> getLoaded() {
+        List<Integer> cids = getLoadedCids();
+        if (cids.size() == 1) return get(cids.get(0));
+        return AppDatabase.get().getHistoryDao().find(cids);
+    }
+
     public static List<History> get(int cid) {
         return AppDatabase.get().getHistoryDao().find(cid);
+    }
+
+    private static List<Integer> getLoadedCids() {
+        Set<Integer> cids = new LinkedHashSet<>();
+        Map<String, Integer> idMap = new HashMap<>();
+        for (Config item : Config.findUrls()) idMap.put(item.getUrl(), item.getId());
+        String urls = Setting.getVodConfigUrls();
+        for (String url : urls.split("[\\n\\r,，;；|]+")) {
+            if (url.trim().isEmpty()) continue;
+            Integer cid = idMap.get(url.trim());
+            if (cid != null && cid > 0) cids.add(cid);
+        }
+        if (cids.isEmpty()) cids.add(VodConfig.getCid());
+        return new ArrayList<>(cids);
     }
 
     public static History find(String key) {
@@ -300,7 +326,7 @@ public class History {
     }
 
     public History delete() {
-        AppDatabase.get().getHistoryDao().delete(VodConfig.getCid(), getKey());
+        AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
         AppDatabase.get().getTrackDao().delete(getKey());
         return this;
     }

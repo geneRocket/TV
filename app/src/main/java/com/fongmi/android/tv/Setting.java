@@ -26,6 +26,38 @@ public class Setting {
         Prefers.put("proxy", proxy);
     }
 
+    public static String getVodConfigDesc() {
+        return Prefers.getString("vod_config_desc");
+    }
+
+    public static void putVodConfigDesc(String desc) {
+        Prefers.put("vod_config_desc", desc);
+    }
+
+    public static String getVodConfigUrls() {
+        return Prefers.getString("vod_config_urls");
+    }
+
+    public static void putVodConfigUrls(String urls) {
+        Prefers.put("vod_config_urls", urls);
+    }
+
+    public static String getLiveConfigDesc() {
+        return Prefers.getString("live_config_desc");
+    }
+
+    public static void putLiveConfigDesc(String desc) {
+        Prefers.put("live_config_desc", desc);
+    }
+
+    public static String getLiveConfigUrls() {
+        return Prefers.getString("live_config_urls");
+    }
+
+    public static void putLiveConfigUrls(String urls) {
+        Prefers.put("live_config_urls", urls);
+    }
+
     public static String getKeep() {
         return Prefers.getString("keep");
     }

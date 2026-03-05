@@ -334,6 +334,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         setConfig(config, "");
     }
 
+    @Override
+    public void setConfigs(List<Config> configs) {
+        setConfigs(configs, "");
+    }
+
     private void setConfig(Config config, String success) {
         if (config.getUrl().startsWith("file") && !PermissionX.isGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
             PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(config, success));
@@ -342,12 +347,40 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         }
     }
 
+    private void setConfigs(List<Config> configs, String success) {
+        if (configs == null || configs.isEmpty()) return;
+        boolean needStorage = false;
+        for (Config config : configs) if (config.getUrl().startsWith("file")) needStorage = true;
+        if (needStorage && !PermissionX.isGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(configs, success));
+        } else {
+            load(configs, success);
+        }
+    }
+
     public void initConfig() {
         if (isLoading()) return;
         WallConfig.get().init();
-        LiveConfig.get().init().load();
-        VodConfig.get().init().load(getCallback(""), true);
+        List<Config> liveConfigs = getStartupConfigs(1);
+        if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback());
+        else LiveConfig.load(liveConfigs, new Callback());
+        List<Config> vodConfigs = getStartupConfigs(0);
+        if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(""), true);
+        else VodConfig.load(vodConfigs, getCallback(""), true);
         setLoading(true);
+    }
+
+    private List<Config> getStartupConfigs(int type) {
+        String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
+        List<Config> configs = new ArrayList<>();
+        for (String url : value.split("[\\n\\r,，;；|]+")) {
+            if (url.trim().isEmpty()) continue;
+            Config item = Config.find(url.trim(), type);
+            if (!configs.contains(item)) configs.add(item);
+        }
+        if (!configs.isEmpty()) return configs;
+        configs.add(type == 0 ? Config.vod() : Config.live());
+        return configs;
     }
 
     private Callback getCallback(String success) {
@@ -380,9 +413,38 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         switch (config.getType()) {
             case 0:
                 getHomeFragment().mBinding.progressLayout.showProgress();
+                Setting.putVodConfigDesc(config.getDesc());
+                Setting.putVodConfigUrls(config.getUrl());
                 VodConfig.load(config, getCallback(success));
                 break;
         }
+    }
+
+    private void load(List<Config> configs, String success) {
+        Config first = configs.get(0);
+        switch (first.getType()) {
+            case 0:
+                getHomeFragment().mBinding.progressLayout.showProgress();
+                Setting.putVodConfigDesc(getConfigsDesc(configs));
+                Setting.putVodConfigUrls(getConfigsUrls(configs));
+                VodConfig.load(configs, getCallback(success));
+                break;
+        }
+    }
+
+    private String getConfigsDesc(List<Config> configs) {
+        if (configs.size() == 1) return configs.get(0).getDesc();
+        if (configs.size() == 2) return configs.get(0).getDesc() + " + " + configs.get(1).getDesc();
+        return configs.get(0).getDesc() + " +" + (configs.size() - 1);
+    }
+
+    private String getConfigsUrls(List<Config> configs) {
+        StringBuilder sb = new StringBuilder();
+        for (Config config : configs) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(config.getUrl());
+        }
+        return sb.toString();
     }
 
     private void loadLive(String url) {
@@ -448,6 +510,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 setLogo();
                 break;
             case VIDEO:
+                getHomeFragment().getHistory();
                 homeContent();
                 break;
             case IMAGE:

@@ -5,6 +5,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
+import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
@@ -24,6 +25,7 @@ import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -321,7 +323,24 @@ public class Action implements Process {
 
     private void initConfig() {
         WallConfig.get().init();
-        LiveConfig.get().init().load();
-        VodConfig.get().init().load(getCallback());
+        List<Config> liveConfigs = getStartupConfigs(1);
+        if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback());
+        else LiveConfig.load(liveConfigs, new Callback());
+        List<Config> vodConfigs = getStartupConfigs(0);
+        if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
+        else VodConfig.load(vodConfigs, getCallback(), true);
+    }
+
+    private List<Config> getStartupConfigs(int type) {
+        String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
+        List<Config> configs = new ArrayList<>();
+        for (String url : value.split("[\\n\\r,，;；|]+")) {
+            if (url.trim().isEmpty()) continue;
+            Config item = Config.find(url.trim(), type);
+            if (!configs.contains(item)) configs.add(item);
+        }
+        if (!configs.isEmpty()) return configs;
+        configs.add(type == 0 ? Config.vod() : Config.live());
+        return configs;
     }
 }

@@ -197,7 +197,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
             return;
         }
         historyIndex = getHistoryIndex();
-        List<History> items = History.get();
+        List<History> items = History.getLoaded();
         boolean exist = isHistoryRow(historyIndex);
         if (renew) {
             if (exist) mAdapter.removeItems(historyIndex, 1);

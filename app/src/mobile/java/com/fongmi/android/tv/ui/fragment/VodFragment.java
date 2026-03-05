@@ -336,6 +336,11 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         setConfig(config, "");
     }
 
+    @Override
+    public void setConfigs(List<Config> configs) {
+        setConfigs(configs, "");
+    }
+
     private void setConfig(Config config, String success) {
         if (config.getUrl().startsWith("file") && !PermissionX.isGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
             PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(config, success));
@@ -344,13 +349,53 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         }
     }
 
+    private void setConfigs(List<Config> configs, String success) {
+        if (configs == null || configs.isEmpty()) return;
+        boolean needStorage = false;
+        for (Config config : configs) if (config.getUrl().startsWith("file")) needStorage = true;
+        if (needStorage && !PermissionX.isGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(configs, success));
+        } else {
+            load(configs, success);
+        }
+    }
+
     private void load(Config config, String success) {
         switch (config.getType()) {
             case 0:
                 Notify.progress(getActivity());
+                Setting.putVodConfigDesc(config.getDesc());
+                Setting.putVodConfigUrls(config.getUrl());
                 VodConfig.load(config, getCallback(success));
                 break;
         }
+    }
+
+    private void load(List<Config> configs, String success) {
+        Config first = configs.get(0);
+        switch (first.getType()) {
+            case 0:
+                Notify.progress(getActivity());
+                Setting.putVodConfigDesc(getConfigsDesc(configs));
+                Setting.putVodConfigUrls(getConfigsUrls(configs));
+                VodConfig.load(configs, getCallback(success));
+                break;
+        }
+    }
+
+    private String getConfigsDesc(List<Config> configs) {
+        if (configs.size() == 1) return configs.get(0).getDesc();
+        if (configs.size() == 2) return configs.get(0).getDesc() + " + " + configs.get(1).getDesc();
+        return configs.get(0).getDesc() + " +" + (configs.size() - 1);
+    }
+
+    private String getConfigsUrls(List<Config> configs) {
+        StringBuilder sb = new StringBuilder();
+        for (Config config : configs) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(config.getUrl());
+        }
+        return sb.toString();
     }
 
     private Callback getCallback(String success) {

@@ -21,6 +21,7 @@ import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -40,6 +41,7 @@ public class VodConfig {
     private List<Proxy> proxy;
     private List<String> hosts;
     private List<String> ruleHosts;
+    private List<String> loadUrls;
     private boolean loadLive;
     private Config config;
     private Parse parse;
@@ -79,7 +81,21 @@ public class VodConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().clear().config(config).load(callback);
+        get().init().clear().config(config).load(callback);
+    }
+
+    public static void load(Config config, Callback callback, boolean loadLive) {
+        get().init().clear().config(config).load(callback, loadLive);
+    }
+
+    public static void load(List<Config> configs, Callback callback) {
+        if (configs == null || configs.isEmpty()) return;
+        get().init().clear().config(configs.get(0)).loadMulti(configs, callback);
+    }
+
+    public static void load(List<Config> configs, Callback callback, boolean loadLive) {
+        if (configs == null || configs.isEmpty()) return;
+        get().init().clear().config(configs.get(0)).loadMulti(configs, callback, loadLive);
     }
 
     public VodConfig init() {
@@ -94,6 +110,7 @@ public class VodConfig {
         this.rules = new ArrayList<>();
         this.headers = new ArrayList<>();
         this.ruleHosts = new ArrayList<>();
+        this.loadUrls = new ArrayList<>();
         this.sites = new ArrayList<>();
         this.flags = new ArrayList<>();
         this.parses = new ArrayList<>();
@@ -117,6 +134,7 @@ public class VodConfig {
         this.rules.clear();
         this.headers.clear();
         this.ruleHosts.clear();
+        this.loadUrls.clear();
         this.sites.clear();
         this.flags.clear();
         this.parses.clear();
@@ -134,14 +152,109 @@ public class VodConfig {
         else App.execute(() -> loadConfig(callback));
     }
 
+    public void loadMulti(List<Config> configs, Callback callback) {
+        App.execute(() -> loadConfigs(configs, callback));
+    }
+
+    public void loadMulti(List<Config> configs, Callback callback, boolean loadLive) {
+        this.loadLive = loadLive;
+        App.execute(() -> loadConfigs(configs, callback));
+    }
+
     private void loadConfig(Callback callback) {
         try {
+            setLoadUrls(Collections.singletonList(config.getUrl()));
             checkJson(Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject(), callback);
         } catch (Throwable e) {
             if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
             else loadCache(callback, e);
             e.printStackTrace();
         }
+    }
+
+    private void loadConfigs(List<Config> configs, Callback callback) {
+        List<String> urls = new ArrayList<>();
+        JsonObject merged = new JsonObject();
+        Throwable error = null;
+        int success = 0;
+        for (Config item : configs) {
+            try {
+                urls.add(item.getUrl());
+                JsonObject object = loadObject(item.getUrl(), 0);
+                mergeConfig(merged, object);
+                success++;
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        setLoadUrls(urls);
+        if (success > 0) parseConfig(merged, callback);
+        else if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
+        else {
+            Throwable cause = error == null ? new Throwable("No valid config") : error;
+            App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+        }
+    }
+
+    private void setLoadUrls(List<String> urls) {
+        this.loadUrls.clear();
+        if (urls != null) this.loadUrls.addAll(urls);
+    }
+
+    private JsonObject loadObject(String url, int depth) throws Throwable {
+        if (depth > 5) throw new IllegalStateException("Too many redirects.");
+        JsonObject object = Json.parse(Decoder.getJson(url)).getAsJsonObject();
+        if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
+        if (!object.has("urls")) return object;
+        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
+        if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
+        return loadObject(items.get(0).getUrl(), depth + 1);
+    }
+
+    private void mergeConfig(JsonObject target, JsonObject source) {
+        JsonObject root = source.has("video") ? source.getAsJsonObject("video") : source;
+        mergeSites(target, root);
+        appendArray(target, source, "lives");
+        if (root != source) appendArray(target, root, "lives");
+        appendArray(target, root, "parses");
+        appendArray(target, root, "rules");
+        appendArray(target, root, "doh");
+        appendArray(target, root, "headers");
+        appendArray(target, root, "proxy");
+        appendArray(target, root, "hosts");
+        appendArray(target, root, "flags");
+        appendArray(target, root, "ads");
+        copyIfEmpty(target, root, "notice");
+        copyIfEmpty(target, root, "logo");
+        copyIfEmpty(target, root, "wallpaper");
+        copyIfEmpty(target, root, "spider");
+    }
+
+    private void mergeSites(JsonObject target, JsonObject source) {
+        String spider = Json.safeString(source, "spider");
+        JsonArray sites = source.has("sites") ? source.getAsJsonArray("sites") : new JsonArray();
+        if (!target.has("sites")) target.add("sites", new JsonArray());
+        JsonArray targetSites = target.getAsJsonArray("sites");
+        for (JsonElement element : sites) {
+            JsonObject item = element.getAsJsonObject().deepCopy();
+            String api = Json.safeString(item, "api");
+            String jar = Json.safeString(item, "jar");
+            if (TextUtils.isEmpty(jar) && api.startsWith("csp_")) item.addProperty("jar", spider);
+            targetSites.add(item);
+        }
+    }
+
+    private void appendArray(JsonObject target, JsonObject source, String key) {
+        if (!source.has(key)) return;
+        if (!target.has(key)) target.add(key, new JsonArray());
+        JsonArray targetArray = target.getAsJsonArray(key);
+        for (JsonElement element : source.getAsJsonArray(key)) targetArray.add(element.deepCopy());
+    }
+
+    private void copyIfEmpty(JsonObject target, JsonObject source, String key) {
+        if (target.has(key)) return;
+        if (source.has(key)) target.add(key, source.get(key).deepCopy());
     }
 
     private void loadCache(Callback callback, Throwable e) {
@@ -216,8 +329,38 @@ public class VodConfig {
 
     private void initLive(JsonObject object) {
         Config temp = Config.find(config, 1).save();
-        boolean sync = LiveConfig.get().needSync(config.getUrl());
-        if (sync) LiveConfig.get().clear().config(temp).parse(object);
+        boolean sync = false;
+        for (String url : loadUrls) {
+            if (LiveConfig.get().needSync(url)) {
+                sync = true;
+                break;
+            }
+        }
+        if (loadUrls.isEmpty()) sync = LiveConfig.get().needSync(config.getUrl());
+        if (sync) {
+            LiveConfig.get().clear().config(temp).parse(object);
+            putLiveSetting(loadUrls.isEmpty() ? Collections.singletonList(temp.getUrl()) : loadUrls);
+        }
+    }
+
+    private void putLiveSetting(List<String> urls) {
+        List<String> values = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (String url : urls) {
+            if (TextUtils.isEmpty(url) || values.contains(url)) continue;
+            values.add(url);
+            names.add(Config.find(url, 1).getDesc());
+        }
+        if (values.isEmpty()) return;
+        StringBuilder sb = new StringBuilder();
+        for (String value : values) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(value);
+        }
+        Setting.putLiveConfigUrls(sb.toString());
+        if (names.size() == 1) Setting.putLiveConfigDesc(names.get(0));
+        else if (names.size() == 2) Setting.putLiveConfigDesc(names.get(0) + " + " + names.get(1));
+        else Setting.putLiveConfigDesc(names.get(0) + " +" + (names.size() - 1));
     }
 
     private void initParse(JsonObject object) {
