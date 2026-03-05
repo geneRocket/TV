@@ -205,8 +205,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         private boolean tryRecoverByPlayerSwitch(ErrorEvent event) {
-            boolean canSwitch = host.getSite().getPlayerType() == -1
-                    && event.isUrl()
+            boolean canSwitch = event.isUrl()
                     && event.getRetry() > 0
                     && state.getToggleCount() < 2
                     && host.mPlayers.getPlayer() != Players.SYS;
@@ -716,7 +715,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int getPlayer() {
-        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : getSite().getPlayerType() != -1 ? getSite().getPlayerType() : Setting.getPlayer();
+        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : Setting.getPlayer();
     }
 
     private int getScale() {

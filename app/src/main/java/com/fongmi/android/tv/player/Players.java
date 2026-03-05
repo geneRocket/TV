@@ -539,7 +539,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void start(Channel channel, int timeout) {
-        setPlayer(channel.getPlayerType() != -1 ? channel.getPlayerType() : Setting.getLivePlayer());
+        setPlayer(Setting.getLivePlayer());
         String url = getChannelUrl(channel);
         boolean forceLive = isLikelyLive(url, channel.getFormat());
         this.timeout = timeout;

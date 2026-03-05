@@ -142,10 +142,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         return LiveConfig.get().getHome();
     }
 
-    private int getPlayerType(int playerType) {
-        return playerType != -1 ? playerType : Setting.getLivePlayer();
-    }
-
     private int getTimeout() {
         return getHome().isEmpty() ? Constant.TIMEOUT_PLAY : getHome().getTimeout();
     }
@@ -638,7 +634,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
             showEpg(item);
         } else {
             mGroup.setPosition(mChannelAdapter.setSelected(item.group(mGroup)));
-            mPlayers.setPlayer(getPlayerType(item.getPlayerType()));
+            mPlayers.setPlayer(Setting.getLivePlayer());
             setArtwork(item.getLogo());
             mChannel = item;
             setPlayerView();
@@ -888,7 +884,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private void checkError(ErrorEvent event) {
-        if (mChannel != null && mChannel.getPlayerType() == -1 && event.isUrl() && event.getRetry() > 0 && getToggleCount() < 2 && mPlayers.getPlayer() != Players.SYS) {
+        if (mChannel != null && event.isUrl() && event.getRetry() > 0 && getToggleCount() < 2 && mPlayers.getPlayer() != Players.SYS) {
             toggleCount++;
             nextPlayer();
         } else {
