@@ -33,6 +33,8 @@ import androidx.media3.datasource.DataSpec;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.HttpUtil;
 import androidx.media3.datasource.TransferListener;
+import com.fongmi.android.tv.Setting;
+import com.fongmi.android.tv.utils.M3u8AdFilter;
 import com.google.common.base.Predicate;
 import com.google.common.io.ByteStreams;
 import com.google.common.net.HttpHeaders;
@@ -324,6 +326,28 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
             throw new InvalidContentTypeException(contentType, dataSpec);
         }
 
+        if (shouldFilterM3u8(dataSpec, contentType)) {
+            byte[] bodyBytes;
+            try {
+                bodyBytes = ByteStreams.toByteArray(castNonNull(responseByteStream));
+            } catch (IOException e) {
+                closeConnectionQuietly();
+                throw HttpDataSourceException.createForIOException(
+                        e, dataSpec, HttpDataSourceException.TYPE_OPEN);
+            }
+            byte[] filtered = M3u8AdFilter.filterMinorHost(bodyBytes, dataSpec.uri.toString());
+            if (filtered == bodyBytes) {
+                // no-op: keep original response stream
+                responseByteStream = new java.io.ByteArrayInputStream(bodyBytes);
+            } else {
+                responseBody.close();
+                responseBody = ResponseBody.create(mediaType, filtered);
+                responseByteStream = responseBody.byteStream();
+                this.response = response.newBuilder().body(responseBody).build();
+                response = this.response;
+            }
+        }
+
         // If we requested a range starting from a non-zero position and received a 200 rather than a
         // 206, then the server does not support partial requests. We'll need to manually skip to the
         // requested position.
@@ -348,6 +372,13 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
         }
 
         return bytesToRead;
+    }
+
+    private boolean shouldFilterM3u8(DataSpec dataSpec, String contentType) {
+        if (!Setting.isRemoveAd()) return false;
+        if (dataSpec.position != 0) return false;
+        if (dataSpec.length != C.LENGTH_UNSET) return false;
+        return M3u8AdFilter.isLikelyM3u8(contentType, dataSpec.uri.toString());
     }
 
     @UnstableApi
