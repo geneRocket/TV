@@ -37,17 +37,24 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
         return this;
     }
 
+    public void setItems(List<String> items) {
+        mItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
+        notifyDataSetChanged();
+    }
+
     public int remove(String item) {
         File file = new File(Path.tv(), item + "." + AppDatabase.BACKUP_SUFFIX);
         if (file.exists()) file.delete();
-        mItems.remove(item);
-        notifyDataSetChanged();
+        int index = mItems.indexOf(item);
+        if (index == -1) return getItemCount();
+        mItems.remove(index);
+        notifyItemRemoved(index);
         return getItemCount();
     }
 
     @Override
     public int getItemCount() {
-        return mItems.size();
+        return mItems == null ? 0 : mItems.size();
     }
 
     @NonNull

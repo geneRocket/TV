@@ -2,16 +2,17 @@ package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Activity;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.WindowManager;
 
-import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.FragmentActivity;
 
-import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
-import com.fongmi.android.tv.databinding.DialogHistoryBinding;
+import com.fongmi.android.tv.databinding.DialogConfigHistoryBinding;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.ui.adapter.ConfigAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -23,10 +24,11 @@ import java.util.List;
 
 public class HistoryDialog implements ConfigAdapter.OnClickListener {
 
-    private final DialogHistoryBinding binding;
+    private final FragmentActivity activity;
+    private final DialogConfigHistoryBinding binding;
     private final ConfigCallback callback;
     private final ConfigAdapter adapter;
-    private final AlertDialog dialog;
+    private final androidx.appcompat.app.AlertDialog dialog;
     private Runnable onAdd;
     private int type;
     private boolean multi;
@@ -46,29 +48,46 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
     }
 
     public HistoryDialog(Activity activity) {
+        this.activity = (FragmentActivity) activity;
         this.callback = (ConfigCallback) activity;
-        this.binding = DialogHistoryBinding.inflate(LayoutInflater.from(activity));
-        this.dialog = new MaterialAlertDialogBuilder(activity).setView(binding.getRoot()).setPositiveButton(R.string.dialog_positive, (dialog, which) -> onPositive()).setNegativeButton(R.string.dialog_negative, null).create();
+        this.binding = DialogConfigHistoryBinding.inflate(LayoutInflater.from(activity));
+        this.dialog = new MaterialAlertDialogBuilder(activity).setView(binding.getRoot()).create();
         this.adapter = new ConfigAdapter(this);
     }
 
     public void show() {
+        setView();
         setRecyclerView();
-        setDialog();
-        binding.recycler.requestFocus();
+    }
+
+    private void setView() {
+        binding.add.setVisibility(View.VISIBLE);
+        binding.add.setOnClickListener(v -> getOnAdd().run());
+        binding.negative.setOnClickListener(v -> dialog.dismiss());
+        binding.positive.setOnClickListener(v -> onPositive());
     }
 
     private void setRecyclerView() {
         multi = type == 0 || type == 1;
         binding.recycler.setHasFixedSize(true);
-        binding.recycler.setAdapter(adapter.multi(multi).includeCurrent(multi).addAll(type));
-        binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
-        if (multi) adapter.select(getEnabledUrls());
+        binding.recycler.setAdapter(adapter.multi(multi).includeCurrent(multi));
+        if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
+        App.execute(() -> {
+            List<Config> items = Config.getAll(type);
+            if (!multi) items.remove(type == 0 ? VodConfig.get().getConfig() : LiveConfig.get().getConfig());
+            App.post(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                adapter.setItems(items);
+                if (multi) adapter.select(getEnabledUrls());
+                setDialog();
+                if (dialog.isShowing()) binding.recycler.requestFocus();
+            });
+        });
     }
 
     private void setDialog() {
-        if (adapter.getItemCount() == 0 && onAdd == null) return;
-        if (onAdd != null) dialog.setButton(AlertDialog.BUTTON_NEUTRAL, dialog.getContext().getString(R.string.dialog_add), (d, w) -> onAdd.run());
+        if (dialog.isShowing()) return;
+        if (adapter.getItemCount() == 0 && getOnAdd() == null) return;
         WindowManager.LayoutParams params = dialog.getWindow().getAttributes();
         params.width = (int) (ResUtil.getScreenWidth() * 0.4f);
         dialog.getWindow().setAttributes(params);
@@ -97,6 +116,12 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
         if (selected.isEmpty()) return;
         if (selected.size() == 1) callback.setConfig(selected.get(0));
         else callback.setConfigs(selected);
+        dialog.dismiss();
+    }
+
+    private Runnable getOnAdd() {
+        if (onAdd != null) return onAdd;
+        return () -> ConfigDialog.create(activity).type(type).show();
     }
 
     private List<String> getEnabledUrls() {

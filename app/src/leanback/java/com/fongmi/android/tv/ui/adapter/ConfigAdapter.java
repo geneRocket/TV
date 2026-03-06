@@ -44,6 +44,12 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
         return this;
     }
 
+    public void setItems(List<Config> items) {
+        mItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
+        mSelected.clear();
+        notifyDataSetChanged();
+    }
+
     public ConfigAdapter multi(boolean multi) {
         mMultiSelect = multi;
         mSelected.clear();
