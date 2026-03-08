@@ -14,11 +14,13 @@ import androidx.leanback.widget.OnChildViewHolderSelectedListener;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Button;
+import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
@@ -27,6 +29,8 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentHomeBinding;
+import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.HistoryActivity;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
@@ -46,6 +50,7 @@ import com.fongmi.android.tv.ui.presenter.HistoryPresenter;
 import com.fongmi.android.tv.ui.presenter.KeepPresenter;
 import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.Lists;
@@ -65,6 +70,9 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     public boolean inited;
     private int homeUI;
     private String button;
+    private int mHistoryRequestId;
+    private int mKeepRequestId;
+    private int mOpenRequestId;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -182,31 +190,21 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     public void getHistory(boolean renew) {
-        int historyIndex = getHistoryIndex();
-        int recommendIndex = getRecommendIndex();
-        if (historyIndex == -1) {
-            if (!Setting.isHomeHistory()) return;
-            int historyStringIndex = recommendIndex - 1;
-            historyStringIndex = historyStringIndex < 0 ? 0 : historyStringIndex;
-            mAdapter.add(historyStringIndex, R.string.home_history);
-        }
-        if (!Setting.isHomeHistory()) {
-            historyIndex = getHistoryIndex();
-            if (historyIndex > 0 && mAdapter.size() > historyIndex && isHistoryRow(historyIndex)) mAdapter.removeItems(historyIndex, 1);
-            if (historyIndex > 0) mAdapter.removeItems(historyIndex - 1, 1);
+        boolean enabled = Setting.isHomeHistory();
+        if (!enabled) {
+            mHistoryRequestId++;
+            applyHistoryItems(renew, enabled, java.util.Collections.emptyList());
             return;
         }
-        historyIndex = getHistoryIndex();
-        List<History> items = History.getLoaded();
-        boolean exist = isHistoryRow(historyIndex);
-        if (renew) {
-            if (exist) mAdapter.removeItems(historyIndex, 1);
-            mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
-            exist = false;
-        }
-        if ((items.isEmpty() && exist) || (renew && exist)) mAdapter.removeItems(historyIndex, 1);
-        if ((items.size() > 0 && !exist) || (renew && exist)) mAdapter.add(historyIndex, new ListRow(mHistoryAdapter));
-        mHistoryAdapter.setItems(items, null);
+        final int requestId = ++mHistoryRequestId;
+        App.execute(() -> {
+            List<History> items = History.getLoaded();
+            App.post(() -> {
+                if (!isViewReady() || requestId != mHistoryRequestId) return;
+                boolean currentEnabled = Setting.isHomeHistory();
+                applyHistoryItems(renew, currentEnabled, currentEnabled ? items : java.util.Collections.emptyList());
+            });
+        });
     }
 
     public void setHistoryDelete(boolean delete) {
@@ -219,23 +217,106 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     public void getKeep(boolean renew) {
+        final int requestId = ++mKeepRequestId;
+        App.execute(() -> {
+            List<Keep> items = Keep.getVod();
+            App.post(() -> {
+                if (!isViewReady() || requestId != mKeepRequestId) return;
+                applyKeepItems(renew, items);
+            });
+        });
+    }
+
+    private boolean isViewReady() {
+        return isAdded() && getView() != null;
+    }
+
+    private boolean isActivityReady() {
+        return isViewReady() && getActivity() != null && !getActivity().isFinishing() && !getActivity().isDestroyed();
+    }
+
+    private void openVodItem(int cid, String siteKey, String vodId, String vodName, String vodPic) {
+        mOpenRequestId++;
+        if (VodConfig.get().hasSite(siteKey)) {
+            VideoActivity.start(getActivity(), siteKey, vodId, vodName, vodPic);
+            return;
+        }
+        final int requestId = mOpenRequestId;
+        App.execute(() -> {
+            Config config = Config.find(cid);
+            App.post(() -> {
+                if (!isActivityReady() || requestId != mOpenRequestId) return;
+                if (config == null) {
+                    CollectActivity.start(getActivity(), vodName);
+                    return;
+                }
+                VodConfig.load(config, new Callback() {
+                    @Override
+                    public void success() {
+                        if (!isActivityReady() || requestId != mOpenRequestId) return;
+                        VideoActivity.start(getActivity(), siteKey, vodId, vodName, vodPic);
+                        RefreshEvent.history();
+                        RefreshEvent.config();
+                        RefreshEvent.video();
+                    }
+
+                    @Override
+                    public void error(String msg) {
+                        if (!isActivityReady() || requestId != mOpenRequestId) return;
+                        Notify.show(msg);
+                    }
+                });
+            });
+        });
+    }
+
+    private void applyHistoryItems(boolean renew, boolean enabled, List<History> items) {
+        if (!enabled) {
+            removeHistorySection();
+            return;
+        }
+        if (items.isEmpty()) {
+            removeHistorySection();
+            return;
+        }
+        int historyIndex = getHistoryIndex();
+        if (historyIndex == -1) {
+            int recommendIndex = getRecommendIndex();
+            int historyStringIndex = recommendIndex - 1;
+            historyStringIndex = historyStringIndex < 0 ? 0 : historyStringIndex;
+            mAdapter.add(historyStringIndex, R.string.home_history);
+        }
+        historyIndex = getHistoryIndex();
+        boolean exist = isHistoryRow(historyIndex);
+        if (renew) {
+            if (exist) mAdapter.removeItems(historyIndex, 1);
+            mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
+            exist = false;
+        }
+        if (!exist) mAdapter.add(getHistoryIndex(), new ListRow(mHistoryAdapter));
+        mHistoryAdapter.setItems(items, null);
+    }
+
+    private void applyKeepItems(boolean renew, List<Keep> items) {
+        if (items.isEmpty()) {
+            removeKeepSection();
+            return;
+        }
         int keepIndex = getKeepIndex();
-        int recommendIndex = getRecommendIndex();
         if (keepIndex == -1) {
+            int recommendIndex = getRecommendIndex();
             int keepStringIndex = recommendIndex - 1;
             keepStringIndex = keepStringIndex < 0 ? 0 : keepStringIndex;
             mAdapter.add(keepStringIndex, R.string.home_keep);
         }
         keepIndex = getKeepIndex();
-        List<Keep> items = Keep.getVod();
         boolean exist = isKeepRow(keepIndex);
         if (renew) {
             if (exist) mAdapter.removeItems(keepIndex, 1);
             mKeepAdapter = new ArrayObjectAdapter(mKeepPresenter = new KeepPresenter(this));
             exist = false;
         }
-        if ((items.isEmpty() && exist) || (renew && exist)) mAdapter.removeItems(keepIndex, 1);
-        if ((items.size() > 0 && !exist) || (renew && exist)) mAdapter.add(keepIndex, new ListRow(mKeepAdapter));
+        if (!exist) mAdapter.add(getKeepIndex(), new ListRow(mKeepAdapter));
         mKeepAdapter.setItems(items, null);
     }
 
@@ -245,15 +326,17 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     private void clearHistory() {
-        mAdapter.removeItems(getHistoryIndex(), 1);
-        History.delete(VodConfig.getCid());
+        mHistoryRequestId++;
+        removeHistorySection();
+        History.deleteLoaded();
         mPresenter.setDelete(false);
         mHistoryAdapter.clear();
     }
 
     private void clearKeep() {
-        mAdapter.removeItems(getKeepIndex(), 1);
-        Keep.delete(VodConfig.getCid());
+        mKeepRequestId++;
+        removeKeepSection();
+        Keep.deleteAll();
         mKeepPresenter.setDelete(false);
         mKeepAdapter.clear();
     }
@@ -263,14 +346,45 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         return -1;
     }
 
+    private int getHistoryHeaderIndex() {
+        return getHeaderIndex(R.string.home_history);
+    }
+
     private int getKeepIndex() {
         for (int i = 0; i < mAdapter.size(); i++) if (mAdapter.get(i).equals(R.string.home_keep)) return i + 1;
         return -1;
     }
 
+    private int getKeepHeaderIndex() {
+        return getHeaderIndex(R.string.home_keep);
+    }
+
     private int getRecommendIndex() {
         for (int i = 0; i < mAdapter.size(); i++) if (mAdapter.get(i).equals(R.string.home_recommend)) return i + 1;
         return -1;
+    }
+
+    private int getHeaderIndex(int resId) {
+        for (int i = 0; i < mAdapter.size(); i++) if (mAdapter.get(i).equals(resId)) return i;
+        return -1;
+    }
+
+    private void removeHistorySection() {
+        int historyIndex = getHistoryIndex();
+        if (isHistoryRow(historyIndex)) mAdapter.removeItems(historyIndex, 1);
+        int headerIndex = getHistoryHeaderIndex();
+        if (headerIndex >= 0) mAdapter.removeItems(headerIndex, 1);
+        if (mPresenter != null) mPresenter.setDelete(false);
+        if (mHistoryAdapter != null) mHistoryAdapter.clear();
+    }
+
+    private void removeKeepSection() {
+        int keepIndex = getKeepIndex();
+        if (isKeepRow(keepIndex)) mAdapter.removeItems(keepIndex, 1);
+        int headerIndex = getKeepHeaderIndex();
+        if (headerIndex >= 0) mAdapter.removeItems(headerIndex, 1);
+        if (mKeepPresenter != null) mKeepPresenter.setDelete(false);
+        if (mKeepAdapter != null) mKeepAdapter.clear();
     }
 
     private boolean isHistoryRow(int index) {
@@ -310,14 +424,15 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     @Override
     public void onItemClick(History item) {
-        VideoActivity.start(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        openVodItem(item.getCid(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
     }
 
     @Override
     public void onItemDelete(History item) {
+        mHistoryRequestId++;
         mHistoryAdapter.remove(item.delete());
         if (mHistoryAdapter.size() > 0) return;
-        mAdapter.removeItems(getHistoryIndex(), 1);
+        removeHistorySection();
         mPresenter.setDelete(false);
     }
 
@@ -363,19 +478,20 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     @Override
     public void onItemClick(Keep item) {
-        VideoActivity.start(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        openVodItem(item.getCid(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
     }
 
     @Override
     public void onItemDelete(Keep item) {
+        mKeepRequestId++;
         mKeepAdapter.remove(item.delete());
         if (mKeepAdapter.size() > 0) return;
-        mAdapter.removeItems(getKeepIndex(), 1);
+        removeKeepSection();
         mKeepPresenter.setDelete(false);
     }
 
     public boolean canBack() {
-        return mBinding.recycler.getSelectedPosition() != 0;
+        return mBinding.recycler.getSelectedPosition() > 0;
     }
 
     public void goBack() {

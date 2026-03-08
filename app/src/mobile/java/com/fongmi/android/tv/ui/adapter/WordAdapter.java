@@ -9,7 +9,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.databinding.AdapterCollectWordBinding;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
 
@@ -28,17 +30,30 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
 
     public void addAll(List<String> items) {
         mItems.clear();
-        mItems.addAll(items.subList(0, Math.min(items.size(), 20)));
+        appendUnique(items);
         notifyDataSetChanged();
     }
 
     public void clear() {
         mItems.clear();
+        notifyDataSetChanged();
     }
 
     public void appendAll(List<String> items) {
-        mItems.addAll(items.subList(0, Math.min(items.size(), 20)));
+        appendUnique(items);
         notifyDataSetChanged();
+    }
+
+    private void appendUnique(List<String> items) {
+        if (items == null || items.isEmpty()) return;
+        Set<String> values = new LinkedHashSet<>(mItems);
+        for (int i = 0; i < items.size() && values.size() < 20; i++) {
+            String item = items.get(i);
+            if (item == null || item.isEmpty()) continue;
+            values.add(item);
+        }
+        mItems.clear();
+        mItems.addAll(values);
     }
 
     @Override
@@ -56,7 +71,11 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         String item = mItems.get(position);
         holder.binding.text.setText(item);
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

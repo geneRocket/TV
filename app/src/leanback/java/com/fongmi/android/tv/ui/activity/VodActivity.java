@@ -54,7 +54,8 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         Intent intent = new Intent(activity, VodActivity.class);
         intent.putExtra("key", key);
         intent.putExtra("result", result);
-        for (Map.Entry<String, List<Filter>> entry : result.getFilters().entrySet()) Prefers.put("filter_" + key + "_" + entry.getKey(), App.gson().toJson(entry.getValue()));
+        String storeKey = VodConfig.rawSiteKey(key);
+        for (Map.Entry<String, List<Filter>> entry : result.getFilters().entrySet()) Prefers.put("filter_" + storeKey + "_" + entry.getKey(), App.gson().toJson(entry.getValue()));
         activity.startActivity(intent);
     }
 
@@ -62,12 +63,16 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         return getIntent().getStringExtra("key");
     }
 
+    private String getStoreKey() {
+        return VodConfig.rawSiteKey(getKey());
+    }
+
     private Result getResult() {
         return getIntent().getParcelableExtra("result");
     }
 
     private List<Filter> getFilter(String typeId) {
-        return Filter.arrayFrom(Prefers.getString("filter_" + getKey() + "_" + typeId));
+        return Filter.arrayFrom(Prefers.getString("filter_" + getStoreKey() + "_" + typeId));
     }
 
     private Site getSite() {
@@ -138,7 +143,9 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     private final Runnable mRunnable = new Runnable() {
         @Override
         public void run() {
-            mBinding.pager.setCurrentItem(mBinding.recycler.getSelectedPosition());
+            int position = mBinding.recycler.getSelectedPosition();
+            if (position < 0 || position >= mPageAdapter.getCount()) return;
+            mBinding.pager.setCurrentItem(position);
         }
     };
 

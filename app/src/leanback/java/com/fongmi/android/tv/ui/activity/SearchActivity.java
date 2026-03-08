@@ -157,12 +157,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mHotCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (!isHotRequestValid(call)) return;
-                List<String> remote = Hot.get(response.body().string());
-                App.post(() -> {
-                    if (!isHotRequestValid(call)) return;
-                    mWordAdapter.addAll(remote);
-                });
+                try (Response res = response) {
+                    if (!isHotRequestValid(call) || res.body() == null) return;
+                    List<String> remote = Hot.get(res.body().string());
+                    App.post(() -> {
+                        if (!isHotRequestValid(call) || isFinishing() || isDestroyed()) return;
+                        mWordAdapter.addAll(remote);
+                    });
+                }
             }
         });
     }
@@ -175,22 +177,28 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mSuggestOneCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (!isSuggestRequestValid(call, text)) return;
-                List<String> items = SuggestTwo.get(response.body().string());
-                App.post(() -> {
-                    if (isSuggestRequestValid(call, text)) mWordAdapter.appendAll(items);
-                });
+                try (Response res = response) {
+                    if (!isSuggestRequestValid(call, text) || res.body() == null) return;
+                    List<String> items = SuggestTwo.get(res.body().string());
+                    App.post(() -> {
+                        if (!isSuggestRequestValid(call, text) || isFinishing() || isDestroyed()) return;
+                        mWordAdapter.appendAll(items);
+                    });
+                }
             }
         });
         mSuggestTwoCall = OkHttp.newCall("https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(Trans.z2p(text)));
         mSuggestTwoCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (!isSuggestRequestValid(call, text)) return;
-                List<String> items = Suggest.get(response.body().string());
-                App.post(() -> {
-                    if (isSuggestRequestValid(call, text)) mWordAdapter.appendAll(items);
-                });
+                try (Response res = response) {
+                    if (!isSuggestRequestValid(call, text) || res.body() == null) return;
+                    List<String> items = Suggest.get(res.body().string());
+                    App.post(() -> {
+                        if (!isSuggestRequestValid(call, text) || isFinishing() || isDestroyed()) return;
+                        mWordAdapter.appendAll(items);
+                    });
+                }
             }
         });
     }

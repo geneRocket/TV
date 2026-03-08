@@ -91,11 +91,29 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         holder.binding.change.setImageResource(getChangeIcon(item));
         holder.binding.search.setVisibility(search ? View.VISIBLE : View.GONE);
         holder.binding.change.setVisibility(change ? View.VISIBLE : View.GONE);
-        holder.binding.text.setOnClickListener(v -> mListener.onTextClick(item));
-        holder.binding.search.setOnClickListener(v -> mListener.onSearchClick(position, item));
-        holder.binding.change.setOnClickListener(v -> mListener.onChangeClick(position, item));
-        holder.binding.search.setOnLongClickListener(v -> mListener.onSearchLongClick(item));
-        holder.binding.change.setOnLongClickListener(v -> mListener.onChangeLongClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onTextClick(mItems.get(index));
+        });
+        holder.binding.search.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onSearchClick(index, mItems.get(index));
+        });
+        holder.binding.change.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onChangeClick(index, mItems.get(index));
+        });
+        holder.binding.search.setOnLongClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            return index != RecyclerView.NO_POSITION && mListener.onSearchLongClick(mItems.get(index));
+        });
+        holder.binding.change.setOnLongClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            return index != RecyclerView.NO_POSITION && mListener.onChangeLongClick(mItems.get(index));
+        });
     }
 
     private int getSearchIcon(Site item) {

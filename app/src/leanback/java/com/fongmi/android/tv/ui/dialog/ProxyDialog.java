@@ -31,6 +31,7 @@ public class ProxyDialog implements DialogInterface.OnDismissListener {
     private final ProxyCallback callback;
     private final AlertDialog dialog;
     private boolean append;
+    private boolean registered;
 
     public static ProxyDialog create(FragmentActivity activity) {
         return new ProxyDialog(activity);
@@ -67,7 +68,10 @@ public class ProxyDialog implements DialogInterface.OnDismissListener {
     }
 
     private void initEvent() {
-        EventBus.getDefault().register(this);
+        if (!registered) {
+            EventBus.getDefault().register(this);
+            registered = true;
+        }
         binding.positive.setOnClickListener(this::onPositive);
         binding.negative.setOnClickListener(this::onNegative);
         binding.text.addTextChangedListener(new CustomTextListener() {
@@ -117,6 +121,9 @@ public class ProxyDialog implements DialogInterface.OnDismissListener {
 
     @Override
     public void onDismiss(DialogInterface dialogInterface) {
-        EventBus.getDefault().unregister(this);
+        if (registered) {
+            EventBus.getDefault().unregister(this);
+            registered = false;
+        }
     }
 }

@@ -346,12 +346,12 @@ public class LiveConfig {
     }
 
     public void setKeep(List<Group> items) {
-        List<String> key = new ArrayList<>();
-        for (Keep keep : Keep.getLive()) key.add(keep.getKey());
+        List<String> keys = new ArrayList<>();
+        for (Keep keep : Keep.getLive()) keys.add(keep.getKey());
         for (Group group : items) {
             if (group.isKeep()) continue;
             for (Channel channel : group.getChannel()) {
-                if (key.contains(channel.getName())) {
+                if (keys.contains(channel.getName())) {
                     items.get(0).add(channel);
                 }
             }
@@ -360,7 +360,8 @@ public class LiveConfig {
 
     public int[] find(List<Group> items) {
         String[] splits = Setting.getKeep().split(AppDatabase.SYMBOL);
-        if (splits.length < 4 || !getHome().getName().equals(splits[0])) return new int[]{1, 0};
+        if (items.isEmpty()) return new int[]{-1, -1};
+        if (splits.length < 4 || !getHome().getName().equals(splits[0])) return new int[]{0, 0};
         for (int i = 0; i < items.size(); i++) {
             Group group = items.get(i);
             if (group.getName().equals(splits[1])) {
@@ -369,12 +370,18 @@ public class LiveConfig {
                 if (j != -1) return new int[]{i, j};
             }
         }
-        return new int[]{1, 0};
+        return new int[]{0, 0};
     }
 
     public int[] find(String number, List<Group> items) {
+        int target;
+        try {
+            target = Integer.parseInt(number);
+        } catch (Exception e) {
+            return new int[]{-1, -1};
+        }
         for (int i = 0; i < items.size(); i++) {
-            int j = items.get(i).find(Integer.parseInt(number));
+            int j = items.get(i).find(target);
             if (j != -1) return new int[]{i, j};
         }
         return new int[]{-1, -1};

@@ -38,6 +38,7 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     private final ConfigCallback callback;
     private final AlertDialog dialog;
     private boolean append;
+    private boolean registered;
     private boolean edit;
     private String url;
     private int type;
@@ -89,7 +90,10 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     }
 
     private void initEvent() {
-        EventBus.getDefault().register(this);
+        if (!registered) {
+            EventBus.getDefault().register(this);
+            registered = true;
+        }
         binding.storage.setOnClickListener(this::onStorage);
         binding.positive.setOnClickListener(this::onPositive);
         binding.negative.setOnClickListener(this::onNegative);
@@ -163,6 +167,9 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
 
     @Override
     public void onDismiss(DialogInterface dialogInterface) {
-        EventBus.getDefault().unregister(this);
+        if (registered) {
+            EventBus.getDefault().unregister(this);
+            registered = false;
+        }
     }
 }

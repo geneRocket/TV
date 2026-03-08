@@ -18,7 +18,7 @@ import java.util.List;
 
 public class DisplayAdapter extends RecyclerView.Adapter<DisplayAdapter.ViewHolder> {
 
-    private List<String> mItems;
+    private final List<String> mItems;
 
     public DisplayAdapter() {
         mItems = new ArrayList<>();
@@ -27,11 +27,17 @@ public class DisplayAdapter extends RecyclerView.Adapter<DisplayAdapter.ViewHold
         mItems.add(ResUtil.getString(R.string.play_duration));
         mItems.add(ResUtil.getString(R.string.play_video_title));
         mItems.add(ResUtil.getString(R.string.play_mini_progress));
+        setHasStableIds(true);
     }
 
     @Override
     public int getItemCount() {
         return mItems.size();
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).hashCode();
     }
 
     @NonNull
@@ -45,8 +51,8 @@ public class DisplayAdapter extends RecyclerView.Adapter<DisplayAdapter.ViewHold
         String name = mItems.get(position);
         holder.binding.text.setText(name);
         holder.binding.check.setChecked(getChecked(position));
-        holder.binding.select.setOnLongClickListener(v -> onItemLongClick(position));
-        holder.binding.select.setOnClickListener(v -> onItemClick(position));
+        holder.binding.select.setOnLongClickListener(v -> onItemLongClick(holder));
+        holder.binding.select.setOnClickListener(v -> onItemClick(holder));
         holder.binding.text.setGravity(Gravity.CENTER);
     }
 
@@ -59,16 +65,20 @@ public class DisplayAdapter extends RecyclerView.Adapter<DisplayAdapter.ViewHold
         return false;
     }
 
-    private void onItemClick(int position) {
+    private void onItemClick(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return;
         if (position == 0) Setting.putDisplayTime(!Setting.isDisplayTime());
         else if (position == 1) Setting.putDisplaySpeed(!Setting.isDisplaySpeed());
         else if (position == 2) Setting.putDisplayDuration(!Setting.isDisplayDuration());
         else if (position == 3) Setting.putDisplayVideoTitle(!Setting.isDisplayVideoTitle());
         else if (position == 4) Setting.putDisplayMiniProgress(!Setting.isDisplayMiniProgress());
-        notifyItemRangeChanged(0, getItemCount());
+        notifyItemChanged(position);
     }
 
-    private boolean onItemLongClick(int position) {
+    private boolean onItemLongClick(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return false;
         boolean checked = false;
         if (position == 0) checked = Setting.isDisplayTime();
         else if (position == 1) checked = Setting.isDisplaySpeed();

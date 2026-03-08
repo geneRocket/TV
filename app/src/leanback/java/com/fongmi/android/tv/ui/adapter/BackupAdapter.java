@@ -21,6 +21,7 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
 
     public BackupAdapter(OnClickListener listener) {
         this.mListener = listener;
+        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -38,7 +39,9 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
     }
 
     public void setItems(List<String> items) {
-        mItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
+        List<String> newItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
+        if (newItems.equals(mItems)) return;
+        mItems = newItems;
         notifyDataSetChanged();
     }
 
@@ -57,6 +60,11 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
         return mItems == null ? 0 : mItems.size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).hashCode();
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -67,8 +75,16 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         String item = mItems.get(position);
         holder.binding.text.setText(item);
-        holder.binding.text.setOnClickListener(v -> mListener.onTextClick(item));
-        holder.binding.delete.setOnClickListener(v -> mListener.onDeleteClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onTextClick(mItems.get(index));
+        });
+        holder.binding.delete.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onDeleteClick(mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

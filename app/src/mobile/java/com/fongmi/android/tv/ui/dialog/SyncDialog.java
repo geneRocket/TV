@@ -164,7 +164,7 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
         String mode = binding.mode.getTag().toString();
         if (mode.equals("0")) return false;
         if (mode.equals("2") && type.equals("keep")) Keep.deleteAll();
-        if (mode.equals("2") && type.equals("history")) History.delete(VodConfig.getCid());
+        if (mode.equals("2") && type.equals("history")) History.deleteLoaded();
         OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s&force=true", item.getIp(), binding.mode.getTag().toString(), type), body.build()).enqueue(getCallback());
         return true;
     }

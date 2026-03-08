@@ -33,7 +33,8 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     }
 
     public void addAll(List<Vod> items) {
-        int position = mItems.size() + 1;
+        int position = mItems.size();
+        if (items == null || items.isEmpty()) return;
         mItems.addAll(items);
         notifyItemRangeInserted(position, items.size());
     }
@@ -68,7 +69,11 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.remark.setText(item.getVodRemarks());
-        holder.binding.getRoot().setOnClickListener(v -> mListener.onItemClick(item));
+        holder.binding.getRoot().setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

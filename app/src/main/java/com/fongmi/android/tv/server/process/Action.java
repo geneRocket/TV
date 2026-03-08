@@ -26,9 +26,11 @@ import com.github.catvod.utils.Path;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import fi.iki.elonen.NanoHTTPD;
 import okhttp3.Response;
@@ -164,14 +166,15 @@ public class Action implements Process {
             if (force) History.delete(config.getId());
             History.sync(targets);
         } else {
-            VodConfig.load(config, getCallback(targets));
+            VodConfig.load(config, getCallback(targets, force));
         }
     }
 
-    private Callback getCallback(List<History> targets) {
+    private Callback getCallback(List<History> targets, boolean force) {
         return new Callback() {
             @Override
             public void success() {
+                if (force) History.delete(VodConfig.getCid());
                 RefreshEvent.config();
                 RefreshEvent.video();
                 History.sync(targets);
@@ -188,17 +191,18 @@ public class Action implements Process {
         List<Keep> targets = Keep.arrayFrom(params.get("targets"));
         List<Config> configs = Config.arrayFrom(params.get("configs"));
         if (TextUtils.isEmpty(VodConfig.getUrl()) && configs.size() > 0) {
-            VodConfig.load(Config.find(configs.get(0)), getCallback(configs, targets));
+            VodConfig.load(Config.find(configs.get(0)), getCallback(configs, targets, force));
         } else {
             if (force) Keep.deleteAll();
             Keep.sync(configs, targets);
         }
     }
 
-    private Callback getCallback(List<Config> configs, List<Keep> targets) {
+    private Callback getCallback(List<Config> configs, List<Keep> targets, boolean force) {
         return new Callback() {
             @Override
             public void success() {
+                if (force) Keep.deleteAll();
                 RefreshEvent.history();
                 RefreshEvent.config();
                 RefreshEvent.video();
@@ -334,10 +338,11 @@ public class Action implements Process {
     private List<Config> getStartupConfigs(int type) {
         String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
         List<Config> configs = new ArrayList<>();
+        Set<String> urls = new LinkedHashSet<>();
         for (String url : value.split("[\\n\\r,，;；|]+")) {
-            if (url.trim().isEmpty()) continue;
-            Config item = Config.find(url.trim(), type);
-            if (!configs.contains(item)) configs.add(item);
+            String itemUrl = url.trim();
+            if (itemUrl.isEmpty() || !urls.add(itemUrl)) continue;
+            configs.add(Config.find(itemUrl, type));
         }
         if (!configs.isEmpty()) return configs;
         configs.add(type == 0 ? Config.vod() : Config.live());

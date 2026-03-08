@@ -35,11 +35,13 @@ public class SubtitleViewModel extends ViewModel {
 
     public MutableLiveData<SubtitleData> searchResult;
     private final AtomicInteger requestSeq;
+    private final AtomicInteger resolveSeq;
     private final OkHttpClient subtitleClient;
 
     public SubtitleViewModel() {
         searchResult = new MutableLiveData<>();
         requestSeq = new AtomicInteger();
+        resolveSeq = new AtomicInteger();
         subtitleClient = OkHttp.client().newBuilder()
                 .readTimeout(15, TimeUnit.SECONDS)
                 .writeTimeout(15, TimeUnit.SECONDS)
@@ -221,6 +223,7 @@ public class SubtitleViewModel extends ViewModel {
     }
 
     private void getSubtitleUrlFromAssrt(Subtitle subtitle, SubtitleLoader subtitleLoader) {
+        int seq = resolveSeq.incrementAndGet();
         String ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.54 Safari/537.36";
         Request request = new Request.Builder()
                 .url(subtitle.getUrl())
@@ -237,12 +240,21 @@ public class SubtitleViewModel extends ViewModel {
             @Override
             public void onResponse(Call call, Response response) throws IOException {
                 try (Response res = response) {
+                    if (seq != resolveSeq.get()) return;
                     String location = res.header("location");
                     subtitle.setUrl(TextUtils.isEmpty(location) ? subtitle.getUrl() : location);
+                    if (seq != resolveSeq.get()) return;
                     subtitleLoader.loadSubtitle(subtitle);
                 }
             }
         });
+    }
+
+    @Override
+    protected void onCleared() {
+        requestSeq.incrementAndGet();
+        resolveSeq.incrementAndGet();
+        super.onCleared();
     }
 
     public interface SubtitleLoader {

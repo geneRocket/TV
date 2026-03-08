@@ -40,10 +40,22 @@ public class Thunder implements Source.Extractor {
     }
 
     private String addTorrentTask(Uri uri) throws Exception {
-        File torrent = new File(uri.getPath());
+        String path = uri.getPath();
         String name = uri.getQueryParameter("name");
-        int index = Integer.parseInt(uri.getQueryParameter("index"));
-        taskId = XLTaskHelper.get().addTorrentTask(torrent, Objects.requireNonNull(torrent.getParentFile()), index);
+        String indexValue = uri.getQueryParameter("index");
+        if (path == null || path.isEmpty() || name == null || name.isEmpty() || indexValue == null || indexValue.isEmpty()) {
+            throw new ExtractException("Invalid thunder torrent task");
+        }
+        File torrent = new File(path);
+        File parent = torrent.getParentFile();
+        if (parent == null) throw new ExtractException("Missing thunder torrent parent");
+        int index;
+        try {
+            index = Integer.parseInt(indexValue);
+        } catch (NumberFormatException e) {
+            throw new ExtractException("Invalid thunder torrent index");
+        }
+        taskId = XLTaskHelper.get().addTorrentTask(torrent, parent, index);
         long start = SystemClock.elapsedRealtime();
         while (true) {
             XLTaskInfo taskInfo = XLTaskHelper.get().getBtSubTaskInfo(taskId, index).mTaskInfo;
@@ -96,7 +108,9 @@ public class Thunder implements Source.Extractor {
         }
 
         private static boolean isTorrent(String url) {
-            return !url.startsWith("magnet") && url.split(";")[0].endsWith(".torrent");
+            int index = url.indexOf(';');
+            String value = index < 0 ? url : url.substring(0, index);
+            return !value.startsWith("magnet") && value.endsWith(".torrent");
         }
 
         @Override

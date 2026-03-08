@@ -89,7 +89,11 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
         Flag item = mItems.get(position);
         holder.binding.text.setText(item.getShow());
         holder.binding.text.setActivated(item.isActivated());
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

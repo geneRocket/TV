@@ -25,11 +25,17 @@ public class ButtonsAdapter extends RecyclerView.Adapter<ButtonsAdapter.ViewHold
         this.mItems = Button.sortedAll();
         this.upFocus = -1;
         this.downFocus = -1;
+        setHasStableIds(true);
     }
 
     @Override
     public int getItemCount() {
         return mItems.size();
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).getId();
     }
 
     @NonNull
@@ -43,11 +49,11 @@ public class ButtonsAdapter extends RecyclerView.Adapter<ButtonsAdapter.ViewHold
         Button item = mItems.get(position);
         holder.binding.text.setText(item.getName());
         holder.binding.check.setChecked(getChecked(item));
-        holder.binding.select.setOnLongClickListener(v -> onItemLongClick(item));
-        holder.binding.select.setOnClickListener(v -> onItemClick(item, position));
+        holder.binding.select.setOnLongClickListener(v -> onItemLongClick(holder));
+        holder.binding.select.setOnClickListener(v -> onItemClick(holder));
         holder.binding.text.setGravity(Gravity.START);
-        holder.binding.down.setOnClickListener(v -> onDownClick(item, position));
-        holder.binding.up.setOnClickListener(v -> onUpClick(item, position));
+        holder.binding.down.setOnClickListener(v -> onDownClick(holder));
+        holder.binding.up.setOnClickListener(v -> onUpClick(holder));
         if (upFocus == position) holder.binding.up.requestFocus();
         else if (downFocus == position) holder.binding.down.requestFocus();
     }
@@ -58,16 +64,22 @@ public class ButtonsAdapter extends RecyclerView.Adapter<ButtonsAdapter.ViewHold
         return false;
     }
 
-    private void onItemClick(Button item, int position) {
+    private void onItemClick(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return;
+        Button item = mItems.get(position);
         boolean checked = getChecked(item);
         Map<Integer, Button> map = Button.getButtonsMap();
         if (checked) map.remove(item.getId());
         else map.put(item.getId(), item);
         save(mItems, map);
-        notifyItemRangeChanged(0, getItemCount());
+        notifyItemChanged(position);
     }
 
-    private boolean onItemLongClick(Button item) {
+    private boolean onItemLongClick(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return false;
+        Button item = mItems.get(position);
         boolean checked = getChecked(item);
         Map<Integer, Button> map = new LinkedHashMap<>();
         if (!checked) map = Button.getMap(mItems);
@@ -76,7 +88,9 @@ public class ButtonsAdapter extends RecyclerView.Adapter<ButtonsAdapter.ViewHold
         return true;
     }
 
-    private void onDownClick(Button item, int position) {
+    private void onDownClick(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return;
         if (position == getItemCount() - 1) return;
         List<Button> buttonList = Button.sortedAll();
         Button button = buttonList.get(position);
@@ -88,10 +102,13 @@ public class ButtonsAdapter extends RecyclerView.Adapter<ButtonsAdapter.ViewHold
         save(mItems, Button.getButtonsMap());
         downFocus = position + 1;
         upFocus = -1;
-        notifyItemRangeChanged(0, getItemCount());
+        notifyItemMoved(position, position + 1);
+        notifyItemRangeChanged(position, 2);
     }
 
-    private void onUpClick(Button item, int position) {
+    private void onUpClick(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return;
         if (position == 0) return;
         List<Button> buttonList = Button.sortedAll();
         Button button = buttonList.get(position);
@@ -103,7 +120,8 @@ public class ButtonsAdapter extends RecyclerView.Adapter<ButtonsAdapter.ViewHold
         save(mItems, Button.getButtonsMap());
         upFocus = position - 1;
         downFocus = -1;
-        notifyItemRangeChanged(0, getItemCount());
+        notifyItemMoved(position, position - 1);
+        notifyItemRangeChanged(position - 1, 2);
     }
 
     private void save(List<Button> sortedItems, Map<Integer, Button> btnsMap) {

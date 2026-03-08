@@ -337,11 +337,16 @@ public class Site implements Parcelable {
     }
 
     public static Site find(String key) {
-        return AppDatabase.get().getSiteDao().find(key);
+        String rawKey = com.fongmi.android.tv.api.config.VodConfig.rawSiteKey(key);
+        return AppDatabase.get().getSiteDao().find(rawKey);
     }
 
     public void save() {
-        AppDatabase.get().getSiteDao().insertOrUpdate(this);
+        Site item = new Site();
+        item.setKey(com.fongmi.android.tv.api.config.VodConfig.rawSiteKey(getKey()));
+        item.setSearchable(getSearchable());
+        item.setChangeable(getChangeable());
+        AppDatabase.get().getSiteDao().insertOrUpdate(item);
     }
 
     @Override

@@ -61,6 +61,10 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         return getArguments().getString("key");
     }
 
+    private String getStoreKey() {
+        return VodConfig.rawSiteKey(getKey());
+    }
+
     private String getTypeId() {
         return mPages.isEmpty() ? getArguments().getString("typeId") : getLastPage().getVodId();
     }

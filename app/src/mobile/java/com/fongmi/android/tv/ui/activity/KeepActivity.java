@@ -8,6 +8,7 @@ import android.view.View;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
@@ -29,6 +30,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     private ActivityKeepBinding mBinding;
     private KeepAdapter mAdapter;
+    private int mOpenRequestId;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, KeepActivity.class));
@@ -78,10 +80,11 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         }
     }
 
-    private void loadConfig(Config config, Keep item) {
+    private void loadConfig(Config config, Keep item, int requestId) {
         VodConfig.load(config, new Callback() {
             @Override
             public void success() {
+                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
                 VideoActivity.start(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
                 RefreshEvent.config();
                 RefreshEvent.video();
@@ -89,6 +92,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
             @Override
             public void error(String msg) {
+                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
                 Notify.show(msg);
             }
         });
@@ -101,10 +105,20 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     @Override
     public void onItemClick(Keep item) {
-        Config config = Config.find(item.getCid());
-        if (config == null) CollectActivity.start(this, item.getVodName());
-        else if (item.getCid() != VodConfig.getCid()) loadConfig(config, item);
-        else VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        mOpenRequestId++;
+        if (VodConfig.get().hasSite(item.getSiteKey())) {
+            VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+            return;
+        }
+        final int requestId = mOpenRequestId;
+        App.execute(() -> {
+            Config config = Config.find(item.getCid());
+            App.post(() -> {
+                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
+                if (config == null) CollectActivity.start(this, item.getVodName());
+                else loadConfig(config, item, requestId);
+            });
+        });
     }
 
     @Override

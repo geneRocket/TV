@@ -34,8 +34,12 @@ import com.fongmi.android.tv.utils.PauseExecutor;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class CollectActivity extends BaseActivity {
@@ -47,6 +51,8 @@ public class CollectActivity extends BaseActivity {
     private PauseExecutor mExecutor;
     private List<Site> mSites;
     private final Set<String> mCollectKeys = new HashSet<>();
+    private final Map<String, Collect> mCollectMap = new LinkedHashMap<>();
+    private final Map<String, Set<String>> mVodKeys = new HashMap<>();
     private View mOldView;
 
     public static void start(Activity activity, String keyword) {
@@ -61,7 +67,7 @@ public class CollectActivity extends BaseActivity {
     }
 
     private String getKeyword() {
-        return getIntent().getStringExtra("keyword");
+        return Objects.toString(getIntent().getStringExtra("keyword"), "");
     }
 
     @Override
@@ -104,8 +110,8 @@ public class CollectActivity extends BaseActivity {
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.search.observe(this, result -> {
+            if (!result.getKeyword().equals(getKeyword().trim())) return;
             updateCollects(result.getList());
-            syncFragments(result.getList());
         });
     }
 
@@ -116,7 +122,12 @@ public class CollectActivity extends BaseActivity {
 
     private void setSite() {
         mSites = new ArrayList<>();
-        for (Site site : VodConfig.get().getSites()) if (site.isSearchable()) mSites.add(site);
+        Set<String> keys = new HashSet<>();
+        for (Site site : VodConfig.get().getSites()) {
+            if (!site.isSearchable()) continue;
+            if (!keys.add(site.getKey())) continue;
+            mSites.add(site);
+        }
         Site home = VodConfig.get().getHome();
         if (!mSites.contains(home)) return;
         mSites.remove(home);
@@ -125,12 +136,22 @@ public class CollectActivity extends BaseActivity {
 
     private void search() {
         stop();
+        if (mOldView != null) {
+            mOldView.setActivated(false);
+            mOldView = null;
+        }
         mAdapter.clear();
+        mCollectMap.clear();
+        mVodKeys.clear();
         Collect all = Collect.all();
         mCollectKeys.clear();
         mCollectKeys.add(all.getSite().getKey());
+        mCollectMap.put(all.getSite().getKey(), all);
+        mVodKeys.put(all.getSite().getKey(), new HashSet<>());
         mAdapter.add(all);
-        mPageAdapter.notifyDataSetChanged();
+        syncPager();
+        mBinding.recycler.setSelectedPosition(0);
+        mBinding.pager.setCurrentItem(0, false);
         mExecutor = new PauseExecutor(Constant.THREAD_POOL);
         mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
         for (Site site : mSites) mExecutor.execute(() -> search(site));
@@ -140,16 +161,20 @@ public class CollectActivity extends BaseActivity {
         if (items.isEmpty()) return;
         Collect collect = Collect.create(items);
         if (!mCollectKeys.add(collect.getSite().getKey())) return;
+        mCollectMap.put(collect.getSite().getKey(), collect);
         mAdapter.add(collect);
-        mPageAdapter.notifyDataSetChanged();
+        syncPager();
     }
 
     private void updateCollects(List<Vod> items) {
         if (items.isEmpty()) return;
-        appendCollect(Collect.all().getSite().getKey(), items);
-        String key = items.get(0).getSiteKey();
-        if (getCollect(key) == null) addCollect(items);
-        else appendCollect(key, items);
+        List<Vod> added = filterNewItems(items.get(0).getSiteKey(), items);
+        if (added.isEmpty()) return;
+        appendCollect(Collect.all().getSite().getKey(), added);
+        String key = added.get(0).getSiteKey();
+        if (getCollect(key) == null) addCollect(added);
+        else appendCollect(key, added);
+        syncFragments(added);
     }
 
     private void appendCollect(String key, List<Vod> items) {
@@ -158,12 +183,7 @@ public class CollectActivity extends BaseActivity {
     }
 
     public Collect getCollect(String key) {
-        if (key == null) return null;
-        for (int i = 0; i < mAdapter.size(); i++) {
-            Collect collect = (Collect) mAdapter.get(i);
-            if (key.equals(collect.getSite().getKey())) return collect;
-        }
-        return null;
+        return key == null ? null : mCollectMap.get(key);
     }
 
     private void syncFragments(List<Vod> items) {
@@ -178,12 +198,32 @@ public class CollectActivity extends BaseActivity {
 
     public void appendAllCollect(List<Vod> items) {
         if (items.isEmpty()) return;
-        appendCollect(Collect.all().getSite().getKey(), items);
+        List<Vod> added = filterNewItems(Collect.all().getSite().getKey(), items);
+        if (added.isEmpty()) return;
+        appendCollect(Collect.all().getSite().getKey(), added);
         for (Fragment fragment : getSupportFragmentManager().getFragments()) {
             if (!(fragment instanceof CollectFragment)) continue;
             CollectFragment target = (CollectFragment) fragment;
-            if ("all".equals(target.getSiteKey())) target.appendRows(items);
+            if ("all".equals(target.getSiteKey())) target.appendRows(added);
         }
+    }
+
+    private List<Vod> filterNewItems(String key, List<Vod> items) {
+        Set<String> values = mVodKeys.computeIfAbsent(key, k -> new HashSet<>());
+        List<Vod> results = new ArrayList<>();
+        for (Vod item : items) if (values.add(getVodKey(item))) results.add(item);
+        return results;
+    }
+
+    private String getVodKey(Vod item) {
+        String id = item.getVodId();
+        if (!id.isEmpty()) return item.getSiteKey() + "@" + id;
+        return item.getSiteKey() + "@" + item.getVodName() + "@" + item.getVodPic() + "@" + item.getVodRemarks();
+    }
+
+    private void syncPager() {
+        if (mPageAdapter == null) return;
+        mPageAdapter.submit(new ArrayList<>(mCollectMap.keySet()));
     }
 
     private void search(Site site) {
@@ -211,7 +251,9 @@ public class CollectActivity extends BaseActivity {
     private final Runnable mRunnable = new Runnable() {
         @Override
         public void run() {
-            mBinding.pager.setCurrentItem(mBinding.recycler.getSelectedPosition());
+            int position = mBinding.recycler.getSelectedPosition();
+            if (position < 0 || position >= mPageAdapter.getCount()) return;
+            mBinding.pager.setCurrentItem(position);
         }
     };
 
@@ -237,31 +279,49 @@ public class CollectActivity extends BaseActivity {
 
     @Override
     public void onBackPressed() {
-        super.onBackPressed();
         stop();
+        super.onBackPressed();
     }
 
     @Override
     protected void onDestroy() {
+        App.removeCallbacks(mRunnable);
         super.onDestroy();
         stop();
     }
 
     class PageAdapter extends FragmentStatePagerAdapter {
 
+        private final List<String> mKeys = new ArrayList<>();
+
         public PageAdapter(@NonNull FragmentManager fm) {
             super(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT);
+        }
+
+        public void submit(List<String> keys) {
+            if (mKeys.equals(keys)) return;
+            mKeys.clear();
+            mKeys.addAll(keys);
+            notifyDataSetChanged();
         }
 
         @NonNull
         @Override
         public Fragment getItem(int position) {
-            return CollectFragment.newInstance(getKeyword(), ((Collect) mAdapter.get(position)).getSite().getKey());
+            return CollectFragment.newInstance(getKeyword(), mKeys.get(position));
+        }
+
+        @Override
+        public int getItemPosition(@NonNull Object object) {
+            if (!(object instanceof CollectFragment)) return POSITION_NONE;
+            String key = ((CollectFragment) object).getSiteKey();
+            int index = mKeys.indexOf(key);
+            return index == -1 ? POSITION_NONE : index;
         }
 
         @Override
         public int getCount() {
-            return mAdapter.size();
+            return mKeys.size();
         }
     }
 }

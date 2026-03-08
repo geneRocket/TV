@@ -47,7 +47,7 @@ public class ButtonsDialog {
         binding.recycler.setAdapter(adapter);
         binding.recycler.setHasFixedSize(true);
         binding.recycler.setItemAnimator(null);
-        binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
+        if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
         binding.recycler.setLayoutManager(new GridLayoutManager(dialog.getContext(), 1));
         binding.recycler.post(() -> binding.recycler.scrollToPosition(0));
 

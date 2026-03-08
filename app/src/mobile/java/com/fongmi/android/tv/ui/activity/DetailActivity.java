@@ -80,8 +80,12 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
         return getIntent().getStringExtra("id");
     }
 
+    private int getSiteCid() {
+        return VodConfig.siteCid(getKey(), VodConfig.getCid());
+    }
+
     private String getHistoryKey() {
-        return getKey().concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + VodConfig.getCid();
+        return VodConfig.rawSiteKey(getKey()).concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + getSiteCid();
     }
 
     private Site getSite() {
@@ -188,7 +192,7 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     private History createHistory(Vod item) {
         History history = new History();
         history.setKey(getHistoryKey());
-        history.setCid(VodConfig.getCid());
+        history.setCid(getSiteCid());
         history.setVodPic(item.getVodPic());
         history.setVodName(item.getVodName());
         history.findEpisode(item.getVodFlags());

@@ -75,7 +75,11 @@ public class RecordAdapter extends RecyclerView.Adapter<RecordAdapter.ViewHolder
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         String text = mItems.get(position);
         holder.binding.text.setText(text);
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(text));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
     }
 
     class ViewHolder extends RecyclerView.ViewHolder implements View.OnLongClickListener {
@@ -90,8 +94,10 @@ public class RecordAdapter extends RecyclerView.Adapter<RecordAdapter.ViewHolder
 
         @Override
         public boolean onLongClick(View v) {
-            mItems.remove(getLayoutPosition());
-            notifyItemRemoved(getLayoutPosition());
+            int index = getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return false;
+            mItems.remove(index);
+            notifyItemRemoved(index);
             mListener.onDataChanged(getItemCount());
             Setting.putKeyword(App.gson().toJson(mItems));
             return true;

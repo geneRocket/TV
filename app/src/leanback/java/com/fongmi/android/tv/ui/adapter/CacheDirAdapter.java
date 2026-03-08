@@ -19,6 +19,7 @@ public class CacheDirAdapter extends RecyclerView.Adapter<CacheDirAdapter.ViewHo
     public CacheDirAdapter(OnClickListener listener, List<String> items) {
         this.mListener = listener;
         this.mItems = items;
+        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -30,6 +31,11 @@ public class CacheDirAdapter extends RecyclerView.Adapter<CacheDirAdapter.ViewHo
     @Override
     public int getItemCount() {
         return mItems.size();
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).hashCode();
     }
 
     @NonNull
@@ -45,7 +51,11 @@ public class CacheDirAdapter extends RecyclerView.Adapter<CacheDirAdapter.ViewHo
         holder.binding.text.setText(item);
         holder.binding.text.setSelected(selected);
         holder.binding.text.setActivated(selected);
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

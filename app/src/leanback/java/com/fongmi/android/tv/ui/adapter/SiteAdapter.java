@@ -28,6 +28,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         this.mListener = listener;
         this.mItems = VodConfig.get().getSites();
         this.batchVersion = new AtomicInteger();
+        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -36,8 +37,9 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     }
 
     public void setType(int type) {
+        if (this.type == type) return;
         this.type = type;
-        notifyDataSetChanged();
+        notifyItemRangeChanged(0, getItemCount());
     }
 
     public void selectAll() {
@@ -51,6 +53,11 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     @Override
     public int getItemCount() {
         return mItems.size();
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).getKey().hashCode();
     }
 
     @NonNull
@@ -67,8 +74,8 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         holder.binding.text.setSelected(item.isActivated());
         holder.binding.text.setActivated(item.isActivated());
         holder.binding.check.setVisibility(type == 0 ? View.GONE : View.VISIBLE);
-        holder.binding.getRoot().setOnLongClickListener(v -> setLongListener(item));
-        holder.binding.getRoot().setOnClickListener(v -> setListener(item, position));
+        holder.binding.getRoot().setOnLongClickListener(v -> setLongListener(holder));
+        holder.binding.getRoot().setOnClickListener(v -> setListener(holder));
         holder.binding.text.setGravity(Setting.getSiteMode() == 0 ? Gravity.CENTER : Gravity.START);
     }
 
@@ -78,14 +85,20 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         return false;
     }
 
-    private void setListener(Site item, int position) {
+    private void setListener(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return;
+        Site item = mItems.get(position);
         if (type == 0) mListener.onItemClick(item);
         if (type == 1) item.setSearchable(!item.isSearchable()).save();
         if (type == 2) item.setChangeable(!item.isChangeable()).save();
         if (type != 0) notifyItemChanged(position);
     }
 
-    private boolean setLongListener(Site item) {
+    private boolean setLongListener(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return false;
+        Site item = mItems.get(position);
         if (type == 1) setEnable(!item.isSearchable());
         if (type == 2) setEnable(!item.isChangeable());
         return true;

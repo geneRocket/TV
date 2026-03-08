@@ -73,7 +73,11 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
         Collect item = mItems.get(position);
         holder.binding.text.setActivated(item.isActivated());
         holder.binding.text.setText(item.getSite().getName());
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(position, item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(index, mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

@@ -99,6 +99,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
         this.binding.array.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (position < 0) return;
                 if (mEpisodeAdapter.size() > getGroupSize()) setEpisodeSelectedPosition(position * getGroupSize());
             }
         });

@@ -90,7 +90,11 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.ViewHolder> 
         Group item = mItems.get(position);
         holder.binding.name.setText(item.getName());
         holder.binding.getRoot().setSelected(item.isSelected());
-        holder.binding.getRoot().setOnClickListener(view -> mListener.onItemClick(item));
+        holder.binding.getRoot().setOnClickListener(view -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

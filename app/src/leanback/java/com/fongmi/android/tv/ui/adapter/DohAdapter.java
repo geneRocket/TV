@@ -21,6 +21,7 @@ public class DohAdapter extends RecyclerView.Adapter<DohAdapter.ViewHolder> {
     public DohAdapter(OnClickListener listener) {
         this.mItems = VodConfig.get().getDoh();
         this.mListener = listener;
+        setHasStableIds(true);
     }
 
     public void setSelect(int select) {
@@ -41,6 +42,11 @@ public class DohAdapter extends RecyclerView.Adapter<DohAdapter.ViewHolder> {
         return mItems.size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).getName().hashCode();
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -52,7 +58,11 @@ public class DohAdapter extends RecyclerView.Adapter<DohAdapter.ViewHolder> {
         Doh item = mItems.get(position);
         holder.binding.text.setText(item.getName());
         holder.binding.text.setActivated(select == position);
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

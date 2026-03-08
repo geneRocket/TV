@@ -37,6 +37,13 @@ public class LiveParser {
         return "";
     }
 
+    private static String extractValue(String line, String token) {
+        if (line == null || token == null) return "";
+        int index = line.toLowerCase().indexOf(token.toLowerCase());
+        if (index < 0) return "";
+        return line.substring(index + token.length()).trim().replace("\"", "");
+    }
+
     public static void start(Live live) throws Exception {
         if (live.getGroups().size() > 0) return;
         if (live.getType() == 0) text(live, getText(live));
@@ -186,8 +193,8 @@ public class LiveParser {
 
         private void ua(String line) {
             try {
-                if (line.contains("user-agent=")) ua = line.split("(?i)user-agent=")[1].trim().replace("\"", "");
-                if (line.contains("ua=")) ua = line.split("ua=")[1].trim().replace("\"", "");
+                if (line.toLowerCase().contains("user-agent=")) ua = extractValue(line, "user-agent=");
+                if (line.contains("ua=")) ua = extractValue(line, "ua=");
             } catch (Exception e) {
                 ua = null;
             }
@@ -195,7 +202,7 @@ public class LiveParser {
 
         private void referer(String line) {
             try {
-                referer = line.split("(?i)referer=")[1].trim().replace("\"", "");
+                referer = extractValue(line, "referer=");
             } catch (Exception e) {
                 referer = null;
             }
@@ -203,7 +210,7 @@ public class LiveParser {
 
         private void parse(String line) {
             try {
-                parse = Integer.parseInt(line.split("parse=")[1].trim());
+                parse = Integer.parseInt(extractValue(line, "parse="));
             } catch (Exception e) {
                 parse = null;
             }
@@ -211,7 +218,7 @@ public class LiveParser {
 
         private void click(String line) {
             try {
-                click = line.split("click=")[1].trim();
+                click = extractValue(line, "click=");
             } catch (Exception e) {
                 click = null;
             }
@@ -219,8 +226,8 @@ public class LiveParser {
 
         private void format(String line) {
             try {
-                if (line.startsWith("format=")) format = line.split("format=")[1].trim();
-                if (line.contains("manifest_type=")) format = line.split("manifest_type=")[1].trim();
+                if (line.startsWith("format=")) format = extractValue(line, "format=");
+                if (line.contains("manifest_type=")) format = extractValue(line, "manifest_type=");
                 if ("mpd".equals(format) || "dash".equals(format)) format = MimeTypes.APPLICATION_MPD;
                 if ("hls".equals(format)) format = MimeTypes.APPLICATION_M3U8;
             } catch (Exception e) {
@@ -230,7 +237,7 @@ public class LiveParser {
 
         private void origin(String line) {
             try {
-                origin = line.split("(?i)origin=")[1].trim();
+                origin = extractValue(line, "origin=");
             } catch (Exception e) {
                 origin = null;
             }
@@ -238,7 +245,7 @@ public class LiveParser {
 
         private void key(String line) {
             try {
-                key = line.split("license_key=")[1].trim();
+                key = extractValue(line, "license_key=");
                 if (!key.startsWith("http")) convert();
             } catch (Exception e) {
                 key = null;
@@ -247,7 +254,7 @@ public class LiveParser {
 
         private void type(String line) {
             try {
-                type = line.split("license_type=")[1].trim();
+                type = extractValue(line, "license_type=");
             } catch (Exception e) {
                 type = null;
             }
@@ -255,8 +262,8 @@ public class LiveParser {
 
         private void header(String line) {
             try {
-                if (line.contains("#EXTHTTP:")) header = Json.toMap(Json.parse(line.split("#EXTHTTP:")[1].trim()));
-                if (line.contains("header=")) header = Json.toMap(Json.parse(line.split("header=")[1].trim()));
+                if (line.contains("#EXTHTTP:")) header = Json.toMap(Json.parse(extractValue(line, "#EXTHTTP:")));
+                if (line.contains("header=")) header = Json.toMap(Json.parse(extractValue(line, "header=")));
             } catch (Exception e) {
                 header = null;
             }
@@ -264,7 +271,7 @@ public class LiveParser {
 
         private void headers(String line) {
             try {
-                headers(line.split("headers=")[1].trim().split("&"));
+                headers(extractValue(line, "headers=").split("&"));
             } catch (Exception ignored) {
             }
         }
@@ -272,8 +279,12 @@ public class LiveParser {
         private void headers(String[] params) {
             if (header == null) header = new HashMap<>();
             for (String param : params) {
-                String[] a = param.split("=");
-                header.put(a[0].trim(), a[1].trim().replace("\"", ""));
+                int index = param.indexOf('=');
+                if (index <= 0 || index >= param.length() - 1) continue;
+                String key = param.substring(0, index).trim();
+                String value = param.substring(index + 1).trim().replace("\"", "");
+                if (key.isEmpty()) continue;
+                header.put(key, value);
             }
         }
 

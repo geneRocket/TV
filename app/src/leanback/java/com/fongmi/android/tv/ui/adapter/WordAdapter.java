@@ -22,6 +22,7 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
     public WordAdapter(OnClickListener listener) {
         this.mItems = new ArrayList<>();
         this.mListener = listener;
+        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -68,6 +69,11 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
         return mItems.size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).hashCode();
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -91,7 +97,9 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
 
         @Override
         public void onClick(View view) {
-            mListener.onItemClick(mItems.get(getLayoutPosition()));
+            int position = getBindingAdapterPosition();
+            if (position == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(position));
         }
     }
 }

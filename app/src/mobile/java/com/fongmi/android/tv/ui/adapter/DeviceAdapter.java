@@ -73,8 +73,15 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
         holder.binding.name.setText(item.getName());
         holder.binding.host.setText(item.getHost());
         holder.binding.type.setImageResource(getIcon(item));
-        holder.binding.getRoot().setOnClickListener(v -> mListener.onItemClick(item));
-        holder.binding.getRoot().setOnLongClickListener(v -> mListener.onLongClick(item));
+        holder.binding.getRoot().setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
+        holder.binding.getRoot().setOnLongClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            return index != RecyclerView.NO_POSITION && mListener.onLongClick(mItems.get(index));
+        });
     }
 
     private int getIcon(Device item) {

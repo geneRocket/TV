@@ -28,6 +28,7 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     public ConfigAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mSelected = new LinkedHashSet<>();
+        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -56,9 +57,11 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     }
 
     public void toggle(Config item) {
+        int index = mItems == null ? -1 : mItems.indexOf(item);
+        if (index == -1) return;
         if (mSelected.contains(item)) mSelected.remove(item);
         else mSelected.add(item);
-        notifyDataSetChanged();
+        notifyItemChanged(index);
     }
 
     public List<Config> getSelected() {
@@ -78,16 +81,23 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     }
 
     public int remove(Config item) {
+        int index = mItems == null ? -1 : mItems.indexOf(item);
         item.delete();
         mSelected.remove(item);
         mItems.remove(item);
-        notifyDataSetChanged();
+        if (index >= 0) notifyItemRemoved(index);
+        else notifyDataSetChanged();
         return getItemCount();
     }
 
     @Override
     public int getItemCount() {
         return mItems == null ? 0 : mItems.size();
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return mItems.get(position).getId();
     }
 
     @NonNull
@@ -103,8 +113,16 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
         String text = mMultiSelect ? (selected ? "\u2713 " : "") + item.getDesc() : item.getDesc();
         holder.binding.text.setText(text);
         holder.binding.text.setActivated(selected);
-        holder.binding.text.setOnClickListener(v -> mListener.onTextClick(item));
-        holder.binding.delete.setOnClickListener(v -> mListener.onDeleteClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onTextClick(mItems.get(index));
+        });
+        holder.binding.delete.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onDeleteClick(mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

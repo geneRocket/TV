@@ -91,7 +91,11 @@ public class ParseAdapter extends RecyclerView.Adapter<ParseAdapter.ViewHolder> 
         void initView(TextView view, Parse item) {
             view.setText(item.getName());
             view.setActivated(item.isActivated());
-            view.setOnClickListener(v -> mListener.onItemClick(item));
+            view.setOnClickListener(v -> {
+                int index = getBindingAdapterPosition();
+                if (index == RecyclerView.NO_POSITION) return;
+                mListener.onItemClick(mItems.get(index));
+            });
         }
     }
 }

@@ -73,8 +73,11 @@ public class Result implements Parcelable {
     private String click;
     @SerializedName("js")
     private String js;
+    private String keyword;
     @SerializedName("key")
     private String key;
+    private String requestTypeId;
+    private String requestPage;
     @SerializedName("page")
     private Integer page;
     @SerializedName("pagecount")
@@ -269,12 +272,36 @@ public class Result implements Parcelable {
         this.js = js;
     }
 
+    public String getKeyword() {
+        return TextUtils.isEmpty(keyword) ? "" : keyword;
+    }
+
+    public void setKeyword(String keyword) {
+        this.keyword = keyword;
+    }
+
     public String getKey() {
         return TextUtils.isEmpty(key) ? "" : key;
     }
 
     public void setKey(String key) {
         this.key = key;
+    }
+
+    public String getRequestTypeId() {
+        return TextUtils.isEmpty(requestTypeId) ? "" : requestTypeId;
+    }
+
+    public void setRequestTypeId(String requestTypeId) {
+        this.requestTypeId = requestTypeId;
+    }
+
+    public String getRequestPage() {
+        return TextUtils.isEmpty(requestPage) ? "" : requestPage;
+    }
+
+    public void setRequestPage(String requestPage) {
+        this.requestPage = requestPage;
     }
 
     public Integer getPageCount() {

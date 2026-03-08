@@ -92,12 +92,16 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         holder.binding.site.setText(item.getSiteName());
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
         ImgUtil.loadVod(item.getVodName(), item.getVodPic(), holder.binding.image);
-        setClickListener(holder.binding.getRoot(), item);
+        setClickListener(holder);
     }
 
-    private void setClickListener(View root, Keep item) {
+    private void setClickListener(@NonNull ViewHolder holder) {
+        View root = holder.binding.getRoot();
         root.setOnLongClickListener(view -> mListener.onLongClick());
         root.setOnClickListener(view -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            Keep item = mItems.get(index);
             if (isDelete()) mListener.onItemDelete(item);
             else mListener.onItemClick(item);
         });

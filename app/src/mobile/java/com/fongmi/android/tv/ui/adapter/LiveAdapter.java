@@ -62,11 +62,29 @@ public class LiveAdapter extends RecyclerView.Adapter<LiveAdapter.ViewHolder> {
         holder.binding.pass.setImageResource(item.getPassIcon());
         holder.binding.boot.setVisibility(action ? View.VISIBLE : View.GONE);
         holder.binding.pass.setVisibility(action ? View.VISIBLE : View.GONE);
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(item));
-        holder.binding.boot.setOnClickListener(v -> mListener.onBootClick(position, item));
-        holder.binding.pass.setOnClickListener(v -> mListener.onPassClick(position, item));
-        holder.binding.boot.setOnLongClickListener(v -> mListener.onBootLongClick(item));
-        holder.binding.pass.setOnLongClickListener(v -> mListener.onPassLongClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
+        holder.binding.boot.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onBootClick(index, mItems.get(index));
+        });
+        holder.binding.pass.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onPassClick(index, mItems.get(index));
+        });
+        holder.binding.boot.setOnLongClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            return index != RecyclerView.NO_POSITION && mListener.onBootLongClick(mItems.get(index));
+        });
+        holder.binding.pass.setOnLongClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            return index != RecyclerView.NO_POSITION && mListener.onPassLongClick(mItems.get(index));
+        });
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

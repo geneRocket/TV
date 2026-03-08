@@ -52,7 +52,12 @@ public abstract class AppDatabase extends RoomDatabase {
     }
 
     public static void reset() {
+        AppDatabase database = instance;
+        if (database != null && database.isOpen()) database.close();
         instance = null;
+        Config.clearCache();
+        History.clearCache();
+        Keep.clearCache();
     }
 
     public static void backup() {
@@ -81,6 +86,7 @@ public abstract class AppDatabase extends RoomDatabase {
         App.execute(() -> {
             File restore = Path.restore();
             if (!restore.exists()) return;
+            reset();
             FileUtil.extractZip(file, restore);
             File db = new File(restore, NAME);
             File wal = new File(restore, NAME + "-wal");

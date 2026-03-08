@@ -28,6 +28,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     public HistoryAdapter(OnClickListener listener) {
         this.mItems = new ArrayList<>();
         this.mListener = listener;
+        setHasStableIds(true);
         setLayoutSize();
     }
 
@@ -57,6 +58,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     }
 
     public void addAll(List<History> items) {
+        if (mItems.equals(items)) return;
         mItems.clear();
         mItems.addAll(items);
         notifyDataSetChanged();
@@ -66,7 +68,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         mItems.clear();
         setDelete(false);
         notifyDataSetChanged();
-        History.delete(VodConfig.getCid());
     }
 
     public int delete(History item) {
@@ -82,6 +83,12 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         return mItems.size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        History item = mItems.get(position);
+        return (item.getCid() + "@" + item.getKey()).hashCode();
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -95,7 +102,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         History item = mItems.get(position);
         setFocusListener(holder.binding);
-        setClickListener(holder.itemView, item);
+        setClickListener(holder);
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.site.setVisibility(item.getSiteVisible());
@@ -112,9 +119,13 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         });
     }
 
-    private void setClickListener(View root, History item) {
+    private void setClickListener(@NonNull ViewHolder holder) {
+        View root = holder.itemView;
         root.setOnLongClickListener(view -> mListener.onLongClick());
         root.setOnClickListener(view -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            History item = mItems.get(index);
             if (isDelete()) mListener.onItemDelete(item);
             else mListener.onItemClick(item);
         });

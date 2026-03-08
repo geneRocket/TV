@@ -30,6 +30,11 @@ import jahirfiquitiva.libs.textdrawable.TextDrawable;
 
 public class ImgUtil {
 
+    private static final String TAG_HEADERS = "@Headers=";
+    private static final String TAG_COOKIE = "@Cookie=";
+    private static final String TAG_REFERER = "@Referer=";
+    private static final String TAG_USER_AGENT = "@User-Agent=";
+
     private static ObjectKey getSignature(String url) {
         return new ObjectKey(url + "_" + Setting.getQuality());
     }
@@ -60,7 +65,7 @@ public class ImgUtil {
 
     public static void loadVod(String text, String url, ImageView view) {
         view.setScaleType(ImageView.ScaleType.CENTER);
-        if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).placeholder(R.drawable.ic_img_loading).listener(getListener(view)).into(view);
+        if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).placeholder(R.drawable.ic_img_loading).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view)).into(view);
         else if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), true));
         else view.setImageResource(R.drawable.ic_img_error);
     }
@@ -78,16 +83,32 @@ public class ImgUtil {
     }
 
     public static Object getUrl(String url) {
-        String param = null;
         url = UrlUtil.convert(url);
         if (url.startsWith("data:")) return url;
         LazyHeaders.Builder builder = new LazyHeaders.Builder();
-        if (url.contains("@Headers=")) addHeader(builder, param = url.split("@Headers=")[1].split("@")[0]);
-        if (url.contains("@Cookie=")) builder.addHeader(HttpHeaders.COOKIE, param = url.split("@Cookie=")[1].split("@")[0]);
-        if (url.contains("@Referer=")) builder.addHeader(HttpHeaders.REFERER, param = url.split("@Referer=")[1].split("@")[0]);
-        if (url.contains("@User-Agent=")) builder.addHeader(HttpHeaders.USER_AGENT, param = url.split("@User-Agent=")[1].split("@")[0]);
-        url = param == null ? url : url.split("@")[0];
+        String headers = getParam(url, TAG_HEADERS);
+        String cookie = getParam(url, TAG_COOKIE);
+        String referer = getParam(url, TAG_REFERER);
+        String userAgent = getParam(url, TAG_USER_AGENT);
+        if (!TextUtils.isEmpty(headers)) addHeader(builder, headers);
+        if (!TextUtils.isEmpty(cookie)) builder.addHeader(HttpHeaders.COOKIE, cookie);
+        if (!TextUtils.isEmpty(referer)) builder.addHeader(HttpHeaders.REFERER, referer);
+        if (!TextUtils.isEmpty(userAgent)) builder.addHeader(HttpHeaders.USER_AGENT, userAgent);
+        url = stripParam(url);
         return TextUtils.isEmpty(url) ? null : new GlideUrl(url, builder.build());
+    }
+
+    private static String getParam(String url, String tag) {
+        int start = url.indexOf(tag);
+        if (start < 0) return "";
+        start += tag.length();
+        int end = url.indexOf("@", start);
+        return (end < 0 ? url.substring(start) : url.substring(start, end)).trim();
+    }
+
+    private static String stripParam(String url) {
+        int index = url.indexOf("@");
+        return index < 0 ? url : url.substring(0, index);
     }
 
     private static void addHeader(LazyHeaders.Builder builder, String header) {

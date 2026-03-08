@@ -156,7 +156,9 @@ public class JarLoader {
             parseJar(jaKey, jar);
             DexClassLoader loader = loaders.get(jaKey);
             if (loader == null) return new SpiderNull();
-            Spider spider = (Spider) loader.loadClass("com.github.catvod.spider." + api.split("csp_")[1]).newInstance();
+            String spiderName = getSpiderName(api);
+            if (spiderName.isEmpty()) return new SpiderNull();
+            Spider spider = (Spider) loader.loadClass("com.github.catvod.spider." + spiderName).newInstance();
             spider.siteKey = key;
             spider.init(App.get(), ext);
             spiders.put(spKey, spider);
@@ -165,6 +167,12 @@ public class JarLoader {
             e.printStackTrace();
             return new SpiderNull();
         }
+    }
+
+    private String getSpiderName(String api) {
+        int index = api.indexOf("csp_");
+        if (index < 0) return "";
+        return api.substring(index + 4).trim();
     }
 
     public JSONObject jsonExt(String key, LinkedHashMap<String, String> jxs, String url) throws Throwable {

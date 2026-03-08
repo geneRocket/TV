@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import okhttp3.ResponseBody;
 
@@ -44,6 +45,7 @@ public class ParseJob implements ParseCallback {
     private ParseCallback callback;
     private Parse parse;
     private volatile boolean stopped;
+    private final AtomicBoolean completed;
 
     public static ParseJob create(ParseCallback callback) {
         return new ParseJob(callback);
@@ -55,10 +57,12 @@ public class ParseJob implements ParseCallback {
         this.webViews = new ArrayList<>();
         this.parseTasks = new CopyOnWriteArrayList<>();
         this.callback = callback;
+        this.completed = new AtomicBoolean(false);
     }
 
     public ParseJob start(Result result, boolean useParse) {
         stopped = false;
+        completed.set(false);
         setParse(result, useParse);
         execute(result);
         return this;
@@ -233,6 +237,7 @@ public class ParseJob implements ParseCallback {
 
     @Override
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
+        if (!completed.compareAndSet(false, true)) return;
         App.post(() -> {
             if (stopped) return;
             if (callback != null) callback.onParseSuccess(headers, url, from);
@@ -242,6 +247,7 @@ public class ParseJob implements ParseCallback {
 
     @Override
     public void onParseError() {
+        if (!completed.compareAndSet(false, true)) return;
         App.post(() -> {
             if (stopped) return;
             if (callback != null) callback.onParseError();
@@ -256,6 +262,7 @@ public class ParseJob implements ParseCallback {
 
     public void stop() {
         stopped = true;
+        completed.set(true);
         if (executor != null) executor.shutdownNow();
         for (Future<?> task : parseTasks) task.cancel(true);
         parseTasks.clear();

@@ -6,6 +6,7 @@ import android.content.Intent;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
@@ -21,10 +22,14 @@ import com.fongmi.android.tv.utils.Notify;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import java.util.List;
+
 public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickListener {
 
     private ActivityKeepBinding mBinding;
     private KeepAdapter mAdapter;
+    private int mKeepRequestId;
+    private int mOpenRequestId;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, KeepActivity.class));
@@ -50,13 +55,22 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     }
 
     private void getKeep() {
-        mAdapter.addAll(Keep.getVod());
+        final int requestId = ++mKeepRequestId;
+        mOpenRequestId++;
+        App.execute(() -> {
+            List<Keep> items = Keep.getVod();
+            App.post(() -> {
+                if (isFinishing() || isDestroyed() || requestId != mKeepRequestId) return;
+                mAdapter.addAll(items);
+            });
+        });
     }
 
-    private void loadConfig(Config config, Keep item) {
+    private void loadConfig(Config config, Keep item, int requestId) {
         VodConfig.load(config, new Callback() {
             @Override
             public void success() {
+                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
                 VideoActivity.start(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
                 RefreshEvent.history();
                 RefreshEvent.config();
@@ -65,6 +79,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
             @Override
             public void error(String msg) {
+                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
                 Notify.show(msg);
             }
         });
@@ -77,14 +92,26 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     @Override
     public void onItemClick(Keep item) {
-        Config config = Config.find(item.getCid());
-        if (config == null) CollectActivity.start(this, item.getVodName());
-        else if (item.getCid() != VodConfig.getCid()) loadConfig(config, item);
-        else VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        mOpenRequestId++;
+        if (VodConfig.get().hasSite(item.getSiteKey())) {
+            VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+            return;
+        }
+        final int requestId = mOpenRequestId;
+        App.execute(() -> {
+            Config config = Config.find(item.getCid());
+            App.post(() -> {
+                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
+                if (config == null) CollectActivity.start(this, item.getVodName());
+                else loadConfig(config, item, requestId);
+            });
+        });
     }
 
     @Override
     public void onItemDelete(Keep item) {
+        mKeepRequestId++;
+        mOpenRequestId++;
         mAdapter.delete(item.delete());
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
     }

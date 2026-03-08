@@ -16,7 +16,10 @@ public class Push implements Source.Extractor {
 
     @Override
     public String fetch(String url) throws Exception {
-        if (App.activity() != null) VideoActivity.start(App.activity(), url.substring(7));
+        if (App.activity() != null) {
+            String pushUrl = url.startsWith("push://") ? url.substring("push://".length()) : url.startsWith("push:") ? url.substring("push:".length()) : url;
+            VideoActivity.start(App.activity(), pushUrl);
+        }
         SystemClock.sleep(500);
         return "";
     }

@@ -39,7 +39,8 @@ public class Button {
         List<Button> buttonList = new ArrayList<>();
         Map<Integer, Button> allButtons = getMap(all());
         for(int i=0; i<buttonsArr.length; i++) {
-            int id = Integer.parseInt(buttonsArr[i]);
+            Integer id = parseId(buttonsArr[i]);
+            if (id == null) continue;
             if (allButtons.containsKey(id)) buttonList.add(allButtons.get(id));
         }
         return buttonList;
@@ -66,10 +67,19 @@ public class Button {
         List<Button> buttonList = new ArrayList<>();
         Map<Integer, Button> allButtons = getMap(all());
         for(int i=0; i<buttonsArr.length; i++) {
-            int id = Integer.parseInt(buttonsArr[i]);
+            Integer id = parseId(buttonsArr[i]);
+            if (id == null) continue;
             if (allButtons.containsKey(id)) buttonList.add(allButtons.get(id));
         }
         return buttonList;
+    }
+
+    private static Integer parseId(String value) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public static Map<Integer, Button> getButtonsMap() {

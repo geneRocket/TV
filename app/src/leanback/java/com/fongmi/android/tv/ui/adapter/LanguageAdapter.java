@@ -40,7 +40,11 @@ public class LanguageAdapter extends RecyclerView.Adapter<LanguageAdapter.ViewHo
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         holder.binding.text.setText(mItems.get(position));
-        holder.binding.text.setOnClickListener(v -> mListener.onItemClick(position));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(index);
+        });
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

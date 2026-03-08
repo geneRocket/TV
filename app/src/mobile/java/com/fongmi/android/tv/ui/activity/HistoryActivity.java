@@ -8,14 +8,19 @@ import android.view.View;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.databinding.ActivityHistoryBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.adapter.HistoryAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.SyncDialog;
+import com.fongmi.android.tv.utils.Notify;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -25,6 +30,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     private ActivityHistoryBinding mBinding;
     private HistoryAdapter mAdapter;
+    private int mOpenRequestId;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, HistoryActivity.class));
@@ -81,7 +87,38 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemClick(History item) {
-        VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        mOpenRequestId++;
+        if (VodConfig.get().hasSite(item.getSiteKey())) {
+            VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+            return;
+        }
+        final int requestId = mOpenRequestId;
+        App.execute(() -> {
+            Config config = Config.find(item.getCid());
+            App.post(() -> {
+                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
+                if (config == null) {
+                    CollectActivity.start(this, item.getVodName());
+                    return;
+                }
+                VodConfig.load(config, new Callback() {
+                    @Override
+                    public void success() {
+                        if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
+                        VideoActivity.start(HistoryActivity.this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+                        RefreshEvent.history();
+                        RefreshEvent.config();
+                        RefreshEvent.video();
+                    }
+
+                    @Override
+                    public void error(String msg) {
+                        if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
+                        Notify.show(msg);
+                    }
+                });
+            });
+        });
     }
 
     @Override

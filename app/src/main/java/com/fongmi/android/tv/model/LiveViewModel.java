@@ -30,6 +30,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LiveViewModel extends ViewModel {
 
@@ -52,6 +53,10 @@ public class LiveViewModel extends ViewModel {
     private ExecutorService executor2;
     private ExecutorService executor3;
     private ExecutorService executor4;
+    private final AtomicInteger liveSeq;
+    private final AtomicInteger epgSeq;
+    private final AtomicInteger urlSeq;
+    private final AtomicInteger xmlSeq;
 
     public LiveViewModel() {
         this.formatTime = new SimpleDateFormat("yyyy-MM-ddHH:mm", Locale.getDefault());
@@ -64,6 +69,10 @@ public class LiveViewModel extends ViewModel {
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
+        this.liveSeq = new AtomicInteger();
+        this.epgSeq = new AtomicInteger();
+        this.urlSeq = new AtomicInteger();
+        this.xmlSeq = new AtomicInteger();
     }
 
     public void getLive(Live item) {
@@ -133,44 +142,60 @@ public class LiveViewModel extends ViewModel {
             case LIVE:
                 if (executor1 != null) executor1.shutdownNow();
                 executor1 = Executors.newFixedThreadPool(2);
-                executor1.execute(runnable(type, callable, executor1));
+                executor1.execute(runnable(type, callable, executor1, liveSeq.incrementAndGet()));
                 break;
             case EPG:
                 if (executor2 != null) executor2.shutdownNow();
                 executor2 = Executors.newFixedThreadPool(2);
-                executor2.execute(runnable(type, callable, executor2));
+                executor2.execute(runnable(type, callable, executor2, epgSeq.incrementAndGet()));
                 break;
             case URL:
                 if (executor3 != null) executor3.shutdownNow();
                 executor3 = Executors.newFixedThreadPool(2);
-                executor3.execute(runnable(type, callable, executor3));
+                executor3.execute(runnable(type, callable, executor3, urlSeq.incrementAndGet()));
                 break;
             case XML:
                 if (executor4 != null) executor4.shutdownNow();
                 executor4 = Executors.newFixedThreadPool(2);
-                executor4.execute(runnable(type, callable, executor4));
+                executor4.execute(runnable(type, callable, executor4, xmlSeq.incrementAndGet()));
                 break;
         }
     }
 
-    private Runnable runnable(int type, Callable<?> callable, ExecutorService executor) {
+    private Runnable runnable(int type, Callable<?> callable, ExecutorService executor, int seq) {
         return () -> {
             try {
                 if (Thread.interrupted()) return;
-                if (type == EPG) epg.postValue((Epg) executor.submit(callable).get(Constant.TIMEOUT_EPG, TimeUnit.MILLISECONDS));
-                if (type == LIVE) live.postValue((Live) executor.submit(callable).get(Constant.TIMEOUT_LIVE, TimeUnit.MILLISECONDS));
-                if (type == XML) xml.postValue((Boolean) executor.submit(callable).get(Constant.TIMEOUT_XML, TimeUnit.MILLISECONDS));
-                if (type == URL) url.postValue((Channel) executor.submit(callable).get(Constant.TIMEOUT_PARSE_LIVE, TimeUnit.MILLISECONDS));
+                if (type == EPG) postEpg((Epg) executor.submit(callable).get(Constant.TIMEOUT_EPG, TimeUnit.MILLISECONDS), seq);
+                if (type == LIVE) postLive((Live) executor.submit(callable).get(Constant.TIMEOUT_LIVE, TimeUnit.MILLISECONDS), seq);
+                if (type == XML) postXml((Boolean) executor.submit(callable).get(Constant.TIMEOUT_XML, TimeUnit.MILLISECONDS), seq);
+                if (type == URL) postUrl((Channel) executor.submit(callable).get(Constant.TIMEOUT_PARSE_LIVE, TimeUnit.MILLISECONDS), seq);
             } catch (Throwable e) {
                 if (e instanceof InterruptedException || Thread.interrupted()) return;
-                if (e.getCause() instanceof ExtractException) url.postValue(Channel.error(e.getCause().getMessage()));
-                else if (type == URL) url.postValue(new Channel());
-                if (type == LIVE) live.postValue(new Live());
-                if (type == EPG) epg.postValue(new Epg());
-                if (type == XML) xml.postValue(false);
+                if (e.getCause() instanceof ExtractException) postUrl(Channel.error(e.getCause().getMessage()), seq);
+                else if (type == URL) postUrl(new Channel(), seq);
+                if (type == LIVE) postLive(new Live(), seq);
+                if (type == EPG) postEpg(new Epg(), seq);
+                if (type == XML) postXml(false, seq);
                 e.printStackTrace();
             }
         };
+    }
+
+    private void postLive(Live value, int seq) {
+        if (seq == liveSeq.get()) live.postValue(value);
+    }
+
+    private void postEpg(Epg value, int seq) {
+        if (seq == epgSeq.get()) epg.postValue(value);
+    }
+
+    private void postUrl(Channel value, int seq) {
+        if (seq == urlSeq.get()) url.postValue(value);
+    }
+
+    private void postXml(Boolean value, int seq) {
+        if (seq == xmlSeq.get()) xml.postValue(value);
     }
 
     @Override

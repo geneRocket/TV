@@ -27,7 +27,11 @@ import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
 
 public class VodConfig {
 
@@ -42,6 +46,8 @@ public class VodConfig {
     private List<String> hosts;
     private List<String> ruleHosts;
     private List<String> loadUrls;
+    private Map<String, Site> siteMap;
+    private Map<String, Parse> parseMap;
     private boolean loadLive;
     private Config config;
     private Parse parse;
@@ -66,6 +72,35 @@ public class VodConfig {
 
     public static String getDesc() {
         return get().getConfig().getDesc();
+    }
+
+    public static String siteKey(int cid, String key) {
+        if (TextUtils.isEmpty(key) || "all".equals(key)) return key == null ? "" : key;
+        if (isScopedSiteKey(key)) return key;
+        cid = cid > 0 ? cid : getCid();
+        return cid + "@" + key;
+    }
+
+    public static String siteKey(String key) {
+        return siteKey(getCid(), key);
+    }
+
+    public static String rawSiteKey(String key) {
+        if (!isScopedSiteKey(key)) return key == null ? "" : key;
+        return key.substring(key.indexOf('@') + 1);
+    }
+
+    public static boolean isScopedSiteKey(String key) {
+        if (TextUtils.isEmpty(key)) return false;
+        int index = key.indexOf('@');
+        if (index <= 0) return false;
+        for (int i = 0; i < index; i++) if (!Character.isDigit(key.charAt(i))) return false;
+        return true;
+    }
+
+    public static int siteCid(String key, int fallbackCid) {
+        if (!isScopedSiteKey(key)) return fallbackCid;
+        return Integer.parseInt(key.substring(0, key.indexOf('@')));
     }
 
     public static int getHomeIndex() {
@@ -111,6 +146,8 @@ public class VodConfig {
         this.headers = new ArrayList<>();
         this.ruleHosts = new ArrayList<>();
         this.loadUrls = new ArrayList<>();
+        this.siteMap = new HashMap<>();
+        this.parseMap = new HashMap<>();
         this.sites = new ArrayList<>();
         this.flags = new ArrayList<>();
         this.parses = new ArrayList<>();
@@ -135,6 +172,8 @@ public class VodConfig {
         this.headers.clear();
         this.ruleHosts.clear();
         this.loadUrls.clear();
+        this.siteMap.clear();
+        this.parseMap.clear();
         this.sites.clear();
         this.flags.clear();
         this.parses.clear();
@@ -174,14 +213,19 @@ public class VodConfig {
 
     private void loadConfigs(List<Config> configs, Callback callback) {
         List<String> urls = new ArrayList<>();
+        Set<String> loaded = new LinkedHashSet<>();
         JsonObject merged = new JsonObject();
+        Config successConfig = null;
         Throwable error = null;
         int success = 0;
         for (Config item : configs) {
             try {
-                urls.add(item.getUrl());
-                JsonObject object = loadObject(item.getUrl(), 0);
-                mergeConfig(merged, object);
+                String url = item.getUrl();
+                if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
+                JsonObject object = loadObject(url, 0);
+                urls.add(url);
+                if (successConfig == null) successConfig = item;
+                mergeConfig(merged, object, item);
                 success++;
             } catch (Throwable e) {
                 error = e;
@@ -189,7 +233,10 @@ public class VodConfig {
             }
         }
         setLoadUrls(urls);
-        if (success > 0) parseConfig(merged, callback);
+        if (success > 0) {
+            if (successConfig != null) config(successConfig);
+            parseConfig(merged, callback);
+        }
         else if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
         else {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
@@ -212,9 +259,9 @@ public class VodConfig {
         return loadObject(items.get(0).getUrl(), depth + 1);
     }
 
-    private void mergeConfig(JsonObject target, JsonObject source) {
+    private void mergeConfig(JsonObject target, JsonObject source, Config config) {
         JsonObject root = source.has("video") ? source.getAsJsonObject("video") : source;
-        mergeSites(target, root);
+        mergeSites(target, root, config);
         appendArray(target, source, "lives");
         if (root != source) appendArray(target, root, "lives");
         appendArray(target, root, "parses");
@@ -231,7 +278,7 @@ public class VodConfig {
         copyIfEmpty(target, root, "spider");
     }
 
-    private void mergeSites(JsonObject target, JsonObject source) {
+    private void mergeSites(JsonObject target, JsonObject source, Config config) {
         String spider = Json.safeString(source, "spider");
         JsonArray sites = source.has("sites") ? source.getAsJsonArray("sites") : new JsonArray();
         if (!target.has("sites")) target.add("sites", new JsonArray());
@@ -240,7 +287,9 @@ public class VodConfig {
             JsonObject item = element.getAsJsonObject().deepCopy();
             String api = Json.safeString(item, "api");
             String jar = Json.safeString(item, "jar");
+            String key = Json.safeString(item, "key");
             if (TextUtils.isEmpty(jar) && api.startsWith("csp_")) item.addProperty("jar", spider);
+            item.addProperty("key", siteKey(config.getId(), key));
             targetSites.add(item);
         }
     }
@@ -316,12 +365,15 @@ public class VodConfig {
         String spider = Json.safeString(object, "spider");
         for (JsonElement element : Json.safeListElement(object, "sites")) {
             Site site = Site.objectFrom(element, spider);
-            if (sites.contains(site)) continue;
+            if (!site.isEmpty()) site.setKey(siteKey(config.getId(), site.getKey()));
+            if (siteMap.containsKey(site.getKey())) continue;
             site.setJar(parseJar(site, spider));
-            sites.add(site.trans().sync());
+            site = site.trans().sync();
+            sites.add(site);
+            siteMap.put(site.getKey(), site);
         }
         for (Site site : sites) {
-            if (site.getKey().equals(config.getHome())) {
+            if (site.getKey().equals(config.getHome()) || site.getKey().equals(siteKey(config.getId(), config.getHome()))) {
                 setHome(site);
             }
         }
@@ -367,12 +419,19 @@ public class VodConfig {
         for (JsonElement element : Json.safeListElement(object, "parses")) {
             Parse parse = Parse.objectFrom(element);
             if (parse.getName().equals(config.getParse()) && parse.getType() > 1) setParse(parse);
-            if (!parses.contains(parse)) parses.add(parse);
+            if (!parses.contains(parse)) {
+                parses.add(parse);
+                parseMap.put(parse.getName(), parse);
+            }
         }
     }
 
     private void initOther(JsonObject object) {
-        if (parses.size() > 0) parses.add(0, Parse.god());
+        if (parses.size() > 0) {
+            Parse god = Parse.god();
+            parses.add(0, god);
+            parseMap.put(god.getName(), god);
+        }
         if (home == null) setHome(sites.isEmpty() ? new Site() : sites.get(0));
         if (parse == null) setParse(parses.isEmpty() ? new Parse() : parses.get(0));
         setHeaders(Header.arrayFrom(object.get("headers")));
@@ -511,6 +570,10 @@ public class VodConfig {
         return config == null ? Config.vod() : config;
     }
 
+    public List<String> getLoadUrls() {
+        return loadUrls == null ? new ArrayList<>() : new ArrayList<>(loadUrls);
+    }
+
     public Parse getParse() {
         return parse == null ? new Parse() : parse;
     }
@@ -524,13 +587,23 @@ public class VodConfig {
     }
 
     public Parse getParse(String name) {
-        int index = getParses().indexOf(Parse.get(name));
-        return index == -1 ? null : getParses().get(index);
+        return TextUtils.isEmpty(name) ? null : parseMap.get(name);
     }
 
     public Site getSite(String key) {
-        int index = getSites().indexOf(Site.get(key));
-        return index == -1 ? new Site() : getSites().get(index);
+        if (TextUtils.isEmpty(key)) return new Site();
+        Site site = siteMap.get(key);
+        if (site == null && isScopedSiteKey(key)) site = siteMap.get(rawSiteKey(key));
+        if (site == null && !isScopedSiteKey(key)) site = siteMap.get(siteKey(key));
+        if (site == null && !isScopedSiteKey(key)) {
+            int cid = siteCid(key, getCid());
+            for (Site item : getSites()) if (item.getKey().equals(siteKey(cid, key))) return item;
+        }
+        return site == null ? new Site() : site;
+    }
+
+    public boolean hasSite(String key) {
+        return !getSite(key).isEmpty();
     }
 
     public void setParse(Parse parse) {
@@ -543,7 +616,7 @@ public class VodConfig {
     public void setHome(Site home) {
         this.home = home;
         this.home.setActivated(true);
-        config.home(home.getKey()).save();
+        config.home(rawSiteKey(home.getKey())).save();
         for (Site item : getSites()) item.setActivated(home);
     }
 

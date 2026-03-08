@@ -36,6 +36,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 
@@ -102,25 +103,58 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void categoryContent(String key, String tid, String page, boolean filter, HashMap<String, String> extend) {
-        execute(result, () -> {
-            Site site = VodConfig.get().getSite(key);
-            if (site.getType() == 3) {
-                Spider spider = site.recent().spider();
-                String categoryContent = spider.categoryContent(tid, page, filter, extend);
-                SpiderDebug.log(categoryContent);
-                return Result.fromJson(categoryContent);
-            } else {
-                ArrayMap<String, String> params = new ArrayMap<>();
-                if (site.getType() == 1 && !extend.isEmpty()) params.put("f", App.gson().toJson(extend));
-                if (site.getType() == 4) params.put("ext", Util.base64(App.gson().toJson(extend), Util.URL_SAFE));
-                params.put("ac", site.getType() == 0 ? "videolist" : "detail");
-                params.put("t", tid);
-                params.put("pg", page);
-                String categoryContent = call(site, params, true);
-                SpiderDebug.log(categoryContent);
-                return Result.fromType(site.getType(), categoryContent);
+        App.execute(() -> {
+            Future<Result> future = null;
+            HashMap<String, String> extendSnapshot = extend == null ? new HashMap<>() : new HashMap<>(extend);
+            try {
+                future = executor.submit(() -> {
+                    Site site = VodConfig.get().getSite(key);
+                    if (site.getType() == 3) {
+                        Spider spider = site.recent().spider();
+                        String categoryContent = spider.categoryContent(tid, page, filter, extendSnapshot);
+                        SpiderDebug.log(categoryContent);
+                        return Result.fromJson(categoryContent);
+                    } else {
+                        ArrayMap<String, String> params = new ArrayMap<>();
+                        if (site.getType() == 1 && !extendSnapshot.isEmpty()) params.put("f", App.gson().toJson(extendSnapshot));
+                        if (site.getType() == 4) params.put("ext", Util.base64(App.gson().toJson(extendSnapshot), Util.URL_SAFE));
+                        params.put("ac", site.getType() == 0 ? "videolist" : "detail");
+                        params.put("t", tid);
+                        params.put("pg", page);
+                        String categoryContent = call(site, params, true);
+                        SpiderDebug.log(categoryContent);
+                        return Result.fromType(site.getType(), categoryContent);
+                    }
+                });
+                result.postValue(withCategoryRequest(future.get(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS), key, tid, page));
+            } catch (RejectedExecutionException e) {
+                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
+            } catch (TimeoutException e) {
+                if (future != null) future.cancel(true);
+                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
+                e.printStackTrace();
+            } catch (ExtractException e) {
+                if (future != null) future.cancel(true);
+                result.postValue(withCategoryRequest(Result.error(e.getMessage()), key, tid, page));
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                if (future != null) future.cancel(true);
+                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
+            } catch (Exception e) {
+                if (future != null) future.cancel(true);
+                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
+                e.printStackTrace();
             }
         });
+    }
+
+    private Result withCategoryRequest(Result result, String key, String tid, String page) {
+        Result value = result == null ? Result.empty() : result;
+        value.setKey(key);
+        value.setRequestTypeId(tid);
+        value.setRequestPage(page);
+        return value;
     }
 
     public void detailContent(String key, String id) {
@@ -228,17 +262,20 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void searchContent(Site site, String keyword, boolean quick) throws Throwable {
+        String original = keyword == null ? "" : keyword.trim();
+        String query = Trans.t2s(keyword);
         if (site.getType() == 3) {
-            String searchContent = site.spider().searchContent(Trans.t2s(keyword), quick);
+            String searchContent = site.spider().searchContent(query, quick);
             SpiderDebug.log(site.getName() + "," + searchContent);
-            post(site, Result.fromJson(searchContent));
+            post(site, Result.fromJson(searchContent), original);
         } else {
             ArrayMap<String, String> params = new ArrayMap<>();
-            params.put("wd", Trans.t2s(keyword));
+            params.put("wd", query);
             params.put("quick", String.valueOf(quick));
             String searchContent = call(site, params, true);
             SpiderDebug.log(site.getName() + "," + searchContent);
-            post(site, fetchPic(site, Result.fromType(site.getType(), searchContent)));
+            Result result = Result.fromType(site.getType(), searchContent);
+            post(site, quick ? result : fetchPic(site, result), original);
         }
     }
 
@@ -308,8 +345,9 @@ public class SiteViewModel extends ViewModel {
         return result;
     }
 
-    private void post(Site site, Result result) {
+    private void post(Site site, Result result, String keyword) {
         if (result.getList().isEmpty()) return;
+        result.setKeyword(keyword);
         for (Vod vod : result.getList()) vod.setSite(site);
         this.search.postValue(result);
     }
@@ -321,11 +359,14 @@ public class SiteViewModel extends ViewModel {
                 future = executor.submit(callable);
                 Result data = future.get(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS);
                 result.postValue(data);
+            } catch (RejectedExecutionException e) {
+                result.postValue(Result.empty());
             } catch (TimeoutException e) {
                 if (future != null) future.cancel(true);
                 result.postValue(Result.empty());
                 e.printStackTrace();
             } catch (ExtractException e) {
+                if (future != null) future.cancel(true);
                 result.postValue(Result.error(e.getMessage()));
                 e.printStackTrace();
             } catch (InterruptedException e) {

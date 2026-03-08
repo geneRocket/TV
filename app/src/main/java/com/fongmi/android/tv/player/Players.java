@@ -292,6 +292,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void clear() {
         headers = null;
         format = null;
+        sub = null;
         subs = null;
         danmakus.clear();
         drm = null;

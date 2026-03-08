@@ -339,7 +339,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private void setPosition(int[] position) {
         if (position[0] == -1) return;
         int size = mGroupAdapter.getItemCount();
-        if (size == 1 || position[0] >= size) return;
+        if (size == 0 || position[0] >= size) return;
         mGroup = mGroupAdapter.get(position[0]);
         mGroup.setPosition(position[1]);
         onItemClick(mGroup);

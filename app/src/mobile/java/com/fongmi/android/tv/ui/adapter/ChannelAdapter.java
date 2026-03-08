@@ -91,8 +91,15 @@ public class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.ViewHold
         holder.binding.name.setText(item.getName());
         holder.binding.number.setText(item.getNumber());
         holder.binding.getRoot().setSelected(item.isSelected());
-        holder.binding.getRoot().setOnClickListener(view -> mListener.onItemClick(item));
-        holder.binding.getRoot().setOnLongClickListener(view -> mListener.onLongClick(item));
+        holder.binding.getRoot().setOnClickListener(view -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        });
+        holder.binding.getRoot().setOnLongClickListener(view -> {
+            int index = holder.getBindingAdapterPosition();
+            return index != RecyclerView.NO_POSITION && mListener.onLongClick(mItems.get(index));
+        });
         holder.binding.epg.setVisibility(item.getData().getList().isEmpty() || !item.isSelected() ? View.GONE : View.VISIBLE);
     }
 

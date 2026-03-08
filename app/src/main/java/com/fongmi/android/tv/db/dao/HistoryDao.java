@@ -28,6 +28,9 @@ public abstract class HistoryDao extends BaseDao<History> {
     @Query("DELETE FROM History WHERE cid = :cid")
     public abstract void delete(int cid);
 
+    @Query("DELETE FROM History WHERE cid IN (:cids)")
+    public abstract void delete(List<Integer> cids);
+
     @Query("DELETE FROM History")
     public abstract void delete();
 }

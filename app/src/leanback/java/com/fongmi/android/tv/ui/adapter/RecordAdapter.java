@@ -35,7 +35,8 @@ public class RecordAdapter extends RecyclerView.Adapter<RecordAdapter.ViewHolder
 
     private List<String> getItems() {
         if (Setting.getKeyword().isEmpty()) return new ArrayList<>();
-        return App.gson().fromJson(Setting.getKeyword(), new TypeToken<List<String>>() {}.getType());
+        List<String> items = App.gson().fromJson(Setting.getKeyword(), new TypeToken<List<String>>() {}.getType());
+        return items == null ? new ArrayList<>() : items;
     }
 
     private void checkToAdd(String item) {
@@ -89,7 +90,9 @@ public class RecordAdapter extends RecyclerView.Adapter<RecordAdapter.ViewHolder
 
         @Override
         public void onClick(View view) {
-            mListener.onItemClick(mItems.get(getLayoutPosition()));
+            int position = getBindingAdapterPosition();
+            if (position == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(position));
         }
 
         @Override

@@ -88,10 +88,18 @@ public class EpgData {
     }
 
     public String format(String group) {
-        String pattern = group.split("\\)")[1].split("\\}")[0];
+        String pattern = extractPattern(group);
+        if (pattern.isEmpty()) return "";
         if (group.contains("(b)")) return new SimpleDateFormat(pattern, Locale.getDefault()).format(getStartTime());
         if (group.contains("(e)")) return new SimpleDateFormat(pattern, Locale.getDefault()).format(getEndTime());
         return "";
+    }
+
+    private String extractPattern(String group) {
+        int start = group.indexOf(')');
+        int end = group.indexOf('}', start + 1);
+        if (start < 0 || end < 0 || end <= start + 1) return "";
+        return group.substring(start + 1, end);
     }
 
     public String format() {

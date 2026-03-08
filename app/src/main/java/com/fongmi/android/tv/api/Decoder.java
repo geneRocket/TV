@@ -23,8 +23,8 @@ public class Decoder {
     private static final Pattern JS_URI = Pattern.compile("\"(\\.|\\.\\.)/(.?|.+?)\\.js\\?(.?|.+?)\"");
 
     public static String getJson(String url) throws Exception {
-        String key = url.contains(";") ? url.split(";")[2] : "";
-        url = url.contains(";") ? url.split(";")[0] : url;
+        String key = getKey(url);
+        url = stripOptions(url);
         String data = getData(url);
         if (data.isEmpty()) throw new Exception();
         if (Json.valid(data)) return fix(url, data);
@@ -32,6 +32,18 @@ public class Decoder {
         if (data.startsWith("2423")) data = cbc(data);
         if (key.length() > 0) data = ecb(data, key);
         return fix(url, data);
+    }
+
+    private static String stripOptions(String url) {
+        if (url == null) return "";
+        int index = url.indexOf(';');
+        return index < 0 ? url : url.substring(0, index);
+    }
+
+    private static String getKey(String url) {
+        if (url == null) return "";
+        String[] parts = url.split(";");
+        return parts.length > 2 ? parts[2] : "";
     }
 
     private static String fix(String url, String data) {

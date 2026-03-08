@@ -28,6 +28,7 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     public ConfigAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mSelected = new LinkedHashSet<>();
+        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -45,7 +46,9 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     }
 
     public void setItems(List<Config> items) {
-        mItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
+        List<Config> newItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
+        if (newItems.equals(mItems) && mSelected.isEmpty()) return;
+        mItems = newItems;
         mSelected.clear();
         notifyDataSetChanged();
     }
@@ -74,15 +77,24 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     }
 
     public void select(List<String> urls) {
+        Set<Config> oldSelected = new LinkedHashSet<>(mSelected);
         mSelected.clear();
         if (mItems == null || urls == null || urls.isEmpty()) {
-            notifyDataSetChanged();
+            notifySelectionChanged(oldSelected);
             return;
         }
         Set<String> values = new HashSet<>();
         for (String url : urls) if (url != null && !url.trim().isEmpty()) values.add(url.trim());
         for (Config item : mItems) if (values.contains(item.getUrl())) mSelected.add(item);
-        notifyDataSetChanged();
+        notifySelectionChanged(oldSelected);
+    }
+
+    private void notifySelectionChanged(Set<Config> oldSelected) {
+        if (mItems == null) return;
+        for (int i = 0; i < mItems.size(); i++) {
+            Config item = mItems.get(i);
+            if (oldSelected.contains(item) != mSelected.contains(item)) notifyItemChanged(i);
+        }
     }
 
     public int remove(Config item) {
@@ -100,6 +112,12 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
         return mItems == null ? 0 : mItems.size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        Config item = mItems.get(position);
+        return item.getId();
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -113,8 +131,16 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
         String text = mMultiSelect ? (selected ? "\u2713 " : "") + item.getDesc() : item.getDesc();
         holder.binding.text.setText(text);
         holder.binding.text.setActivated(selected);
-        holder.binding.text.setOnClickListener(v -> mListener.onTextClick(item));
-        holder.binding.delete.setOnClickListener(v -> mListener.onDeleteClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onTextClick(mItems.get(index));
+        });
+        holder.binding.delete.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onDeleteClick(mItems.get(index));
+        });
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

@@ -150,7 +150,9 @@ public class Group {
     }
 
     public Channel current() {
-        return getChannel().get(getPosition()).group(this);
+        if (getChannel().isEmpty()) return Channel.create("");
+        int index = Math.max(0, Math.min(getPosition(), getChannel().size() - 1));
+        return getChannel().get(index).group(this);
     }
 
     @Override

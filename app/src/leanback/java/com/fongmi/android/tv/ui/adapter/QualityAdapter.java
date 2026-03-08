@@ -19,6 +19,7 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
     public QualityAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mResult = Result.empty();
+        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -44,6 +45,11 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
         return mResult.getUrl().getValues().size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        return (mResult.getUrl().n(position) + "@" + mResult.getUrl().v(position)).hashCode();
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -54,11 +60,13 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         holder.binding.text.setNextFocusDownId(nextFocusDown);
         holder.binding.text.setText(mResult.getUrl().n(position));
-        holder.binding.text.setOnClickListener(v -> onItemClick(position));
+        holder.binding.text.setOnClickListener(v -> onItemClick(holder));
         holder.binding.text.setActivated(mResult.getUrl().getPosition() == position);
     }
 
-    private void onItemClick(int position) {
+    private void onItemClick(@NonNull ViewHolder holder) {
+        int position = holder.getBindingAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) return;
         int oldPosition = mResult.getUrl().getPosition();
         this.position = position;
         mResult.getUrl().set(position);

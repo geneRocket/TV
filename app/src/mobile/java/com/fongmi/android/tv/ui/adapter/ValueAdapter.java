@@ -41,7 +41,11 @@ public class ValueAdapter extends RecyclerView.Adapter<ValueAdapter.ViewHolder> 
         Value item = mItems.get(position);
         holder.binding.text.setText(item.getN());
         holder.binding.text.setActivated(item.isActivated());
-        holder.binding.text.setOnClickListener(v -> onItemClick(item));
+        holder.binding.text.setOnClickListener(v -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            onItemClick(mItems.get(index));
+        });
     }
 
     private void onItemClick(Value value) {

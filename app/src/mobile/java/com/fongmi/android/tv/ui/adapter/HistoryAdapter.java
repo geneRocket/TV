@@ -62,7 +62,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         mItems.clear();
         setDelete(false);
         notifyDataSetChanged();
-        History.delete(VodConfig.getCid());
+        History.deleteLoaded();
     }
 
     public void remove(History item) {
@@ -96,12 +96,16 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
         holder.binding.remark.setText(ResUtil.getString(R.string.vod_last, item.getVodRemarks()));
         ImgUtil.loadVod(item.getVodName(), item.getVodPic(), holder.binding.image);
-        setClickListener(holder.binding.getRoot(), item);
+        setClickListener(holder);
     }
 
-    private void setClickListener(View root, History item) {
+    private void setClickListener(@NonNull ViewHolder holder) {
+        View root = holder.binding.getRoot();
         root.setOnLongClickListener(view -> mListener.onLongClick());
         root.setOnClickListener(view -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            History item = mItems.get(index);
             if (isDelete()) mListener.onItemDelete(item);
             else mListener.onItemClick(item);
         });

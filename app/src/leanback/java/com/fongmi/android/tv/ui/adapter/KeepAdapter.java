@@ -26,6 +26,7 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     public KeepAdapter(OnClickListener listener) {
         this.mItems = new ArrayList<>();
         this.mListener = listener;
+        setHasStableIds(true);
         setLayoutSize();
     }
 
@@ -46,6 +47,7 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     }
 
     public void addAll(List<Keep> items) {
+        if (mItems.equals(items)) return;
         mItems.clear();
         mItems.addAll(items);
         notifyDataSetChanged();
@@ -72,6 +74,12 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         return mItems.size();
     }
 
+    @Override
+    public long getItemId(int position) {
+        Keep item = mItems.get(position);
+        return (item.getCid() + "@" + item.getKey()).hashCode();
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -85,7 +93,7 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Keep item = mItems.get(position);
         setFocusListener(holder.binding);
-        setClickListener(holder.itemView, item);
+        setClickListener(holder);
         holder.binding.name.setText(item.getVodName());
         holder.binding.remark.setVisibility(View.GONE);
         holder.binding.site.setVisibility(View.VISIBLE);
@@ -98,9 +106,13 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.name.setSelected(hasFocus));
     }
 
-    private void setClickListener(View root, Keep item) {
+    private void setClickListener(@NonNull ViewHolder holder) {
+        View root = holder.itemView;
         root.setOnLongClickListener(view -> mListener.onLongClick());
         root.setOnClickListener(view -> {
+            int index = holder.getBindingAdapterPosition();
+            if (index == RecyclerView.NO_POSITION) return;
+            Keep item = mItems.get(index);
             if (isDelete()) mListener.onItemDelete(item);
             else mListener.onItemClick(item);
         });

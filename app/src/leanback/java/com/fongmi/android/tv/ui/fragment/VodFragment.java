@@ -39,12 +39,14 @@ import com.fongmi.android.tv.ui.presenter.FilterPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.utils.Prefers;
-import com.google.common.collect.Lists;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class VodFragment extends BaseFragment implements CustomScroller.Callback, VodPresenter.OnClickListener {
 
@@ -56,8 +58,11 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private SiteViewModel mViewModel;
     private List<Filter> mFilters;
     private List<Page> mPages;
+    private Set<String> mVodKeys;
     private boolean mOpen;
     private Page mPage;
+    private String mRequestTypeId;
+    private String mRequestPage;
 
     public static VodFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
         Bundle args = new Bundle();
@@ -75,17 +80,27 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         return getArguments().getString("key");
     }
 
+    private String getStoreKey() {
+        return VodConfig.rawSiteKey(getKey());
+    }
+
     private String getTypeId() {
         return mPages.isEmpty() ? getArguments().getString("typeId") : getLastPage().getVodId();
     }
 
     private List<Filter> getFilter() {
-        return Filter.arrayFrom(Prefers.getString("filter_" + getKey() + "_" + getTypeId()));
+        return Filter.arrayFrom(Prefers.getString("filter_" + getStoreKey() + "_" + getTypeId()));
     }
 
     private HashMap<String, String> getExtend() {
         Serializable extend = getArguments().getSerializable("extend");
-        return extend == null ? new HashMap<>() : (HashMap<String, String>) extend;
+        HashMap<String, String> result = new HashMap<>();
+        if (!(extend instanceof Map<?, ?>)) return result;
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) extend).entrySet()) {
+            if (!(entry.getKey() instanceof String) || !(entry.getValue() instanceof String)) continue;
+            result.put((String) entry.getKey(), (String) entry.getValue());
+        }
+        return result;
     }
 
     private boolean isFolder() {
@@ -116,6 +131,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     @Override
     protected void initView() {
         mPages = new ArrayList<>();
+        mVodKeys = new HashSet<>();
         mExtends = getExtend();
         mFilters = getFilter();
         setRecyclerView();
@@ -137,6 +153,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mBinding.recycler.addOnScrollListener(mScroller = new CustomScroller(this));
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setHeader(getActivity().findViewById(R.id.recycler));
+        mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
         mBinding.recycler.setItemAnimator(null);
     }
@@ -144,6 +161,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.result.observe(getViewLifecycleOwner(), result -> {
+            if (!isCurrentRequest(result)) return;
             boolean first = mScroller.first();
             int size = result.getList().size();
             if (size > 0) addVideo(result);
@@ -177,7 +195,10 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     private void requestVideo(String typeId, String page) {
         boolean first = "1".equals(page);
+        mRequestTypeId = typeId;
+        mRequestPage = page;
         if (first) mLast = null;
+        if (first) mVodKeys.clear();
         if (first) showProgress();
         int filterSize = mOpen ? mFilters.size() : 0;
         boolean clear = first && mAdapter.size() > filterSize;
@@ -185,10 +206,36 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
     }
 
+    private boolean isCurrentRequest(Result result) {
+        return result != null
+                && getKey().equals(result.getKey())
+                && mRequestTypeId != null
+                && mRequestTypeId.equals(result.getRequestTypeId())
+                && mRequestPage != null
+                && mRequestPage.equals(result.getRequestPage());
+    }
+
     private void addVideo(Result result) {
         Style style = result.getStyle(getStyle());
-        if (style.isList()) mAdapter.addAll(mAdapter.size(), result.getList());
-        else addGrid(result.getList(), style);
+        List<Vod> items = filterVodList(result.getList());
+        if (items.isEmpty()) return;
+        if (style.isList()) mAdapter.addAll(mAdapter.size(), items);
+        else addGrid(items, style);
+    }
+
+    private List<Vod> filterVodList(List<Vod> items) {
+        List<Vod> filtered = new ArrayList<>();
+        for (Vod item : items) {
+            String key = getVodKey(item);
+            if (mVodKeys.add(key)) filtered.add(item);
+        }
+        return filtered;
+    }
+
+    private String getVodKey(Vod item) {
+        String id = item.getVodId();
+        if (!id.isEmpty()) return item.getSiteKey() + "@" + id;
+        return item.getSiteKey() + "@" + item.getVodName() + "@" + item.getVodPic() + "@" + item.getVodRemarks();
     }
 
     private void checkPosition(boolean first) {
@@ -217,9 +264,11 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private void addGrid(List<Vod> items, Style style) {
         if (checkLastSize(items, style)) return;
         List<ListRow> rows = new ArrayList<>();
-        for (List<Vod> part : Lists.partition(items, Product.getColumn(style))) {
+        int column = Product.getColumn(style);
+        for (int start = 0; start < items.size(); start += column) {
+            int end = Math.min(start + column, items.size());
             mLast = new ArrayObjectAdapter(new VodPresenter(this, style));
-            mLast.setItems(part, null);
+            mLast.setItems(new ArrayList<>(items.subList(start, end)), null);
             rows.add(new ListRow(mLast));
         }
         mAdapter.addAll(mAdapter.size(), rows);

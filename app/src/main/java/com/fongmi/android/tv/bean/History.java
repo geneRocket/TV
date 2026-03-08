@@ -19,14 +19,24 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Entity
 public class History {
+
+    private static final Map<String, History> CACHE = new ConcurrentHashMap<>();
+
+    public static void clearCache() {
+        CACHE.clear();
+    }
 
     @NonNull
     @PrimaryKey
@@ -219,15 +229,92 @@ public class History {
     }
 
     public String getSiteName() {
-        return VodConfig.get().getSite(getSiteKey()).getName();
+        Site site = VodConfig.get().getSite(getSiteKey());
+        if (!site.getName().isEmpty()) return site.getName();
+        String rawKey = VodConfig.rawSiteKey(getKeyPart(0));
+        site = VodConfig.get().getSite(rawKey);
+        if (!site.getName().isEmpty()) return site.getName();
+        return rawKey;
     }
 
     public String getSiteKey() {
-        return getKey().split(AppDatabase.SYMBOL)[0];
+        return VodConfig.siteKey(getCid(), getKeyPart(0));
     }
 
     public String getVodId() {
-        return getKey().split(AppDatabase.SYMBOL)[1];
+        return getKeyPart(1);
+    }
+
+    private String getKeyPart(int index) {
+        String[] values = splitKey(getKey());
+        return index >= 0 && index < values.length ? values[index] : "";
+    }
+
+    private static String cacheKey(int cid, String key) {
+        return cid + "@" + key;
+    }
+
+    private static String[] splitKey(String key) {
+        return key == null ? new String[0] : key.split(AppDatabase.SYMBOL);
+    }
+
+    private static History cache(History item) {
+        if (item == null) return null;
+        CACHE.put(cacheKey(item.getCid(), item.getKey()), item);
+        return item;
+    }
+
+    private static List<History> cache(List<History> items) {
+        for (History item : items) cache(item);
+        return items;
+    }
+
+    private static History copy(History item) {
+        if (item == null) return null;
+        History copy = new History();
+        copy.setKey(item.getKey());
+        copy.setVodPic(item.getVodPic());
+        copy.setVodName(item.getVodName());
+        copy.setVodFlag(item.getVodFlag());
+        copy.setVodRemarks(item.getVodRemarks());
+        copy.setEpisodeUrl(item.getEpisodeUrl());
+        copy.setRevSort(item.isRevSort());
+        copy.setRevPlay(item.isRevPlay());
+        copy.setCreateTime(item.getCreateTime());
+        copy.setOpening(item.getOpening());
+        copy.setEnding(item.getEnding());
+        copy.setPosition(item.getPosition());
+        copy.setDuration(item.getDuration());
+        copy.setSpeed(item.getSpeed());
+        copy.setPlayer(item.getPlayer());
+        copy.setScale(item.getScale());
+        copy.setCid(item.getCid());
+        return copy;
+    }
+
+    private static List<History> copy(List<History> items) {
+        List<History> copied = new ArrayList<>(items.size());
+        for (History item : items) copied.add(copy(item));
+        return copied;
+    }
+
+    private static void removeCache(int cid, String key) {
+        CACHE.remove(cacheKey(cid, key));
+    }
+
+    private static int keyCid(String key) {
+        String[] values = splitKey(key);
+        if (values.length >= 3) {
+            try {
+                return Integer.parseInt(values[2]);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return VodConfig.siteCid(values.length > 0 ? values[0] : "", VodConfig.getCid());
+    }
+
+    private static void removeCache(int cid) {
+        for (String key : new ArrayList<>(CACHE.keySet())) if (key.startsWith(cid + "@")) CACHE.remove(key);
     }
 
     public Flag getFlag() {
@@ -261,20 +348,30 @@ public class History {
     public static List<History> getLoaded() {
         List<Integer> cids = getLoadedCids();
         if (cids.size() == 1) return get(cids.get(0));
-        return AppDatabase.get().getHistoryDao().find(cids);
+        List<History> items = cache(AppDatabase.get().getHistoryDao().find(cids));
+        items.sort(Comparator.comparingLong(History::getCreateTime).reversed());
+        return copy(items);
     }
 
     public static List<History> get(int cid) {
-        return AppDatabase.get().getHistoryDao().find(cid);
+        List<History> items = cache(AppDatabase.get().getHistoryDao().find(cid));
+        items.sort(Comparator.comparingLong(History::getCreateTime).reversed());
+        return copy(items);
     }
 
     private static List<Integer> getLoadedCids() {
         Set<Integer> cids = new LinkedHashSet<>();
         Map<String, Integer> idMap = new HashMap<>();
         for (Config item : Config.findUrls()) idMap.put(item.getUrl(), item.getId());
-        String urls = Setting.getVodConfigUrls();
-        for (String url : urls.split("[\\n\\r,，;；|]+")) {
-            if (url.trim().isEmpty()) continue;
+        List<String> urls = VodConfig.get().getLoadUrls();
+        if (urls.isEmpty()) {
+            for (String value : Setting.getVodConfigUrls().split("[\\n\\r,，;；|]+")) {
+                String url = value.trim();
+                if (!url.isEmpty()) urls.add(url);
+            }
+        }
+        for (String url : urls) {
+            if (url == null || url.trim().isEmpty()) continue;
             Integer cid = idMap.get(url.trim());
             if (cid != null && cid > 0) cids.add(cid);
         }
@@ -283,11 +380,26 @@ public class History {
     }
 
     public static History find(String key) {
-        return AppDatabase.get().getHistoryDao().find(VodConfig.getCid(), key);
+        int cid = keyCid(key);
+        History item = CACHE.get(cacheKey(cid, key));
+        if (item != null) return copy(item);
+        return copy(cache(AppDatabase.get().getHistoryDao().find(cid, key)));
     }
 
     public static void delete(int cid) {
         AppDatabase.get().getHistoryDao().delete(cid);
+        removeCache(cid);
+    }
+
+    public static void deleteLoaded() {
+        List<Integer> cids = getLoadedCids();
+        if (cids.isEmpty()) return;
+        if (cids.size() == 1) {
+            delete(cids.get(0));
+            return;
+        }
+        AppDatabase.get().getHistoryDao().delete(cids);
+        for (Integer cid : cids) removeCache(cid);
     }
 
     private void checkParam(History item) {
@@ -322,17 +434,21 @@ public class History {
 
     public History save() {
         AppDatabase.get().getHistoryDao().insertOrUpdate(this);
-        return this;
+        return cache(this);
     }
 
     public History delete() {
         AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
         AppDatabase.get().getTrackDao().delete(getKey());
+        removeCache(getCid(), getKey());
         return this;
     }
 
     public List<History> find() {
-        return AppDatabase.get().getHistoryDao().findByName(VodConfig.getCid(), getVodName());
+        List<History> items = AppDatabase.get().getHistoryDao().findByName(getCid(), getVodName());
+        Map<String, History> unique = new LinkedHashMap<>();
+        for (History item : cache(items)) unique.put(item.getKey(), item);
+        return copy(new ArrayList<>(unique.values()));
     }
 
     public void findEpisode(List<Flag> flags) {
@@ -377,6 +493,36 @@ public class History {
             startSync(targets);
             RefreshEvent.history();
         });
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof History)) return false;
+        History other = (History) obj;
+        return Objects.equals(getKey(), other.getKey())
+                && getCid() == other.getCid()
+                && getCreateTime() == other.getCreateTime()
+                && getPosition() == other.getPosition()
+                && getDuration() == other.getDuration()
+                && Objects.equals(getVodName(), other.getVodName())
+                && Objects.equals(getVodPic(), other.getVodPic())
+                && Objects.equals(getVodRemarks(), other.getVodRemarks())
+                && Objects.equals(getEpisodeUrl(), other.getEpisodeUrl());
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hashCode(getKey());
+        result = 31 * result + getCid();
+        result = 31 * result + Long.hashCode(getCreateTime());
+        result = 31 * result + Long.hashCode(getPosition());
+        result = 31 * result + Long.hashCode(getDuration());
+        result = 31 * result + Objects.hashCode(getVodName());
+        result = 31 * result + Objects.hashCode(getVodPic());
+        result = 31 * result + Objects.hashCode(getVodRemarks());
+        result = 31 * result + Objects.hashCode(getEpisodeUrl());
+        return result;
     }
 
     @NonNull

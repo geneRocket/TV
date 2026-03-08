@@ -246,8 +246,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         return Objects.toString(getIntent().getStringExtra("id"), "");
     }
 
+    private int getSiteCid() {
+        return VodConfig.siteCid(getKey(), VodConfig.getCid());
+    }
+
     private String getHistoryKey() {
-        return getKey().concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + VodConfig.getCid();
+        return VodConfig.rawSiteKey(getKey()).concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + getSiteCid();
     }
 
     private Site getSite() {
@@ -1260,7 +1264,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private History createHistory(Vod item) {
         History history = new History();
         history.setKey(getHistoryKey());
-        history.setCid(VodConfig.getCid());
+        history.setCid(getSiteCid());
         history.setVodName(item.getVodName());
         history.findEpisode(item.getVodFlags());
         history.setSpeed(Setting.getPlaySpeed());
@@ -1309,7 +1313,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void createKeep() {
         Keep keep = new Keep();
         keep.setKey(getHistoryKey());
-        keep.setCid(VodConfig.getCid());
+        keep.setCid(getSiteCid());
         keep.setSiteName(getSite().getName());
         keep.setVodPic(mBinding.video.getTag().toString());
         keep.setVodName(mBinding.name.getText().toString());
