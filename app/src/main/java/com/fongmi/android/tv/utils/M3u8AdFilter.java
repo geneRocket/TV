@@ -216,6 +216,8 @@ public final class M3u8AdFilter {
         boolean cueAdOpen = false;
         double cueAdSeconds = 0;
         double dateRangeAdSeconds = 0;
+        boolean discontinuityAdOpen = false;
+        int discontinuityAdSegments = 0;
         for (Record record : records) {
             if (!record.segment) {
                 if (isCueOutTag(record.line)) {
@@ -239,6 +241,22 @@ public final class M3u8AdFilter {
                 continue;
             }
 
+            boolean explicitAd = isExplicitAdRecord(record);
+            boolean hasDiscontinuity = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
+            if (explicitAd && (hasDiscontinuity || hasAdSignalTag(record.tags))) {
+                discontinuityAdOpen = true;
+                discontinuityAdSegments = 0;
+            }
+            if (discontinuityAdOpen) {
+                if (!explicitAd && discontinuityAdSegments > 0 && hasDiscontinuity) {
+                    discontinuityAdOpen = false;
+                    discontinuityAdSegments = 0;
+                } else {
+                    discontinuityAdSegments++;
+                    continue;
+                }
+            }
+            if (explicitAd) continue;
             if (cueAdOpen || dateRangeAdSeconds > 0) {
                 if (cueAdOpen && cueAdSeconds > 0) {
                     cueAdSeconds = nextRemaining(cueAdSeconds, record.duration);
@@ -394,12 +412,103 @@ public final class M3u8AdFilter {
                     || token.equals("advert")
                     || token.equals("advertisement")
                     || token.equals("commercial")
+                    || token.equals("bumper")
+                    || token.equals("insert")
+                    || token.equals("insertion")
+                    || token.equals("interstitial")
                     || token.equals("promo")
                     || token.equals("preroll")
                     || token.equals("midroll")
-                    || token.equals("postroll")) return true;
+                    || token.equals("postroll")
+                    || token.equals("scte35")
+                    || token.equals("stitched")
+                    || token.equals("vast")
+                    || token.equals("vmap")) return true;
         }
         return false;
+    }
+
+    private static boolean isExplicitAdRecord(Record record) {
+        if (!record.segment) return false;
+        if (hasExplicitAdTag(record.tags)) return true;
+        return isLikelyAdSegmentUri(record.line);
+    }
+
+    private static boolean hasExplicitAdTag(List<String> tags) {
+        if (tags == null || tags.isEmpty()) return false;
+        for (String tag : tags) {
+            if (TextUtils.isEmpty(tag)) continue;
+            if (isExplicitAdTag(tag)) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasAdSignalTag(List<String> tags) {
+        if (tags == null || tags.isEmpty()) return false;
+        for (String tag : tags) {
+            if (TextUtils.isEmpty(tag)) continue;
+            if (isAdSignalTag(tag)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isExplicitAdTag(String tag) {
+        String lower = tag.toLowerCase(Locale.US);
+        if (lower.startsWith("#ext-x-cue:") || lower.startsWith("#ext-x-cue-out-cont")) return true;
+        if (lower.startsWith("#ext-oatcls-scte35")
+                || lower.startsWith("#ext-x-scte35")
+                || lower.startsWith("#ext-x-splicepoint-scte35")
+                || lower.startsWith("#ext-x-asset")) return true;
+        return containsAdKeyword(lower);
+    }
+
+    private static boolean isAdSignalTag(String tag) {
+        String lower = tag.toLowerCase(Locale.US);
+        return lower.startsWith("#ext-x-discontinuity")
+                || lower.startsWith("#ext-x-program-date-time")
+                || lower.startsWith("#ext-x-map:")
+                || lower.startsWith("#ext-x-byterange");
+    }
+
+    private static boolean hasTagPrefix(List<String> tags, String prefix) {
+        if (tags == null || tags.isEmpty()) return false;
+        for (String tag : tags) {
+            if (tag != null && tag.startsWith(prefix)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isLikelyAdSegmentUri(String uri) {
+        if (TextUtils.isEmpty(uri)) return false;
+        String lower = uri.toLowerCase(Locale.US).trim();
+        int fragment = lower.indexOf('#');
+        if (fragment >= 0) lower = lower.substring(0, fragment);
+        if (!containsAdKeyword(lower) && !containsAdQueryKey(lower)) return false;
+        return isLikelySegmentResource(lower);
+    }
+
+    private static boolean containsAdQueryKey(String uri) {
+        int query = uri.indexOf('?');
+        if (query < 0 || query >= uri.length() - 1) return false;
+        String[] parts = uri.substring(query + 1).split("&");
+        for (String part : parts) {
+            int index = part.indexOf('=');
+            String key = index >= 0 ? part.substring(0, index) : part;
+            if (containsAdKeyword(key)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isLikelySegmentResource(String uri) {
+        int query = uri.indexOf('?');
+        String path = query >= 0 ? uri.substring(0, query) : uri;
+        return path.endsWith(".ts")
+                || path.endsWith(".m4s")
+                || path.endsWith(".mp4")
+                || path.endsWith(".cmfa")
+                || path.endsWith(".cmfv")
+                || path.endsWith(".aac")
+                || path.endsWith(".mp3");
     }
 
     private static double parseDouble(String value) {
