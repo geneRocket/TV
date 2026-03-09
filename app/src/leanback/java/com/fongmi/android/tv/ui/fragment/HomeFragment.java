@@ -20,7 +20,6 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Button;
-import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
@@ -30,7 +29,6 @@ import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentHomeBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.HistoryActivity;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
@@ -50,7 +48,6 @@ import com.fongmi.android.tv.ui.presenter.HistoryPresenter;
 import com.fongmi.android.tv.ui.presenter.KeepPresenter;
 import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
-import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.Lists;
@@ -241,33 +238,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
             VideoActivity.start(getActivity(), siteKey, vodId, vodName, vodPic);
             return;
         }
-        final int requestId = mOpenRequestId;
-        App.execute(() -> {
-            Config config = Config.find(cid);
-            App.post(() -> {
-                if (!isActivityReady() || requestId != mOpenRequestId) return;
-                if (config == null) {
-                    CollectActivity.start(getActivity(), vodName);
-                    return;
-                }
-                VodConfig.load(config, new Callback() {
-                    @Override
-                    public void success() {
-                        if (!isActivityReady() || requestId != mOpenRequestId) return;
-                        VideoActivity.start(getActivity(), siteKey, vodId, vodName, vodPic);
-                        RefreshEvent.history();
-                        RefreshEvent.config();
-                        RefreshEvent.video();
-                    }
-
-                    @Override
-                    public void error(String msg) {
-                        if (!isActivityReady() || requestId != mOpenRequestId) return;
-                        Notify.show(msg);
-                    }
-                });
-            });
-        });
+        CollectActivity.start(getActivity(), vodName);
     }
 
     private void applyHistoryItems(boolean renew, boolean enabled, List<History> items) {

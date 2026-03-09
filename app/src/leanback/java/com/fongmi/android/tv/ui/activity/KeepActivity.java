@@ -9,15 +9,12 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.api.config.VodConfig;
-import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.databinding.ActivityKeepBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.adapter.KeepAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
-import com.fongmi.android.tv.utils.Notify;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -66,25 +63,6 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         });
     }
 
-    private void loadConfig(Config config, Keep item, int requestId) {
-        VodConfig.load(config, new Callback() {
-            @Override
-            public void success() {
-                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
-                VideoActivity.start(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
-                RefreshEvent.history();
-                RefreshEvent.config();
-                RefreshEvent.video();
-            }
-
-            @Override
-            public void error(String msg) {
-                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
-                Notify.show(msg);
-            }
-        });
-    }
-
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
         if (event.getType() == RefreshEvent.Type.KEEP) getKeep();
@@ -97,15 +75,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
             VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
             return;
         }
-        final int requestId = mOpenRequestId;
-        App.execute(() -> {
-            Config config = Config.find(item.getCid());
-            App.post(() -> {
-                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
-                if (config == null) CollectActivity.start(this, item.getVodName());
-                else loadConfig(config, item, requestId);
-            });
-        });
+        CollectActivity.start(this, item.getVodName());
     }
 
     @Override
