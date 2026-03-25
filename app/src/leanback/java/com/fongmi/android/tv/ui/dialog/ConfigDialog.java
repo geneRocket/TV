@@ -12,6 +12,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
@@ -31,6 +32,11 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
 public class ConfigDialog implements DialogInterface.OnDismissListener {
 
     private final DialogConfigBinding binding;
@@ -40,6 +46,7 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     private boolean append;
     private boolean registered;
     private boolean edit;
+    private boolean reopenHistory;
     private String url;
     private int type;
 
@@ -54,6 +61,11 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
 
     public ConfigDialog edit() {
         this.edit = true;
+        return this;
+    }
+
+    public ConfigDialog returnToHistory() {
+        this.reopenHistory = true;
         return this;
     }
 
@@ -148,9 +160,49 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
         String text = UrlUtil.fixUrl(binding.text.getText().toString().trim());
         if (edit) Config.find(url, type).url(text).update();
         if (text.isEmpty()) Config.delete(url, type);
-        if (name.isEmpty()) callback.setConfig(Config.find(text, type));
-        else callback.setConfig(Config.find(text, name, type));
+        Config config = name.isEmpty() ? Config.find(text, type) : Config.find(text, name, type);
+        if (!edit && (type == 0 || type == 1) && !config.isEmpty()) callback.setConfigs(mergeConfigs(config));
+        else callback.setConfig(config);
         dialog.dismiss();
+        reopenHistory(config);
+    }
+
+    private List<Config> mergeConfigs(Config config) {
+        List<Config> items = new ArrayList<>();
+        Set<String> urls = new LinkedHashSet<>();
+        for (String url : getEnabledUrls()) {
+            if (!urls.add(url)) continue;
+            items.add(Config.find(url, type));
+        }
+        if (urls.add(config.getUrl())) items.add(config);
+        else items.set(findConfigIndex(items, config.getUrl()), config);
+        return items;
+    }
+
+    private int findConfigIndex(List<Config> items, String url) {
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).getUrl().equals(url)) return i;
+        }
+        return 0;
+    }
+
+    private List<String> getEnabledUrls() {
+        String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
+        List<String> urls = new ArrayList<>();
+        for (String item : value.split("[\\n\\r,，;；|]+")) {
+            String url = item.trim();
+            if (!url.isEmpty()) urls.add(url);
+        }
+        if (!urls.isEmpty()) return urls;
+        String current = type == 0 ? VodConfig.getUrl() : LiveConfig.getUrl();
+        if (!current.isEmpty()) urls.add(current);
+        return urls;
+    }
+
+    private void reopenHistory(Config config) {
+        if (!reopenHistory || edit || config == null || config.isEmpty()) return;
+        if (type != 0 && type != 1) return;
+        activity.getWindow().getDecorView().post(() -> HistoryDialog.create(activity).type(type).add(() -> ConfigDialog.create(activity).type(type).returnToHistory().show()).show());
     }
 
     private void onNegative(View view) {

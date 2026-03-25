@@ -281,12 +281,12 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
 
     private void onVod(View view) {
         type = 0;
-        HistoryDialog.create(this).type(type).add(() -> ConfigDialog.create(this).type(type).show()).show();
+        HistoryDialog.create(this).type(type).add(() -> ConfigDialog.create(this).type(type).returnToHistory().show()).show();
     }
 
     private void onLive(View view) {
         type = 1;
-        HistoryDialog.create(this).type(type).add(() -> ConfigDialog.create(this).type(type).show()).show();
+        HistoryDialog.create(this).type(type).add(() -> ConfigDialog.create(this).type(type).returnToHistory().show()).show();
     }
 
     private void onWall(View view) {
