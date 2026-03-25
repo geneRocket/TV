@@ -31,12 +31,13 @@ public class BootReceiver extends BroadcastReceiver {
 
     static class Callback extends ConnectivityManager.NetworkCallback {
 
-        private boolean first;
+        private boolean handled;
 
         @Override
         public void onAvailable(@NonNull Network network) {
-            if (first) doJob();
-            else first = true;
+            if (handled) return;
+            handled = true;
+            doJob();
         }
 
         @Override

@@ -44,6 +44,7 @@ public class LiveConfig {
     private List<Proxy> proxy;
     private List<String> hosts;
     private List<String> ruleHosts;
+    private boolean persistCache;
     private Config config;
     private boolean sync;
     private Live home;
@@ -88,9 +89,18 @@ public class LiveConfig {
         get().init().clear().config(config).load(callback);
     }
 
+    public static void load(Config config, Callback callback, boolean cache) {
+        get().init().clear().config(config).load(callback, cache);
+    }
+
     public static void load(List<Config> configs, Callback callback) {
         if (configs == null || configs.isEmpty()) return;
         get().init().clear().config(configs.get(0)).loadMulti(configs, callback);
+    }
+
+    public static void load(List<Config> configs, Callback callback, boolean cache) {
+        if (configs == null || configs.isEmpty()) return;
+        get().init().clear().config(configs.get(0)).loadMulti(configs, callback, cache);
     }
 
     public LiveConfig init() {
@@ -102,6 +112,7 @@ public class LiveConfig {
         this.headers = new ArrayList<>();
         this.ruleHosts = new ArrayList<>();
         this.lives = new ArrayList<>();
+        this.persistCache = true;
         return config(Config.live());
     }
 
@@ -133,8 +144,20 @@ public class LiveConfig {
         App.execute(() -> loadConfig(callback));
     }
 
+    public void load(Callback callback, boolean cache) {
+        if (cache) App.execute(() -> loadConfigCache(callback));
+        else App.execute(() -> loadConfig(callback));
+    }
+
     public void loadMulti(List<Config> configs, Callback callback) {
+        this.persistCache = false;
         App.execute(() -> loadConfigs(configs, callback));
+    }
+
+    public void loadMulti(List<Config> configs, Callback callback, boolean cache) {
+        this.persistCache = false;
+        if (cache) App.execute(() -> loadConfigsCache(configs, callback));
+        else App.execute(() -> loadConfigs(configs, callback));
     }
 
     private void loadConfig(Callback callback) {
@@ -160,6 +183,7 @@ public class LiveConfig {
                     continue;
                 }
                 JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
+                cacheConfig(item, object);
                 mergeConfig(merged, object);
                 success++;
             } catch (Throwable e) {
@@ -173,6 +197,50 @@ public class LiveConfig {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
             App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
         }
+    }
+
+    private void loadConfigCache(Callback callback) {
+        if (!TextUtils.isEmpty(config.getJson()) && config.isCache()) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
+        else loadConfig(callback);
+    }
+
+    private void loadConfigsCache(List<Config> configs, Callback callback) {
+        JsonObject merged = new JsonObject();
+        Throwable error = null;
+        int success = 0;
+        for (Config item : configs) {
+            try {
+                if (!TextUtils.isEmpty(item.getJson()) && item.isCache()) {
+                    mergeConfig(merged, Json.parse(item.getJson()).getAsJsonObject());
+                    success++;
+                    continue;
+                }
+                String text = Decoder.getJson(item.getUrl());
+                if (Json.invalid(text)) {
+                    parseText(item.getUrl(), text);
+                    success++;
+                    continue;
+                }
+                JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
+                cacheConfig(item, object);
+                mergeConfig(merged, object);
+                success++;
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        if (merged.has("lives") || merged.has("headers") || merged.has("proxy") || merged.has("hosts") || merged.has("rules") || merged.has("ads")) parseConfig(merged, null);
+        if (success > 0) App.post(callback::success);
+        else {
+            Throwable cause = error == null ? new Throwable("No valid config") : error;
+            App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+        }
+    }
+
+    private void cacheConfig(Config item, JsonObject object) {
+        if (item == null || object == null || TextUtils.isEmpty(item.getUrl())) return;
+        item.json(object.toString()).time(System.currentTimeMillis()).save();
     }
 
     private JsonObject loadObject(JsonObject object, int depth) throws Throwable {
@@ -271,6 +339,7 @@ public class LiveConfig {
             initLive(object);
             initOther(object);
             BaseLoader.get().parseJar(Json.safeString(object, "spider"));
+            if (persistCache) config.json(object.toString()).update();
             if (callback != null) App.post(callback::success);
         } catch (Throwable e) {
             e.printStackTrace();

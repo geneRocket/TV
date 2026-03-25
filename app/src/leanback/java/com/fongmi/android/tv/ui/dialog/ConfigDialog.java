@@ -158,7 +158,7 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     private void onPositive(View view) {
         String name = binding.name.getText().toString().trim();
         String text = UrlUtil.fixUrl(binding.text.getText().toString().trim());
-        if (edit) Config.find(url, type).url(text).update();
+        if (edit) Config.find(url, type).url(text).name(name).update();
         if (text.isEmpty()) Config.delete(url, type);
         Config config = name.isEmpty() ? Config.find(text, type) : Config.find(text, name, type);
         if (!edit && (type == 0 || type == 1) && !config.isEmpty()) callback.setConfigs(mergeConfigs(config));

@@ -49,6 +49,7 @@ public class VodConfig {
     private Map<String, Site> siteMap;
     private Map<String, Parse> parseMap;
     private boolean loadLive;
+    private boolean persistCache;
     private Config config;
     private Parse parse;
     private String wall;
@@ -133,6 +134,11 @@ public class VodConfig {
         get().init().clear().config(configs.get(0)).loadMulti(configs, callback, loadLive);
     }
 
+    public static void load(List<Config> configs, Callback callback, boolean loadLive, boolean cache) {
+        if (configs == null || configs.isEmpty()) return;
+        get().init().clear().config(configs.get(0)).loadMulti(configs, callback, loadLive, cache);
+    }
+
     public VodConfig init() {
         this.wall = null;
         this.home = null;
@@ -152,6 +158,7 @@ public class VodConfig {
         this.flags = new ArrayList<>();
         this.parses = new ArrayList<>();
         this.loadLive = false;
+        this.persistCache = true;
         return this;
     }
 
@@ -192,12 +199,21 @@ public class VodConfig {
     }
 
     public void loadMulti(List<Config> configs, Callback callback) {
+        this.persistCache = false;
         App.execute(() -> loadConfigs(configs, callback));
     }
 
     public void loadMulti(List<Config> configs, Callback callback, boolean loadLive) {
         this.loadLive = loadLive;
+        this.persistCache = false;
         App.execute(() -> loadConfigs(configs, callback));
+    }
+
+    public void loadMulti(List<Config> configs, Callback callback, boolean loadLive, boolean cache) {
+        this.loadLive = loadLive;
+        this.persistCache = false;
+        if (cache) App.execute(() -> loadConfigsCache(configs, callback));
+        else App.execute(() -> loadConfigs(configs, callback));
     }
 
     private void loadConfig(Callback callback) {
@@ -215,7 +231,6 @@ public class VodConfig {
         List<String> urls = new ArrayList<>();
         Set<String> loaded = new LinkedHashSet<>();
         JsonObject merged = new JsonObject();
-        Config successConfig = null;
         Throwable error = null;
         int success = 0;
         for (Config item : configs) {
@@ -223,8 +238,8 @@ public class VodConfig {
                 String url = item.getUrl();
                 if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
                 JsonObject object = loadObject(url, 0);
+                cacheConfig(item, object);
                 urls.add(url);
-                if (successConfig == null) successConfig = item;
                 mergeConfig(merged, object, item);
                 success++;
             } catch (Throwable e) {
@@ -234,7 +249,6 @@ public class VodConfig {
         }
         setLoadUrls(urls);
         if (success > 0) {
-            if (successConfig != null) config(successConfig);
             parseConfig(merged, callback);
         }
         else if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
@@ -242,6 +256,59 @@ public class VodConfig {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
             App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
         }
+    }
+
+    private void loadConfigsCache(List<Config> configs, Callback callback) {
+        setLoadUrls(getConfigUrls(configs));
+        List<String> urls = new ArrayList<>();
+        Set<String> loaded = new LinkedHashSet<>();
+        JsonObject merged = new JsonObject();
+        Throwable error = null;
+        int success = 0;
+        for (Config item : configs) {
+            try {
+                String url = item.getUrl();
+                if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
+                JsonObject object;
+                if (!TextUtils.isEmpty(item.getJson()) && item.isCache()) {
+                    object = Json.parse(item.getJson()).getAsJsonObject();
+                } else {
+                    object = loadObject(url, 0);
+                    cacheConfig(item, object);
+                }
+                urls.add(url);
+                mergeConfig(merged, object, item);
+                success++;
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        setLoadUrls(urls);
+        if (success > 0) {
+            parseConfig(merged, callback);
+        } else if (!TextUtils.isEmpty(config.getJson())) {
+            checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
+        } else {
+            Throwable cause = error == null ? new Throwable("No valid config") : error;
+            App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+        }
+    }
+
+    private List<String> getConfigUrls(List<Config> configs) {
+        List<String> urls = new ArrayList<>();
+        Set<String> loaded = new LinkedHashSet<>();
+        for (Config item : configs) {
+            String url = item.getUrl();
+            if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
+            urls.add(url);
+        }
+        return urls;
+    }
+
+    private void cacheConfig(Config item, JsonObject object) {
+        if (item == null || object == null || TextUtils.isEmpty(item.getUrl())) return;
+        item.json(object.toString()).time(System.currentTimeMillis()).save();
     }
 
     private void setLoadUrls(List<String> urls) {
@@ -349,7 +416,7 @@ public class VodConfig {
             String notice = Json.safeString(object, "notice");
             config.logo(Json.safeString(object, "logo"));
             App.post(() -> callback.success(notice));
-            config.json(object.toString()).update();
+            if (persistCache) config.json(object.toString()).update();
             App.post(callback::success);
         } catch (Throwable e) {
             e.printStackTrace();

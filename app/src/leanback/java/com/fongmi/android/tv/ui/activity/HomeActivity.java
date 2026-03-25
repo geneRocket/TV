@@ -404,10 +404,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 List<Config> vodConfigs = getStartupConfigs(0);
                 App.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
-                    if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback());
-                    else LiveConfig.load(liveConfigs, new Callback());
+                    if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), getLiveCallback(), true);
+                    else LiveConfig.load(liveConfigs, getLiveCallback(), true);
                     if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(""), true);
-                    else VodConfig.load(vodConfigs, getCallback(""), true);
+                    else VodConfig.load(vodConfigs, getCallback(""), true, true);
                 });
             } catch (Throwable e) {
                 App.post(() -> {
@@ -421,6 +421,15 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 });
             }
         });
+    }
+
+    private Callback getLiveCallback() {
+        return new Callback() {
+            @Override
+            public void error(String msg) {
+                Notify.show(msg);
+            }
+        };
     }
 
     private List<Config> getStartupConfigs(int type) {
