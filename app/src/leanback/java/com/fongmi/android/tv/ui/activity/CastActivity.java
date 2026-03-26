@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.drawable.Drawable;
 import android.os.IBinder;
+import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
 
@@ -143,6 +144,10 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     private void checkAction() {
         mAction = getIntent().getParcelableExtra(RendererInterfaceKt.keyExtraCastAction);
+        if (mAction == null || TextUtils.isEmpty(mAction.getCurrentURI())) {
+            finish();
+            return;
+        }
         mBinding.widget.title.setText(getName());
         position = duration = 0;
         start();

@@ -115,26 +115,46 @@ public class FileChooser {
     }
 
     private static String getPath(Context context, Uri uri, String docId) {
-        String fileName = getNameColumn(context, uri);
         if (docId.startsWith("raw:")) {
             return docId.replaceFirst("raw:", "");
-        } else if (fileName != null) {
-            return Environment.getExternalStorageDirectory() + "/Download/" + fileName;
-        } else {
-            return getDataColumn(context, ContentUris.withAppendedId(Uri.parse("content://downloads/public_downloads"), Long.parseLong(docId)));
         }
+        Long id = parseId(docId);
+        if (id != null) {
+            String path = getDataColumn(context, ContentUris.withAppendedId(Uri.parse("content://downloads/public_downloads"), id));
+            if (path != null) return path;
+            path = getDataColumn(context, ContentUris.withAppendedId(Uri.parse("content://downloads/all_downloads"), id));
+            if (path != null) return path;
+        }
+        String fileName = getNameColumn(context, uri);
+        if (fileName == null) return null;
+        File guess = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName);
+        return guess.exists() ? guess.getAbsolutePath() : null;
     }
 
     private static String getPath(Context context, String[] split) {
+        if (split.length < 2) return null;
+        Long id = parseId(split[1]);
+        if (id == null) return null;
         switch (split[0]) {
             case "image":
-                return getDataColumn(context, ContentUris.withAppendedId(getImageUri(), Long.parseLong(split[1])));
+                return getDataColumn(context, ContentUris.withAppendedId(getImageUri(), id));
             case "video":
-                return getDataColumn(context, ContentUris.withAppendedId(getVideoUri(), Long.parseLong(split[1])));
+                return getDataColumn(context, ContentUris.withAppendedId(getVideoUri(), id));
             case "audio":
-                return getDataColumn(context, ContentUris.withAppendedId(getAudioUri(), Long.parseLong(split[1])));
+                return getDataColumn(context, ContentUris.withAppendedId(getAudioUri(), id));
             default:
-                return getDataColumn(context, ContentUris.withAppendedId(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL), Long.parseLong(split[1])));
+                return getDataColumn(context, ContentUris.withAppendedId(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL), id));
+        }
+    }
+
+    private static Long parseId(String value) {
+        if (value == null) return null;
+        try {
+            return Long.parseLong(value);
+        } catch (Exception e) {
+            int index = value.lastIndexOf(':');
+            if (index >= 0 && index + 1 < value.length()) return parseId(value.substring(index + 1));
+            return null;
         }
     }
 

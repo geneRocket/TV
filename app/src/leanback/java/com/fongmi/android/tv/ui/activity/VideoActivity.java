@@ -300,8 +300,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.beginSourceSwitch();
             Vod item = (Vod) host.mQuickAdapter.get(0);
             host.mQuickAdapter.removeItems(0, 1);
-            String id = host.getId();
-            if (!id.isEmpty()) host.mBroken.add(id);
+            host.markCurrentSourceBroken();
             host.setPendingSiteSwitch(true);
             host.setInitAuto(false);
             showDetail(item, true);
@@ -441,7 +440,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 if (mismatch(item) || !host.mQuickKeys.add(getQuickKey(item))) iterator.remove();
             }
             if (items.isEmpty()) return;
-            host.mQuickAdapter.addAll(host.mQuickAdapter.size(), items);
+            host.mergeQuickItems(items);
             host.setVisibilityIfChanged(host.mBinding.quick, View.VISIBLE);
             if (host.isInitAuto() || host.canAdvancePendingSourceSwitch()) host.mPlaybackNavigation.nextSite();
             App.removeCallbacks(host.mR4);
@@ -450,11 +449,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         public void setSearch(Vod item) {
             int index = host.mQuickAdapter.indexOf(item);
             if (index >= 0) host.mQuickAdapter.removeItems(index, 1);
-            String id = host.getId();
-            if (!id.isEmpty()) host.mBroken.add(id);
+            host.beginSourceSwitch();
+            host.markCurrentSourceBroken();
             host.setAutoMode(false);
             host.setInitAuto(false);
-            host.beginSourceSwitch();
             host.setPendingSiteSwitch(true);
             host.mPlaybackNavigation.showDetail(item, false);
         }
@@ -611,8 +609,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         private boolean mismatch(Vod item) {
-            if (host.getId().equals(item.getVodId())) return true;
-            if (!item.getVodId().isEmpty() && host.mBroken.contains(item.getVodId())) return true;
+            String brokenKey = host.getBrokenKey(item);
+            if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
+            if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
             String keyword = Objects.toString(host.mBinding.part.getTag(), "");
             return !host.matchSourceTitle(item.getVodName(), keyword);
         }
@@ -647,7 +646,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private ExecutorService mExecutor;
     private SiteViewModel mViewModel;
     private List<Danmaku> mDanmakus;
-    private List<String> mBroken;
+    private final Set<String> mBroken = new HashSet<>();
     private History mHistory;
     private Players mPlayers;
     private boolean background;
@@ -877,7 +876,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mClock = Clock.create(mBinding.display.clock);
         mDanmakuContext = DanmakuContext.create();
         mPlayers = Players.create(this);
-        mBroken = new ArrayList<>();
         mR1 = this::hideControl;
         mR2 = this::updateFocus;
         mR3 = this::setTraffic;
@@ -2336,6 +2334,47 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private String normalizeSourceTitle(String text) {
         return Objects.toString(text, "").trim().toLowerCase().replaceAll("[\\s\\p{Punct}]+", "");
+    }
+
+    private void markCurrentSourceBroken() {
+        String brokenKey = getCurrentBrokenKey();
+        if (!brokenKey.isEmpty()) mBroken.add(brokenKey);
+    }
+
+    private String getCurrentBrokenKey() {
+        return getBrokenKey(getKey(), getId());
+    }
+
+    private String getBrokenKey(Vod item) {
+        return getBrokenKey(item.getSiteKey(), item.getVodId());
+    }
+
+    private String getBrokenKey(String siteKey, String vodId) {
+        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return "";
+        return siteKey + "@" + vodId;
+    }
+
+    private void mergeQuickItems(List<Vod> items) {
+        List<Vod> merged = new ArrayList<>();
+        for (int i = 0; i < mQuickAdapter.size(); i++) merged.add((Vod) mQuickAdapter.get(i));
+        merged.addAll(items);
+        Collections.sort(merged, this::compareQuickItem);
+        mQuickAdapter.clear();
+        if (!merged.isEmpty()) mQuickAdapter.addAll(0, merged);
+    }
+
+    private int compareQuickItem(Vod left, Vod right) {
+        return Integer.compare(getQuickMatchRank(left), getQuickMatchRank(right));
+    }
+
+    private int getQuickMatchRank(Vod item) {
+        String source = normalizeSourceTitle(item.getVodName());
+        String target = normalizeSourceTitle(Objects.toString(mBinding.part.getTag(), ""));
+        if (source.isEmpty() || target.isEmpty()) return Integer.MAX_VALUE;
+        if (source.equals(target)) return 0;
+        if (source.contains(target)) return 1;
+        if (target.contains(source)) return 2;
+        return 3;
     }
 
     private Flag findTargetFlag(List<Flag> flags) {

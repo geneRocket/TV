@@ -249,7 +249,21 @@ public class LiveConfig {
         if (!object.has("urls")) return object;
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
         if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-        return loadObject(Json.parse(Decoder.getJson(items.get(0).getUrl())).getAsJsonObject(), depth + 1);
+        return loadDepot(items, depth + 1);
+    }
+
+    private JsonObject loadDepot(List<Depot> items, int depth) throws Throwable {
+        Throwable error = null;
+        for (Depot item : items) {
+            try {
+                return loadObject(Json.parse(Decoder.getJson(item.getUrl())).getAsJsonObject(), depth);
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        if (error != null) throw error;
+        throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
     }
 
     private void mergeConfig(JsonObject target, JsonObject source) {
@@ -279,19 +293,23 @@ public class LiveConfig {
     }
 
     private void parseConfig(String text, Callback callback) {
-        if (Json.invalid(text)) {
-            parseText(text, callback);
-        } else {
-            checkJson(Json.parse(text).getAsJsonObject(), callback);
+        try {
+            parseConfigOrThrow(text);
+            if (callback != null) App.post(callback::success);
+        } catch (Throwable e) {
+            e.printStackTrace();
+            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
 
     private void parseText(String text, Callback callback) {
-        Live live = new Live(parseName(config.getUrl()), config.getUrl()).sync();
-        LiveParser.text(live, text);
-        lives.add(live);
-        setHome(live, true);
-        App.post(callback::success);
+        try {
+            parseTextOrThrow(text);
+            if (callback != null) App.post(callback::success);
+        } catch (Throwable e) {
+            e.printStackTrace();
+            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
+        }
     }
 
     private void parseText(String url, String text) {
@@ -322,29 +340,82 @@ public class LiveConfig {
     }
 
     private void parseDepot(JsonObject object, Callback callback) {
-        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
-        if (items.isEmpty()) {
-            if (callback != null) App.post(() -> callback.error(ResUtil.getString(R.string.error_config_parse)));
-            return;
+        try {
+            parseDepotOrThrow(object);
+            if (callback != null) App.post(callback::success);
+        } catch (Throwable e) {
+            e.printStackTrace();
+            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
         }
-        List<Config> configs = new ArrayList<>();
-        for (Depot item : items) configs.add(Config.find(item, 1));
+    }
+
+    private void parseDepotOrThrow(JsonObject object) throws Throwable {
+        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
+        if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
         Config.delete(config.getUrl());
-        config = configs.get(0);
-        loadConfig(callback);
+        Throwable error = null;
+        for (Depot item : items) {
+            try {
+                Config target = Config.find(item, 1);
+                String text = loadDepotConfig(target);
+                clear();
+                config(target);
+                parseConfigOrThrow(text);
+                return;
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        if (error != null) throw error;
+        throw new IllegalStateException("No valid config");
+    }
+
+    private String loadDepotConfig(Config target) throws Throwable {
+        try {
+            String text = Decoder.getJson(target.getUrl());
+            if (Json.invalid(text)) return text;
+            JsonObject loaded = loadObject(Json.parse(text).getAsJsonObject(), 0);
+            cacheConfig(target, loaded);
+            return loaded.toString();
+        } catch (Throwable e) {
+            if (!TextUtils.isEmpty(target.getJson()) && target.isCache()) return target.getJson();
+            throw e;
+        }
     }
 
     private void parseConfig(JsonObject object, Callback callback) {
         try {
-            initLive(object);
-            initOther(object);
-            BaseLoader.get().parseJar(Json.safeString(object, "spider"));
-            if (persistCache) config.json(object.toString()).update();
+            parseConfigOrThrow(object);
             if (callback != null) App.post(callback::success);
         } catch (Throwable e) {
             e.printStackTrace();
             if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
+    }
+
+    private void parseConfigOrThrow(String text) throws Throwable {
+        if (Json.invalid(text)) parseTextOrThrow(text);
+        else {
+            JsonObject object = Json.parse(text).getAsJsonObject();
+            if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
+            if (object.has("urls")) parseDepotOrThrow(object);
+            else parseConfigOrThrow(object);
+        }
+    }
+
+    private void parseTextOrThrow(String text) throws Throwable {
+        Live live = new Live(parseName(config.getUrl()), config.getUrl()).sync();
+        LiveParser.text(live, text);
+        lives.add(live);
+        setHome(live, true);
+    }
+
+    private void parseConfigOrThrow(JsonObject object) throws Throwable {
+        initLive(object);
+        initOther(object);
+        BaseLoader.get().parseJar(Json.safeString(object, "spider"));
+        if (persistCache) config.json(object.toString()).update();
     }
 
     private void initLive(JsonObject object) {

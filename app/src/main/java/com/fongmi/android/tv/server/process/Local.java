@@ -10,7 +10,6 @@ import com.google.gson.JsonObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
@@ -19,12 +18,6 @@ import java.util.Map;
 import fi.iki.elonen.NanoHTTPD;
 
 public class Local implements Process {
-
-    private final SimpleDateFormat format;
-
-    public Local() {
-        this.format = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault());
-    }
 
     @Override
     public boolean isRequest(NanoHTTPD.IHTTPSession session, String path) {
@@ -78,6 +71,7 @@ public class Local implements Process {
     private NanoHTTPD.Response getFolder(File root) {
         File[] list = root.listFiles();
         JsonObject info = new JsonObject();
+        java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault());
         info.addProperty("parent", root.equals(Path.root()) ? "." : root.getParent().replace(Path.rootPath(), ""));
         if (list == null || list.length == 0) {
             info.add("files", new JsonArray());
