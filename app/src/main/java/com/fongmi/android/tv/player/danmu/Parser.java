@@ -11,6 +11,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.io.File;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import master.flame.danmaku.danmaku.model.AlphaValue;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -24,6 +26,8 @@ import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.danmaku.util.DanmakuUtils;
 
 public class Parser extends BaseDanmakuParser {
+
+    private static final Pattern XML_NUMBER_ENTITY = Pattern.compile("&#(x?[0-9A-Fa-f]+);");
 
     private final Danmu danmu;
     private BaseDanmaku item;
@@ -188,10 +192,26 @@ public class Parser extends BaseDanmakuParser {
     }
 
     private String decodeXmlString(String title) {
+        if (TextUtils.isEmpty(title)) return "";
         if (title.contains("&amp;")) title = title.replace("&amp;", "&");
         if (title.contains("&quot;")) title = title.replace("&quot;", "\"");
         if (title.contains("&gt;")) title = title.replace("&gt;", ">");
         if (title.contains("&lt;")) title = title.replace("&lt;", "<");
-        return title;
+        if (title.contains("&apos;")) title = title.replace("&apos;", "'");
+        Matcher matcher = XML_NUMBER_ENTITY.matcher(title);
+        StringBuffer buffer = new StringBuffer();
+        while (matcher.find()) {
+            String value = matcher.group(1);
+            try {
+                int codePoint = value.startsWith("x") || value.startsWith("X")
+                        ? Integer.parseInt(value.substring(1), 16)
+                        : Integer.parseInt(value);
+                matcher.appendReplacement(buffer, Matcher.quoteReplacement(new String(Character.toChars(codePoint))));
+            } catch (Exception e) {
+                matcher.appendReplacement(buffer, Matcher.quoteReplacement(matcher.group()));
+            }
+        }
+        matcher.appendTail(buffer);
+        return buffer.toString();
     }
 }

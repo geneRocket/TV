@@ -39,10 +39,8 @@ public class LiveViewModel extends ViewModel {
     private static final int URL = 2;
     private static final int XML = 3;
 
-    private final SimpleDateFormat formatDate;
-    private final SimpleDateFormat formatTime;
-    private final List<SimpleDateFormat> formatTimeList;
     private final TimeZone defaultTimeZone;
+    private volatile TimeZone currentTimeZone;
 
     public MutableLiveData<Channel> url;
     public MutableLiveData<Boolean> xml;
@@ -59,12 +57,8 @@ public class LiveViewModel extends ViewModel {
     private final AtomicInteger xmlSeq;
 
     public LiveViewModel() {
-        this.formatTime = new SimpleDateFormat("yyyy-MM-ddHH:mm", Locale.getDefault());
-        this.formatDate = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-        this.formatTimeList = new ArrayList<>();
         this.defaultTimeZone = TimeZone.getDefault();
-        this.formatTimeList.add(formatTime);
-        this.formatTimeList.add(new SimpleDateFormat("yyyy-MM-ddHH:mm:ss", Locale.getDefault()));
+        this.currentTimeZone = defaultTimeZone;
         this.live = new MutableLiveData<>();
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
@@ -76,9 +70,9 @@ public class LiveViewModel extends ViewModel {
     }
 
     public void getLive(Live item) {
+        currentTimeZone = resolveTimeZone(item.getTimeZone(), item.getEpg(), defaultTimeZone);
         execute(LIVE, () -> {
             LiveParser.start(item.recent());
-            setTimeZone(item);
             verify(item);
             return item;
         });
@@ -89,44 +83,70 @@ public class LiveViewModel extends ViewModel {
     }
 
     public void getEpg(Channel item) {
-        String date = formatDate.format(new Date());
+        TimeZone timeZone = resolveTimeZone(null, item.getEpg(), currentTimeZone);
+        String date = createDateFormat(timeZone).format(new Date());
         String url = item.getEpg().replace("{date}", date);
+        List<SimpleDateFormat> formats = createTimeFormats(timeZone);
         execute(EPG, () -> {
             if (!url.startsWith("http")) return item.getData().selected();
-            if (!item.getData().equal(date)) item.setData(Epg.objectFrom(OkHttp.string(url), item.getTvgId(), formatTimeList));
+            if (!item.getData().equal(date)) item.setData(Epg.objectFrom(OkHttp.string(url), item.getTvgId(), formats));
             return item.getData().selected();
         });
     }
 
     public void getUrl(Channel item) {
+        Channel request = snapshot(item);
         execute(URL, () -> {
-            item.setMsg(null);
+            request.setMsg(null);
             Source.get().stop();
-            item.setUrl(Source.get().fetch(item));
-            return item;
+            request.setUrl(Source.get().fetch(request));
+            return request;
         });
     }
 
     public void getUrl(Channel item, EpgData data) {
+        Channel request = snapshot(item);
         execute(URL, () -> {
-            item.setUrl(item.getCatchup().format(item.getCurrent(), data));
-            return item;
+            request.setUrl(request.getCatchup().format(request.getCurrent(), data));
+            return request;
         });
     }
 
-    private void setTimeZone(Live item) {
+    private Channel snapshot(Channel item) {
+        Channel request = Channel.create(item).group(item.getGroup());
+        request.setLine(item.getLine());
+        request.setUrl(item.getUrl());
+        request.setMsg(item.getMsg());
+        request.setSelected(item.isSelected());
+        return request;
+    }
+
+    private TimeZone resolveTimeZone(String value, String epg, TimeZone fallback) {
         try {
-            String value = item.getTimeZone();
-            if (value.isEmpty() && item.getEpg().contains("serverTimeZone=")) value = Uri.parse(item.getEpg()).getQueryParameter("serverTimeZone");
-            TimeZone timeZone = value == null || value.isEmpty() ? defaultTimeZone : TimeZone.getTimeZone(value);
-            formatDate.setTimeZone(timeZone);
-            formatTime.setTimeZone(timeZone);
-            for (SimpleDateFormat itemFormat : formatTimeList) itemFormat.setTimeZone(timeZone);
+            if ((value == null || value.isEmpty()) && epg != null && epg.contains("serverTimeZone=")) value = Uri.parse(epg).getQueryParameter("serverTimeZone");
+            return value == null || value.isEmpty() ? fallback : TimeZone.getTimeZone(value);
         } catch (Exception ignored) {
-            formatDate.setTimeZone(defaultTimeZone);
-            formatTime.setTimeZone(defaultTimeZone);
-            for (SimpleDateFormat itemFormat : formatTimeList) itemFormat.setTimeZone(defaultTimeZone);
+            return fallback;
         }
+    }
+
+    private SimpleDateFormat createDateFormat(TimeZone timeZone) {
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        format.setTimeZone(timeZone);
+        return format;
+    }
+
+    private List<SimpleDateFormat> createTimeFormats(TimeZone timeZone) {
+        List<SimpleDateFormat> formats = new ArrayList<>();
+        formats.add(createTimeFormat("yyyy-MM-ddHH:mm", timeZone));
+        formats.add(createTimeFormat("yyyy-MM-ddHH:mm:ss", timeZone));
+        return formats;
+    }
+
+    private SimpleDateFormat createTimeFormat(String pattern, TimeZone timeZone) {
+        SimpleDateFormat format = new SimpleDateFormat(pattern, Locale.getDefault());
+        format.setTimeZone(timeZone);
+        return format;
     }
 
     private void verify(Live item) {

@@ -205,6 +205,7 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
             @Override
             public void success(String result) {
                 Notify.show(result);
+                success();
             }
 
             @Override

@@ -409,7 +409,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void requestDetail() {
-            host.mViewModel.detailContent(host.getKey(), host.getId());
+            String token = host.nextRequestToken("detail");
+            host.setPendingDetailRequest(token);
+            host.mViewModel.detailContent(host.getKey(), host.getId(), token);
         }
 
         public void handleMissingDetail() {
@@ -422,6 +424,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void setDetail(Result result) {
+            if (!host.isCurrentDetailResult(result)) return;
             if (result.getList().isEmpty()) setEmpty(result.hasMsg());
             else bindDetail(result.getList().get(0));
             Notify.show(result.getMsg());
@@ -678,6 +681,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int mSelectedEpisodePosition;
     private int mSelectedParsePosition;
     private String mArtworkUrl;
+    private long requestTokenSeed;
+    private String pendingDetailToken;
+    private String pendingPlaybackKey;
+    private String pendingPlaybackFlag;
+    private String pendingPlaybackId;
+    private String pendingPlaybackToken;
     private int mEpisodeNumColumns;
     private int mEpisodeNumRows;
     private int mEpisodeColumnWidth;
@@ -1074,6 +1083,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void stopActivePlayback() {
+        clearPendingPlaybackRequest();
         mPlaybackState.clear();
         mClock.setCallback(null);
         mPlayers.reset();
@@ -1084,7 +1094,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         CharSequence title = getString(R.string.detail_title, mBinding.name.getText(), episode.getName());
         if (!TextUtils.equals(mBinding.widget.title.getText(), title)) mBinding.widget.title.setText(title);
         if (!TextUtils.equals(mBinding.display.title.getText(), title)) mBinding.display.title.setText(title);
-        mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl());
+        String token = nextRequestToken("play");
+        setPendingPlaybackRequest(getKey(), flag.getFlag(), episode.getUrl(), token);
+        mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         updateHistory(episode, replay);
         mPlayers.clear();
@@ -1101,6 +1113,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void applyPlayerResult(Result result) {
+        if (!isCurrentPlayerResult(result)) return;
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         mPlayers.start(result, isUseParse(), getSite().getTimeout());
@@ -1947,10 +1960,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public void onSubtitleClick() {
         App.post(this::hideControl, 200);
         SubtitleView subtitleView = mPlayers.isIjk() ? getIjk().getSubtitleView() : getExo().getSubtitleView();
-        String videoName = getName(); // 获取视频名称
+        String videoName = getName();
+        Episode current = mEpisodeAdapter != null && mEpisodeAdapter.size() > 0 ? getEpisode() : null;
         String finalVideoName;
-        if (videoName.isEmpty() && getEpisode() != null) {
-            finalVideoName = getEpisode().getName();
+        if (videoName.isEmpty() && current != null) {
+            finalVideoName = current.getName();
         } else if (videoName.isEmpty() && getTitle() != null) {
             finalVideoName = getTitle().toString();
         } else {
@@ -2243,6 +2257,43 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private boolean isCurrentSingleEpisode() {
         return mEpisodeAdapter != null && mEpisodeAdapter.size() == 1;
+    }
+
+    private String nextRequestToken(String prefix) {
+        return prefix + ":" + (++requestTokenSeed);
+    }
+
+    private void setPendingDetailRequest(String token) {
+        pendingDetailToken = token;
+    }
+
+    private void setPendingPlaybackRequest(String key, String flag, String id, String token) {
+        pendingPlaybackKey = key;
+        pendingPlaybackFlag = flag;
+        pendingPlaybackId = id;
+        pendingPlaybackToken = token;
+    }
+
+    private void clearPendingPlaybackRequest() {
+        pendingPlaybackKey = null;
+        pendingPlaybackFlag = null;
+        pendingPlaybackId = null;
+        pendingPlaybackToken = null;
+    }
+
+    private boolean isCurrentDetailResult(Result result) {
+        return result != null
+                && TextUtils.equals(result.getKey(), getKey())
+                && TextUtils.equals(result.getRequestId(), getId())
+                && TextUtils.equals(result.getRequestToken(), pendingDetailToken);
+    }
+
+    private boolean isCurrentPlayerResult(Result result) {
+        return result != null
+                && TextUtils.equals(result.getKey(), pendingPlaybackKey)
+                && TextUtils.equals(result.getRequestFlag(), pendingPlaybackFlag)
+                && TextUtils.equals(result.getRequestId(), pendingPlaybackId)
+                && TextUtils.equals(result.getRequestToken(), pendingPlaybackToken);
     }
 
     private String getSourceSwitchKeyword() {

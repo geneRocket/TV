@@ -307,6 +307,7 @@ public class Action implements Process {
             @Override
             public void success(String result) {
                 Notify.show(result);
+                success();
             }
 
             @Override

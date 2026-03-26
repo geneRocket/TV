@@ -76,6 +76,9 @@ public class Result implements Parcelable {
     private String keyword;
     @SerializedName("key")
     private String key;
+    private String requestId;
+    private String requestFlag;
+    private String requestToken;
     private String requestTypeId;
     private String requestPage;
     @SerializedName("page")
@@ -286,6 +289,30 @@ public class Result implements Parcelable {
 
     public void setKey(String key) {
         this.key = key;
+    }
+
+    public String getRequestId() {
+        return TextUtils.isEmpty(requestId) ? "" : requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
+
+    public String getRequestFlag() {
+        return TextUtils.isEmpty(requestFlag) ? "" : requestFlag;
+    }
+
+    public void setRequestFlag(String requestFlag) {
+        this.requestFlag = requestFlag;
+    }
+
+    public String getRequestToken() {
+        return TextUtils.isEmpty(requestToken) ? "" : requestToken;
+    }
+
+    public void setRequestToken(String requestToken) {
+        this.requestToken = requestToken;
     }
 
     public String getRequestTypeId() {

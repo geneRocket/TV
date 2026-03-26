@@ -21,8 +21,9 @@ import com.fongmi.android.tv.player.extractor.ZLive;
 import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -59,29 +60,40 @@ public class Source {
         return null;
     }
 
-    private void addCallable(Iterator<Episode> iterator, List<Callable<List<Episode>>> items) {
-        String url = iterator.next().getUrl();
-        if (Thunder.Parser.match(url)) {
-            items.add(Thunder.Parser.get(url));
-            iterator.remove();
-        } else if (Youtube.Parser.match(url)) {
-            items.add(Youtube.Parser.get(url));
-            iterator.remove();
-        }
+    private ParseTask getTask(Episode episode, int index) {
+        String url = episode.getUrl();
+        if (Thunder.Parser.match(url)) return new ParseTask(index, Thunder.Parser.get(url));
+        if (Youtube.Parser.match(url)) return new ParseTask(index, Youtube.Parser.get(url));
+        return null;
     }
 
     public void parse(List<Flag> flags) throws Exception {
         ExecutorService executor = ThreadPools.parse();
         for (Flag flag : flags) {
-            List<Callable<List<Episode>>> items = new ArrayList<>();
-            Iterator<Episode> iterator = flag.getEpisodes().iterator();
-            while (iterator.hasNext()) addCallable(iterator, items);
-            for (Future<List<Episode>> future : executor.invokeAll(items, 30, TimeUnit.SECONDS)) {
+            List<Episode> originals = new ArrayList<>(flag.getEpisodes());
+            List<ParseTask> tasks = new ArrayList<>();
+            List<Callable<List<Episode>>> callables = new ArrayList<>();
+            Map<Integer, List<Episode>> replacements = new HashMap<>();
+            for (int i = 0; i < originals.size(); i++) {
+                ParseTask task = getTask(originals.get(i), i);
+                if (task == null) continue;
+                tasks.add(task);
+                callables.add(task.callable);
+            }
+            if (callables.isEmpty()) continue;
+            List<Future<List<Episode>>> futures = executor.invokeAll(callables, 30, TimeUnit.SECONDS);
+            for (int i = 0; i < futures.size(); i++) {
                 try {
-                    List<Episode> episodes = future.get();
-                    if (episodes != null) flag.getEpisodes().addAll(episodes);
+                    List<Episode> episodes = futures.get(i).get();
+                    if (episodes != null && !episodes.isEmpty()) replacements.put(tasks.get(i).index, episodes);
                 } catch (Exception ignored) {
                 }
+            }
+            flag.getEpisodes().clear();
+            for (int i = 0; i < originals.size(); i++) {
+                List<Episode> episodes = replacements.get(i);
+                if (episodes != null) flag.getEpisodes().addAll(episodes);
+                else flag.getEpisodes().add(originals.get(i));
             }
         }
     }
@@ -90,7 +102,6 @@ public class Source {
         String url = result.getUrl().v();
         Extractor extractor = getExtractor(UrlUtil.uri(url));
         if (extractor != null) result.setParse(0);
-        if (extractor instanceof Video) result.setParse(1);
         return extractor == null ? url : extractor.fetch(url);
     }
 
@@ -98,7 +109,6 @@ public class Source {
         String url = channel.getCurrent();
         Extractor extractor = getExtractor(Uri.parse(url));
         if (extractor != null) channel.setParse(0);
-        if (extractor instanceof Video) channel.setParse(1);
         return extractor == null ? url : extractor.fetch(url);
     }
 
@@ -121,5 +131,16 @@ public class Source {
         void stop();
 
         void exit();
+    }
+
+    private static class ParseTask {
+
+        private final int index;
+        private final Callable<List<Episode>> callable;
+
+        public ParseTask(int index, Callable<List<Episode>> callable) {
+            this.index = index;
+            this.callable = callable;
+        }
     }
 }

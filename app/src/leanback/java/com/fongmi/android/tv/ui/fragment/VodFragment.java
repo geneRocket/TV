@@ -81,7 +81,8 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private String getStoreKey() {
-        return VodConfig.rawSiteKey(getKey());
+        String key = getKey();
+        return key == null ? "" : key;
     }
 
     private String getTypeId() {

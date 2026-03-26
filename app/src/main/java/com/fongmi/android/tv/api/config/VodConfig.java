@@ -323,7 +323,21 @@ public class VodConfig {
         if (!object.has("urls")) return object;
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
         if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-        return loadObject(items.get(0).getUrl(), depth + 1);
+        return loadDepot(items, depth + 1);
+    }
+
+    private JsonObject loadDepot(List<Depot> items, int depth) throws Throwable {
+        Throwable error = null;
+        for (Depot item : items) {
+            try {
+                return loadObject(item.getUrl(), depth);
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        if (error != null) throw error;
+        throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
     }
 
     private void mergeConfig(JsonObject target, JsonObject source, Config config) {
@@ -399,11 +413,34 @@ public class VodConfig {
             if (callback != null) App.post(() -> callback.error(ResUtil.getString(R.string.error_config_parse)));
             return;
         }
-        List<Config> configs = new ArrayList<>();
-        for (Depot item : items) configs.add(Config.find(item, 0));
         Config.delete(config.getUrl());
-        config = configs.get(0);
-        loadConfig(callback);
+        Throwable error = null;
+        for (Depot item : items) {
+            try {
+                Config target = Config.find(item, 0);
+                JsonObject loaded = loadDepotObject(target);
+                config = target;
+                setLoadUrls(Collections.singletonList(target.getUrl()));
+                checkJson(loaded, callback);
+                return;
+            } catch (Throwable e) {
+                error = e;
+                e.printStackTrace();
+            }
+        }
+        Throwable cause = error == null ? new Throwable("No valid config") : error;
+        if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+    }
+
+    private JsonObject loadDepotObject(Config target) throws Throwable {
+        try {
+            JsonObject loaded = loadObject(target.getUrl(), 0);
+            cacheConfig(target, loaded);
+            return loaded;
+        } catch (Throwable e) {
+            if (!TextUtils.isEmpty(target.getJson())) return Json.parse(target.getJson()).getAsJsonObject();
+            throw e;
+        }
     }
 
     private void parseConfig(JsonObject object, Callback callback) {
@@ -415,13 +452,18 @@ public class VodConfig {
             if (loadLive && object.has("lives")) initLive(object);
             String notice = Json.safeString(object, "notice");
             config.logo(Json.safeString(object, "logo"));
-            App.post(() -> callback.success(notice));
             if (persistCache) config.json(object.toString()).update();
-            App.post(callback::success);
+            postSuccess(callback, notice);
         } catch (Throwable e) {
             e.printStackTrace();
             App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
+    }
+
+    private void postSuccess(Callback callback, String notice) {
+        if (callback == null) return;
+        if (TextUtils.isEmpty(notice)) App.post(callback::success);
+        else App.post(() -> callback.success(notice));
     }
 
     private void initSite(JsonObject object) {

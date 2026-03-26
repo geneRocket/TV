@@ -56,16 +56,23 @@ public class Media implements Process {
         return TextUtils.isEmpty(getPlayer().getUrl()) ? "" : getPlayer().getUrl();
     }
 
+    private String getMetadataString(String key) {
+        MediaMetadataCompat metadata = getMetadata();
+        if (metadata == null) return "";
+        String value = metadata.getString(key);
+        return TextUtils.isEmpty(value) ? "" : value;
+    }
+
     private String getTitle() {
-        return getMetadata() == null || getMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE).isEmpty() ? "" : getMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE);
+        return getMetadataString(MediaMetadataCompat.METADATA_KEY_TITLE);
     }
 
     private String getArtist() {
-        return getMetadata() == null || getMetadata().getString(MediaMetadataCompat.METADATA_KEY_ARTIST).isEmpty() ? "" : getMetadata().getString(MediaMetadataCompat.METADATA_KEY_ARTIST);
+        return getMetadataString(MediaMetadataCompat.METADATA_KEY_ARTIST);
     }
 
     private String getArtUri() {
-        return getMetadata() == null ? "" : getMetadata().getString(MediaMetadataCompat.METADATA_KEY_ART_URI);
+        return getMetadataString(MediaMetadataCompat.METADATA_KEY_ART_URI);
     }
 
     private long getDuration() {

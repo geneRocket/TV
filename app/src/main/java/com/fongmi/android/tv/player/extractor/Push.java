@@ -1,11 +1,7 @@
 package com.fongmi.android.tv.player.extractor;
 
 import android.net.Uri;
-import android.os.SystemClock;
-
-import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.player.Source;
-import com.fongmi.android.tv.ui.activity.VideoActivity;
 
 public class Push implements Source.Extractor {
 
@@ -15,13 +11,10 @@ public class Push implements Source.Extractor {
     }
 
     @Override
-    public String fetch(String url) throws Exception {
-        if (App.activity() != null) {
-            String pushUrl = url.startsWith("push://") ? url.substring("push://".length()) : url.startsWith("push:") ? url.substring("push:".length()) : url;
-            VideoActivity.start(App.activity(), pushUrl);
-        }
-        SystemClock.sleep(500);
-        return "";
+    public String fetch(String url) {
+        if (url.startsWith("push://")) return url.substring("push://".length());
+        if (url.startsWith("push:")) return url.substring("push:".length());
+        return url;
     }
 
     @Override

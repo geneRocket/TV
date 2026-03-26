@@ -285,7 +285,11 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private boolean isCurrentChannel(Channel item) {
-        return item != null && mChannel != null && item.equals(mChannel) && item.getLine() == mChannel.getLine();
+        return item != null
+                && mChannel != null
+                && item.getGroup() == mChannel.getGroup()
+                && item.getLine() == mChannel.getLine()
+                && TextUtils.equals(item.getCurrent(), mChannel.getCurrent());
     }
 
     private void checkLive() {
@@ -748,7 +752,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void setEpg(Epg epg) {
-        if (mChannel != null && mChannel.getTvgName().equals(epg.getKey())) setEpg();
+        if (mChannel != null && mChannel.getTvgId().equals(epg.getKey())) setEpg();
     }
 
     private void fetch() {

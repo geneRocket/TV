@@ -13,6 +13,7 @@ public class Callback implements okhttp3.Callback {
     }
 
     public void success(String result) {
+        success();
     }
 
     public void error(String msg) {

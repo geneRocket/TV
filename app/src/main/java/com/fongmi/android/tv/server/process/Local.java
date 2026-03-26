@@ -101,24 +101,33 @@ public class Local implements Process {
     }
 
     private NanoHTTPD.Response getFile(Map<String, String> header, File file, String mime) throws Exception {
+        long fileLen = file.length();
         long startFrom = 0;
         long endAt = -1;
         String range = header.get("range");
-        if (range != null) {
-            if (range.startsWith("bytes=")) {
-                range = range.substring("bytes=".length());
-                int minus = range.indexOf('-');
-                try {
-                    if (minus > 0) {
-                        startFrom = Long.parseLong(range.substring(0, minus));
-                        endAt = Long.parseLong(range.substring(minus + 1));
+        if (range != null && range.startsWith("bytes=")) {
+            range = range.substring("bytes=".length()).trim();
+            int minus = range.indexOf('-');
+            try {
+                if (minus >= 0) {
+                    String start = range.substring(0, minus).trim();
+                    String end = range.substring(minus + 1).trim();
+                    if (!start.isEmpty()) startFrom = Long.parseLong(start);
+                    if (!end.isEmpty()) endAt = Long.parseLong(end);
+                    if (start.isEmpty() && !end.isEmpty()) {
+                        long suffixLen = Long.parseLong(end);
+                        if (suffixLen > 0) {
+                            startFrom = Math.max(fileLen - suffixLen, 0);
+                            endAt = fileLen - 1;
+                        }
                     }
-                } catch (NumberFormatException ignored) {
                 }
+            } catch (NumberFormatException ignored) {
+                startFrom = 0;
+                endAt = -1;
             }
         }
         NanoHTTPD.Response res;
-        long fileLen = file.length();
         String ifRange = header.get("if-range");
         String etag = Integer.toHexString((file.getAbsolutePath() + file.lastModified() + "" + file.length()).hashCode());
         boolean headerIfRangeMissingOrMatching = (ifRange == null || etag.equals(ifRange));
@@ -131,8 +140,15 @@ public class Local implements Process {
                 res.addHeader(HttpHeaders.ETAG, etag);
             } else {
                 if (endAt < 0) endAt = fileLen - 1;
+                endAt = Math.min(endAt, fileLen - 1);
                 long newLen = endAt - startFrom + 1;
-                if (newLen < 0) newLen = 0;
+                if (newLen <= 0) {
+                    res = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.RANGE_NOT_SATISFIABLE, NanoHTTPD.MIME_PLAINTEXT, "");
+                    res.addHeader(HttpHeaders.CONTENT_RANGE, "bytes */" + fileLen);
+                    res.addHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
+                    res.addHeader(HttpHeaders.ETAG, etag);
+                    return res;
+                }
                 FileInputStream fis = new FileInputStream(file);
                 fis.skip(startFrom);
                 res = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.PARTIAL_CONTENT, mime, fis, newLen);
@@ -152,7 +168,7 @@ public class Local implements Process {
                 res.addHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
                 res.addHeader(HttpHeaders.ETAG, etag);
             } else {
-                res = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mime, new FileInputStream(file), (int) file.length());
+                res = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mime, new FileInputStream(file), fileLen);
                 res.addHeader(HttpHeaders.CONTENT_LENGTH, fileLen + "");
                 res.addHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
                 res.addHeader(HttpHeaders.ETAG, etag);

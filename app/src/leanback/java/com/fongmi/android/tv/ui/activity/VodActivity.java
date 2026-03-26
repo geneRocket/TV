@@ -54,7 +54,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         Intent intent = new Intent(activity, VodActivity.class);
         intent.putExtra("key", key);
         intent.putExtra("result", result);
-        String storeKey = VodConfig.rawSiteKey(key);
+        String storeKey = key == null ? "" : key;
         for (Map.Entry<String, List<Filter>> entry : result.getFilters().entrySet()) Prefers.put("filter_" + storeKey + "_" + entry.getKey(), App.gson().toJson(entry.getValue()));
         activity.startActivity(intent);
     }
@@ -64,7 +64,8 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     }
 
     private String getStoreKey() {
-        return VodConfig.rawSiteKey(getKey());
+        String key = getKey();
+        return key == null ? "" : key;
     }
 
     private Result getResult() {

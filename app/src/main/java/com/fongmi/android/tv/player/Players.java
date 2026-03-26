@@ -384,10 +384,13 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public boolean isLive() {
-        return getDuration() < 5 * 60 * 1000;
+        if (forceLive) return true;
+        long duration = getDuration();
+        return duration == C.TIME_UNSET || duration < 0 || duration < 5 * 60 * 1000;
     }
 
     public boolean isVod() {
+        if (forceLive) return false;
         return getDuration() > 5 * 60 * 1000;
     }
 
@@ -896,12 +899,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private void updateLiveDecision() {
         if (!isExo() || exoPlayer == null) return;
-        boolean runtimeLive = exoPlayer.isCurrentMediaItemLive();
-        if (runtimeLive) {
-            forceLive = true;
-        } else if (getDuration() > 0 && getDuration() != C.TIME_UNSET) {
-            forceLive = false;
-        }
+        forceLive = forceLive || exoPlayer.isCurrentMediaItemLive();
     }
 
     @Override

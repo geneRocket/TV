@@ -194,7 +194,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private String getStoreKey() {
-        return VodConfig.rawSiteKey(getKey());
+        String key = getKey();
+        return key == null ? "" : key;
     }
 
     private List<Filter> getFilter(String typeId) {
@@ -451,6 +452,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             @Override
             public void success(String result) {
                 Notify.show(result);
+                success();
             }
 
             @Override

@@ -158,7 +158,11 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void detailContent(String key, String id) {
-        execute(result, () -> {
+        detailContent(key, id, "");
+    }
+
+    public void detailContent(String key, String id, String token) {
+        executeRequest(result, () -> {
             Site site = VodConfig.get().getSite(key);
             if (site.getType() == 3) {
                 Spider spider = site.recent().spider();
@@ -187,11 +191,15 @@ public class SiteViewModel extends ViewModel {
                 if (!result.getList().isEmpty()) Source.get().parse(result.getList().get(0).getVodFlags());
                 return result;
             }
-        });
+        }, key, id, null, token);
     }
 
     private void executePlayer(MutableLiveData<Result> data, String key, String flag, String id) {
-        execute(data, () -> {
+        executePlayer(data, key, flag, id, "");
+    }
+
+    private void executePlayer(MutableLiveData<Result> data, String key, String flag, String id, String token) {
+        executeRequest(data, () -> {
             Source.get().stop();
             Site site = VodConfig.get().getSite(key);
             if (site.getType() == 3) {
@@ -241,11 +249,15 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(result.toString());
                 return result;
             }
-        });
+        }, key, id, flag, token);
     }
 
     public void playerContent(String key, String flag, String id) {
-        executePlayer(player, key, flag, id);
+        playerContent(key, flag, id, "");
+    }
+
+    public void playerContent(String key, String flag, String id, String token) {
+        executePlayer(player, key, flag, id, token);
     }
 
     public void download(String key, String flag, String id) {
@@ -379,6 +391,49 @@ public class SiteViewModel extends ViewModel {
                 e.printStackTrace();
             }
         });
+    }
+
+    private void executeRequest(MutableLiveData<Result> result, Callable<Result> callable, String key, String id, String flag, String token) {
+        App.execute(() -> {
+            Future<Result> future = null;
+            try {
+                future = executor.submit(callable);
+                result.postValue(withRequest(future.get(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS), key, id, flag, token));
+            } catch (RejectedExecutionException e) {
+                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
+            } catch (TimeoutException e) {
+                if (future != null) future.cancel(true);
+                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
+                e.printStackTrace();
+            } catch (ExtractException e) {
+                if (future != null) future.cancel(true);
+                result.postValue(withRequest(Result.error(e.getMessage()), key, id, flag, token));
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                if (future != null) future.cancel(true);
+                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
+            } catch (Exception e) {
+                if (future != null) future.cancel(true);
+                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private Result withRequest(Result result, String key, String id, String flag, String token) {
+        Result value = result == null ? emptyRequestResult() : result;
+        value.setKey(key);
+        value.setRequestId(id);
+        value.setRequestFlag(flag);
+        value.setRequestToken(token);
+        return value;
+    }
+
+    private Result emptyRequestResult() {
+        Result result = Result.empty();
+        result.setParse(0);
+        return result;
     }
 
     @Override
