@@ -111,7 +111,11 @@ public class Flag implements Parcelable {
     public Episode find(String remarks, boolean strict) {
         int number = Util.getDigit(remarks);
         if (getEpisodes().size() == 0) return null;
-        if (getEpisodes().size() == 1) return getEpisodes().get(0);
+        if (getEpisodes().size() == 1) {
+            Episode only = getEpisodes().get(0);
+            if (!strict || only.rule1(remarks) || only.rule2(number) || only.rule3(remarks) || only.rule4(remarks)) return only;
+            return null;
+        }
         for (Episode item : getEpisodes()) if (item.rule1(remarks)) return item;
         for (Episode item : getEpisodes()) if (item.rule2(number)) return item;
         if (number == -1) for (Episode item : getEpisodes()) if (item.rule3(remarks)) return item;

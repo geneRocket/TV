@@ -235,7 +235,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void switchFlag(Flag item, boolean notify) {
-            if (host.mFlagAdapter.size() == 0 || item.isActivated()) return;
+            if (host.mFlagAdapter.size() == 0) return;
+            if (item.isActivated()) {
+                if (host.isPendingSiteSwitch() || host.isSourceSwitching()) {
+                    host.setEpisodeAdapter(item.getEpisodes());
+                    host.setQualityVisible(false);
+                    host.seamless(item);
+                }
+                return;
+            }
             int index = host.mFlagAdapter.indexOf(item);
             if (index == -1) {
                 item.setFlag(((Flag) host.mFlagAdapter.get(0)).getFlag());
@@ -258,6 +266,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             for (int i = 0; i < host.mFlagAdapter.size(); i++) ((Flag) host.mFlagAdapter.get(i)).toggle(flagPosition == i, item);
             host.mSelectedEpisodePosition = Math.max(0, host.getFlag().getEpisodes().indexOf(item));
             host.setEpisodeSelectedPosition(host.getEpisodePosition());
+            if (host.shouldApplySourceSwitchProgress(host.getFlag(), item)) host.applySourceSwitchProgress(host.getFlag(), item);
+            host.clearSourceSwitch();
             host.notifyItemChanged(host.getEpisodeView(), host.mEpisodeAdapter);
             host.onRefresh();
         }
@@ -287,10 +297,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         public void nextSite() {
             if (host.mQuickAdapter.size() == 0) return;
+            host.beginSourceSwitch();
             Vod item = (Vod) host.mQuickAdapter.get(0);
             host.mQuickAdapter.removeItems(0, 1);
             String id = host.getId();
             if (!id.isEmpty()) host.mBroken.add(id);
+            host.setPendingSiteSwitch(true);
             host.setInitAuto(false);
             showDetail(item, true);
         }
@@ -428,18 +440,25 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (items.isEmpty()) return;
             host.mQuickAdapter.addAll(host.mQuickAdapter.size(), items);
             host.setVisibilityIfChanged(host.mBinding.quick, View.VISIBLE);
-            if (host.isInitAuto()) host.mPlaybackNavigation.nextSite();
+            if (host.isInitAuto() || host.canAdvancePendingSourceSwitch()) host.mPlaybackNavigation.nextSite();
             App.removeCallbacks(host.mR4);
         }
 
         public void setSearch(Vod item) {
+            int index = host.mQuickAdapter.indexOf(item);
+            if (index >= 0) host.mQuickAdapter.removeItems(index, 1);
+            String id = host.getId();
+            if (!id.isEmpty()) host.mBroken.add(id);
             host.setAutoMode(false);
+            host.setInitAuto(false);
+            host.beginSourceSwitch();
+            host.setPendingSiteSwitch(true);
             host.mPlaybackNavigation.showDetail(item, false);
         }
 
         public void advanceSearch(boolean force) {
-            if (host.mQuickAdapter.size() == 0) initSearch(host.mBinding.name.getText().toString(), true);
-            else if (host.isAutoMode() || force) host.mPlaybackNavigation.nextSite();
+            if (host.mQuickAdapter.size() == 0) initSearch(host.getSourceSwitchKeyword(), true);
+            else if (host.isAutoMode() || force || host.isSourceSwitching()) host.mPlaybackNavigation.nextSite();
         }
 
         public void stopSearch() {
@@ -447,11 +466,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (host.mExecutor != ThreadPools.search()) host.mExecutor.shutdownNow();
             host.mExecutor = null;
             host.mSearchActive = false;
+            host.resetSearchTaskState();
             host.mQuickKeys.clear();
         }
 
         public void showEmpty() {
             host.mBinding.progressLayout.showEmpty();
+            host.clearSourceSwitch();
             stopSearch();
         }
 
@@ -459,9 +480,21 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             boolean empty = item.getVodFlags().isEmpty();
             host.setVisibilityIfChanged(host.mBinding.flag, empty ? View.GONE : View.VISIBLE);
             if (empty) {
+                if (host.isPendingSiteSwitch()) {
+                    host.setPendingSiteSwitch(false);
+                    host.continueSourceSwitch();
+                    return;
+                }
                 ErrorEvent.flag();
             } else {
-                host.mPlaybackNavigation.switchFlag(host.mHistory.getFlag(), false);
+                Flag target = host.findTargetFlag(item.getVodFlags());
+                if (target == null) {
+                    host.setPendingSiteSwitch(false);
+                    host.continueSourceSwitch();
+                    return;
+                }
+                host.setPendingSiteSwitch(false);
+                host.mPlaybackNavigation.switchFlag(target, false);
                 if (host.mHistory.isRevSort()) host.reverseEpisode(true);
             }
         }
@@ -489,6 +522,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         private void setEmpty(boolean finish) {
+            if (host.isSourceSwitching()) {
+                host.setPendingSiteSwitch(false);
+                host.continueSourceSwitch();
+                return;
+            }
             if (host.isFromCollect() || finish) {
                 host.finish();
             } else if (host.getName().isEmpty()) {
@@ -555,13 +593,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 if (!keys.add(site.getKey())) continue;
                 sites.add(site);
             }
-            for (Site site : sites) host.mExecutor.execute(() -> search(site, keyword));
+            int generation = host.beginSearchTaskState(sites.size());
+            for (Site site : sites) host.mExecutor.execute(() -> search(site, keyword, generation));
+            if (sites.isEmpty()) host.onSearchTasksSettled(generation);
         }
 
-        private void search(Site site, String keyword) {
+        private void search(Site site, String keyword, int generation) {
             try {
                 host.mViewModel.searchContent(site, keyword, true);
             } catch (Throwable ignored) {
+            } finally {
+                if (host.onSearchTaskFinished(generation)) App.post(() -> host.onSearchTasksSettled(generation), 100);
             }
         }
 
@@ -569,8 +611,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (host.getId().equals(item.getVodId())) return true;
             if (!item.getVodId().isEmpty() && host.mBroken.contains(item.getVodId())) return true;
             String keyword = Objects.toString(host.mBinding.part.getTag(), "");
-            if (host.isAutoMode()) return !item.getVodName().equals(keyword);
-            else return !item.getVodName().contains(keyword);
+            return !host.matchSourceTitle(item.getVodName(), keyword);
         }
 
         private boolean isPass(Site item) {
@@ -613,6 +654,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean autoMode;
     private boolean useParse;
     private volatile boolean mSearchActive;
+    private int mSearchGeneration;
+    private int mSearchPendingCount;
     private final Set<String> mQuickKeys = new HashSet<>();
     private final ContentController mContent = new ContentController(this);
     private final ErrorRecoveryController mErrorRecovery = new ErrorRecoveryController(this);
@@ -644,6 +687,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int mDanmakuRequestId;
     private boolean mArrayRevSort;
     private boolean mArrayRevPlay;
+    private boolean pendingSiteSwitch;
+    private boolean sourceSwitching;
+    private boolean sourceSwitchSingleEpisode;
+    private String sourceSwitchFlag;
+    private String sourceSwitchEpisode;
+    private String sourceSwitchKeyword;
+    private String sourceSwitchTargetFlag;
+    private String sourceSwitchTargetEpisodeKey;
+    private long sourceSwitchPosition;
 
     public static void push(FragmentActivity activity, String text) {
         if (FileChooser.isValid(activity, Uri.parse(text))) file(activity, FileChooser.getPathFromUri(activity, Uri.parse(text)));
@@ -1051,7 +1103,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void applyPlayerResult(Result result) {
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
-        mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
+        mPlayers.start(result, isUseParse(), getSite().getTimeout());
         mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
         setQualityVisible(result.getUrl().isMulti());
         setDanmakus(result.getDanmakus());
@@ -1226,18 +1278,32 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void seamless(Flag flag) {
-        Episode episode = flag.find(mHistory.getVodRemarks(), getMark().isEmpty());
+        String episodeName = isSourceSwitching() ? sourceSwitchEpisode : mHistory.getVodRemarks();
+        Episode episode = isSourceSwitchSingleEpisode()
+                ? getDefaultSourceSwitchEpisode(flag)
+                : flag.find(episodeName, !TextUtils.isEmpty(episodeName));
         setQualityVisible(episode != null && episode.isActivated() && mQualityAdapter.getItemCount() > 1);
-        if (episode == null || episode.isActivated()) return;
+        if (episode == null) return;
+        if (episode.isActivated()) {
+            applySourceSwitchProgress(flag, episode);
+            clearSourceSwitch();
+            hidePreview();
+            onRefresh();
+            return;
+        }
         if (Setting.getFlag() == 1) {
+            setSourceSwitchTarget(flag, episode);
             episode.setActivated(true);
+            mSelectedEpisodePosition = Math.max(0, flag.getEpisodes().indexOf(episode));
             if (!isFullscreen()) getEpisodeView().requestFocus();
-            setEpisodeSelectedPosition(getEpisodePosition());
+            setEpisodeSelectedPosition(mSelectedEpisodePosition);
             episode.setActivated(false);
         } else {
+            applySourceSwitchProgress(flag, episode);
             mHistory.setVodRemarks(episode.getName());
             mPlaybackNavigation.switchEpisode(episode);
             hidePreview();
+            clearSourceSwitch();
         }
     }
 
@@ -1252,7 +1318,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setQualityActivated(Result result) {
         try {
-            mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
+            mPlayers.start(result, isUseParse(), getSite().getTimeout());
             mBinding.danmaku.hide();
         } catch (Exception e) {
             ErrorEvent.extract(e.getMessage());
@@ -1729,6 +1795,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void hideControl(boolean hideInfo) {
+        cancelPendingSourceSwitchTarget();
         if (hideInfo) hideInfo();
         setPlainTextIfChanged(mBinding.control.text, getString(R.string.play_track_text));
         setVisibilityIfChanged(mBinding.control.getRoot(), View.GONE);
@@ -2016,7 +2083,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void advanceRecoveryFlow() {
-        if (!getSite().isChangeable()) return;
         if (isUseParse()) advanceParse();
         else advanceFlag();
     }
@@ -2097,6 +2163,186 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     public void setAutoMode(boolean autoMode) {
         this.autoMode = autoMode;
+    }
+
+    private boolean isSourceSwitching() {
+        return sourceSwitching;
+    }
+
+    private boolean isSourceSwitchSingleEpisode() {
+        return sourceSwitchSingleEpisode;
+    }
+
+    private boolean isPendingSiteSwitch() {
+        return pendingSiteSwitch;
+    }
+
+    private void setPendingSiteSwitch(boolean pendingSiteSwitch) {
+        this.pendingSiteSwitch = pendingSiteSwitch;
+    }
+
+    private void beginSourceSwitch() {
+        if (isSourceSwitching()) return;
+        sourceSwitching = true;
+        mBroken.clear();
+        sourceSwitchSingleEpisode = isCurrentSingleEpisode();
+        sourceSwitchFlag = getCurrentSwitchFlag();
+        sourceSwitchEpisode = getCurrentSwitchEpisode();
+        sourceSwitchKeyword = getCurrentSwitchKeyword();
+        setSourceSwitchTarget(null, null);
+        sourceSwitchPosition = getCurrentSwitchPosition();
+    }
+
+    private void clearSourceSwitch() {
+        setPendingSiteSwitch(false);
+        sourceSwitching = false;
+        sourceSwitchSingleEpisode = false;
+        sourceSwitchFlag = null;
+        sourceSwitchEpisode = null;
+        sourceSwitchKeyword = null;
+        setSourceSwitchTarget(null, null);
+        sourceSwitchPosition = 0;
+    }
+
+    private void continueSourceSwitch() {
+        if (!isSourceSwitching()) return;
+        if (mQuickAdapter.size() > 0) {
+            mPlaybackNavigation.nextSite();
+        } else if (!hasPendingSearchTasks()) {
+            clearSourceSwitch();
+        }
+    }
+
+    private boolean canAdvancePendingSourceSwitch() {
+        return isSourceSwitching() && !isPendingSiteSwitch() && mQuickAdapter.size() > 0;
+    }
+
+    private String getCurrentSwitchFlag() {
+        if (mFlagAdapter != null && mFlagAdapter.size() > 0) return getFlag().getFlag();
+        if (mHistory != null) return mHistory.getVodFlag();
+        return "";
+    }
+
+    private String getCurrentSwitchEpisode() {
+        if (!TextUtils.isEmpty(getMark())) return getMark();
+        if (mEpisodeAdapter != null && mEpisodeAdapter.size() > 0) return getEpisode().getName();
+        if (mHistory != null) return mHistory.getVodRemarks();
+        return "";
+    }
+
+    private String getCurrentSwitchKeyword() {
+        if (mHistory != null && !TextUtils.isEmpty(mHistory.getVodName())) return mHistory.getVodName();
+        return mBinding == null ? getName() : mBinding.name.getText().toString();
+    }
+
+    private long getCurrentSwitchPosition() {
+        long position = mPlayers == null ? 0 : mPlayers.getPosition();
+        if (position > 0) return position;
+        return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
+    }
+
+    private boolean isCurrentSingleEpisode() {
+        return mEpisodeAdapter != null && mEpisodeAdapter.size() == 1;
+    }
+
+    private String getSourceSwitchKeyword() {
+        if (!TextUtils.isEmpty(sourceSwitchKeyword)) return sourceSwitchKeyword;
+        return getCurrentSwitchKeyword();
+    }
+
+    private synchronized int beginSearchTaskState(int count) {
+        mSearchGeneration++;
+        mSearchPendingCount = Math.max(count, 0);
+        return mSearchGeneration;
+    }
+
+    private synchronized void resetSearchTaskState() {
+        mSearchGeneration++;
+        mSearchPendingCount = 0;
+    }
+
+    private synchronized boolean onSearchTaskFinished(int generation) {
+        if (generation != mSearchGeneration) return false;
+        if (mSearchPendingCount > 0) mSearchPendingCount--;
+        return mSearchPendingCount == 0;
+    }
+
+    private synchronized boolean hasPendingSearchTasks() {
+        return mSearchPendingCount > 0;
+    }
+
+    private void onSearchTasksSettled(int generation) {
+        if (generation != mSearchGeneration || !isSourceSwitching() || isPendingSiteSwitch()) return;
+        if (mQuickAdapter.size() == 0 && !hasPendingSearchTasks()) clearSourceSwitch();
+    }
+
+    private boolean matchSourceTitle(String title, String keyword) {
+        String source = normalizeSourceTitle(title);
+        String target = normalizeSourceTitle(keyword);
+        if (source.isEmpty() || target.isEmpty()) return false;
+        return source.equals(target) || source.contains(target) || target.contains(source);
+    }
+
+    private String normalizeSourceTitle(String text) {
+        return Objects.toString(text, "").trim().toLowerCase().replaceAll("[\\s\\p{Punct}]+", "");
+    }
+
+    private Flag findTargetFlag(List<Flag> flags) {
+        Flag preferred = null;
+        for (Flag flag : flags) {
+            if (flag.getFlag().equals(sourceSwitchFlag)) {
+                preferred = flag;
+                break;
+            }
+        }
+        if (!isPendingSiteSwitch()) return preferred != null ? preferred : flags.isEmpty() ? null : flags.get(0);
+        if (hasEpisode(preferred)) return preferred;
+        for (Flag flag : flags) if (hasEpisode(flag)) return flag;
+        return null;
+    }
+
+    private boolean hasEpisode(Flag flag) {
+        if (sourceSwitchSingleEpisode) return flag != null;
+        return flag != null && flag.find(sourceSwitchEpisode, !TextUtils.isEmpty(sourceSwitchEpisode)) != null;
+    }
+
+    private Episode getDefaultSourceSwitchEpisode(Flag flag) {
+        if (flag == null || flag.getEpisodes().isEmpty()) return null;
+        if (flag.getPosition() >= 0 && flag.getPosition() < flag.getEpisodes().size()) return flag.getEpisodes().get(flag.getPosition());
+        for (Episode episode : flag.getEpisodes()) if (episode.isActivated()) return episode;
+        return flag.getEpisodes().get(0);
+    }
+
+    private void setSourceSwitchTarget(Flag flag, Episode episode) {
+        sourceSwitchTargetFlag = flag == null ? null : flag.getFlag();
+        sourceSwitchTargetEpisodeKey = getSourceSwitchEpisodeKey(episode);
+    }
+
+    private boolean hasPendingSourceSwitchTarget() {
+        return isSourceSwitching() && !TextUtils.isEmpty(sourceSwitchTargetEpisodeKey);
+    }
+
+    private void cancelPendingSourceSwitchTarget() {
+        if (hasPendingSourceSwitchTarget()) clearSourceSwitch();
+    }
+
+    private String getSourceSwitchEpisodeKey(Episode episode) {
+        if (episode == null) return null;
+        return TextUtils.isEmpty(episode.getUrl()) ? episode.getName() : episode.getUrl();
+    }
+
+    private boolean shouldApplySourceSwitchProgress(Flag flag, Episode episode) {
+        if (!isSourceSwitching() || flag == null || episode == null) return false;
+        if (TextUtils.isEmpty(sourceSwitchTargetEpisodeKey)) return true;
+        return TextUtils.equals(sourceSwitchTargetFlag, flag.getFlag()) && TextUtils.equals(sourceSwitchTargetEpisodeKey, getSourceSwitchEpisodeKey(episode));
+    }
+
+    private void applySourceSwitchProgress(Flag flag, Episode episode) {
+        if (!isSourceSwitching() || mHistory == null || episode == null) return;
+        mHistory.setVodFlag(flag.getFlag());
+        mHistory.setVodRemarks(episode.getName());
+        mHistory.setEpisodeUrl(episode.getUrl());
+        mHistory.setPosition(Math.max(sourceSwitchPosition, 0));
     }
 
     public boolean isUseParse() {
