@@ -91,7 +91,6 @@ import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
-import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.Traffic;
 import com.github.bassaer.library.MDColor;
 import com.github.catvod.net.OkHttp;
@@ -117,6 +116,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -197,6 +197,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         private boolean tryRecoverByExoFormat(ErrorEvent event) {
             if (!event.isExo() || !host.mPlayers.isExo()) return false;
+            host.capturePlaybackPosition();
             if (event.getCode() == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
                     || event.getCode() >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
                     && event.getCode() <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) {
@@ -343,6 +344,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setInitTrack(true);
             host.setTrackVisible(false);
             host.mClock.setCallback(host);
+            host.showProgress();
         }
 
         public void onBuffering() {
@@ -431,6 +433,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         public void setSearch(Result result) {
             if (!host.mSearchActive) return;
+            if (!host.isCurrentSearchResult(result)) return;
             if (!result.getKeyword().equals(Objects.toString(host.mBinding.part.getTag(), "").trim())) return;
             List<Vod> items = result.getList();
             if (items.isEmpty()) return;
@@ -463,12 +466,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void stopSearch() {
-            if (host.mExecutor == null) return;
-            if (host.mExecutor != ThreadPools.search()) host.mExecutor.shutdownNow();
-            host.mExecutor = null;
             host.mSearchActive = false;
+            host.setPendingSearchToken(null);
             host.resetSearchTaskState();
             host.mQuickKeys.clear();
+            if (host.mExecutor == null) return;
+            host.mExecutor.shutdownNow();
+            host.mExecutor = null;
         }
 
         public void showEmpty() {
@@ -578,16 +582,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             stopSearch();
             host.setAutoMode(auto);
             host.setInitAuto(auto);
-            startSearch(keyword);
+            String token = host.nextRequestToken("search");
+            host.setPendingSearchToken(token);
             host.mBinding.part.setTag(keyword);
+            startSearch(keyword, token);
         }
 
-        private void startSearch(String keyword) {
+        private void startSearch(String keyword, String token) {
             host.mQuickAdapter.clear();
             host.mQuickKeys.clear();
             List<Site> sites = new ArrayList<>();
             Set<String> keys = new HashSet<>();
-            host.mExecutor = ThreadPools.search();
+            host.mExecutor = Executors.newFixedThreadPool(Constant.THREAD_POOL);
             host.mSearchActive = true;
             for (Site site : VodConfig.get().getSites()) {
                 if (!isPass(site)) continue;
@@ -595,13 +601,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 sites.add(site);
             }
             int generation = host.beginSearchTaskState(sites.size());
-            for (Site site : sites) host.mExecutor.execute(() -> search(site, keyword, generation));
+            for (Site site : sites) host.mExecutor.execute(() -> search(site, keyword, generation, token));
             if (sites.isEmpty()) host.onSearchTasksSettled(generation);
         }
 
-        private void search(Site site, String keyword, int generation) {
+        private void search(Site site, String keyword, int generation, String token) {
             try {
-                host.mViewModel.searchContent(site, keyword, true);
+                if (!host.isSearchExecutionActive(generation, token)) return;
+                host.mViewModel.searchContent(site, keyword, true, token);
             } catch (Throwable ignored) {
             } finally {
                 if (host.onSearchTaskFinished(generation)) App.post(() -> host.onSearchTasksSettled(generation), 100);
@@ -686,6 +693,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String pendingPlaybackFlag;
     private String pendingPlaybackId;
     private String pendingPlaybackToken;
+    private String pendingSearchToken;
     private int mEpisodeNumColumns;
     private int mEpisodeNumRows;
     private int mEpisodeColumnWidth;
@@ -1584,10 +1592,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         
         return true;
     }
-
-
     private void onRefresh() {
         onReset(false);
+    }
+
+    private void capturePlaybackPosition() {
+        long position = Math.max(mPlayers.getPosition(), 0);
+        mPlayers.setPosition(position);
+        if (mHistory != null) mHistory.setPosition(position);
     }
 
     private void saveHistoryNow() {
@@ -1690,6 +1702,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onDecode(boolean save) {
+        capturePlaybackPosition();
         mPlayers.toggleDecode(save);
         mPlayers.init(getExo(), getIjk());
         mPlayers.setMediaSource();
@@ -1709,7 +1722,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void setProgressVisible(boolean visible) {
         setVisibilityIfChanged(mBinding.widget.progress, visible ? View.VISIBLE : View.GONE);
         if (visible) {
-            App.post(mR3, 0);
+            Traffic.reset();
             hideError();
         } else {
             App.removeCallbacks(mR3);
@@ -1717,8 +1730,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
     }
 
+    private void startProgressPolling() {
+        App.removeCallbacks(mR3);
+        App.post(mR3, 0);
+    }
+
     private void showProgress() {
         setProgressVisible(true);
+        startProgressPolling();
+        hideError();
     }
 
     private void hideProgress() {
@@ -1832,10 +1852,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void setTraffic() {
         Traffic.setSpeed(mBinding.widget.traffic);
         if (!isBuffering()) {
-            hideProgress();
+            App.removeCallbacks(mR3);
+            Traffic.reset();
             return;
         }
         App.post(mR3, Constant.INTERVAL_TRAFFIC);
+    }
+
+    private void reconcilePlaybackUiState() {
+        if (mPlayers.isBuffering()) {
+            mPlaybackState.onBuffering();
+        } else if (mPlayers.isReady()) {
+            mPlaybackState.onReady();
+        }
     }
 
     private boolean isBuffering() {
@@ -2088,6 +2117,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void retryWithNextPlayer() {
+        capturePlaybackPosition();
         mPlayers.nextPlayer();
         setPlayerView();
         setDecodeView();
@@ -2279,6 +2309,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         pendingPlaybackToken = null;
     }
 
+    private void setPendingSearchToken(String token) {
+        pendingSearchToken = token;
+    }
+
+    private synchronized boolean isSearchExecutionActive(int generation, String token) {
+        return mSearchActive
+                && generation == mSearchGeneration
+                && TextUtils.equals(token, pendingSearchToken)
+                && !Thread.currentThread().isInterrupted();
+    }
+
     private boolean isCurrentDetailResult(Result result) {
         return result != null
                 && TextUtils.equals(result.getKey(), getKey())
@@ -2292,6 +2333,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 && TextUtils.equals(result.getRequestFlag(), pendingPlaybackFlag)
                 && TextUtils.equals(result.getRequestId(), pendingPlaybackId)
                 && TextUtils.equals(result.getRequestToken(), pendingPlaybackToken);
+    }
+
+    private boolean isCurrentSearchResult(Result result) {
+        return result != null && TextUtils.equals(result.getRequestToken(), pendingSearchToken);
     }
 
     private String getSourceSwitchKeyword() {
@@ -2619,8 +2664,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             setPlayerView();
             setDecodeView();
             onRefresh();
-        } else if (mResumeOnForeground) {
-            onPlay();
+        } else {
+            reconcilePlaybackUiState();
+            if (mResumeOnForeground) onPlay();
         }
     }
 

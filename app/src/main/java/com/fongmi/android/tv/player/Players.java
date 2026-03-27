@@ -63,6 +63,7 @@ import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCallback, DrawHandler.Callback {
 
     private static final String TAG = Players.class.getSimpleName();
+    private static final long IJK_READY_FALLBACK_MS = 1000;
 
     public static final int SYS = 0;
     public static final int IJK = 1;
@@ -74,6 +75,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private final StringBuilder builder;
     private final Formatter formatter;
     private final Runnable runnable;
+    private final Runnable readyFallback;
 
     private Map<String, String> headers;
     private MediaSessionCompat session;
@@ -136,6 +138,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         decode = Setting.getDecode(player);
         builder = new StringBuilder();
         runnable = ErrorEvent::timeout;
+        readyFallback = this::dispatchIjkReadyFallback;
         formatter = new Formatter(builder, Locale.getDefault());
         position = C.TIME_UNSET;
         playerState = Player.STATE_IDLE;
@@ -283,6 +286,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void reset() {
         position = C.TIME_UNSET;
         removeTimeoutCheck();
+        removeReadyFallback();
         stopParse();
         count = 0;
         retry = 0;
@@ -298,6 +302,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         drm = null;
         url = null;
         forceLive = false;
+        removeReadyFallback();
         pendingReady = false;
     }
 
@@ -367,6 +372,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public boolean isBuffering() {
         return playerState == Player.STATE_BUFFERING;
+    }
+
+    public boolean isReady() {
+        return playerState == Player.STATE_READY;
     }
 
     public boolean isEnd() {
@@ -507,6 +516,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void stop() {
         removeTimeoutCheck();
+        removeReadyFallback();
         stopParse();
         if (isExo()) stopExo();
         if (isIjk()) stopIjk();
@@ -519,6 +529,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void release() {
         boolean current = Server.get().getPlayer() == this;
         stopParse();
+        removeReadyFallback();
         if (session != null) {
             session.release();
             session = null;
@@ -539,6 +550,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         releaseExo();
         releaseIjk();
         removeTimeoutCheck();
+        removeReadyFallback();
         if (haveDanmu()) danmuView.pause();
     }
 
@@ -662,6 +674,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
         stopParse();
+        removeReadyFallback();
         this.headers = checkUa(headers);
         this.url = url;
         this.format = format;
@@ -669,7 +682,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         this.forceLive = forceLive;
         this.subs = checkSub(subs);
         if (this.drm != null && isIjk()) setPlayer(EXO);
-        this.pendingReady = isExo();
+        // Wait for an actual render/play signal before reporting READY.
+        this.pendingReady = true;
         if (isIjk() && ijkPlayer != null) ijkPlayer.setMediaSource(IjkUtil.getSource(this.headers, this.url), position);
         if (isExo() && exoPlayer != null) {
             MediaItem item = ExoUtil.getMediaItem(this.headers, UrlUtil.uri(this.url), this.format, this.drm, this.subs, decode, this.forceLive);
@@ -686,6 +700,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         App.removeCallbacks(runnable);
     }
 
+    private void removeReadyFallback() {
+        App.removeCallbacks(readyFallback);
+    }
+
     private void setPlayerState(int state) {
         if (playerState == state) return;
         playerState = state;
@@ -693,8 +711,20 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void dispatchReadyState() {
+        removeTimeoutCheck();
+        removeReadyFallback();
         pendingReady = false;
         setPlayerState(Player.STATE_READY);
+    }
+
+    private void scheduleReadyFallback() {
+        if (!isIjk()) return;
+        App.post(readyFallback, IJK_READY_FALLBACK_MS);
+    }
+
+    private void dispatchIjkReadyFallback() {
+        if (!pendingReady || !isIjk() || ijkPlayer == null) return;
+        dispatchReadyState();
     }
 
     public void setTrack(List<Track> tracks) {
@@ -948,6 +978,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
                 setPlayerState(Player.STATE_BUFFERING);
                 break;
             case IMediaPlayer.MEDIA_INFO_BUFFERING_END:
+                if (!pendingReady) setPlayerState(Player.STATE_READY);
+                updateDanmuPlayingState();
+                break;
+            case IMediaPlayer.MEDIA_INFO_AUDIO_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_VIDEO_SEEK_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_AUDIO_SEEK_RENDERING_START:
@@ -967,6 +1001,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public void onPrepared(IMediaPlayer mp) {
         if (!pendingReady) setPlayerState(Player.STATE_READY);
+        else scheduleReadyFallback();
     }
 
     @Override

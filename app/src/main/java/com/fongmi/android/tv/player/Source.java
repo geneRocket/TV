@@ -68,7 +68,7 @@ public class Source {
     }
 
     public void parse(List<Flag> flags) throws Exception {
-        ExecutorService executor = ThreadPools.parse();
+        ExecutorService executor = ThreadPools.preloadParse();
         for (Flag flag : flags) {
             List<Episode> originals = new ArrayList<>(flag.getEpisodes());
             List<ParseTask> tasks = new ArrayList<>();

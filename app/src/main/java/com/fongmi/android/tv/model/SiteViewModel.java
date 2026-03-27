@@ -33,12 +33,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import okhttp3.Call;
 import okhttp3.Response;
@@ -55,6 +56,7 @@ public class SiteViewModel extends ViewModel {
     public MutableLiveData<Danmu> danmaku;
     public MutableLiveData<Result> download;
     private final ExecutorService executor = Executors.newFixedThreadPool(8);
+    private final CopyOnWriteArrayList<PendingRequest> pendingRequests = new CopyOnWriteArrayList<>();
 
     public SiteViewModel() {
         this.ep = new MutableLiveData<>();
@@ -65,6 +67,19 @@ public class SiteViewModel extends ViewModel {
         this.action = new MutableLiveData<>();
         this.danmaku = new MutableLiveData<>();
         this.download = new MutableLiveData<>();
+    }
+
+    private static final class PendingRequest {
+        private Future<?> future;
+        private Runnable timeout;
+    }
+
+    private interface ResultPoster {
+        void post(Result result);
+    }
+
+    private interface ResultFallback {
+        Result create(Throwable error);
     }
 
     public void setEpisode(Episode value) {
@@ -103,50 +118,26 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void categoryContent(String key, String tid, String page, boolean filter, HashMap<String, String> extend) {
-        App.execute(() -> {
-            Future<Result> future = null;
-            HashMap<String, String> extendSnapshot = extend == null ? new HashMap<>() : new HashMap<>(extend);
-            try {
-                future = executor.submit(() -> {
-                    Site site = VodConfig.get().getSite(key);
-                    if (site.getType() == 3) {
-                        Spider spider = site.recent().spider();
-                        String categoryContent = spider.categoryContent(tid, page, filter, extendSnapshot);
-                        SpiderDebug.log(categoryContent);
-                        return Result.fromJson(categoryContent);
-                    } else {
-                        ArrayMap<String, String> params = new ArrayMap<>();
-                        if (site.getType() == 1 && !extendSnapshot.isEmpty()) params.put("f", App.gson().toJson(extendSnapshot));
-                        if (site.getType() == 4) params.put("ext", Util.base64(App.gson().toJson(extendSnapshot), Util.URL_SAFE));
-                        params.put("ac", site.getType() == 0 ? "videolist" : "detail");
-                        params.put("t", tid);
-                        params.put("pg", page);
-                        String categoryContent = call(site, params, true);
-                        SpiderDebug.log(categoryContent);
-                        return Result.fromType(site.getType(), categoryContent);
-                    }
-                });
-                result.postValue(withCategoryRequest(future.get(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS), key, tid, page));
-            } catch (RejectedExecutionException e) {
-                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
-            } catch (TimeoutException e) {
-                if (future != null) future.cancel(true);
-                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
-                e.printStackTrace();
-            } catch (ExtractException e) {
-                if (future != null) future.cancel(true);
-                result.postValue(withCategoryRequest(Result.error(e.getMessage()), key, tid, page));
-                e.printStackTrace();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                if (future != null) future.cancel(true);
-                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
-            } catch (Exception e) {
-                if (future != null) future.cancel(true);
-                result.postValue(withCategoryRequest(Result.empty(), key, tid, page));
-                e.printStackTrace();
+        HashMap<String, String> extendSnapshot = extend == null ? new HashMap<>() : new HashMap<>(extend);
+        executeAsync(() -> {
+            Site site = VodConfig.get().getSite(key);
+            if (site.getType() == 3) {
+                Spider spider = site.recent().spider();
+                String categoryContent = spider.categoryContent(tid, page, filter, extendSnapshot);
+                SpiderDebug.log(categoryContent);
+                return Result.fromJson(categoryContent);
+            } else {
+                ArrayMap<String, String> params = new ArrayMap<>();
+                if (site.getType() == 1 && !extendSnapshot.isEmpty()) params.put("f", App.gson().toJson(extendSnapshot));
+                if (site.getType() == 4) params.put("ext", Util.base64(App.gson().toJson(extendSnapshot), Util.URL_SAFE));
+                params.put("ac", site.getType() == 0 ? "videolist" : "detail");
+                params.put("t", tid);
+                params.put("pg", page);
+                String categoryContent = call(site, params, true);
+                SpiderDebug.log(categoryContent);
+                return Result.fromType(site.getType(), categoryContent);
             }
-        });
+        }, data -> result.postValue(withCategoryRequest(data, key, tid, page)), this::requestFallback);
     }
 
     private Result withCategoryRequest(Result result, String key, String tid, String page) {
@@ -274,12 +265,16 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void searchContent(Site site, String keyword, boolean quick) throws Throwable {
+        searchContent(site, keyword, quick, "");
+    }
+
+    public void searchContent(Site site, String keyword, boolean quick, String token) throws Throwable {
         String original = keyword == null ? "" : keyword.trim();
         String query = Trans.t2s(keyword);
         if (site.getType() == 3) {
             String searchContent = site.spider().searchContent(query, quick);
             SpiderDebug.log(site.getName() + "," + searchContent);
-            post(site, Result.fromJson(searchContent), original);
+            post(site, Result.fromJson(searchContent), original, token);
         } else {
             ArrayMap<String, String> params = new ArrayMap<>();
             params.put("wd", query);
@@ -287,7 +282,7 @@ public class SiteViewModel extends ViewModel {
             String searchContent = call(site, params, true);
             SpiderDebug.log(site.getName() + "," + searchContent);
             Result result = Result.fromType(site.getType(), searchContent);
-            post(site, quick ? result : fetchPic(site, result), original);
+            post(site, quick ? result : fetchPic(site, result), original, token);
         }
     }
 
@@ -357,68 +352,65 @@ public class SiteViewModel extends ViewModel {
         return result;
     }
 
-    private void post(Site site, Result result, String keyword) {
+    private void post(Site site, Result result, String keyword, String token) {
         if (result.getList().isEmpty()) return;
         result.setKeyword(keyword);
+        result.setRequestToken(token);
         for (Vod vod : result.getList()) vod.setSite(site);
         this.search.postValue(result);
     }
 
     private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
-        App.execute(() -> {
-            Future<Result> future = null;
-            try {
-                future = executor.submit(callable);
-                Result data = future.get(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS);
-                result.postValue(data);
-            } catch (RejectedExecutionException e) {
-                result.postValue(Result.empty());
-            } catch (TimeoutException e) {
-                if (future != null) future.cancel(true);
-                result.postValue(Result.empty());
-                e.printStackTrace();
-            } catch (ExtractException e) {
-                if (future != null) future.cancel(true);
-                result.postValue(Result.error(e.getMessage()));
-                e.printStackTrace();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                if (future != null) future.cancel(true);
-                result.postValue(Result.empty());
-            } catch (Exception e) {
-                if (future != null) future.cancel(true);
-                result.postValue(Result.empty());
-                e.printStackTrace();
-            }
-        });
+        executeAsync(callable, result::postValue, this::requestFallback);
     }
 
     private void executeRequest(MutableLiveData<Result> result, Callable<Result> callable, String key, String id, String flag, String token) {
-        App.execute(() -> {
-            Future<Result> future = null;
-            try {
-                future = executor.submit(callable);
-                result.postValue(withRequest(future.get(Constant.TIMEOUT_PLAY, TimeUnit.MILLISECONDS), key, id, flag, token));
-            } catch (RejectedExecutionException e) {
-                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
-            } catch (TimeoutException e) {
-                if (future != null) future.cancel(true);
-                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
-                e.printStackTrace();
-            } catch (ExtractException e) {
-                if (future != null) future.cancel(true);
-                result.postValue(withRequest(Result.error(e.getMessage()), key, id, flag, token));
-                e.printStackTrace();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                if (future != null) future.cancel(true);
-                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
-            } catch (Exception e) {
-                if (future != null) future.cancel(true);
-                result.postValue(withRequest(emptyRequestResult(), key, id, flag, token));
-                e.printStackTrace();
-            }
-        });
+        executeAsync(callable, data -> result.postValue(withRequest(data, key, id, flag, token)), this::requestRequestFallback);
+    }
+
+    private void executeAsync(Callable<Result> callable, ResultPoster poster, ResultFallback fallback) {
+        AtomicBoolean completed = new AtomicBoolean(false);
+        PendingRequest request = new PendingRequest();
+        request.timeout = () -> {
+            if (!completed.compareAndSet(false, true)) return;
+            if (request.future != null) request.future.cancel(true);
+            finishRequest(request);
+            poster.post(fallback.create(new TimeoutException()));
+        };
+        try {
+            pendingRequests.add(request);
+            request.future = executor.submit(() -> {
+                try {
+                    Result data = callable.call();
+                    if (!completed.compareAndSet(false, true)) return;
+                    finishRequest(request);
+                    poster.post(data);
+                } catch (Throwable e) {
+                    if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+                    if (!completed.compareAndSet(false, true)) return;
+                    finishRequest(request);
+                    poster.post(fallback.create(e));
+                    if (!(e instanceof InterruptedException)) e.printStackTrace();
+                }
+            });
+            App.post(request.timeout, Constant.TIMEOUT_PLAY);
+        } catch (RejectedExecutionException e) {
+            finishRequest(request);
+            poster.post(fallback.create(e));
+        }
+    }
+
+    private void finishRequest(PendingRequest request) {
+        if (request.timeout != null) App.removeCallbacks(request.timeout);
+        pendingRequests.remove(request);
+    }
+
+    private Result requestFallback(Throwable error) {
+        return error instanceof ExtractException ? Result.error(error.getMessage()) : Result.empty();
+    }
+
+    private Result requestRequestFallback(Throwable error) {
+        return error instanceof ExtractException ? Result.error(error.getMessage()) : emptyRequestResult();
     }
 
     private Result withRequest(Result result, String key, String id, String flag, String token) {
@@ -439,6 +431,11 @@ public class SiteViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
+        for (PendingRequest request : pendingRequests) {
+            if (request.timeout != null) App.removeCallbacks(request.timeout);
+            if (request.future != null) request.future.cancel(true);
+        }
+        pendingRequests.clear();
         if (executor != null) executor.shutdownNow();
     }
 }

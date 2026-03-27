@@ -9,6 +9,7 @@ public final class ThreadPools {
 
     private static final ExecutorService SEARCH = Executors.newFixedThreadPool(Constant.THREAD_POOL);
     private static final ExecutorService PARSE = Executors.newFixedThreadPool(Constant.THREAD_POOL);
+    private static final ExecutorService PRELOAD_PARSE = Executors.newFixedThreadPool(Math.max(2, Constant.THREAD_POOL / 4));
 
     private ThreadPools() {
     }
@@ -19,5 +20,9 @@ public final class ThreadPools {
 
     public static ExecutorService parse() {
         return PARSE;
+    }
+
+    public static ExecutorService preloadParse() {
+        return PRELOAD_PARSE;
     }
 }

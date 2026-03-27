@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.utils;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.server.Server;
 import com.github.catvod.net.OkHttp;
@@ -11,6 +12,8 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
@@ -20,6 +23,8 @@ public class ScanTask {
     private final Listener listener;
     private final OkHttpClient client;
     private final List<Device> devices;
+    private ExecutorService executor;
+    private volatile boolean stopped;
 
     public static ScanTask create(Listener listener) {
         return new ScanTask(listener);
@@ -31,27 +36,54 @@ public class ScanTask {
         this.devices = Collections.synchronizedList(new ArrayList<>());
     }
 
-    public void start(List<String> ips) {
-        App.execute(() -> run(getUrl(ips)));
+    public synchronized void start(List<String> ips) {
+        begin(getUrl(ips));
     }
 
-    public void start(String url) {
-        App.execute(() -> run(Arrays.asList(url)));
+    public synchronized void start(String url) {
+        begin(Arrays.asList(url));
     }
 
-    private void run(List<String> items) {
+    public synchronized void stop() {
+        stopped = true;
+        if (executor != null) executor.shutdownNow();
+        executor = null;
+    }
+
+    private void begin(List<String> urls) {
+        stop();
+        stopped = false;
+        devices.clear();
+        ExecutorService currentExecutor = Executors.newFixedThreadPool(Constant.THREAD_POOL);
+        executor = currentExecutor;
+        currentExecutor.execute(() -> run(urls, currentExecutor));
+    }
+
+    private void run(List<String> items, ExecutorService currentExecutor) {
         try {
-            getDevice(items);
+            getDevice(items, currentExecutor);
         } catch (Exception e) {
-            e.printStackTrace();
+            if (!(e instanceof InterruptedException)) e.printStackTrace();
         } finally {
-            App.post(() -> listener.onFind(devices));
+            synchronized (this) {
+                if (executor == currentExecutor) {
+                    currentExecutor.shutdown();
+                    executor = null;
+                }
+            }
+            App.post(() -> listener.onFind(new ArrayList<>(devices)));
         }
     }
 
-    private void getDevice(List<String> urls) throws Exception {
+    private void getDevice(List<String> urls, ExecutorService currentExecutor) throws Exception {
         CountDownLatch cd = new CountDownLatch(urls.size());
-        for (String url : urls) ThreadPools.search().execute(() -> findDevice(cd, url));
+        for (String url : urls) {
+            if (stopped) {
+                cd.countDown();
+                continue;
+            }
+            currentExecutor.execute(() -> findDevice(cd, url));
+        }
         cd.await();
     }
 
@@ -65,6 +97,7 @@ public class ScanTask {
 
     private void findDevice(CountDownLatch cd, String url) {
         try {
+            if (stopped || Thread.currentThread().isInterrupted()) return;
             if (url.contains(Server.get().getAddress())) return;
             String result;
             try (Response response = OkHttp.newCall(client, url.concat("/device")).execute()) {
