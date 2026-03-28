@@ -42,6 +42,8 @@ public class ParseJob implements ParseCallback {
     private final CopyOnWriteArrayList<Future<?>> parseTasks;
     private ExecutorService executor;
     private ExecutorService infinite;
+    private Future<?> task;
+    private Runnable timeout;
     private ParseCallback callback;
     private Parse parse;
     private volatile boolean stopped;
@@ -52,7 +54,7 @@ public class ParseJob implements ParseCallback {
     }
 
     public ParseJob(ParseCallback callback) {
-        this.executor = Executors.newFixedThreadPool(2);
+        this.executor = Executors.newSingleThreadExecutor();
         this.infinite = ThreadPools.parse();
         this.webViews = new ArrayList<>();
         this.parseTasks = new CopyOnWriteArrayList<>();
@@ -85,21 +87,29 @@ public class ParseJob implements ParseCallback {
     }
 
     private void execute(Result result) {
-        executor.execute(() -> {
-            try {
-                executor.submit(getTask(result)).get(Constant.TIMEOUT_PARSE_DEF, TimeUnit.MILLISECONDS);
-            } catch (Throwable e) {
-                onParseError();
-            }
-        });
+        clearTimeout();
+        timeout = () -> {
+            if (task != null) task.cancel(true);
+            onParseError();
+        };
+        try {
+            task = executor.submit(getTask(result));
+            App.post(timeout, Constant.TIMEOUT_PARSE_DEF);
+        } catch (Throwable e) {
+            onParseError();
+        }
     }
 
     private Runnable getTask(Result result) {
         return () -> {
             try {
                 doInBackground(result.getKey(), result.getUrl().v(), result.getFlag());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } catch (Throwable e) {
                 onParseError();
+            } finally {
+                clearTimeout();
             }
         };
     }
@@ -164,7 +174,11 @@ public class ParseJob implements ParseCallback {
         CountDownLatch latch = new CountDownLatch(json.size());
         for (Parse item : json) parseTasks.add(infinite.submit(() -> jsonParse(latch, item, webUrl)));
         if (!webs.isEmpty()) startWeb(webs, webUrl);
-        latch.await();
+        boolean finished = latch.await(Constant.TIMEOUT_PARSE_DEF, TimeUnit.MILLISECONDS);
+        if (!finished && webs.isEmpty()) {
+            onParseError();
+            return;
+        }
         if (webs.isEmpty()) onParseError();
     }
 
@@ -238,6 +252,7 @@ public class ParseJob implements ParseCallback {
     @Override
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
         if (!completed.compareAndSet(false, true)) return;
+        clearTimeout();
         App.post(() -> {
             if (stopped) return;
             if (callback != null) callback.onParseSuccess(headers, url, from);
@@ -248,11 +263,18 @@ public class ParseJob implements ParseCallback {
     @Override
     public void onParseError() {
         if (!completed.compareAndSet(false, true)) return;
+        clearTimeout();
         App.post(() -> {
             if (stopped) return;
             if (callback != null) callback.onParseError();
             stop();
         });
+    }
+
+    private void clearTimeout() {
+        if (timeout == null) return;
+        App.removeCallbacks(timeout);
+        timeout = null;
     }
 
     private void stopWeb() {
@@ -263,11 +285,15 @@ public class ParseJob implements ParseCallback {
     public void stop() {
         stopped = true;
         completed.set(true);
+        clearTimeout();
+        if (task != null) task.cancel(true);
         if (executor != null) executor.shutdownNow();
         for (Future<?> task : parseTasks) task.cancel(true);
         parseTasks.clear();
         infinite = null;
+        this.task = null;
         executor = null;
+        timeout = null;
         callback = null;
         stopWeb();
     }

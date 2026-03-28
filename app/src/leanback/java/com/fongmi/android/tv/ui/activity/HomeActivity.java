@@ -68,7 +68,6 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SiteCategoryUtil;
 import com.fongmi.android.tv.utils.Tbs;
 import com.fongmi.android.tv.utils.UrlUtil;
-import com.github.catvod.utils.Prefers;
 import com.permissionx.guolindev.PermissionX;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -94,6 +93,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private Clock mClock;
     private View mFocus;
     private int mLastPagePosition;
+    private long mHomeRequestSeed;
+    private String mPendingHomeToken;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -181,6 +182,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.result.observe(this, result -> {
+            if (!isCurrentHomeResult(result)) return;
             setTypes(mResult = result);
         });
     }
@@ -193,13 +195,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         return getHome().getKey();
     }
 
-    private String getStoreKey() {
-        String key = getKey();
-        return key == null ? "" : key;
-    }
-
-    private List<Filter> getFilter(String typeId) {
-        return Filter.arrayFrom(Prefers.getString("filter_" + getStoreKey() + "_" + typeId));
+    private List<Filter> getFilters(Result result, String typeId) {
+        if (result == null || result.getFilters() == null) return new ArrayList<>();
+        List<Filter> filters = result.getFilters().get(typeId);
+        return filters == null ? new ArrayList<>() : filters;
     }
 
     private void setHomeType() {
@@ -212,10 +211,24 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     public void homeContent() {
         mResult = Result.empty();
         updateHomeTitle();
-        if (getHome().getKey().isEmpty()) return;
+        if (getHome().getKey().isEmpty()) {
+            mPendingHomeToken = null;
+            return;
+        }
         mFocus = getCurrentFocus();
         showHomeProgress();
-        mViewModel.homeContent();
+        mPendingHomeToken = nextHomeRequestToken();
+        mViewModel.homeContent(getKey(), mPendingHomeToken);
+    }
+
+    private String nextHomeRequestToken() {
+        return "home:" + (++mHomeRequestSeed);
+    }
+
+    private boolean isCurrentHomeResult(Result result) {
+        return result != null
+                && TextUtils.equals(result.getKey(), getKey())
+                && TextUtils.equals(result.getRequestToken(), mPendingHomeToken);
     }
 
     private void updateHomeTitle() {
@@ -232,10 +245,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void updateTypeFilters(Result result) {
-        for (Map.Entry<String, List<Filter>> entry : result.getFilters().entrySet()) {
-            Prefers.put("filter_" + getStoreKey() + "_" + entry.getKey(), App.gson().toJson(entry.getValue()));
-        }
-        for (Class item : result.getTypes()) item.setFilters(getFilter(item.getTypeId()));
+        for (Class item : result.getTypes()) item.setFilters(getFilters(result, item.getTypeId()));
     }
 
     private void updateTypeAdapter(Result result) {
@@ -288,6 +298,23 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (item.getFilter() == null) return;
         getFragment().toggleFilter(item.toggleFilter());
         mAdapter.notifyArrayItemRangeChanged(1, mAdapter.size() - 1);
+    }
+
+    public void updateTypeState(String typeId, java.util.Map<String, String> extend, boolean open) {
+        Class item = findType(typeId);
+        if (item == null) return;
+        item.setExtend(extend);
+        item.setFilter(item.getFilters().isEmpty() ? null : open);
+        mAdapter.notifyArrayItemRangeChanged(1, Math.max(0, mAdapter.size() - 1));
+    }
+
+    @Nullable
+    private Class findType(String typeId) {
+        for (int i = 1; i < mAdapter.size(); i++) {
+            Object item = mAdapter.get(i);
+            if (item instanceof Class && ((Class) item).getTypeId().equals(typeId)) return (Class) item;
+        }
+        return null;
     }
 
     private boolean isHomePageSelected() {
@@ -747,7 +774,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             return;
         }
         Class item = (Class) mAdapter.get(mBinding.pager.getCurrentItem());
-        if (item.getFilter() != null && item.getFilter()) updateFilter(item);
+        if (item.getFilter() != null && item.getFilter()) getFragment().resetFilterOnBack();
         else if (getFragment().canBack()) getFragment().goBack();
         else if (!coolDown) super.onBackPressed();
     }
@@ -795,8 +822,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             Style style = type.getStyle();
             String styleKey = style == null ? "" : style.getType() + "@" + style.getRatio();
             String extendKey = App.gson().toJson(type.getExtend(false));
+            String filterKey = App.gson().toJson(type.getFilters());
             String folderKey = "1".equals(type.getTypeFlag()) ? "1" : "0";
-            return getHome().getKey() + "@" + type.getTypeId() + "@" + styleKey + "@" + folderKey + "@" + extendKey;
+            return getHome().getKey() + "@" + type.getTypeId() + "@" + styleKey + "@" + folderKey + "@" + extendKey + "@" + filterKey;
         }
 
         private String getFragmentKey(@NonNull Fragment fragment) {
@@ -807,9 +835,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             Style style = fragment.getArguments().getParcelable("style");
             String styleKey = style == null ? "" : style.getType() + "@" + style.getRatio();
             String extendKey = App.gson().toJson(fragment.getArguments().getSerializable("extend"));
+            String filterKey = App.gson().toJson(fragment.getArguments().getParcelableArrayList("filters"));
             boolean folder = fragment.getArguments().getBoolean("folder");
             return key + "@" + typeId + "@" + styleKey + "@"
-                    + (folder ? "1" : "0") + "@" + extendKey;
+                    + (folder ? "1" : "0") + "@" + extendKey + "@" + filterKey;
         }
 
         @NonNull
@@ -817,7 +846,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         public Fragment getItem(int position) {
             if (position == 0) return new HomeFragment();
             Class type = (Class) mAdapter.get(position);
-            return VodFragment.newInstance(getHome().getKey(), type.getTypeId(), type.getStyle(), type.getExtend(false), "1".equals(type.getTypeFlag()));
+            return VodFragment.newInstance(getHome().getKey(), type.getTypeId(), type.getStyle(), type.getExtend(false), new ArrayList<>(Filter.copy(type.getFilters())), "1".equals(type.getTypeFlag()), Boolean.TRUE.equals(type.getFilter()));
         }
 
         @Override

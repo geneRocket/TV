@@ -81,6 +81,7 @@ public class Result implements Parcelable {
     private String requestToken;
     private String requestTypeId;
     private String requestPage;
+    private String requestExtend;
     @SerializedName("page")
     private Integer page;
     @SerializedName("pagecount")
@@ -331,6 +332,14 @@ public class Result implements Parcelable {
         this.requestPage = requestPage;
     }
 
+    public String getRequestExtend() {
+        return TextUtils.isEmpty(requestExtend) ? "" : requestExtend;
+    }
+
+    public void setRequestExtend(String requestExtend) {
+        this.requestExtend = requestExtend;
+    }
+
     public Integer getPageCount() {
         if (pagecount != null && pagecount > 0) return pagecount;
         if (limit != null && limit > 0 && total != null && total >= 0) return (total + limit - 1) / limit;
@@ -392,6 +401,21 @@ public class Result implements Parcelable {
         return this;
     }
 
+    public Result copyForVod() {
+        Result result = new Result();
+        if (this.types != null) {
+            result.types = new ArrayList<>(this.types.size());
+            for (Class item : this.types) result.types.add(item == null ? null : item.copy());
+        }
+        if (this.filters != null) {
+            result.filters = new LinkedHashMap<>();
+            for (Map.Entry<String, List<Filter>> entry : this.filters.entrySet()) {
+                result.filters.put(entry.getKey(), Filter.copy(entry.getValue()));
+            }
+        }
+        return result;
+    }
+
     public Result trans() {
         if (Trans.pass()) return this;
         for (Class type : getTypes()) type.trans();
@@ -415,12 +439,30 @@ public class Result implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeList(this.types);
         dest.writeTypedList(this.list);
+        if (this.filters == null) {
+            dest.writeInt(-1);
+            return;
+        }
+        dest.writeInt(this.filters.size());
+        for (Map.Entry<String, List<Filter>> entry : this.filters.entrySet()) {
+            dest.writeString(entry.getKey());
+            dest.writeTypedList(entry.getValue());
+        }
     }
 
     protected Result(Parcel in) {
         this.types = new ArrayList<>();
         in.readList(this.types, Class.class.getClassLoader());
         this.list = in.createTypedArrayList(Vod.CREATOR);
+        int filterSize = in.readInt();
+        if (filterSize >= 0) {
+            this.filters = new LinkedHashMap<>();
+            for (int i = 0; i < filterSize; i++) {
+                String key = in.readString();
+                List<Filter> value = in.createTypedArrayList(Filter.CREATOR);
+                this.filters.put(key, value == null ? new ArrayList<>() : value);
+            }
+        }
     }
 
     public static final Creator<Result> CREATOR = new Creator<>() {

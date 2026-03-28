@@ -58,6 +58,14 @@ public class Value implements Parcelable {
         this.n = Trans.s2t(n);
     }
 
+    public Value copy() {
+        Value value = new Value();
+        value.n = this.n;
+        value.v = this.v;
+        value.activated = this.activated;
+        return value;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;

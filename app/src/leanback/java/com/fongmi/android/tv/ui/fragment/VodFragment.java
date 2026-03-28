@@ -29,6 +29,8 @@ import com.fongmi.android.tv.bean.Value;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentVodBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.ui.activity.HomeActivity;
+import com.fongmi.android.tv.ui.activity.VodActivity;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
@@ -38,7 +40,6 @@ import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.presenter.FilterPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.github.catvod.utils.Prefers;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 public class VodFragment extends BaseFragment implements CustomScroller.Callback, VodPresenter.OnClickListener {
 
@@ -63,14 +65,17 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private Page mPage;
     private String mRequestTypeId;
     private String mRequestPage;
+    private String mRequestExtend;
 
-    public static VodFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
+    public static VodFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, ArrayList<Filter> filters, boolean folder, boolean open) {
         Bundle args = new Bundle();
         args.putString("key", key);
         args.putString("typeId", typeId);
         args.putBoolean("folder", folder);
+        args.putBoolean("open", open);
         args.putParcelable("style", style);
         args.putSerializable("extend", extend);
+        args.putParcelableArrayList("filters", filters);
         VodFragment fragment = new VodFragment();
         fragment.setArguments(args);
         return fragment;
@@ -80,9 +85,8 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         return getArguments().getString("key");
     }
 
-    private String getStoreKey() {
-        String key = getKey();
-        return key == null ? "" : key;
+    private String getRootTypeId() {
+        return getArguments().getString("typeId");
     }
 
     private String getTypeId() {
@@ -90,22 +94,28 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private List<Filter> getFilter() {
-        return Filter.arrayFrom(Prefers.getString("filter_" + getStoreKey() + "_" + getTypeId()));
+        ArrayList<Filter> filters = getArguments().getParcelableArrayList("filters");
+        return filters == null ? new ArrayList<>() : new ArrayList<>(filters);
     }
 
     private HashMap<String, String> getExtend() {
         Serializable extend = getArguments().getSerializable("extend");
         HashMap<String, String> result = new HashMap<>();
-        if (!(extend instanceof Map<?, ?>)) return result;
-        for (Map.Entry<?, ?> entry : ((Map<?, ?>) extend).entrySet()) {
-            if (!(entry.getKey() instanceof String) || !(entry.getValue() instanceof String)) continue;
-            result.put((String) entry.getKey(), (String) entry.getValue());
+        if (extend instanceof Map<?, ?>) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) extend).entrySet()) {
+                if (!(entry.getKey() instanceof String) || !(entry.getValue() instanceof String)) continue;
+                result.put((String) entry.getKey(), (String) entry.getValue());
+            }
         }
         return result;
     }
 
     private boolean isFolder() {
         return getArguments().getBoolean("folder");
+    }
+
+    private boolean isOpen() {
+        return getArguments().getBoolean("open");
     }
 
     private Site getSite() {
@@ -133,11 +143,13 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     protected void initView() {
         mPages = new ArrayList<>();
         mVodKeys = new HashSet<>();
+        mOpen = isOpen();
         mExtends = getExtend();
         mFilters = getFilter();
         setRecyclerView();
         setViewModel();
         setFilters();
+        if (mOpen) showFilter();
     }
 
     @Override
@@ -175,10 +187,23 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     private void setFilters() {
         for (Filter filter : mFilters) {
+            for (Value value : filter.getValue()) {
+                if (value != null) value.setActivated(false);
+            }
+        }
+        for (Filter filter : mFilters) {
             if (mExtends.containsKey(filter.getKey())) {
                 filter.setActivated(mExtends.get(filter.getKey()));
             }
         }
+    }
+
+    private HashMap<String, String> getDefaultExtend() {
+        HashMap<String, String> extend = new HashMap<>();
+        for (Filter filter : mFilters) {
+            if (filter.getInit() != null) extend.put(filter.getKey(), filter.getInit());
+        }
+        return extend;
     }
 
     private void setClick(ArrayObjectAdapter adapter, String key, Value item) {
@@ -186,6 +211,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         adapter.notifyArrayItemRangeChanged(0, adapter.size());
         if (item.isActivated()) mExtends.put(key, item.getV());
         else mExtends.remove(key);
+        dispatchTypeState();
         onRefresh();
     }
 
@@ -198,6 +224,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         boolean first = "1".equals(page);
         mRequestTypeId = typeId;
         mRequestPage = page;
+        mRequestExtend = getRequestExtend(mExtends);
         if (first) mLast = null;
         if (first) mVodKeys.clear();
         if (first) showProgress();
@@ -213,7 +240,14 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
                 && mRequestTypeId != null
                 && mRequestTypeId.equals(result.getRequestTypeId())
                 && mRequestPage != null
-                && mRequestPage.equals(result.getRequestPage());
+                && mRequestPage.equals(result.getRequestPage())
+                && mRequestExtend != null
+                && mRequestExtend.equals(result.getRequestExtend());
+    }
+
+    private String getRequestExtend(HashMap<String, String> extend) {
+        if (extend == null || extend.isEmpty()) return "";
+        return App.gson().toJson(new TreeMap<>(extend));
     }
 
     private void addVideo(Result result) {
@@ -310,6 +344,19 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         if (open) showFilter();
         else hideFilter();
         mOpen = open;
+        dispatchTypeState();
+    }
+
+    public void resetFilterOnBack() {
+        HashMap<String, String> defaults = getDefaultExtend();
+        boolean changed = !getRequestExtend(mExtends).equals(getRequestExtend(defaults));
+        mExtends.clear();
+        mExtends.putAll(defaults);
+        setFilters();
+        if (mOpen) hideFilter();
+        mOpen = false;
+        dispatchTypeState();
+        if (changed) onRefresh();
     }
 
     public void onRefresh() {
@@ -374,5 +421,13 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     public void onPageHidden() {
         if (mBinding != null) mBinding.recycler.moveToTop();
+    }
+
+    private void dispatchTypeState() {
+        if (getActivity() instanceof VodActivity) {
+            ((VodActivity) getActivity()).updateTypeState(getRootTypeId(), mExtends, mOpen);
+        } else if (getActivity() instanceof HomeActivity) {
+            ((HomeActivity) getActivity()).updateTypeState(getRootTypeId(), mExtends, mOpen);
+        }
     }
 }

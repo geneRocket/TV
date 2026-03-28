@@ -507,7 +507,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private void hideProgress() {
         mBinding.widget.progress.setVisibility(View.GONE);
         App.removeCallbacks(mR2);
-        Traffic.reset();
     }
 
     private void showError(String text) {
@@ -543,15 +542,16 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private void showDisplayInfo() {
         boolean controlVisible = isVisible(mBinding.control.getRoot()) || isVisible(mBinding.widget.info);
         boolean visible = (!controlVisible && !isLock());
+        boolean showNetSpeed = Setting.isDisplaySpeed() && visible && !isVisible(mBinding.widget.progress);
         mBinding.display.clock.setVisibility(Setting.isDisplayTime() && visible  ? View.VISIBLE : View.GONE);
-        mBinding.display.netspeed.setVisibility(Setting.isDisplaySpeed() && visible ? View.VISIBLE : View.GONE);
+        mBinding.display.netspeed.setVisibility(showNetSpeed ? View.VISIBLE : View.GONE);
         mBinding.display.duration.setVisibility(View.GONE);
         mBinding.display.titleLayout.setVisibility(Setting.isDisplayVideoTitle()&& visible ? View.VISIBLE : View.GONE);
     }
 
     private void onTimeChangeDisplaySpeed() {
         boolean controlVisible = isVisible(mBinding.control.getRoot()) || isVisible(mBinding.widget.info);
-        boolean visible = (!controlVisible && !isLock());
+        boolean visible = (!controlVisible && !isLock() && !isVisible(mBinding.widget.progress));
         if (Setting.isDisplaySpeed() && visible) Traffic.setSpeed(mBinding.display.netspeed);
         showDisplayInfo();
     }

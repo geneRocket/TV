@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -91,30 +92,37 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void homeContent() {
-        execute(result, () -> {
-            Site site = VodConfig.get().getHome();
-            if (site.getType() == 3) {
-                Spider spider = site.recent().spider();
-                String homeContent = spider.homeContent(true);
-                SpiderDebug.log(homeContent);
-                Result result = Result.fromJson(homeContent);
-                if (result.getList().size() > 0) return result;
-                String homeVideoContent = spider.homeVideoContent();
-                SpiderDebug.log(homeVideoContent);
-                result.setList(Result.fromJson(homeVideoContent).getList());
-                return result;
-            } else if (site.getType() == 4) {
-                ArrayMap<String, String> params = new ArrayMap<>();
-                params.put("filter", "true");
-                String homeContent = call(site, params, false);
-                SpiderDebug.log(homeContent);
-                return Result.fromJson(homeContent);
-            } else {
-                String homeContent = call(OkHttp.newCall(site.getApi(), site.getHeaders()));
-                SpiderDebug.log(homeContent);
-                return fetchPic(site, Result.fromType(site.getType(), homeContent));
-            }
-        });
+        execute(result, () -> loadHomeResult(VodConfig.get().getHome().getKey()));
+    }
+
+    public void homeContent(String key, String token) {
+        executeAsync(() -> loadHomeResult(key), data -> result.postValue(withHomeRequest(data, key, token)), this::requestFallback);
+    }
+
+    private Result loadHomeResult(String key) throws Exception {
+        Site site = TextUtils.isEmpty(key) ? VodConfig.get().getHome() : VodConfig.get().getSite(key);
+        if (site.isEmpty()) return Result.empty();
+        if (site.getType() == 3) {
+            Spider spider = site.recent().spider();
+            String homeContent = spider.homeContent(true);
+            SpiderDebug.log(homeContent);
+            Result result = Result.fromJson(homeContent);
+            if (result.getList().size() > 0) return result;
+            String homeVideoContent = spider.homeVideoContent();
+            SpiderDebug.log(homeVideoContent);
+            result.setList(Result.fromJson(homeVideoContent).getList());
+            return result;
+        } else if (site.getType() == 4) {
+            ArrayMap<String, String> params = new ArrayMap<>();
+            params.put("filter", "true");
+            String homeContent = call(site, params, false);
+            SpiderDebug.log(homeContent);
+            return Result.fromJson(homeContent);
+        } else {
+            String homeContent = call(OkHttp.newCall(site.getApi(), site.getHeaders()));
+            SpiderDebug.log(homeContent);
+            return fetchPic(site, Result.fromType(site.getType(), homeContent));
+        }
     }
 
     public void categoryContent(String key, String tid, String page, boolean filter, HashMap<String, String> extend) {
@@ -137,14 +145,15 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(categoryContent);
                 return Result.fromType(site.getType(), categoryContent);
             }
-        }, data -> result.postValue(withCategoryRequest(data, key, tid, page)), this::requestFallback);
+        }, data -> result.postValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::requestFallback);
     }
 
-    private Result withCategoryRequest(Result result, String key, String tid, String page) {
+    private Result withCategoryRequest(Result result, String key, String tid, String page, HashMap<String, String> extend) {
         Result value = result == null ? Result.empty() : result;
         value.setKey(key);
         value.setRequestTypeId(tid);
         value.setRequestPage(page);
+        value.setRequestExtend(getRequestExtend(extend));
         return value;
     }
 
@@ -153,36 +162,47 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void detailContent(String key, String id, String token) {
-        executeRequest(result, () -> {
-            Site site = VodConfig.get().getSite(key);
-            if (site.getType() == 3) {
-                Spider spider = site.recent().spider();
-                String detailContent = spider.detailContent(Arrays.asList(id));
-                SpiderDebug.log(detailContent);
-                Result result = Result.fromJson(detailContent);
-                if (!result.getList().isEmpty()) result.getList().get(0).setVodFlags();
-                if (!result.getList().isEmpty()) Source.get().parse(result.getList().get(0).getVodFlags());
-                return result;
-            } else if (site.isEmpty() && "push_agent".equals(key)) {
-                Vod vod = new Vod();
-                vod.setVodId(id);
-                vod.setVodName(id);
-                vod.setVodPic(ResUtil.getString(R.string.push_image));
-                vod.setVodFlags(Flag.create(ResUtil.getString(R.string.push), ResUtil.getString(R.string.play), id));
-                Source.get().parse(vod.getVodFlags());
-                return Result.vod(vod);
-            } else {
-                ArrayMap<String, String> params = new ArrayMap<>();
-                params.put("ac", site.getType() == 0 ? "videolist" : "detail");
-                params.put("ids", id);
-                String detailContent = call(site, params, true);
-                SpiderDebug.log(detailContent);
-                Result result = Result.fromType(site.getType(), detailContent);
-                if (!result.getList().isEmpty()) result.getList().get(0).setVodFlags();
-                if (!result.getList().isEmpty()) Source.get().parse(result.getList().get(0).getVodFlags());
-                return result;
-            }
-        }, key, id, null, token);
+        detailContent(key, id, token, true);
+    }
+
+    public void detailContentFast(String key, String id, String token) {
+        detailContent(key, id, token, false);
+    }
+
+    private void detailContent(String key, String id, String token, boolean preloadFlags) {
+        executeRequest(result, () -> loadDetailResult(key, id, preloadFlags), key, id, null, token);
+    }
+
+    private Result loadDetailResult(String key, String id, boolean preloadFlags) throws Exception {
+        Site site = VodConfig.get().getSite(key);
+        if (site.getType() == 3) {
+            Spider spider = site.recent().spider();
+            String detailContent = spider.detailContent(Arrays.asList(id));
+            SpiderDebug.log(detailContent);
+            return prepareDetailResult(Result.fromJson(detailContent), preloadFlags);
+        } else if (site.isEmpty() && "push_agent".equals(key)) {
+            Vod vod = new Vod();
+            vod.setVodId(id);
+            vod.setVodName(id);
+            vod.setVodPic(ResUtil.getString(R.string.push_image));
+            vod.setVodFlags(Flag.create(ResUtil.getString(R.string.push), ResUtil.getString(R.string.play), id));
+            return prepareDetailResult(Result.vod(vod), preloadFlags);
+        } else {
+            ArrayMap<String, String> params = new ArrayMap<>();
+            params.put("ac", site.getType() == 0 ? "videolist" : "detail");
+            params.put("ids", id);
+            String detailContent = call(site, params, true);
+            SpiderDebug.log(detailContent);
+            return prepareDetailResult(Result.fromType(site.getType(), detailContent), preloadFlags);
+        }
+    }
+
+    private Result prepareDetailResult(Result result, boolean preloadFlags) throws Exception {
+        if (result.getList().isEmpty()) return result;
+        Vod vod = result.getList().get(0);
+        vod.setVodFlags();
+        if (preloadFlags) Source.get().parse(vod.getVodFlags());
+        return result;
     }
 
     private void executePlayer(MutableLiveData<Result> data, String key, String flag, String id) {
@@ -420,6 +440,18 @@ public class SiteViewModel extends ViewModel {
         value.setRequestFlag(flag);
         value.setRequestToken(token);
         return value;
+    }
+
+    private Result withHomeRequest(Result result, String key, String token) {
+        Result value = result == null ? Result.empty() : result;
+        value.setKey(key);
+        value.setRequestToken(token);
+        return value;
+    }
+
+    private String getRequestExtend(HashMap<String, String> extend) {
+        if (extend == null || extend.isEmpty()) return "";
+        return App.gson().toJson(new TreeMap<>(extend));
     }
 
     private Result emptyRequestResult() {

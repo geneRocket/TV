@@ -373,7 +373,8 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
                 HistoryActivity.start(getActivity());
                 break;
             case R.string.home_vod:
-                VodActivity.start(getActivity(), getHomeActicity().mResult.clear());
+                Result result = getHomeActicity().mResult == null ? null : getHomeActicity().mResult.copyForVod();
+                VodActivity.start(getActivity(), result);
                 break;
             case R.string.home_live:
                 LiveActivity.start(getActivity());

@@ -74,6 +74,23 @@ public class Filter implements Parcelable {
         return this;
     }
 
+    public Filter copy() {
+        Filter filter = new Filter();
+        filter.key = this.key;
+        filter.name = this.name;
+        filter.init = this.init;
+        filter.value = new ArrayList<>();
+        for (Value item : getValue()) filter.value.add(item == null ? null : item.copy());
+        return filter;
+    }
+
+    public static List<Filter> copy(List<Filter> items) {
+        if (items == null || items.isEmpty()) return new ArrayList<>();
+        List<Filter> copies = new ArrayList<>(items.size());
+        for (Filter item : items) copies.add(item == null ? null : item.copy());
+        return copies;
+    }
+
     @Override
     public int describeContents() {
         return 0;

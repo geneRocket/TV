@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Root(strict = false)
 public class Class implements Parcelable {
@@ -43,6 +44,7 @@ public class Class implements Parcelable {
     @SerializedName("ratio")
     private float ratio;
 
+    private HashMap<String, String> extend;
     private Boolean filter;
     private boolean activated;
 
@@ -83,7 +85,7 @@ public class Class implements Parcelable {
 
     public void setFilters(List<Filter> filters) {
         if (filters == null || filters.isEmpty()) return;
-        this.filters = filters;
+        this.filters = Filter.copy(filters);
         this.setFilter(false);
     }
 
@@ -133,10 +135,42 @@ public class Class implements Parcelable {
         return Style.get(getLand(), getCircle(), getRatio());
     }
 
+    public void setExtend(Map<String, String> extend) {
+        if (extend == null || extend.isEmpty()) {
+            this.extend = null;
+            return;
+        }
+        this.extend = new HashMap<>();
+        for (Map.Entry<String, String> entry : extend.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) continue;
+            this.extend.put(entry.getKey(), entry.getValue());
+        }
+    }
+
     public HashMap<String, String> getExtend(boolean change) {
         HashMap<String, String> extend = new HashMap<>();
-        for (Filter filter : getFilters()) if (filter.getInit() != null) extend.put(filter.getKey(), change ? filter.setActivated(filter.getInit()) : filter.getInit());
+        if (this.extend != null && !this.extend.isEmpty()) {
+            extend.putAll(this.extend);
+        } else {
+            for (Filter filter : getFilters()) if (filter.getInit() != null) extend.put(filter.getKey(), filter.getInit());
+        }
+        if (change) for (Filter filter : getFilters()) if (extend.containsKey(filter.getKey())) filter.setActivated(extend.get(filter.getKey()));
         return extend;
+    }
+
+    public Class copy() {
+        Class item = new Class();
+        item.typeId = this.typeId;
+        item.typeName = this.typeName;
+        item.typeFlag = this.typeFlag;
+        item.filters = Filter.copy(this.filters);
+        item.land = this.land;
+        item.circle = this.circle;
+        item.ratio = this.ratio;
+        item.extend = this.extend == null ? null : new HashMap<>(this.extend);
+        item.filter = this.filter;
+        item.activated = this.activated;
+        return item;
     }
 
     @Override
@@ -162,6 +196,7 @@ public class Class implements Parcelable {
         dest.writeInt(this.land);
         dest.writeInt(this.circle);
         dest.writeFloat(this.ratio);
+        dest.writeMap(this.extend);
         dest.writeByte(this.activated ? (byte) 1 : (byte) 0);
     }
 
@@ -175,6 +210,7 @@ public class Class implements Parcelable {
         this.land = in.readInt();
         this.circle = in.readInt();
         this.ratio = in.readFloat();
+        this.extend = (HashMap<String, String>) in.readHashMap(String.class.getClassLoader());
         this.activated = in.readByte() != 0;
     }
 

@@ -31,10 +31,9 @@ import com.fongmi.android.tv.ui.presenter.TypePresenter;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SiteCategoryUtil;
-import com.github.catvod.utils.Prefers;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class VodActivity extends BaseActivity implements TypePresenter.OnClickListener {
 
@@ -54,8 +53,6 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         Intent intent = new Intent(activity, VodActivity.class);
         intent.putExtra("key", key);
         intent.putExtra("result", result);
-        String storeKey = key == null ? "" : key;
-        for (Map.Entry<String, List<Filter>> entry : result.getFilters().entrySet()) Prefers.put("filter_" + storeKey + "_" + entry.getKey(), App.gson().toJson(entry.getValue()));
         activity.startActivity(intent);
     }
 
@@ -63,17 +60,14 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         return getIntent().getStringExtra("key");
     }
 
-    private String getStoreKey() {
-        String key = getKey();
-        return key == null ? "" : key;
-    }
-
     private Result getResult() {
         return getIntent().getParcelableExtra("result");
     }
 
-    private List<Filter> getFilter(String typeId) {
-        return Filter.arrayFrom(Prefers.getString("filter_" + getStoreKey() + "_" + typeId));
+    private List<Filter> getFilters(Result result, String typeId) {
+        if (result == null || result.getFilters() == null) return new ArrayList<>();
+        List<Filter> filters = result.getFilters().get(typeId);
+        return filters == null ? new ArrayList<>() : filters;
     }
 
     private Site getSite() {
@@ -123,7 +117,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     private void setTypes() {
         Result result = getResult();
         result.setTypes(getTypes(result));
-        for (Class item : result.getTypes()) item.setFilters(getFilter(item.getTypeId()));
+        for (Class item : result.getTypes()) item.setFilters(getFilters(result, item.getTypeId()));
         mAdapter.setItems(result.getTypes(), null);
     }
 
@@ -154,6 +148,23 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         if (item.getFilter() == null) return;
         getFragment().toggleFilter(item.toggleFilter());
         mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size());
+    }
+
+    public void updateTypeState(String typeId, java.util.Map<String, String> extend, boolean open) {
+        Class item = findType(typeId);
+        if (item == null) return;
+        item.setExtend(extend);
+        item.setFilter(item.getFilters().isEmpty() ? null : open);
+        mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size());
+    }
+
+    @Nullable
+    private Class findType(String typeId) {
+        for (int i = 0; i < mAdapter.size(); i++) {
+            Object item = mAdapter.get(i);
+            if (item instanceof Class && ((Class) item).getTypeId().equals(typeId)) return (Class) item;
+        }
+        return null;
     }
 
     private VodFragment getFragment() {
@@ -200,7 +211,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     @Override
     public void onBackPressed() {
         Class item = (Class) mAdapter.get(mBinding.pager.getCurrentItem());
-        if (item.getFilter() != null && item.getFilter()) updateFilter(item);
+        if (item.getFilter() != null && item.getFilter()) getFragment().resetFilterOnBack();
         else if (getFragment().canBack()) getFragment().goBack();
         else if (!coolDown) super.onBackPressed();
     }
@@ -215,7 +226,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         @Override
         public Fragment getItem(int position) {
             Class type = (Class) mAdapter.get(position);
-            return VodFragment.newInstance(getKey(), type.getTypeId(), type.getStyle(), type.getExtend(false), "1".equals(type.getTypeFlag()));
+            return VodFragment.newInstance(getKey(), type.getTypeId(), type.getStyle(), type.getExtend(false), new ArrayList<>(Filter.copy(type.getFilters())), "1".equals(type.getTypeFlag()), Boolean.TRUE.equals(type.getFilter()));
         }
 
         @Override

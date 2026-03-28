@@ -1051,8 +1051,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) hasDialog = true;
         boolean controlVisible = isVisible(mBinding.control.getRoot());
         boolean visible = (!controlVisible || isLock()) && !pictureMode && !hasDialog;
+        boolean showNetSpeed = Setting.isDisplaySpeed() && visible && !isVisible(mBinding.widget.progress);
         mBinding.display.clock.setVisibility(Setting.isDisplayTime() && visible  ? View.VISIBLE : View.GONE);
-        mBinding.display.netspeed.setVisibility(Setting.isDisplaySpeed() && visible ? View.VISIBLE : View.GONE);
+        mBinding.display.netspeed.setVisibility(showNetSpeed ? View.VISIBLE : View.GONE);
         mBinding.display.duration.setVisibility(Setting.isDisplayDuration() && visible && (mPlayers.isVod()) ? View.VISIBLE : View.GONE);
         mBinding.display.progress.setVisibility(Setting.isDisplayMiniProgress() && visible && (mPlayers.isVod()) ? View.VISIBLE : View.GONE);
         mBinding.display.titleLayout.setVisibility(Setting.isDisplayVideoTitle()&& visible ? View.VISIBLE : View.GONE);
@@ -1060,7 +1061,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void onTimeChangeDisplaySpeed() {
         boolean controlVisible = isVisible(mBinding.control.getRoot());
-        boolean visible = (!controlVisible || isLock());
+        boolean pictureMode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode();
+        boolean hasDialog = false;
+        for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) hasDialog = true;
+        boolean visible = (!controlVisible || isLock()) && !pictureMode && !hasDialog && !isVisible(mBinding.widget.progress);
         long position = mPlayers.getPosition();
         if (Setting.isDisplaySpeed() && visible) Traffic.setSpeed(mBinding.display.netspeed);
         if (Setting.isDisplayDuration() && visible && position > 0) mBinding.display.duration.setText(mPlayers.getPositionTime(0) + "/" + mPlayers.getDurationTime());
@@ -1124,7 +1128,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void hideProgress() {
         mBinding.widget.progress.setVisibility(View.GONE);
         App.removeCallbacks(mR2);
-        Traffic.reset();
     }
 
     private void showError(String text) {

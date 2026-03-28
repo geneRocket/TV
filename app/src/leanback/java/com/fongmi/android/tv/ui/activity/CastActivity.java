@@ -247,14 +247,13 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     private void showProgress() {
         mBinding.widget.progress.setVisibility(View.VISIBLE);
-        App.post(mR2, 0);
+        startProgressPolling();
         hideError();
     }
 
     private void hideProgress() {
         mBinding.widget.progress.setVisibility(View.GONE);
         App.removeCallbacks(mR2);
-        Traffic.reset();
     }
 
     private void showError(String text) {
@@ -304,7 +303,13 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         App.post(mR2, Constant.INTERVAL_TRAFFIC);
     }
 
+    private void startProgressPolling() {
+        App.removeCallbacks(mR2);
+        App.post(mR2, 0);
+    }
+
     private void setR1Callback() {
+        App.removeCallbacks(mR1);
         App.post(mR1, Constant.INTERVAL_HIDE);
     }
 

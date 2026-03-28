@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.model;
 
 import android.net.Uri;
+import android.text.TextUtils;
 
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -71,6 +72,10 @@ public class LiveViewModel extends ViewModel {
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
+        this.executor1 = Executors.newSingleThreadExecutor();
+        this.executor2 = Executors.newSingleThreadExecutor();
+        this.executor3 = Executors.newSingleThreadExecutor();
+        this.executor4 = Executors.newSingleThreadExecutor();
         this.liveSeq = new AtomicInteger();
         this.epgSeq = new AtomicInteger();
         this.urlSeq = new AtomicInteger();
@@ -122,7 +127,7 @@ public class LiveViewModel extends ViewModel {
             Source.get().stop();
             request.setUrl(Source.get().fetch(request));
             return request;
-        });
+        }, error -> urlFallback(request, error));
     }
 
     public void getUrl(Channel item, EpgData data) {
@@ -130,7 +135,7 @@ public class LiveViewModel extends ViewModel {
         execute(URL, () -> {
             request.setUrl(request.getCatchup().format(request.getCurrent(), data));
             return request;
-        });
+        }, error -> urlFallback(request, error));
     }
 
     private Channel snapshot(Channel item) {
@@ -179,27 +184,37 @@ public class LiveViewModel extends ViewModel {
     }
 
     private void execute(int type, Callable<?> callable) {
+        execute(type, callable, null);
+    }
+
+    private void execute(int type, Callable<?> callable, ValueFallback<?> fallbackOverride) {
         switch (type) {
-            case LIVE:
-                cancelTask(liveTask, executor1);
-                executor1 = Executors.newSingleThreadExecutor();
-                liveTask = submit(executor1, callable, Constant.TIMEOUT_LIVE, liveSeq.incrementAndGet(), this::postLive, error -> new Live());
+            case LIVE: {
+                int seq = liveSeq.incrementAndGet();
+                cancelTask(liveTask);
+                liveTask = submit(executor1, callable, Constant.TIMEOUT_LIVE, seq, this::postLive, error -> new Live());
                 break;
-            case EPG:
-                cancelTask(epgTask, executor2);
-                executor2 = Executors.newSingleThreadExecutor();
-                epgTask = submit(executor2, callable, Constant.TIMEOUT_EPG, epgSeq.incrementAndGet(), this::postEpg, error -> new Epg());
+            }
+            case EPG: {
+                int seq = epgSeq.incrementAndGet();
+                cancelTask(epgTask);
+                epgTask = submit(executor2, callable, Constant.TIMEOUT_EPG, seq, this::postEpg, error -> new Epg());
                 break;
-            case URL:
-                cancelTask(urlTask, executor3);
-                executor3 = Executors.newSingleThreadExecutor();
-                urlTask = submit(executor3, callable, Constant.TIMEOUT_PARSE_LIVE, urlSeq.incrementAndGet(), this::postUrl, this::urlFallback);
+            }
+            case URL: {
+                int seq = urlSeq.incrementAndGet();
+                cancelTask(urlTask);
+                @SuppressWarnings("unchecked")
+                ValueFallback<Channel> fallback = fallbackOverride == null ? this::urlFallback : (ValueFallback<Channel>) fallbackOverride;
+                urlTask = submit(executor3, callable, Constant.TIMEOUT_PARSE_LIVE, seq, this::postUrl, fallback);
                 break;
-            case XML:
-                cancelTask(xmlTask, executor4);
-                executor4 = Executors.newSingleThreadExecutor();
-                xmlTask = submit(executor4, callable, Constant.TIMEOUT_XML, xmlSeq.incrementAndGet(), this::postXml, error -> false);
+            }
+            case XML: {
+                int seq = xmlSeq.incrementAndGet();
+                cancelTask(xmlTask);
+                xmlTask = submit(executor4, callable, Constant.TIMEOUT_XML, seq, this::postXml, error -> false);
                 break;
+            }
         }
     }
 
@@ -240,14 +255,24 @@ public class LiveViewModel extends ViewModel {
         if (task != null && task.timeout != null) App.removeCallbacks(task.timeout);
     }
 
-    private void cancelTask(RunningTask task, ExecutorService executor) {
+    private void cancelTask(RunningTask task) {
         clearTask(task);
         if (task != null && task.future != null) task.future.cancel(true);
+    }
+
+    private void shutdownExecutor(ExecutorService executor) {
         if (executor != null) executor.shutdownNow();
     }
 
     private Channel urlFallback(Throwable error) {
         return error instanceof ExtractException ? Channel.error(error.getMessage()) : new Channel();
+    }
+
+    private Channel urlFallback(Channel request, Throwable error) {
+        String msg = error instanceof ExtractException ? error.getMessage() : error.getMessage();
+        if (TextUtils.isEmpty(msg)) msg = App.get().getString(R.string.error_play_timeout);
+        request.setMsg(msg);
+        return request;
     }
 
     private void postLive(Live value, int seq) {
@@ -269,9 +294,13 @@ public class LiveViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-        cancelTask(liveTask, executor1);
-        cancelTask(epgTask, executor2);
-        cancelTask(urlTask, executor3);
-        cancelTask(xmlTask, executor4);
+        cancelTask(liveTask);
+        cancelTask(epgTask);
+        cancelTask(urlTask);
+        cancelTask(xmlTask);
+        shutdownExecutor(executor1);
+        shutdownExecutor(executor2);
+        shutdownExecutor(executor3);
+        shutdownExecutor(executor4);
     }
 }

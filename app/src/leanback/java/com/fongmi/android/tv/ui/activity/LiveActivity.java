@@ -528,14 +528,13 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     private void showProgress() {
         mBinding.widget.progress.setVisibility(View.VISIBLE);
-        App.post(mR2, 0);
+        startProgressPolling();
         hideError();
     }
 
     private void hideProgress() {
         mBinding.widget.progress.setVisibility(View.GONE);
         App.removeCallbacks(mR2);
-        Traffic.reset();
     }
 
     private void showError(String text) {
@@ -570,15 +569,18 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) hasDialog = true;
         boolean controlVisible = isVisible(mBinding.control.getRoot());
         boolean visible = !controlVisible && !hasDialog;
+        boolean showNetSpeed = Setting.isDisplaySpeed() && visible && !isVisible(mBinding.widget.progress);
         mBinding.display.clock.setVisibility(Setting.isDisplayTime() && visible  ? View.VISIBLE : View.GONE);
-        mBinding.display.netspeed.setVisibility(Setting.isDisplaySpeed() && visible ? View.VISIBLE : View.GONE);
+        mBinding.display.netspeed.setVisibility(showNetSpeed ? View.VISIBLE : View.GONE);
         mBinding.display.duration.setVisibility(View.GONE);
         mBinding.display.titleLayout.setVisibility(Setting.isDisplayVideoTitle() && visible ? View.VISIBLE : View.GONE);
     }
 
     private void onTimeChangeDisplaySpeed() {
+        boolean hasDialog = false;
+        for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) hasDialog = true;
         boolean controlVisible = isVisible(mBinding.control.getRoot());
-        boolean visible = !controlVisible;
+        boolean visible = !controlVisible && !hasDialog && !isVisible(mBinding.widget.progress);
         if (Setting.isDisplaySpeed() && visible) Traffic.setSpeed(mBinding.display.netspeed);
         showDisplayInfo();
     }
@@ -605,11 +607,18 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         App.post(mR2, Constant.INTERVAL_TRAFFIC);
     }
 
+    private void startProgressPolling() {
+        App.removeCallbacks(mR2);
+        App.post(mR2, 0);
+    }
+
     private void setR1Callback() {
+        App.removeCallbacks(mR1);
         App.post(mR1, Constant.INTERVAL_HIDE);
     }
 
     private void setR3Callback() {
+        App.removeCallbacks(mR3);
         App.post(mR3, Constant.INTERVAL_HIDE);
     }
 
@@ -1027,6 +1036,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     @Override
     public void setUITimer() {
+        App.removeCallbacks(mR4);
         App.post(mR4, Constant.INTERVAL_HIDE);
     }
 

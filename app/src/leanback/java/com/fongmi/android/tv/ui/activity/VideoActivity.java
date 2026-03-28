@@ -117,6 +117,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -410,9 +411,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void requestDetail() {
+            host.cancelDetailPreload();
             String token = host.nextRequestToken("detail");
             host.setPendingDetailRequest(token);
-            host.mViewModel.detailContent(host.getKey(), host.getId(), token);
+            host.mViewModel.detailContentFast(host.getKey(), host.getId(), token);
         }
 
         public void handleMissingDetail() {
@@ -566,6 +568,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             checkHistory(item);
             checkFlag(item);
             host.checkKeep();
+            host.preloadDetailFlags(item);
         }
 
         private History createHistory(Vod item) {
@@ -651,6 +654,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private PartPresenter mPartPresenter;
     private CustomKeyDownVod mKeyDown;
     private ExecutorService mExecutor;
+    private final ExecutorService mDetailExecutor = Executors.newSingleThreadExecutor();
     private SiteViewModel mViewModel;
     private List<Danmaku> mDanmakus;
     private final Set<String> mBroken = new HashSet<>();
@@ -677,6 +681,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private Runnable mR2;
     private Runnable mR3;
     private Runnable mR4;
+    private Runnable mR5;
     private Call mPartCall;
     private Clock mClock;
     private View mFocus1;
@@ -689,6 +694,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String mArtworkUrl;
     private long requestTokenSeed;
     private String pendingDetailToken;
+    private Future<?> mDetailParseTask;
     private String pendingPlaybackKey;
     private String pendingPlaybackFlag;
     private String pendingPlaybackId;
@@ -703,6 +709,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int mDanmakuRequestId;
     private boolean mArrayRevSort;
     private boolean mArrayRevPlay;
+    private boolean mDisplayTrafficPolling;
     private boolean pendingSiteSwitch;
     private boolean sourceSwitching;
     private boolean sourceSwitchSingleEpisode;
@@ -888,6 +895,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mR2 = this::updateFocus;
         mR3 = this::setTraffic;
         mR4 = mContent::showEmpty;
+        mR5 = this::setDisplayTraffic;
         setBackground(false);
         setRecyclerView();
         setEpisodeView();
@@ -1249,6 +1257,71 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         return 0;
     }
 
+    private void preloadDetailFlags(Vod item) {
+        cancelDetailPreload();
+        if (item == null || item.getVodFlags().isEmpty()) return;
+        String key = getKey();
+        String id = getId();
+        String token = pendingDetailToken;
+        boolean revSort = mHistory != null && mHistory.isRevSort();
+        List<Flag> snapshot = copyFlags(item.getVodFlags());
+        if (snapshot.isEmpty()) return;
+        mDetailParseTask = mDetailExecutor.submit(() -> {
+            try {
+                Source.get().parse(snapshot);
+                if (Thread.currentThread().isInterrupted()) return;
+                App.post(() -> applyParsedDetailFlags(key, id, token, snapshot, revSort));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    private List<Flag> copyFlags(List<Flag> flags) {
+        List<Flag> copies = new ArrayList<>();
+        for (Flag source : flags) {
+            Flag target = Flag.create(source.getFlag());
+            for (Episode episode : source.getEpisodes()) target.getEpisodes().add(Episode.create(episode.getName(), episode.getDesc(), episode.getUrl()));
+            copies.add(target);
+        }
+        return copies;
+    }
+
+    private void applyParsedDetailFlags(String key, String id, String token, List<Flag> flags, boolean revSortSnapshot) {
+        if (!TextUtils.equals(key, getKey())
+                || !TextUtils.equals(id, getId())
+                || !TextUtils.equals(token, pendingDetailToken)
+                || flags.isEmpty()) return;
+        if ((mHistory != null && mHistory.isRevSort()) != revSortSnapshot) {
+            for (Flag flag : flags) Collections.reverse(flag.getEpisodes());
+        }
+        String currentFlag = getCurrentSwitchFlag();
+        String currentEpisode = getCurrentSwitchEpisode();
+        Flag target = findFlag(flags, currentFlag);
+        if (target == null) target = findTargetFlag(flags);
+        if (target == null) return;
+        Episode episode = target.find(currentEpisode, !TextUtils.isEmpty(currentEpisode));
+        if (episode != null) target.toggle(true, episode);
+        for (Flag flag : flags) flag.setActivated(target);
+        mFlagAdapter.setItems(flags, null);
+        mSelectedFlagPosition = Math.max(0, flags.indexOf(target));
+        mBinding.flag.setSelectedPosition(mSelectedFlagPosition);
+        setEpisodeAdapter(target.getEpisodes());
+        if (!target.getEpisodes().isEmpty()) setEpisodeSelectedPosition(getEpisodePosition());
+    }
+
+    private Flag findFlag(List<Flag> flags, String name) {
+        for (Flag flag : flags) if (TextUtils.equals(flag.getFlag(), name)) return flag;
+        return null;
+    }
+
+    private void cancelDetailPreload() {
+        if (mDetailParseTask == null) return;
+        mDetailParseTask.cancel(true);
+        mDetailParseTask = null;
+    }
+
     private void setEpisodeView(List<Episode> items) {
         int size = items.size();
         int episodeNameLength = items.isEmpty() ? 0 : items.get(0).getName().length();
@@ -1399,22 +1472,54 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void showDisplayInfo() {
-        boolean hasDialog = false;
-        for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) hasDialog = true;
+        boolean hasDialog = hasBottomSheetDialog();
         setVisibilityIfChanged(mBinding.display.clock, Setting.isDisplayTime() || isVisible(mBinding.widget.info)  ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.display.titleLayout, Setting.isDisplayVideoTitle() && !isVisible(mBinding.control.getRoot()) ? View.VISIBLE : View.GONE);
-        setVisibilityIfChanged(mBinding.display.netspeed, Setting.isDisplaySpeed() && !isVisible(mBinding.control.getRoot()) && !hasDialog ? View.VISIBLE : View.GONE);
+        boolean showNetSpeed = shouldShowDisplaySpeed(hasDialog);
+        setVisibilityIfChanged(mBinding.display.netspeed, showNetSpeed ? View.VISIBLE : View.GONE);
+        if (showNetSpeed) startDisplayTrafficPolling();
+        else stopDisplayTrafficPolling();
         setVisibilityIfChanged(mBinding.display.duration, Setting.isDisplayDuration() && !isVisible(mBinding.control.getRoot()) && (mPlayers.isVod()) && !hasDialog ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.display.progress, Setting.isDisplayMiniProgress() && !isVisible(mBinding.control.getRoot()) && (mPlayers.isVod()) && !hasDialog ? View.VISIBLE : View.GONE);
     }
 
     private void onTimeChangeDisplaySpeed() {
-        boolean visible = !isVisible(mBinding.control.getRoot());
+        boolean hasDialog = hasBottomSheetDialog();
+        boolean visible = shouldShowDisplaySpeed(hasDialog);
         long position = mPlayers.getPosition();
-        if (Setting.isDisplaySpeed() && visible) Traffic.setSpeed(mBinding.display.netspeed);
         if (Setting.isDisplayDuration() && visible && position > 0) setPlainTextIfChanged(mBinding.display.duration, mPlayers.getPositionTime(0) + "/" + mPlayers.getDurationTime());
         if (Setting.isDisplayMiniProgress() && visible && position > 0 && (mPlayers.isVod())) mBinding.display.progress.setProgress((int)(position * 100 / mPlayers.getDuration()));
         showDisplayInfo();
+    }
+
+    private boolean hasBottomSheetDialog() {
+        for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) return true;
+        return false;
+    }
+
+    private boolean shouldShowDisplaySpeed(boolean hasDialog) {
+        return Setting.isDisplaySpeed() && !isVisible(mBinding.control.getRoot()) && !hasDialog && !isVisible(mBinding.widget.progress);
+    }
+
+    private void startDisplayTrafficPolling() {
+        if (mDisplayTrafficPolling) return;
+        mDisplayTrafficPolling = true;
+        App.removeCallbacks(mR5);
+        App.post(mR5, 0);
+    }
+
+    private void stopDisplayTrafficPolling() {
+        mDisplayTrafficPolling = false;
+        App.removeCallbacks(mR5);
+    }
+
+    private void setDisplayTraffic() {
+        if (!shouldShowDisplaySpeed(hasBottomSheetDialog())) {
+            stopDisplayTrafficPolling();
+            return;
+        }
+        Traffic.setSpeed(mBinding.display.netspeed);
+        App.post(mR5, Constant.INTERVAL_TRAFFIC);
     }
 
     @Override
@@ -1722,11 +1827,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void setProgressVisible(boolean visible) {
         setVisibilityIfChanged(mBinding.widget.progress, visible ? View.VISIBLE : View.GONE);
         if (visible) {
-            Traffic.reset();
             hideError();
         } else {
             App.removeCallbacks(mR3);
-            Traffic.reset();
         }
     }
 
@@ -1853,7 +1956,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         Traffic.setSpeed(mBinding.widget.traffic);
         if (!isBuffering()) {
             App.removeCallbacks(mR3);
-            Traffic.reset();
             return;
         }
         App.post(mR3, Constant.INTERVAL_TRAFFIC);
@@ -2677,6 +2779,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         saveHistoryNow();
         mPlayers.pause();
         mClock.stop();
+        stopDisplayTrafficPolling();
     }
 
     @Override
@@ -2707,10 +2810,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPartCall = null;
         mPlaybackState.release();
         mContent.stopSearch();
+        cancelDetailPreload();
+        mDetailExecutor.shutdownNow();
         mClock.release();
         mPlayers.release();
         Source.get().stop();
         RefreshEvent.history();
-        App.removeCallbacks(mR1, mR2, mR3, mR4);
+        App.removeCallbacks(mR1, mR2, mR3, mR4, mR5);
     }
 }
