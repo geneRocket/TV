@@ -16,6 +16,7 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.ui.activity.CrashActivity;
 import com.fongmi.android.tv.utils.LanguageUtil;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.Init;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.OkHttp;
@@ -26,7 +27,6 @@ import com.orhanobut.logger.Logger;
 import com.orhanobut.logger.PrettyFormatStrategy;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import cat.ereza.customactivityoncrash.config.CaocConfig;
 
@@ -41,7 +41,7 @@ public class App extends Application {
 
     public App() {
         instance = this;
-        executor = Executors.newFixedThreadPool(Constant.THREAD_POOL);
+        executor = ThreadPools.newFixed("app", Constant.THREAD_POOL);
         handler = HandlerCompat.createAsync(Looper.getMainLooper());
         gson = new Gson();
     }
@@ -59,7 +59,14 @@ public class App extends Application {
     }
 
     public static void execute(Runnable runnable) {
-        get().executor.execute(runnable);
+        get().executor.execute(() -> {
+            try {
+                runnable.run();
+            } catch (Throwable e) {
+                ThreadPools.log(e, "App background task failed.");
+                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            }
+        });
     }
 
     public static void post(Runnable runnable) {

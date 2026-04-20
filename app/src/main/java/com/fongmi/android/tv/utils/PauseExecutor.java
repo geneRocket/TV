@@ -13,11 +13,11 @@ public class PauseExecutor extends ThreadPoolExecutor {
     private boolean isPaused;
 
     public PauseExecutor(int corePoolSize) {
-        super(corePoolSize, corePoolSize, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        super(corePoolSize, corePoolSize, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), ThreadPools.newThreadFactory("pause"));
         pauseLock = new ReentrantLock();
         condition = pauseLock.newCondition();
+        allowCoreThreadTimeOut(true);
     }
-
 
     @Override
     protected void beforeExecute(Thread t, Runnable r) {
@@ -30,6 +30,12 @@ public class PauseExecutor extends ThreadPoolExecutor {
         } finally {
             pauseLock.unlock();
         }
+    }
+
+    @Override
+    protected void afterExecute(Runnable r, Throwable t) {
+        super.afterExecute(r, t);
+        ThreadPools.log(t, "Pause executor task failed.");
     }
 
     public void pause() {
@@ -51,4 +57,3 @@ public class PauseExecutor extends ThreadPoolExecutor {
         }
     }
 }
-

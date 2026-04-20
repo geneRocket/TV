@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel;
 
 import com.fongmi.android.tv.bean.Subtitle;
 import com.fongmi.android.tv.bean.SubtitleData;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.net.OkHttp;
 
 import org.jsoup.Jsoup;
@@ -37,6 +38,8 @@ public class SubtitleViewModel extends ViewModel {
     private final AtomicInteger requestSeq;
     private final AtomicInteger resolveSeq;
     private final OkHttpClient subtitleClient;
+    private volatile Call currentSearchCall;
+    private volatile Call currentResolveCall;
 
     public SubtitleViewModel() {
         searchResult = new MutableLiveData<>();
@@ -72,7 +75,7 @@ public class SubtitleViewModel extends ViewModel {
             subtitleData.setIsZip(isZip);
             searchResult.postValue(subtitleData);
         } catch (Throwable e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Subtitle data update failed.");
             searchResult.postValue(null);
         }
     }
@@ -82,6 +85,7 @@ public class SubtitleViewModel extends ViewModel {
     private void searchResultFromAssrt(String title, int page) {
         try {
             int seq = requestSeq.incrementAndGet();
+            cancelCall(currentSearchCall);
             if (pagesTotal > 0 && page > pagesTotal) {
                 if (seq == requestSeq.get()) setSearchListData(new ArrayList<>(), page <= 1, true);
                 return;
@@ -89,11 +93,14 @@ public class SubtitleViewModel extends ViewModel {
             if (page == 1) pagesTotal = -1;//第一页时 重置页大小
             String searchApiUrl = "https://secure.assrt.net/sub/";
             String url = searchApiUrl + "?searchword=" + title + "&sort=rank&page=" + page + "&no_redir=1";
-            
-            OkHttp.client().newCall(new Request.Builder().url(url).build()).enqueue(new Callback() {
+
+            Call call = subtitleClient.newCall(new Request.Builder().url(url).build());
+            currentSearchCall = call;
+            call.enqueue(new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
-                    e.printStackTrace();
+                    if (call.isCanceled()) return;
+                    ThreadPools.log(e, "Subtitle search failed.");
                     if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
                 }
 
@@ -132,13 +139,13 @@ public class SubtitleViewModel extends ViewModel {
                             }
                         }
                     } catch (Throwable th) {
-                        th.printStackTrace();
+                        ThreadPools.log(th, "Subtitle search parse failed.");
                         if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
                     }
                 }
             });
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Subtitle search init failed.");
         }
     }
 
@@ -148,10 +155,14 @@ public class SubtitleViewModel extends ViewModel {
         try {
             int seq = requestSeq.incrementAndGet();
             String url = subtitle.getUrl();
-            OkHttp.client().newCall(new Request.Builder().url(url).build()).enqueue(new Callback() {
+            cancelCall(currentSearchCall);
+            Call call = subtitleClient.newCall(new Request.Builder().url(url).build());
+            currentSearchCall = call;
+            call.enqueue(new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
-                    e.printStackTrace();
+                    if (call.isCanceled()) return;
+                    ThreadPools.log(e, "Subtitle detail search failed.");
                     if (seq == requestSeq.get()) setSearchListData(null, true, true);
                 }
 
@@ -212,18 +223,19 @@ public class SubtitleViewModel extends ViewModel {
                             }
                         }
                     } catch (Throwable th) {
-                        th.printStackTrace();
+                        ThreadPools.log(th, "Subtitle detail parse failed.");
                         if (seq == requestSeq.get()) setSearchListData(null, true, false);
                     }
                 }
             });
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Subtitle detail init failed.");
         }
     }
 
     private void getSubtitleUrlFromAssrt(Subtitle subtitle, SubtitleLoader subtitleLoader) {
         int seq = resolveSeq.incrementAndGet();
+        cancelCall(currentResolveCall);
         String ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.54 Safari/537.36";
         Request request = new Request.Builder()
                 .url(subtitle.getUrl())
@@ -231,10 +243,13 @@ public class SubtitleViewModel extends ViewModel {
                 .addHeader("Referer", "https://secure.assrt.net")
                 .addHeader("User-Agent", ua)
                 .build();
-        subtitleClient.newCall(request).enqueue(new Callback() {
+        Call call = subtitleClient.newCall(request);
+        currentResolveCall = call;
+        call.enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                e.printStackTrace();
+                if (call.isCanceled()) return;
+                ThreadPools.log(e, "Subtitle resolve failed.");
             }
 
             @Override
@@ -254,7 +269,13 @@ public class SubtitleViewModel extends ViewModel {
     protected void onCleared() {
         requestSeq.incrementAndGet();
         resolveSeq.incrementAndGet();
+        cancelCall(currentSearchCall);
+        cancelCall(currentResolveCall);
         super.onCleared();
+    }
+
+    private void cancelCall(Call call) {
+        if (call != null) call.cancel();
     }
 
     public interface SubtitleLoader {

@@ -39,4 +39,11 @@ public class VodRectHolder extends BaseVodHolder {
         binding.getRoot().setOnLongClickListener(v -> listener.onLongClick(item));
         ImgUtil.rect(item.getVodName(), item.getVodPic(), binding.image);
     }
+
+    @Override
+    public void onUnbind() {
+        binding.getRoot().setOnClickListener(null);
+        binding.getRoot().setOnLongClickListener(null);
+        ImgUtil.clear(binding.image);
+    }
 }

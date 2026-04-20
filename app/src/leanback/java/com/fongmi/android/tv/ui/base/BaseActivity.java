@@ -80,11 +80,13 @@ public abstract class BaseActivity extends AppCompatActivity {
     }
 
     protected void notifyItemChanged(RecyclerView view, ArrayObjectAdapter adapter) {
-        if (!view.isComputingLayout()) adapter.notifyArrayItemRangeChanged(0, adapter.size());
+        if (view.isComputingLayout()) view.post(() -> notifyItemChanged(view, adapter));
+        else adapter.notifyArrayItemRangeChanged(0, adapter.size());
     }
 
     protected void notifyItemChanged(RecyclerView view, RecyclerView.Adapter<?> adapter) {
-        if (!view.isComputingLayout()) adapter.notifyItemRangeChanged(0, adapter.getItemCount());
+        if (view.isComputingLayout()) view.post(() -> notifyItemChanged(view, adapter));
+        else adapter.notifyItemRangeChanged(0, adapter.getItemCount());
     }
 
     private void setBackCallback() {

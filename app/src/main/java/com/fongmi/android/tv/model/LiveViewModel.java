@@ -19,6 +19,7 @@ import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.net.OkHttp;
 
 import java.text.SimpleDateFormat;
@@ -30,7 +31,6 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -72,10 +72,10 @@ public class LiveViewModel extends ViewModel {
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
-        this.executor1 = Executors.newSingleThreadExecutor();
-        this.executor2 = Executors.newSingleThreadExecutor();
-        this.executor3 = Executors.newSingleThreadExecutor();
-        this.executor4 = Executors.newSingleThreadExecutor();
+        this.executor1 = ThreadPools.newSingle("live-load");
+        this.executor2 = ThreadPools.newSingle("live-epg");
+        this.executor3 = ThreadPools.newSingle("live-url");
+        this.executor4 = ThreadPools.newSingle("live-xml");
         this.liveSeq = new AtomicInteger();
         this.epgSeq = new AtomicInteger();
         this.urlSeq = new AtomicInteger();
@@ -240,7 +240,7 @@ public class LiveViewModel extends ViewModel {
                     if (!completed.compareAndSet(false, true)) return;
                     clearTask(task);
                     poster.post(fallback.create(e), seq);
-                    if (!(e instanceof InterruptedException)) e.printStackTrace();
+                    ThreadPools.log(e, "Live request failed.");
                 }
             });
             App.post(task.timeout, timeout);
@@ -261,7 +261,7 @@ public class LiveViewModel extends ViewModel {
     }
 
     private void shutdownExecutor(ExecutorService executor) {
-        if (executor != null) executor.shutdownNow();
+        ThreadPools.shutdown(executor);
     }
 
     private Channel urlFallback(Throwable error) {

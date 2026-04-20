@@ -86,7 +86,8 @@ public class Source {
                 try {
                     List<Episode> episodes = futures.get(i).get();
                     if (episodes != null && !episodes.isEmpty()) replacements.put(tasks.get(i).index, episodes);
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    ThreadPools.log(e, "Episode preload parse failed.");
                 }
             }
             flag.getEpisodes().clear();

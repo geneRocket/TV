@@ -31,4 +31,11 @@ public class VodListHolder extends BaseVodHolder {
         binding.getRoot().setOnLongClickListener(v -> listener.onLongClick(item));
         ImgUtil.load(item.getVodName(), item.getVodPic(), binding.image, ImageView.ScaleType.FIT_CENTER, true);
     }
+
+    @Override
+    public void onUnbind() {
+        binding.getRoot().setOnClickListener(null);
+        binding.getRoot().setOnLongClickListener(null);
+        ImgUtil.clear(binding.image);
+    }
 }

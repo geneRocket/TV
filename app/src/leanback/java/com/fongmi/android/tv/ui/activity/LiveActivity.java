@@ -336,7 +336,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         int padding = ResUtil.dp2px(48);
         if (live.getWidth() == 0) for (Group item : live.getGroups()) live.setWidth(Math.max(live.getWidth(), ResUtil.getTextWidth(item.getName(), 16)));
         int width = live.getWidth() == 0 ? 0 : Math.min(live.getWidth() + padding, ResUtil.getScreenWidth() / 4);
-        if (mBinding.group.getLayoutParams().width != width) mBinding.group.getLayoutParams().width = width;
+        if (mBinding.group.getLayoutParams().width != width) {
+            mBinding.group.getLayoutParams().width = width;
+            mBinding.group.requestLayout();
+        }
         int visibility = live.getWidth() == 0 ? View.GONE : View.VISIBLE;
         if (mBinding.divide.getVisibility() != visibility) mBinding.divide.setVisibility(visibility);
     }
@@ -347,7 +350,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         if (group.isKeep()) group.setWidth(0);
         if (group.getWidth() == 0) for (Channel item : group.getChannel()) group.setWidth(Math.max(group.getWidth(), (item.getLogo().isEmpty() ? 0 : logo) + ResUtil.getTextWidth(item.getNumber() + item.getName(), 16)));
         int width = group.getWidth() == 0 ? 0 : Math.min(group.getWidth() + padding, ResUtil.getScreenWidth() / 2);
-        if (mBinding.channel.getLayoutParams().width != width) mBinding.channel.getLayoutParams().width = width;
+        if (mBinding.channel.getLayoutParams().width != width) {
+            mBinding.channel.getLayoutParams().width = width;
+            mBinding.channel.requestLayout();
+        }
         return group;
     }
 
@@ -357,7 +363,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         int minWidth = ResUtil.getTextWidth(epg.getList().get(0).getTime(), 16);
         if (epg.getWidth() == 0) for (EpgData item : epg.getList()) epg.setWidth(Math.max(epg.getWidth(), ResUtil.getTextWidth(item.getTitle(), 16)));
         int width = epg.getWidth() == 0 ? 0 : Math.min(Math.max(epg.getWidth(), minWidth) + padding, ResUtil.getScreenWidth() / 2);
-        if (mBinding.widget.epgData.getLayoutParams().width != width) mBinding.widget.epgData.getLayoutParams().width = width;
+        if (mBinding.widget.epgData.getLayoutParams().width != width) {
+            mBinding.widget.epgData.getLayoutParams().width = width;
+            mBinding.widget.epgData.requestLayout();
+        }
     }
 
     private void setPosition(int[] position) {
@@ -1204,17 +1213,22 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     private void setChannels(Group group) {
         group = setWidth(group);
+        if (mDisplayedGroup == group) return;
         mChannelAdapter.setItems(group.getChannel(), null);
         mDisplayedGroup = group;
     }
 
     private void notifyChannelChanged(Channel item) {
         int position = mChannelAdapter.indexOf(item);
-        if (position != -1 && !mBinding.channel.isComputingLayout()) mChannelAdapter.notifyArrayItemRangeChanged(position, 1);
+        if (position == -1) return;
+        if (mBinding.channel.isComputingLayout()) mBinding.channel.post(() -> notifyChannelChanged(item));
+        else mChannelAdapter.notifyArrayItemRangeChanged(position, 1);
     }
 
     private void notifyEpgChanged(EpgData item) {
         int position = mEpgDataAdapter.indexOf(item);
-        if (position != -1 && !mBinding.widget.epgData.isComputingLayout()) mEpgDataAdapter.notifyArrayItemRangeChanged(position, 1);
+        if (position == -1) return;
+        if (mBinding.widget.epgData.isComputingLayout()) mBinding.widget.epgData.post(() -> notifyEpgChanged(item));
+        else mEpgDataAdapter.notifyArrayItemRangeChanged(position, 1);
     }
 }

@@ -44,6 +44,7 @@ import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Path;
@@ -848,7 +849,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
             intent.setType("text/plain");
             activity.startActivity(Util.getChooser(intent));
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Share playback url failed.");
         }
     }
 
@@ -865,7 +866,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
             if (isVod()) intent.putExtra("position", (int) getPosition());
             activity.startActivityForResult(Util.getChooser(intent), 1001);
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Open external player failed.");
         }
     }
 
@@ -877,7 +878,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
             if ("playback_completion".equals(endBy)) ActionEvent.next();
             if ("user".equals(endBy)) seekTo(position);
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Handle external player result failed.");
         }
     }
 

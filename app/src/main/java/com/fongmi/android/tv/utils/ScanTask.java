@@ -13,7 +13,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
@@ -54,7 +53,7 @@ public class ScanTask {
         stop();
         stopped = false;
         devices.clear();
-        ExecutorService currentExecutor = Executors.newFixedThreadPool(Constant.THREAD_POOL);
+        ExecutorService currentExecutor = ThreadPools.newFixed("scan", Constant.THREAD_POOL);
         executor = currentExecutor;
         currentExecutor.execute(() -> run(urls, currentExecutor));
     }
@@ -63,11 +62,11 @@ public class ScanTask {
         try {
             getDevice(items, currentExecutor);
         } catch (Exception e) {
-            if (!(e instanceof InterruptedException)) e.printStackTrace();
+            ThreadPools.log(e, "Scan task failed.");
         } finally {
             synchronized (this) {
                 if (executor == currentExecutor) {
-                    currentExecutor.shutdown();
+                    ThreadPools.shutdown(currentExecutor);
                     executor = null;
                 }
             }

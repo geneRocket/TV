@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -54,7 +53,7 @@ public class ParseJob implements ParseCallback {
     }
 
     public ParseJob(ParseCallback callback) {
-        this.executor = Executors.newSingleThreadExecutor();
+        this.executor = ThreadPools.newSingle("parse-job");
         this.infinite = ThreadPools.parse();
         this.webViews = new ArrayList<>();
         this.parseTasks = new CopyOnWriteArrayList<>();
@@ -186,7 +185,7 @@ public class ParseJob implements ParseCallback {
         try {
             jsonParse(item, webUrl, false);
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Parallel parse failed.");
         } finally {
             latch.countDown();
         }
@@ -287,7 +286,7 @@ public class ParseJob implements ParseCallback {
         completed.set(true);
         clearTimeout();
         if (task != null) task.cancel(true);
-        if (executor != null) executor.shutdownNow();
+        ThreadPools.shutdown(executor);
         for (Future<?> task : parseTasks) task.cancel(true);
         parseTasks.clear();
         infinite = null;

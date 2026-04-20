@@ -22,6 +22,7 @@ import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
@@ -36,7 +37,6 @@ import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -56,7 +56,7 @@ public class SiteViewModel extends ViewModel {
     public MutableLiveData<Result> action;
     public MutableLiveData<Danmu> danmaku;
     public MutableLiveData<Result> download;
-    private final ExecutorService executor = Executors.newFixedThreadPool(8);
+    private final ExecutorService executor = ThreadPools.newFixed("site-vm", Math.max(2, Constant.THREAD_POOL / 2));
     private final CopyOnWriteArrayList<PendingRequest> pendingRequests = new CopyOnWriteArrayList<>();
 
     public SiteViewModel() {
@@ -410,7 +410,7 @@ public class SiteViewModel extends ViewModel {
                     if (!completed.compareAndSet(false, true)) return;
                     finishRequest(request);
                     poster.post(fallback.create(e));
-                    if (!(e instanceof InterruptedException)) e.printStackTrace();
+                    ThreadPools.log(e, "Site request failed.");
                 }
             });
             App.post(request.timeout, Constant.TIMEOUT_PLAY);
@@ -468,6 +468,6 @@ public class SiteViewModel extends ViewModel {
             if (request.future != null) request.future.cancel(true);
         }
         pendingRequests.clear();
-        if (executor != null) executor.shutdownNow();
+        ThreadPools.shutdown(executor);
     }
 }

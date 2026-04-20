@@ -61,6 +61,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private List<Filter> mFilters;
     private List<Page> mPages;
     private Set<String> mVodKeys;
+    private boolean mPendingFirstRefresh;
     private boolean mOpen;
     private Page mPage;
     private String mRequestTypeId;
@@ -177,6 +178,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
             if (!isCurrentRequest(result)) return;
             boolean first = mScroller.first();
             int size = result.getList().size();
+            if (first) applyFirstPageResult();
             if (size > 0) addVideo(result);
             mScroller.endLoading(result);
             checkPosition(first);
@@ -227,11 +229,17 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mRequestExtend = getRequestExtend(mExtends);
         if (first) mLast = null;
         if (first) mVodKeys.clear();
+        if (first) mPendingFirstRefresh = true;
         if (first) showProgress();
         int filterSize = mOpen ? mFilters.size() : 0;
-        boolean clear = first && mAdapter.size() > filterSize;
-        if (clear) mAdapter.removeItems(filterSize, mAdapter.size() - filterSize);
         mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
+    }
+
+    private void applyFirstPageResult() {
+        if (!mPendingFirstRefresh) return;
+        int filterSize = mOpen ? mFilters.size() : 0;
+        if (mAdapter.size() > filterSize) mAdapter.removeItems(filterSize, mAdapter.size() - filterSize);
+        mPendingFirstRefresh = false;
     }
 
     private boolean isCurrentRequest(Result result) {

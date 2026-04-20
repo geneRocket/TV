@@ -32,6 +32,7 @@ import com.fongmi.android.tv.ui.fragment.CollectFragment;
 import com.fongmi.android.tv.ui.presenter.CollectPresenter;
 import com.fongmi.android.tv.utils.PauseExecutor;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -152,7 +153,7 @@ public class CollectActivity extends BaseActivity {
         syncPager();
         mBinding.recycler.setSelectedPosition(0);
         mBinding.pager.setCurrentItem(0, false);
-        mExecutor = new PauseExecutor(Constant.THREAD_POOL);
+        mExecutor = new PauseExecutor(Math.max(2, Math.min(6, Constant.THREAD_POOL)));
         mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
         for (Site site : mSites) mExecutor.execute(() -> search(site));
     }
@@ -229,7 +230,8 @@ public class CollectActivity extends BaseActivity {
     private void search(Site site) {
         try {
             mViewModel.searchContent(site, getKeyword(), false);
-        } catch (Throwable ignored) {
+        } catch (Throwable e) {
+            ThreadPools.log(e, "Collect search failed for " + site.getName());
         }
     }
 

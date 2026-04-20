@@ -3,12 +3,14 @@ package com.fongmi.android.tv.ui.presenter;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.leanback.widget.Presenter;
 
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.databinding.AdapterChannelBinding;
+import com.fongmi.android.tv.utils.ImgUtil;
 
 public class ChannelPresenter extends Presenter {
 
@@ -48,6 +50,12 @@ public class ChannelPresenter extends Presenter {
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
+        ViewHolder holder = (ViewHolder) viewHolder;
+        holder.view.setOnClickListener(null);
+        holder.view.setOnLongClickListener(null);
+        holder.binding.getRoot().setRightListener(null);
+        ImgUtil.clear(holder.binding.logo, ImageView.ScaleType.FIT_CENTER);
+        holder.binding.epg.setVisibility(View.GONE);
     }
 
     public static class ViewHolder extends Presenter.ViewHolder {
