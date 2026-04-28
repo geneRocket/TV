@@ -539,6 +539,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.getIntent().putExtra("pic", item.getVodPic());
             host.getIntent().putExtra("id", item.getVodId());
             host.mBinding.scroll.scrollTo(0, 0);
+            host.clearPartRequest();
+            host.setPartAdapter(Collections.emptyList());
             host.stopActivePlayback();
         }
 
@@ -1122,6 +1124,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         clearPlaybackTimeout();
         mPlaybackState.clear();
         mClock.setCallback(null);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         mPlayers.reset();
         mPlayers.stop();
     }
@@ -1310,6 +1313,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 Thread.currentThread().interrupt();
             } catch (Throwable e) {
                 ThreadPools.log(e, "Detail preload failed.");
+            } finally {
+                mDetailParseTask = null;
             }
         });
     }
@@ -2046,8 +2051,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void getPart(String source) {
-        if (mPartCall != null) mPartCall.cancel();
+        clearPartRequest();
         String keyword = source.trim();
+        if (keyword.isEmpty()) {
+            setPartAdapter(Collections.emptyList());
+            return;
+        }
         List<String> cached;
         synchronized (PART_CACHE) {
             cached = PART_CACHE.get(keyword);
@@ -2064,7 +2073,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 List<String> items;
                 try (Response res = response) {
                     ResponseBody body = res.body();
-                    items = body == null ? Collections.emptyList() : Part.get(body.string());
+                    items = body == null ? new ArrayList<>() : new ArrayList<>(Part.get(body.string()));
                 }
                 items.removeIf(keyword::equals);
                 synchronized (PART_CACHE) {
@@ -2072,6 +2081,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 }
                 App.post(() -> {
                     if (call != mPartCall || isFinishing() || isDestroyed()) return;
+                    mPartCall = null;
                     setPartAdapter(items);
                 }, 200);
             }
@@ -2082,10 +2092,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 List<String> items = Collections.emptyList();
                 App.post(() -> {
                     if (call != mPartCall || isFinishing() || isDestroyed()) return;
+                    mPartCall = null;
                     setPartAdapter(items);
                 }, 200);
             }
         });
+    }
+
+    private void clearPartRequest() {
+        if (mPartCall != null) mPartCall.cancel();
+        mPartCall = null;
     }
 
     private void setPartAdapter(List<String> items) {
@@ -2897,8 +2913,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     protected void onDestroy() {
         super.onDestroy();
         saveHistoryNow();
-        if (mPartCall != null) mPartCall.cancel();
-        mPartCall = null;
+        clearPartRequest();
         mPlaybackState.release();
         mContent.stopSearch();
         cancelDetailPreload();

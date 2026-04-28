@@ -35,6 +35,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -58,6 +59,12 @@ public class SiteViewModel extends ViewModel {
     public MutableLiveData<Result> download;
     private final ExecutorService executor = ThreadPools.newFixed("site-vm", Math.max(2, Constant.THREAD_POOL / 2));
     private final CopyOnWriteArrayList<PendingRequest> pendingRequests = new CopyOnWriteArrayList<>();
+    private final ConcurrentHashMap<String, PendingRequest> activeRequests = new ConcurrentHashMap<>();
+
+    private static final String REQUEST_RESULT = "result";
+    private static final String REQUEST_PLAYER = "player";
+    private static final String REQUEST_DOWNLOAD = "download";
+    private static final String REQUEST_ACTION = "action";
 
     public SiteViewModel() {
         this.ep = new MutableLiveData<>();
@@ -71,6 +78,7 @@ public class SiteViewModel extends ViewModel {
     }
 
     private static final class PendingRequest {
+        private String key;
         private Future<?> future;
         private Runnable timeout;
     }
@@ -96,7 +104,7 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void homeContent(String key, String token) {
-        executeAsync(() -> loadHomeResult(key), data -> result.postValue(withHomeRequest(data, key, token)), this::requestFallback);
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> loadHomeResult(key), data -> result.postValue(withHomeRequest(data, key, token)), this::requestFallback);
     }
 
     private Result loadHomeResult(String key) throws Exception {
@@ -127,7 +135,7 @@ public class SiteViewModel extends ViewModel {
 
     public void categoryContent(String key, String tid, String page, boolean filter, HashMap<String, String> extend) {
         HashMap<String, String> extendSnapshot = extend == null ? new HashMap<>() : new HashMap<>(extend);
-        executeAsync(() -> {
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> {
             Site site = VodConfig.get().getSite(key);
             if (site.getType() == 3) {
                 Spider spider = site.recent().spider();
@@ -276,12 +284,12 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void action(String key, String action) {
-        execute(this.action, () -> {
+        executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> {
             Site site = VodConfig.get().getSite(key);
             if (site.getType() == 3) return Result.fromJson(site.recent().spider().action(action));
             if (site.getType() == 4) return Result.fromJson(OkHttp.string(action));
             return Result.empty();
-        });
+        }, this.action::postValue, this::requestFallback);
     }
 
     public void searchContent(Site site, String keyword, boolean quick) throws Throwable {
@@ -381,16 +389,19 @@ public class SiteViewModel extends ViewModel {
     }
 
     private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
-        executeAsync(callable, result::postValue, this::requestFallback);
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, callable, result::postValue, this::requestFallback);
     }
 
     private void executeRequest(MutableLiveData<Result> result, Callable<Result> callable, String key, String id, String flag, String token) {
-        executeAsync(callable, data -> result.postValue(withRequest(data, key, id, flag, token)), this::requestRequestFallback);
+        String requestKey = result == player ? REQUEST_PLAYER : result == download ? REQUEST_DOWNLOAD : REQUEST_RESULT;
+        long timeout = result == player || result == download ? Constant.TIMEOUT_PLAY : Constant.TIMEOUT_VOD;
+        executeAsync(requestKey, timeout, callable, data -> result.postValue(withRequest(data, key, id, flag, token)), this::requestRequestFallback);
     }
 
-    private void executeAsync(Callable<Result> callable, ResultPoster poster, ResultFallback fallback) {
+    private void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, ResultPoster poster, ResultFallback fallback) {
         AtomicBoolean completed = new AtomicBoolean(false);
         PendingRequest request = new PendingRequest();
+        request.key = requestKey;
         request.timeout = () -> {
             if (!completed.compareAndSet(false, true)) return;
             if (request.future != null) request.future.cancel(true);
@@ -398,7 +409,9 @@ public class SiteViewModel extends ViewModel {
             poster.post(fallback.create(new TimeoutException()));
         };
         try {
+            cancelRequest(requestKey);
             pendingRequests.add(request);
+            if (!TextUtils.isEmpty(requestKey)) activeRequests.put(requestKey, request);
             request.future = executor.submit(() -> {
                 try {
                     Result data = callable.call();
@@ -413,7 +426,7 @@ public class SiteViewModel extends ViewModel {
                     ThreadPools.log(e, "Site request failed.");
                 }
             });
-            App.post(request.timeout, Constant.TIMEOUT_PLAY);
+            App.post(request.timeout, timeoutMs);
         } catch (RejectedExecutionException e) {
             finishRequest(request);
             poster.post(fallback.create(e));
@@ -423,6 +436,16 @@ public class SiteViewModel extends ViewModel {
     private void finishRequest(PendingRequest request) {
         if (request.timeout != null) App.removeCallbacks(request.timeout);
         pendingRequests.remove(request);
+        if (!TextUtils.isEmpty(request.key)) activeRequests.remove(request.key, request);
+    }
+
+    private void cancelRequest(String requestKey) {
+        if (TextUtils.isEmpty(requestKey)) return;
+        PendingRequest previous = activeRequests.remove(requestKey);
+        if (previous == null) return;
+        if (previous.timeout != null) App.removeCallbacks(previous.timeout);
+        if (previous.future != null) previous.future.cancel(true);
+        pendingRequests.remove(previous);
     }
 
     private Result requestFallback(Throwable error) {
@@ -468,6 +491,7 @@ public class SiteViewModel extends ViewModel {
             if (request.future != null) request.future.cancel(true);
         }
         pendingRequests.clear();
+        activeRequests.clear();
         ThreadPools.shutdown(executor);
     }
 }

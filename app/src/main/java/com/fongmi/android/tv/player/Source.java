@@ -21,6 +21,8 @@ import com.fongmi.android.tv.player.extractor.ZLive;
 import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +33,11 @@ import java.util.concurrent.TimeUnit;
 
 public class Source {
 
+    private static final int MAX_PRELOAD_TASKS_PER_FLAG = 8;
+    private static final int MAX_PARSE_CACHE_SIZE = 64;
+
     private final List<Extractor> extractors;
+    private final Map<String, List<Episode>> parseCache;
 
     private static class Loader {
         static volatile Source INSTANCE = new Source();
@@ -43,6 +49,12 @@ public class Source {
 
     public Source() {
         extractors = new ArrayList<>();
+        parseCache = Collections.synchronizedMap(new LinkedHashMap<String, List<Episode>>(MAX_PARSE_CACHE_SIZE, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, List<Episode>> eldest) {
+                return size() > MAX_PARSE_CACHE_SIZE;
+            }
+        });
         extractors.add(new Force());
         extractors.add(new JianPian());
         extractors.add(new Proxy());
@@ -62,19 +74,23 @@ public class Source {
 
     private ParseTask getTask(Episode episode, int index) {
         String url = episode.getUrl();
-        if (Thunder.Parser.match(url)) return new ParseTask(index, Thunder.Parser.get(url));
-        if (Youtube.Parser.match(url)) return new ParseTask(index, Youtube.Parser.get(url));
+        List<Episode> cached = getCachedEpisodes(url);
+        if (cached != null) return new ParseTask(index, url, () -> cached);
+        if (Thunder.Parser.match(url)) return new ParseTask(index, url, Thunder.Parser.get(url));
+        if (Youtube.Parser.match(url)) return new ParseTask(index, url, Youtube.Parser.get(url));
         return null;
     }
 
     public void parse(List<Flag> flags) throws Exception {
         ExecutorService executor = ThreadPools.preloadParse();
         for (Flag flag : flags) {
+            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
             List<Episode> originals = new ArrayList<>(flag.getEpisodes());
             List<ParseTask> tasks = new ArrayList<>();
             List<Callable<List<Episode>>> callables = new ArrayList<>();
             Map<Integer, List<Episode>> replacements = new HashMap<>();
             for (int i = 0; i < originals.size(); i++) {
+                if (tasks.size() >= MAX_PRELOAD_TASKS_PER_FLAG) break;
                 ParseTask task = getTask(originals.get(i), i);
                 if (task == null) continue;
                 tasks.add(task);
@@ -84,9 +100,15 @@ public class Source {
             List<Future<List<Episode>>> futures = executor.invokeAll(callables, 30, TimeUnit.SECONDS);
             for (int i = 0; i < futures.size(); i++) {
                 try {
+                    if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
                     List<Episode> episodes = futures.get(i).get();
-                    if (episodes != null && !episodes.isEmpty()) replacements.put(tasks.get(i).index, episodes);
+                    if (episodes != null && !episodes.isEmpty()) {
+                        String key = tasks.get(i).url;
+                        putCachedEpisodes(key, episodes);
+                        replacements.put(tasks.get(i).index, copyEpisodes(episodes));
+                    }
                 } catch (Exception e) {
+                    if (e instanceof InterruptedException) throw e;
                     ThreadPools.log(e, "Episode preload parse failed.");
                 }
             }
@@ -137,11 +159,29 @@ public class Source {
     private static class ParseTask {
 
         private final int index;
+        private final String url;
         private final Callable<List<Episode>> callable;
 
-        public ParseTask(int index, Callable<List<Episode>> callable) {
+        public ParseTask(int index, String url, Callable<List<Episode>> callable) {
             this.index = index;
+            this.url = url;
             this.callable = callable;
         }
+    }
+
+    private List<Episode> getCachedEpisodes(String url) {
+        List<Episode> items = parseCache.get(url);
+        return items == null ? null : copyEpisodes(items);
+    }
+
+    private void putCachedEpisodes(String url, List<Episode> episodes) {
+        if (url == null || url.isEmpty() || episodes == null || episodes.isEmpty()) return;
+        parseCache.put(url, copyEpisodes(episodes));
+    }
+
+    private List<Episode> copyEpisodes(List<Episode> episodes) {
+        List<Episode> copies = new ArrayList<>();
+        for (Episode item : episodes) copies.add(Episode.create(item.getName(), item.getDesc(), item.getUrl()));
+        return copies;
     }
 }

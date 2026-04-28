@@ -143,7 +143,7 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     }
 
     private void getDetail() {
-        mViewModel.detailContent(getKey(), getId());
+        mViewModel.detailContentFast(getKey(), getId(), "");
     }
 
     private void setDetail(Result result) {
