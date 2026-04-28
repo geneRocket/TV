@@ -125,8 +125,11 @@ public class ImgUtil {
     }
 
     private static void addHeader(LazyHeaders.Builder builder, String header) {
-        Map<String, String> map = Json.toMap(Json.parse(header));
-        for (Map.Entry<String, String> entry : map.entrySet()) builder.addHeader(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+        try {
+            Map<String, String> map = Json.toMap(Json.parse(header));
+            for (Map.Entry<String, String> entry : map.entrySet()) builder.addHeader(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+        } catch (Exception ignored) {
+        }
     }
 
     private static RequestListener<Bitmap> getListener(ImageView view) {

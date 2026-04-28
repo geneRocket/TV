@@ -321,6 +321,8 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(site.getName() + "," + searchContent);
                 Result result = Result.fromJson(searchContent);
                 for (Vod vod : result.getList()) vod.setSite(site);
+                result.setKey(site.getKey());
+                result.setKeyword(keyword);
                 return result;
             } else {
                 ArrayMap<String, String> params = new ArrayMap<>();
@@ -330,6 +332,8 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(site.getName() + "," + searchContent);
                 Result result = fetchPic(site, Result.fromType(site.getType(), searchContent));
                 for (Vod vod : result.getList()) vod.setSite(site);
+                result.setKey(site.getKey());
+                result.setKeyword(keyword);
                 return result;
             }
         });
@@ -382,6 +386,7 @@ public class SiteViewModel extends ViewModel {
 
     private void post(Site site, Result result, String keyword, String token) {
         if (result.getList().isEmpty()) return;
+        result.setKey(site.getKey());
         result.setKeyword(keyword);
         result.setRequestToken(token);
         for (Vod vod : result.getList()) vod.setSite(site);

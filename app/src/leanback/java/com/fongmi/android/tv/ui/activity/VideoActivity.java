@@ -35,6 +35,7 @@ import androidx.media3.ui.SubtitleView;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
+import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.fongmi.android.tv.App;
@@ -740,6 +741,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String sourceSwitchTargetFlag;
     private String sourceSwitchTargetEpisodeKey;
     private long sourceSwitchPosition;
+    private CustomTarget<Drawable> mArtworkTarget;
 
     public static void push(FragmentActivity activity, String text) {
         if (FileChooser.isValid(activity, Uri.parse(text))) file(activity, FileChooser.getPathFromUri(activity, Uri.parse(text)));
@@ -1185,12 +1187,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
             mBinding.danmaku.setVisibility(View.GONE);
-            setVisibilityIfChanged(mBinding.control.danmu, View.GONE);
+            setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
             return;
         }
         boolean hasSource = item != null && !item.isEmpty();
         mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
-        setVisibilityIfChanged(mBinding.control.danmu, hasSource ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         if (!hasSource) {
             mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
@@ -1204,12 +1206,22 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.danmaku.release();
         if (hasSource) {
             App.execute(() -> {
-                Parser parser = new Parser(item.getUrl());
-                App.post(() -> {
-                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                    mBinding.danmaku.prepare(parser, mDanmakuContext);
-                    showDanmu();
-                });
+                try {
+                    Parser parser = new Parser(item.getUrl());
+                    App.post(() -> {
+                        if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                        mBinding.danmaku.prepare(parser, mDanmakuContext);
+                        showDanmu();
+                    });
+                } catch (Throwable e) {
+                    ThreadPools.log(e, "Danmaku prepare failed.");
+                    App.post(() -> {
+                        if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                        mPreparedDanmakuUrl = null;
+                        mBinding.danmaku.release();
+                        mBinding.danmaku.setVisibility(View.GONE);
+                    });
+                }
             });
         }
     }
@@ -1641,15 +1653,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onDanmu() {
-        if (!hasDanmakuSource()) {
-            setVisibilityIfChanged(mBinding.control.danmu, View.GONE);
-            showDanmu();
-            return;
-        }
         Setting.putDanmu(!Setting.isDanmu());
         mBinding.control.danmu.setActivated(Setting.isDanmu());
         showDanmu();
-        if (Setting.isDanmu()) mPlayers.prepared();
+        if (Setting.isDanmu() && hasDanmakuSource()) mPlayers.prepared();
     }
 
     private void showDanmu() {
@@ -1960,7 +1967,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void showControl(View view) {
-        setVisibilityIfChanged(mBinding.control.danmu, hasDanmakuSource() ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.getRoot(), View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.episodes, Setting.getFullscreenMenuKey() == 0 ? View.VISIBLE : View.GONE);
         view.requestFocus();
@@ -2029,7 +2036,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (url == null) url = "";
         if (url.equals(mArtworkUrl)) return;
         mArtworkUrl = url;
-        ImgUtil.load(url, R.drawable.radio, new CustomTarget<>() {
+        clearArtworkTarget();
+        mArtworkTarget = new CustomTarget<>() {
             @Override
             public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
                 getExo().setDefaultArtwork(resource);
@@ -2047,7 +2055,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             @Override
             public void onLoadCleared(@Nullable Drawable placeholder) {
             }
-        });
+        };
+        ImgUtil.load(url, R.drawable.radio, mArtworkTarget);
+    }
+
+    private void clearArtworkTarget() {
+        if (mArtworkTarget == null) return;
+        Glide.with(App.get()).clear(mArtworkTarget);
+        mArtworkTarget = null;
     }
 
     private void getPart(String source) {
@@ -2065,7 +2080,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             setPartAdapter(cached);
             return;
         }
-        mPartCall = OkHttp.newCall("https://api.yesapi.cn/?service=App.Scws.GetWords&app_key=CEE4B8A091578B252AC4C92FB4E893C3&text=" + URLEncoder.encode(keyword));
+        mPartCall = OkHttp.newCall(OkHttp.client(5000), "https://api.yesapi.cn/?service=App.Scws.GetWords&app_key=CEE4B8A091578B252AC4C92FB4E893C3&text=" + URLEncoder.encode(keyword));
         mPartCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
@@ -2920,6 +2935,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         ThreadPools.shutdown(mDetailExecutor);
         mClock.release();
         mPlayers.release();
+        clearArtworkTarget();
         Source.get().stop();
         RefreshEvent.history();
         App.removeCallbacks(mR1, mR2, mR3, mR4, mR5, mR6, mR7);

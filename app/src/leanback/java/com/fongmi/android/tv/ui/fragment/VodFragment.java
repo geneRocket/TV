@@ -67,6 +67,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private String mRequestTypeId;
     private String mRequestPage;
     private String mRequestExtend;
+    private final Runnable mFilterRefresh = this::getVideo;
 
     public static VodFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, ArrayList<Filter> filters, boolean folder, boolean open) {
         Bundle args = new Bundle();
@@ -214,7 +215,12 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         if (item.isActivated()) mExtends.put(key, item.getV());
         else mExtends.remove(key);
         dispatchTypeState();
-        onRefresh();
+        scheduleFilterRefresh();
+    }
+
+    private void scheduleFilterRefresh() {
+        App.removeCallbacks(mFilterRefresh);
+        App.post(mFilterRefresh, 180);
     }
 
     private void getVideo() {
@@ -429,6 +435,12 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     public void onPageHidden() {
         if (mBinding != null) mBinding.recycler.moveToTop();
+    }
+
+    @Override
+    public void onDestroyView() {
+        App.removeCallbacks(mFilterRefresh);
+        super.onDestroyView();
     }
 
     private void dispatchTypeState() {

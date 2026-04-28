@@ -47,6 +47,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     private static final String EXTRA_KEYWORD = "keyword";
     private static final String EXTRA_AUTO = "auto";
+    private static final int SEARCH_HINT_TIMEOUT = 5000;
 
     private ActivitySearchBinding mBinding;
     private RecordAdapter mRecordAdapter;
@@ -153,7 +154,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         List<String> items = Hot.get(Setting.getHot());
         mWordAdapter.addAll(items);
         if (!items.isEmpty()) return;
-        mHotCall = OkHttp.newCall("https://api.web.360kan.com/v1/rank?cat=1", Headers.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general"));
+        mHotCall = OkHttp.client(SEARCH_HINT_TIMEOUT).newCall(new okhttp3.Request.Builder().url("https://api.web.360kan.com/v1/rank?cat=1").headers(Headers.of(HttpHeaders.REFERER, "https://www.360kan.com/rank/general")).build());
         mHotCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
@@ -173,7 +174,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         cancelSuggestRequest();
         mBinding.hint.setText(R.string.search_suggest);
         mWordAdapter.addAll(Collections.emptyList());
-        mSuggestOneCall = OkHttp.newCall("https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box?format=json&page_num=0&page_size=10&key=" + URLEncoder.encode(Trans.z2p(text)));
+        mSuggestOneCall = OkHttp.newCall(OkHttp.client(SEARCH_HINT_TIMEOUT), "https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box?format=json&page_num=0&page_size=10&key=" + URLEncoder.encode(Trans.z2p(text)));
         mSuggestOneCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
@@ -187,7 +188,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                 }
             }
         });
-        mSuggestTwoCall = OkHttp.newCall("https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(Trans.z2p(text)));
+        mSuggestTwoCall = OkHttp.newCall(OkHttp.client(SEARCH_HINT_TIMEOUT), "https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(Trans.z2p(text)));
         mSuggestTwoCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
@@ -249,7 +250,9 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         cancelSuggestTask();
         cancelSuggestRequest();
         CollectActivity.start(this, keyword);
-        App.post(() -> mRecordAdapter.add(keyword), 250);
+        App.post(() -> {
+            if (!isFinishing() && !isDestroyed()) mRecordAdapter.add(keyword);
+        }, 250);
     }
 
     @Override

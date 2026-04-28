@@ -28,6 +28,8 @@ import master.flame.danmaku.danmaku.util.DanmakuUtils;
 public class Parser extends BaseDanmakuParser {
 
     private static final Pattern XML_NUMBER_ENTITY = Pattern.compile("&#(x?[0-9A-Fa-f]+);");
+    private static final int MAX_DANMAKU_ITEMS = 6000;
+    private static final int MAX_TEXT_LENGTH = 300;
 
     private final Danmu danmu;
     private BaseDanmaku item;
@@ -51,6 +53,7 @@ public class Parser extends BaseDanmakuParser {
     protected Danmakus parse() {
         Danmakus result = new Danmakus(IDanmakus.ST_BY_TIME);
         for (Danmu.Data data : danmu.getData()) {
+            if (index >= MAX_DANMAKU_ITEMS) break;
             String[] values = data.getParam().split(",");
             if (values.length < 4) continue;
             if (!setParam(values)) continue;
@@ -193,6 +196,7 @@ public class Parser extends BaseDanmakuParser {
 
     private String decodeXmlString(String title) {
         if (TextUtils.isEmpty(title)) return "";
+        if (title.length() > MAX_TEXT_LENGTH) title = title.substring(0, MAX_TEXT_LENGTH);
         if (title.contains("&amp;")) title = title.replace("&amp;", "&");
         if (title.contains("&quot;")) title = title.replace("&quot;", "\"");
         if (title.contains("&gt;")) title = title.replace("&gt;", ">");

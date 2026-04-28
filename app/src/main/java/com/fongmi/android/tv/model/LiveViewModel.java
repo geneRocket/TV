@@ -37,6 +37,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+
 public class LiveViewModel extends ViewModel {
 
     private static final int LIVE = 0;
@@ -115,9 +118,16 @@ public class LiveViewModel extends ViewModel {
         List<SimpleDateFormat> formats = createTimeFormats(timeZone);
         execute(EPG, () -> {
             if (!url.startsWith("http")) return item.getData().selected();
-            if (!item.getData().equal(date)) item.setData(Epg.objectFrom(OkHttp.string(url), item.getTvgId(), formats));
+            if (!item.getData().equal(date)) item.setData(Epg.objectFrom(requestString(url, Constant.TIMEOUT_EPG), item.getTvgId(), formats));
             return item.getData().selected();
         });
+    }
+
+    private String requestString(String url, int timeout) throws Exception {
+        try (Response response = OkHttp.newCall(OkHttp.client(timeout), url).execute()) {
+            ResponseBody body = response.body();
+            return body == null ? "" : body.string();
+        }
     }
 
     public void getUrl(Channel item) {

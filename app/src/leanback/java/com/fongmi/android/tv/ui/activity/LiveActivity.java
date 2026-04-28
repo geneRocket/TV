@@ -24,6 +24,7 @@ import androidx.media3.ui.SubtitleView;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
+import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.fongmi.android.tv.App;
@@ -107,6 +108,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private EpgData mActivatedEpgData;
     private String mArtworkUrl;
     private String mInfoLogoUrl;
+    private CustomTarget<Drawable> mArtworkTarget;
     private int toggleCount;
     private int errorCount;
     private int count;
@@ -646,7 +648,8 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         if (url == null) url = "";
         if (url.equals(mArtworkUrl)) return;
         mArtworkUrl = url;
-        ImgUtil.load(url, R.drawable.radio, new CustomTarget<>() {
+        clearArtworkTarget();
+        mArtworkTarget = new CustomTarget<>() {
             @Override
             public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
                 getExo().setDefaultArtwork(resource);
@@ -662,7 +665,14 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
             @Override
             public void onLoadCleared(@Nullable Drawable placeholder) {
             }
-        });
+        };
+        ImgUtil.load(url, R.drawable.radio, mArtworkTarget);
+    }
+
+    private void clearArtworkTarget() {
+        if (mArtworkTarget == null) return;
+        Glide.with(App.get()).clear(mArtworkTarget);
+        mArtworkTarget = null;
     }
 
     @Override
@@ -798,6 +808,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mDisplayedEpg = null;
         mActivatedChannel = null;
         mActivatedEpgData = null;
+        clearArtworkTarget();
         mArtworkUrl = "";
         mInfoLogoUrl = null;
     }
@@ -912,6 +923,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void setMetadata() {
+        if (mChannel == null) return;
         String title = mBinding.widget.name.getText().toString();
         String artist = mBinding.widget.play.getText().toString();
         mPlayers.setMetadata(title, artist, mChannel.getLogo(), getDefaultArtwork());
@@ -964,7 +976,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void startFlow() {
-        if (!Setting.isChange()) return;
+        if (!Setting.isChange() || mChannel == null) return;
         if (!mChannel.isLast()) {
             nextLine(true);
         } else if (isGone(mBinding.recycler)) {
@@ -1208,6 +1220,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     protected void onDestroy() {
         super.onDestroy();
         mPlayers.release();
+        clearArtworkTarget();
         App.removeCallbacks(mR0, mR1, mR2, mR3, mR4);
     }
 

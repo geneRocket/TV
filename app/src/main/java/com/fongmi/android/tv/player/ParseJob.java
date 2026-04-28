@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class ParseJob implements ParseCallback {
@@ -147,7 +148,10 @@ public class ParseJob implements ParseCallback {
     }
 
     private String requestString(String url, Map<String, String> headers) throws Exception {
-        return OkHttp.string(url, headers);
+        try (Response response = OkHttp.client(Constant.TIMEOUT_PARSE_DEF).newCall(new okhttp3.Request.Builder().url(url).headers(okhttp3.Headers.of(headers)).build()).execute()) {
+            ResponseBody body = response.body();
+            return body == null ? "" : body.string();
+        }
     }
 
     private void jsonExtend(String webUrl) throws Throwable {

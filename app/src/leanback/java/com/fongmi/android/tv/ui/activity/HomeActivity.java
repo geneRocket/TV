@@ -95,6 +95,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private int mLastPagePosition;
     private long mHomeRequestSeed;
     private String mPendingHomeToken;
+    private final Runnable mCoolDownReset = () -> coolDown = false;
+    private final Runnable mConfirmReset = () -> confirm = false;
+    private final Runnable mEnableTitleFocus = () -> {
+        if (!isFinishing() && !isDestroyed()) mBinding.title.setFocusable(true);
+    };
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -370,7 +375,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setCoolDown() {
-        App.post(() -> coolDown = false, 2000);
+        App.removeCallbacks(mCoolDownReset);
+        App.post(mCoolDownReset, 2000);
         coolDown = true;
     }
 
@@ -559,7 +565,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void setConfirm() {
         confirm = true;
         Notify.show(R.string.app_exit);
-        App.post(() -> confirm = false, 5000);
+        App.removeCallbacks(mConfirmReset);
+        App.post(mConfirmReset, 5000);
     }
 
 
@@ -698,7 +705,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void setFocus() {
         setLoading(false);
-        if (!mBinding.title.isFocusable()) App.post(() -> mBinding.title.setFocusable(true), 500);
+        if (!mBinding.title.isFocusable()) {
+            App.removeCallbacks(mEnableTitleFocus);
+            App.post(mEnableTitleFocus, 500);
+        }
         if (mFocus != mBinding.title) {
             if (Setting.getHomeUI() == 0) {
                 HomeFragment fragment = getHomeFragmentSafe();
@@ -781,7 +791,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     protected void onDestroy() {
-        App.removeCallbacks(mRunnable);
+        App.removeCallbacks(mRunnable, mCoolDownReset, mConfirmReset, mEnableTitleFocus);
         super.onDestroy();
         WallConfig.get().clear();
         LiveConfig.get().clear();

@@ -43,6 +43,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     private boolean coolDown;
     private View mOldView;
     private int mLastPagePosition;
+    private final Runnable mCoolDownReset = () -> coolDown = false;
 
     public static void start(Activity activity, Result result) {
         start(activity, VodConfig.get().getHome().getKey(), result);
@@ -182,7 +183,8 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     }
 
     private void setCoolDown() {
-        App.post(() -> coolDown = false, 2000);
+        App.removeCallbacks(mCoolDownReset);
+        App.post(mCoolDownReset, 2000);
         coolDown = true;
     }
 
@@ -214,6 +216,12 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         if (item.getFilter() != null && item.getFilter()) getFragment().resetFilterOnBack();
         else if (getFragment().canBack()) getFragment().goBack();
         else if (!coolDown) super.onBackPressed();
+    }
+
+    @Override
+    protected void onDestroy() {
+        App.removeCallbacks(mRunnable, mCoolDownReset);
+        super.onDestroy();
     }
 
     class PageAdapter extends FragmentStatePagerAdapter {
