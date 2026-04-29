@@ -22,6 +22,7 @@ import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.net.OkHttp;
 
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -125,6 +126,7 @@ public class LiveViewModel extends ViewModel {
 
     private String requestString(String url, int timeout) throws Exception {
         try (Response response = OkHttp.newCall(OkHttp.client(timeout), url).execute()) {
+            if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
             ResponseBody body = response.body();
             return body == null ? "" : body.string();
         }

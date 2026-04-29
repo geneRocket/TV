@@ -100,6 +100,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private Runnable mR2;
     private Runnable mR3;
     private Runnable mR4;
+    private Runnable mSeekRunnable;
     private Clock mClock;
     private Group mDisplayedGroup;
     private Live mDisplayedLive;
@@ -1032,6 +1033,15 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         hideCenter();
     }
 
+    private void postSeekTo(int time) {
+        if (mSeekRunnable != null) App.removeCallbacks(mSeekRunnable);
+        mSeekRunnable = () -> {
+            seekTo(time);
+            mSeekRunnable = null;
+        };
+        App.post(mSeekRunnable, 250);
+    }
+
     public int getToggleCount() {
         return toggleCount;
     }
@@ -1129,13 +1139,13 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     public void onKeyLeft(int time) {
         if (!mPlayers.isVod()) prevLine();
-        else App.post(() -> seekTo(time), 250);
+        else postSeekTo(time);
     }
 
     @Override
     public void onKeyRight(int time) {
         if (!mPlayers.isVod()) nextLine(true);
-        else App.post(() -> seekTo(time), 250);
+        else postSeekTo(time);
     }
 
     @Override
@@ -1220,7 +1230,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     protected void onDestroy() {
         super.onDestroy();
         mPlayers.release();
+        mKeyDown.release();
         clearArtworkTarget();
+        if (mSeekRunnable != null) App.removeCallbacks(mSeekRunnable);
+        mSeekRunnable = null;
         App.removeCallbacks(mR0, mR1, mR2, mR3, mR4);
     }
 

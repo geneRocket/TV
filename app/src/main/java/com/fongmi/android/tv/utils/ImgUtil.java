@@ -115,13 +115,31 @@ public class ImgUtil {
         int start = url.indexOf(tag);
         if (start < 0) return "";
         start += tag.length();
-        int end = url.indexOf("@", start);
+        int end = findNextTag(url, start);
         return (end < 0 ? url.substring(start) : url.substring(start, end)).trim();
     }
 
     private static String stripParam(String url) {
-        int index = url.indexOf("@");
+        int index = findFirstTag(url);
         return index < 0 ? url : url.substring(0, index);
+    }
+
+    private static int findFirstTag(String url) {
+        int index = -1;
+        for (String tag : new String[]{TAG_HEADERS, TAG_COOKIE, TAG_REFERER, TAG_USER_AGENT}) {
+            int found = url.indexOf(tag);
+            if (found >= 0 && (index < 0 || found < index)) index = found;
+        }
+        return index;
+    }
+
+    private static int findNextTag(String url, int start) {
+        int index = -1;
+        for (String tag : new String[]{TAG_HEADERS, TAG_COOKIE, TAG_REFERER, TAG_USER_AGENT}) {
+            int found = url.indexOf(tag, start);
+            if (found >= 0 && (index < 0 || found < index)) index = found;
+        }
+        return index;
     }
 
     private static void addHeader(LazyHeaders.Builder builder, String header) {

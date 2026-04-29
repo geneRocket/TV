@@ -53,6 +53,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     }
 
     public void setDelete(boolean delete) {
+        if (this.delete == delete) return;
         this.delete = delete;
         notifyItemRangeChanged(0, mItems.size());
     }
@@ -102,7 +103,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         History item = mItems.get(position);
         setFocusListener(holder.binding);
-        setClickListener(holder);
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.site.setVisibility(item.getSiteVisible());
@@ -119,25 +119,21 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         });
     }
 
-    private void setClickListener(@NonNull ViewHolder holder) {
-        View root = holder.itemView;
-        root.setOnLongClickListener(view -> mListener.onLongClick());
-        root.setOnClickListener(view -> {
-            int index = holder.getBindingAdapterPosition();
-            if (index == RecyclerView.NO_POSITION) return;
-            History item = mItems.get(index);
-            if (isDelete()) mListener.onItemDelete(item);
-            else mListener.onItemClick(item);
-        });
-    }
-
-    public static class ViewHolder extends RecyclerView.ViewHolder {
+    public class ViewHolder extends RecyclerView.ViewHolder {
 
         private final AdapterVodBinding binding;
 
         public ViewHolder(@NonNull AdapterVodBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            itemView.setOnLongClickListener(view -> mListener.onLongClick());
+            itemView.setOnClickListener(view -> {
+                int index = getBindingAdapterPosition();
+                if (index == RecyclerView.NO_POSITION) return;
+                History item = mItems.get(index);
+                if (isDelete()) mListener.onItemDelete(item);
+                else mListener.onItemClick(item);
+            });
         }
     }
 }

@@ -16,6 +16,7 @@ public class CustomTypeView extends AppCompatTextView {
 
     private Listener listener;
     private boolean coolDown;
+    private final Runnable coolDownReset = () -> coolDown = false;
 
     public CustomTypeView(@NonNull Context context) {
         super(context);
@@ -40,7 +41,7 @@ public class CustomTypeView extends AppCompatTextView {
     }
 
     private boolean onKeyDown() {
-        App.post(() -> coolDown = false, 3000);
+        App.post(coolDownReset, 3000);
         listener.onRefresh();
         coolDown = true;
         return true;
@@ -49,8 +50,14 @@ public class CustomTypeView extends AppCompatTextView {
     @Override
     protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
-        App.post(() -> coolDown = false, 500);
+        App.post(coolDownReset, 500);
         if (focused) coolDown = true;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        App.removeCallbacks(coolDownReset);
+        super.onDetachedFromWindow();
     }
 
     public interface Listener {

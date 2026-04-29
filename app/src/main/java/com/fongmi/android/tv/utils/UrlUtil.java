@@ -10,11 +10,11 @@ import com.google.common.net.HttpHeaders;
 public class UrlUtil {
 
     public static Uri uri(String url) {
-        return Uri.parse(url.trim().replace("\\", ""));
+        return Uri.parse(TextUtils.isEmpty(url) ? "" : url.trim().replace("\\", ""));
     }
 
     public static String scheme(String url) {
-        return url == null ? "" : scheme(Uri.parse(url));
+        return scheme(uri(url));
     }
 
     public static String scheme(Uri uri) {
@@ -23,7 +23,7 @@ public class UrlUtil {
     }
 
     public static String host(String url) {
-        return url == null ? "" : host(Uri.parse(url));
+        return host(uri(url));
     }
 
     public static String host(Uri uri) {

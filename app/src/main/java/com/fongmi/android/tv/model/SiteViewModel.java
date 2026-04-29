@@ -351,6 +351,7 @@ public class SiteViewModel extends ViewModel {
     }
 
     private String body(Response response) throws IOException {
+        if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
         ResponseBody body = response.body();
         return body == null ? "" : body.string();
     }
@@ -364,7 +365,7 @@ public class SiteViewModel extends ViewModel {
 
     private String fetchExt(Site site) throws IOException {
         try (Response res = OkHttp.newCall(site.getExt(), site.getHeaders()).execute()) {
-            if (res.code() != 200) return "";
+            if (!res.isSuccessful()) return "";
             site.setExt(body(res));
             return site.getExt();
         }

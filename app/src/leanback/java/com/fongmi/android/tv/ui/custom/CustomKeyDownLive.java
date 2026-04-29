@@ -22,6 +22,7 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
     private final StringBuilder text;
     private final Listener listener;
     private int holdTime;
+    private boolean isMoveAdd;
 
     private final Runnable runnable = new Runnable() {
         @Override
@@ -81,6 +82,7 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
         if (text.length() >= 4) return;
         text.append(getNumber(keyCode));
         listener.onShow(text.toString());
+        App.removeCallbacks(runnable);
         App.post(runnable, 2000);
     }
 
@@ -124,15 +126,25 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
     }
 
     private int addTime() {
+        if (!isMoveAdd) holdTime = 0;
+        isMoveAdd = true;
         return holdTime = holdTime + Constant.INTERVAL_SEEK;
     }
 
     private int subTime() {
+        if (isMoveAdd) holdTime = 0;
+        isMoveAdd = false;
         return holdTime = holdTime - Constant.INTERVAL_SEEK;
     }
 
     public void resetTime() {
         holdTime = 0;
+    }
+
+    public void release() {
+        App.removeCallbacks(runnable);
+        text.setLength(0);
+        resetTime();
     }
 
     public interface Listener {

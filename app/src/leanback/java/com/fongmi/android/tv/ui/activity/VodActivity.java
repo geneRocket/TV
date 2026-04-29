@@ -148,7 +148,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     private void updateFilter(Class item) {
         if (item.getFilter() == null) return;
         getFragment().toggleFilter(item.toggleFilter());
-        mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size());
+        notifyTypeChanged(item);
     }
 
     public void updateTypeState(String typeId, java.util.Map<String, String> extend, boolean open) {
@@ -156,7 +156,7 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         if (item == null) return;
         item.setExtend(extend);
         item.setFilter(item.getFilters().isEmpty() ? null : open);
-        mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size());
+        notifyTypeChanged(item);
     }
 
     @Nullable
@@ -166,6 +166,11 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
             if (item instanceof Class && ((Class) item).getTypeId().equals(typeId)) return (Class) item;
         }
         return null;
+    }
+
+    private void notifyTypeChanged(Class item) {
+        int index = mAdapter.indexOf(item);
+        if (index >= 0) mAdapter.notifyArrayItemRangeChanged(index, 1);
     }
 
     private VodFragment getFragment() {

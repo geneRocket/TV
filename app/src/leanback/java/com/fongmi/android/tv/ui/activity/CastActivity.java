@@ -596,6 +596,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         super.onDestroy();
         mClock.release();
         mPlayers.release();
+        mKeyDown.release();
         mService = null;
         App.removeCallbacks(mR1, mR2);
     }

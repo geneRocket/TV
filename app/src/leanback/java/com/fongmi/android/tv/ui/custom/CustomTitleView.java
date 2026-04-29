@@ -26,6 +26,7 @@ public class CustomTitleView extends AppCompatTextView {
     private Listener listener;
     private Animation flicker;
     private boolean coolDown;
+    private final Runnable coolDownReset = () -> coolDown = false;
 
     public CustomTitleView(@NonNull Context context) {
         super(context);
@@ -74,9 +75,16 @@ public class CustomTitleView extends AppCompatTextView {
     }
 
     private void onKeyUp() {
-        App.post(() -> coolDown = false, 3000);
+        App.post(coolDownReset, 3000);
         listener.onRefresh();
         coolDown = true;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        App.removeCallbacks(coolDownReset);
+        clearAnimation();
+        super.onDetachedFromWindow();
     }
 
     private Site getSite(boolean next) {

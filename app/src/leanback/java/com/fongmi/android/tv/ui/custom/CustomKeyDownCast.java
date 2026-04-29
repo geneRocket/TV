@@ -14,6 +14,7 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
 
     private final GestureDetector detector;
     private final Listener listener;
+    private final Runnable seekRunnable;
     private boolean changeSpeed;
     private int holdSecond;
     private boolean isMoveAdd;
@@ -25,6 +26,10 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
     private CustomKeyDownCast(Activity activity) {
         this.detector = new GestureDetector(activity, this);
         this.listener = (Listener) activity;
+        this.seekRunnable = () -> {
+            listener.onSeekTo(CustomKeyDownVod.getDelta(holdSecond, isMoveAdd));
+            resetTime();
+        };
     }
 
     public boolean onTouchEvent(MotionEvent e) {
@@ -46,7 +51,8 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
         } else if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isRightKey(event)) {
             listener.onSeeking(addTime());
         } else if (event.getAction() == KeyEvent.ACTION_UP && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
-            App.post(() -> listener.onSeekTo(CustomKeyDownVod.getDelta(holdSecond, isMoveAdd)), 250);
+            App.removeCallbacks(seekRunnable);
+            App.post(seekRunnable, 250);
         } else if (event.getAction() == KeyEvent.ACTION_UP && KeyUtil.isUpKey(event)) {
             if (changeSpeed) listener.onSpeedEnd();
             else listener.onKeyUp();
@@ -79,12 +85,14 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
     }
 
     private int addTime() {
+        if (!isMoveAdd) holdSecond = 0;
         isMoveAdd = true;
         holdSecond += 1;
         return CustomKeyDownVod.getDelta(holdSecond, isMoveAdd);
     }
 
     private int subTime() {
+        if (isMoveAdd) holdSecond = 0;
         isMoveAdd = false;
         holdSecond += 1;
         return CustomKeyDownVod.getDelta(holdSecond, isMoveAdd);
@@ -92,6 +100,11 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
 
     public void resetTime() {
         holdSecond = 0;
+    }
+
+    public void release() {
+        App.removeCallbacks(seekRunnable);
+        resetTime();
     }
 
     public interface Listener {

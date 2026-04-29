@@ -65,6 +65,7 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     }
 
     public void setDelete(boolean delete) {
+        if (this.delete == delete) return;
         this.delete = delete;
         notifyItemRangeChanged(0, mItems.size());
     }
@@ -93,7 +94,6 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Keep item = mItems.get(position);
         setFocusListener(holder.binding);
-        setClickListener(holder);
         holder.binding.name.setText(item.getVodName());
         holder.binding.remark.setVisibility(View.GONE);
         holder.binding.site.setVisibility(View.VISIBLE);
@@ -106,25 +106,21 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.name.setSelected(hasFocus));
     }
 
-    private void setClickListener(@NonNull ViewHolder holder) {
-        View root = holder.itemView;
-        root.setOnLongClickListener(view -> mListener.onLongClick());
-        root.setOnClickListener(view -> {
-            int index = holder.getBindingAdapterPosition();
-            if (index == RecyclerView.NO_POSITION) return;
-            Keep item = mItems.get(index);
-            if (isDelete()) mListener.onItemDelete(item);
-            else mListener.onItemClick(item);
-        });
-    }
-
-    public static class ViewHolder extends RecyclerView.ViewHolder {
+    public class ViewHolder extends RecyclerView.ViewHolder {
 
         private final AdapterVodBinding binding;
 
         public ViewHolder(@NonNull AdapterVodBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            itemView.setOnLongClickListener(view -> mListener.onLongClick());
+            itemView.setOnClickListener(view -> {
+                int index = getBindingAdapterPosition();
+                if (index == RecyclerView.NO_POSITION) return;
+                Keep item = mItems.get(index);
+                if (isDelete()) mListener.onItemDelete(item);
+                else mListener.onItemClick(item);
+            });
         }
     }
 }

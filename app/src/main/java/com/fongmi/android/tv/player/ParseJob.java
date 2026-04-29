@@ -20,6 +20,7 @@ import com.google.common.net.HttpHeaders;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -149,6 +150,7 @@ public class ParseJob implements ParseCallback {
 
     private String requestString(String url, Map<String, String> headers) throws Exception {
         try (Response response = OkHttp.client(Constant.TIMEOUT_PARSE_DEF).newCall(new okhttp3.Request.Builder().url(url).headers(okhttp3.Headers.of(headers)).build()).execute()) {
+            if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
             ResponseBody body = response.body();
             return body == null ? "" : body.string();
         }

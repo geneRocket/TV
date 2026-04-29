@@ -74,8 +74,6 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         holder.binding.text.setSelected(item.isActivated());
         holder.binding.text.setActivated(item.isActivated());
         holder.binding.check.setVisibility(type == 0 ? View.GONE : View.VISIBLE);
-        holder.binding.getRoot().setOnLongClickListener(v -> setLongListener(holder));
-        holder.binding.getRoot().setOnClickListener(v -> setListener(holder));
         holder.binding.text.setGravity(Setting.getSiteMode() == 0 ? Gravity.CENTER : Gravity.START);
     }
 
@@ -115,13 +113,25 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         });
     }
 
-    static class ViewHolder extends RecyclerView.ViewHolder {
+    class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener, View.OnLongClickListener {
 
         private final AdapterSiteBinding binding;
 
         ViewHolder(@NonNull AdapterSiteBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            itemView.setOnClickListener(this);
+            itemView.setOnLongClickListener(this);
+        }
+
+        @Override
+        public void onClick(View view) {
+            setListener(this);
+        }
+
+        @Override
+        public boolean onLongClick(View view) {
+            return setLongListener(this);
         }
     }
 }

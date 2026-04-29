@@ -15,8 +15,12 @@ import com.fongmi.android.tv.R;
 public class CustomRecyclerView extends RecyclerView {
 
     private int maxHeight;
+    private int focusPosition = NO_POSITION;
     private float x1;
     private float y1;
+    private final Runnable focusRunnable = () -> {
+        if (isAttachedToWindow()) focus(focusPosition);
+    };
 
     public CustomRecyclerView(@NonNull Context context) {
         super(context);
@@ -55,7 +59,15 @@ public class CustomRecyclerView extends RecyclerView {
     @Override
     public void scrollToPosition(int position) {
         super.scrollToPosition(position);
-        postDelayed(() -> focus(position), 50);
+        focusPosition = position;
+        removeCallbacks(focusRunnable);
+        postDelayed(focusRunnable, 50);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        removeCallbacks(focusRunnable);
+        super.onDetachedFromWindow();
     }
 
     @Override

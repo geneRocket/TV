@@ -57,6 +57,7 @@ public class CustomMic extends AppCompatImageView {
     }
 
     private void checkPermission() {
+        if (activity == null || recognizer == null) return;
         PermissionX.init(activity).permissions(Manifest.permission.RECORD_AUDIO).request((allGranted, grantedList, deniedList) -> {
             if (allGranted) start();
         });
@@ -72,6 +73,7 @@ public class CustomMic extends AppCompatImageView {
     }
 
     public void start() {
+        if (recognizer == null) return;
         setColorFilter(MDColor.RED_500, PorterDuff.Mode.SRC_IN);
         startAnimation(flicker);
         startListening();
@@ -81,10 +83,19 @@ public class CustomMic extends AppCompatImageView {
 
     public boolean stop() {
         setColorFilter(MDColor.WHITE, PorterDuff.Mode.SRC_IN);
-        recognizer.stopListening();
+        if (recognizer != null) recognizer.stopListening();
         clearAnimation();
         setListen(false);
         return true;
+    }
+
+    public void release() {
+        stop();
+        if (recognizer != null) {
+            recognizer.destroy();
+            recognizer = null;
+        }
+        activity = null;
     }
 
     @Override

@@ -2628,8 +2628,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         for (int i = 0; i < mQuickAdapter.size(); i++) merged.add((Vod) mQuickAdapter.get(i));
         merged.addAll(items);
         Collections.sort(merged, this::compareQuickItem);
-        mQuickAdapter.clear();
-        if (!merged.isEmpty()) mQuickAdapter.addAll(0, merged);
+        mQuickAdapter.setItems(merged, null);
     }
 
     private int compareQuickItem(Vod left, Vod right) {
@@ -2930,6 +2929,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         saveHistoryNow();
         clearPartRequest();
         mPlaybackState.release();
+        mKeyDown.release();
         mContent.stopSearch();
         cancelDetailPreload();
         ThreadPools.shutdown(mDetailExecutor);

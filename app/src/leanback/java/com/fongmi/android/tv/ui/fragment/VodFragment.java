@@ -237,7 +237,6 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         if (first) mVodKeys.clear();
         if (first) mPendingFirstRefresh = true;
         if (first) showProgress();
-        int filterSize = mOpen ? mFilters.size() : 0;
         mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
     }
 
@@ -343,7 +342,9 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         if (mFilters.isEmpty()) return;
         List<ListRow> rows = new ArrayList<>();
         for (Filter filter : mFilters) rows.add(getRow(filter));
-        App.post(() -> mBinding.recycler.scrollToPosition(0), 48);
+        App.post(() -> {
+            if (isAdded() && mBinding != null) mBinding.recycler.scrollToPosition(0);
+        }, 48);
         mAdapter.addAll(0, rows);
         hideProgress();
     }

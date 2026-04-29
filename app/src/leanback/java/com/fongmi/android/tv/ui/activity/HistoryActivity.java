@@ -68,7 +68,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
                 mAdapter.addAll(items);
                 updateDeleteView();
                 mBinding.recycler.post(() -> {
-                    if (!isFinishing()) mBinding.recycler.requestFocus();
+                    if (!isFinishing() && !isDestroyed()) mBinding.recycler.requestFocus();
                 });
             });
         });

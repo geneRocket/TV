@@ -33,6 +33,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     private float volume;
     private int holdSecond;
     private boolean isMoveAdd;
+    private final Runnable seekRunnable;
 
     public static CustomKeyDownVod create(Activity activity, View videoView) {
         return new CustomKeyDownVod(activity, videoView);
@@ -44,6 +45,10 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         this.listener = (Listener) activity;
         this.videoView = videoView;
         this.activity = activity;
+        this.seekRunnable = () -> {
+            listener.onSeekTo(getDelta(holdSecond, isMoveAdd));
+            resetTime();
+        };
     }
 
     public boolean onTouchEvent(MotionEvent e) {
@@ -72,7 +77,8 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         } else if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isRightKey(event)) {
             listener.onSeeking(addTime());
         } else if (event.getAction() == KeyEvent.ACTION_UP && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
-            App.post(() -> listener.onSeekTo(getDelta(holdSecond, isMoveAdd)), 250);
+            App.removeCallbacks(seekRunnable);
+            App.post(seekRunnable, 250);
         } else if (event.getAction() == KeyEvent.ACTION_UP && KeyUtil.isUpKey(event)) {
             if (changeSpeed) listener.onSpeedEnd();
             else listener.onKeyUp();
@@ -121,12 +127,14 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     }
 
     private int addTime() {
+        if (!isMoveAdd) holdSecond = 0;
         isMoveAdd = true;
         holdSecond += 1;
         return getDelta(holdSecond, isMoveAdd);
     }
 
     private int subTime() {
+        if (isMoveAdd) holdSecond = 0;
         isMoveAdd = false;
         holdSecond += 1;
         return getDelta(holdSecond, isMoveAdd);
@@ -139,6 +147,11 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
 
     public void resetTime() {
         holdSecond = 0;
+    }
+
+    public void release() {
+        App.removeCallbacks(seekRunnable);
+        resetTime();
     }
 
     private void checkFunc(float distanceX, float distanceY, MotionEvent e2) {

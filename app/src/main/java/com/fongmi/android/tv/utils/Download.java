@@ -17,6 +17,7 @@ public class Download {
     private final File file;
     private final String url;
     private final Callback callback;
+    private int lastProgress = -1;
 
     public static Download create(String url, File file) {
         return create(url, file, null);
@@ -58,8 +59,9 @@ public class Download {
     private void runDownload() throws Exception {
         Path.create(file);
         try (Response response = OkHttp.newCall(url).execute()) {
+            if (!response.isSuccessful()) throw new IllegalStateException(response.code() + " " + response.message());
             if (response.body() == null) throw new IllegalStateException("Empty download body");
-            download(response.body().byteStream(), Double.parseDouble(response.header(HttpHeaders.CONTENT_LENGTH, "1")));
+            download(response.body().byteStream(), Math.max(1, Double.parseDouble(response.header(HttpHeaders.CONTENT_LENGTH, "1"))));
         }
     }
 
@@ -71,8 +73,11 @@ public class Download {
             while ((readBytes = input.read(buffer)) != -1) {
                 totalBytes += readBytes;
                 os.write(buffer, 0, readBytes);
-                int progress = (int) (totalBytes / length * 100.0);
-                if (callback != null) App.post(() -> callback.progress(progress));
+                int progress = Math.min(100, (int) (totalBytes / length * 100.0));
+                if (callback != null && progress != lastProgress) {
+                    lastProgress = progress;
+                    App.post(() -> callback.progress(progress));
+                }
             }
         }
     }

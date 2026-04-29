@@ -70,38 +70,52 @@ public class LiveAdapter extends RecyclerView.Adapter<LiveAdapter.ViewHolder> {
         holder.binding.pass.setImageResource(item.getPassIcon());
         holder.binding.boot.setVisibility(action ? View.VISIBLE : View.GONE);
         holder.binding.pass.setVisibility(action ? View.VISIBLE : View.GONE);
-        holder.binding.text.setOnClickListener(v -> {
-            int index = holder.getBindingAdapterPosition();
-            if (index == RecyclerView.NO_POSITION) return;
-            mListener.onItemClick(mItems.get(index));
-        });
-        holder.binding.boot.setOnClickListener(v -> {
-            int index = holder.getBindingAdapterPosition();
-            if (index == RecyclerView.NO_POSITION) return;
-            mListener.onBootClick(index, mItems.get(index));
-        });
-        holder.binding.pass.setOnClickListener(v -> {
-            int index = holder.getBindingAdapterPosition();
-            if (index == RecyclerView.NO_POSITION) return;
-            mListener.onPassClick(index, mItems.get(index));
-        });
-        holder.binding.boot.setOnLongClickListener(v -> {
-            int index = holder.getBindingAdapterPosition();
-            return index != RecyclerView.NO_POSITION && mListener.onBootLongClick(mItems.get(index));
-        });
-        holder.binding.pass.setOnLongClickListener(v -> {
-            int index = holder.getBindingAdapterPosition();
-            return index != RecyclerView.NO_POSITION && mListener.onPassLongClick(mItems.get(index));
-        });
     }
 
-    static class ViewHolder extends RecyclerView.ViewHolder {
+    class ViewHolder extends RecyclerView.ViewHolder {
 
         private final AdapterLiveBinding binding;
 
         public ViewHolder(@NonNull AdapterLiveBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            binding.text.setOnClickListener(v -> onTextClick());
+            binding.boot.setOnClickListener(v -> onBootClick());
+            binding.pass.setOnClickListener(v -> onPassClick());
+            binding.boot.setOnLongClickListener(v -> onBootLongClick());
+            binding.pass.setOnLongClickListener(v -> onPassLongClick());
+        }
+
+        private int getAdapterIndex() {
+            return getBindingAdapterPosition();
+        }
+
+        private void onTextClick() {
+            int index = getAdapterIndex();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onItemClick(mItems.get(index));
+        }
+
+        private void onBootClick() {
+            int index = getAdapterIndex();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onBootClick(index, mItems.get(index));
+        }
+
+        private void onPassClick() {
+            int index = getAdapterIndex();
+            if (index == RecyclerView.NO_POSITION) return;
+            mListener.onPassClick(index, mItems.get(index));
+        }
+
+        private boolean onBootLongClick() {
+            int index = getAdapterIndex();
+            return index != RecyclerView.NO_POSITION && mListener.onBootLongClick(mItems.get(index));
+        }
+
+        private boolean onPassLongClick() {
+            int index = getAdapterIndex();
+            return index != RecyclerView.NO_POSITION && mListener.onPassLongClick(mItems.get(index));
         }
     }
 }

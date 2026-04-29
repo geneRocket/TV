@@ -291,5 +291,6 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         cancelHotRequest();
         cancelSuggestTask();
         cancelSuggestRequest();
+        mBinding.mic.release();
     }
 }

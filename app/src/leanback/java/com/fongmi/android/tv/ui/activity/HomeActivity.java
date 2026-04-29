@@ -302,7 +302,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void updateFilter(Class item) {
         if (item.getFilter() == null) return;
         getFragment().toggleFilter(item.toggleFilter());
-        mAdapter.notifyArrayItemRangeChanged(1, mAdapter.size() - 1);
+        notifyTypeChanged(item);
     }
 
     public void updateTypeState(String typeId, java.util.Map<String, String> extend, boolean open) {
@@ -310,7 +310,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (item == null) return;
         item.setExtend(extend);
         item.setFilter(item.getFilters().isEmpty() ? null : open);
-        mAdapter.notifyArrayItemRangeChanged(1, Math.max(0, mAdapter.size() - 1));
+        notifyTypeChanged(item);
     }
 
     @Nullable
@@ -320,6 +320,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             if (item instanceof Class && ((Class) item).getTypeId().equals(typeId)) return (Class) item;
         }
         return null;
+    }
+
+    private void notifyTypeChanged(Class item) {
+        int index = mAdapter.indexOf(item);
+        if (index >= 0) mAdapter.notifyArrayItemRangeChanged(index, 1);
     }
 
     private boolean isHomePageSelected() {

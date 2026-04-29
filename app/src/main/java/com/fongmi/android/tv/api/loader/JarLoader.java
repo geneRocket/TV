@@ -105,6 +105,7 @@ public class JarLoader {
     private File download(String url) {
         try {
             try (Response response = OkHttp.newCall(url).execute()) {
+                if (!response.isSuccessful()) return Path.jar(url);
                 return response.body() == null ? Path.jar(url) : Path.write(Path.jar(url), response.body().bytes());
             }
         } catch (Exception e) {

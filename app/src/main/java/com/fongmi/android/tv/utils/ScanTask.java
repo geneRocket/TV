@@ -59,18 +59,20 @@ public class ScanTask {
     }
 
     private void run(List<String> items, ExecutorService currentExecutor) {
+        boolean current;
         try {
             getDevice(items, currentExecutor);
         } catch (Exception e) {
             ThreadPools.log(e, "Scan task failed.");
         } finally {
             synchronized (this) {
-                if (executor == currentExecutor) {
+                current = executor == currentExecutor;
+                if (current) {
                     ThreadPools.shutdown(currentExecutor);
                     executor = null;
                 }
             }
-            App.post(() -> listener.onFind(new ArrayList<>(devices)));
+            if (current && !stopped) App.post(() -> listener.onFind(new ArrayList<>(devices)));
         }
     }
 
@@ -100,6 +102,7 @@ public class ScanTask {
             if (url.contains(Server.get().getAddress())) return;
             String result;
             try (Response response = OkHttp.newCall(client, url.concat("/device")).execute()) {
+                if (!response.isSuccessful()) return;
                 result = response.body() == null ? "" : response.body().string();
             }
             Device device = Device.objectFrom(result);

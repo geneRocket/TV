@@ -59,7 +59,7 @@ public class ExoUtil {
 
     public static TrackSelector buildTrackSelector() {
         DefaultTrackSelector trackSelector = new DefaultTrackSelector(App.get());
-        trackSelector.setParameters(trackSelector.buildUponParameters().setPreferredTextLanguage(Locale.getDefault().getISO3Language()).setForceHighestSupportedBitrate(true).setTunnelingEnabled(Setting.isTunnel()));
+        trackSelector.setParameters(trackSelector.buildUponParameters().setPreferredTextLanguage(Locale.getDefault().getISO3Language()).setForceHighestSupportedBitrate(false).setTunnelingEnabled(Setting.isTunnel()));
         return trackSelector;
     }
 
@@ -103,6 +103,7 @@ public class ExoUtil {
 
     public static String getMimeType(String path) {
         if (TextUtils.isEmpty(path)) return "";
+        path = path.split("\\?", 2)[0].toLowerCase(Locale.US);
         if (path.endsWith(".vtt")) return MimeTypes.TEXT_VTT;
         if (path.endsWith(".ssa") || path.endsWith(".ass")) return MimeTypes.TEXT_SSA;
         if (path.endsWith(".ttml") || path.endsWith(".xml") || path.endsWith(".dfxp")) return MimeTypes.APPLICATION_TTML;

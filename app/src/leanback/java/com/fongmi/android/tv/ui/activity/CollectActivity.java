@@ -111,6 +111,7 @@ public class CollectActivity extends BaseActivity {
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.search.observe(this, result -> {
+            if (isFinishing() || isDestroyed()) return;
             if (!result.getKeyword().equals(getKeyword().trim())) return;
             updateCollects(result.getList());
         });
@@ -168,6 +169,7 @@ public class CollectActivity extends BaseActivity {
     }
 
     private void updateCollects(List<Vod> items) {
+        if (isFinishing() || isDestroyed()) return;
         if (items.isEmpty()) return;
         List<Vod> added = filterNewItems(items.get(0).getSiteKey(), items);
         if (added.isEmpty()) return;
@@ -198,6 +200,7 @@ public class CollectActivity extends BaseActivity {
     }
 
     public void appendAllCollect(List<Vod> items) {
+        if (isFinishing() || isDestroyed()) return;
         if (items.isEmpty()) return;
         List<Vod> added = filterNewItems(Collect.all().getSite().getKey(), items);
         if (added.isEmpty()) return;
@@ -228,6 +231,7 @@ public class CollectActivity extends BaseActivity {
     }
 
     private void search(Site site) {
+        if (isFinishing() || isDestroyed() || mExecutor == null) return;
         try {
             mViewModel.searchContent(site, getKeyword(), false);
         } catch (Throwable e) {

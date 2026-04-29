@@ -59,6 +59,9 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mKeepRequestId) return;
                 mAdapter.addAll(items);
+                if (mAdapter.getItemCount() > 0) mBinding.recycler.post(() -> {
+                    if (!isFinishing() && !isDestroyed()) mBinding.recycler.requestFocus();
+                });
             });
         });
     }
