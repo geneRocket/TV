@@ -1318,7 +1318,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void updateHistory(Episode item, boolean replay) {
-        replay = replay || !item.equals(mHistory.getEpisode());
+        replay = replay || !isSameHistoryEpisode(item);
         long position = replay ? 0 : mHistory.getPosition();
         mHistory.setPosition(position);
         mHistory.setEpisodeUrl(item.getUrl());
@@ -1326,6 +1326,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mHistory.setVodFlag(getFlag().getFlag());
         mHistory.setCreateTime(System.currentTimeMillis());
         mPlayers.setPosition(Math.max(mHistory.getOpening(), mHistory.getPosition()));
+    }
+
+    private boolean isSameHistoryEpisode(Episode item) {
+        if (item == null || mHistory == null) return false;
+        if (item.equals(mHistory.getEpisode())) return true;
+        return item.getName() != null && item.getName().equalsIgnoreCase(mHistory.getVodRemarks());
     }
 
     private void checkPlayImg(boolean playing) {
@@ -1399,7 +1405,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
-                App.execute(() -> mHistory.update());
+                History snapshot = mHistory.copy();
+                App.execute(snapshot::update);
             }
         }
         

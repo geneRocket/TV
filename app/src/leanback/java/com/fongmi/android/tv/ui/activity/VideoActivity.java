@@ -415,6 +415,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             pendingSeek = false;
             host.mContent.stopSearch();
             host.clearPlaybackTimeout();
+            host.commitPendingHistoryUpdate();
             host.setMetadata();
             host.mErrorRecovery.onPlayerReady();
             host.hideProgress();
@@ -769,6 +770,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String flagSwitchTargetEpisodeKey;
     private long flagSwitchPosition;
     private long sourceSwitchPosition;
+    private Flag pendingHistoryFlag;
+    private Episode pendingHistoryEpisode;
+    private long pendingHistoryPosition;
+    private boolean pendingHistorySkipOpening;
+    private String pendingProgressFlag;
+    private String pendingProgressEpisodeKey;
+    private long pendingProgressPosition;
     private CustomTarget<Drawable> mArtworkTarget;
 
     public static void push(FragmentActivity activity, String text) {
@@ -1173,7 +1181,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         schedulePlaybackTimeout(token);
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        updateHistory(episode, replay);
+        prepareHistoryUpdate(flag, episode, replay);
         mPlayers.clear();
         mPlayers.stop();
         showProgress();
@@ -2166,17 +2174,49 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         SearchActivity.start(this, keyword, true);
     }
 
-    private void updateHistory(Episode item, boolean replay) {
-        boolean sameEpisode = item.equals(mHistory.getEpisode());
+    private void prepareHistoryUpdate(Flag flag, Episode item, boolean replay) {
+        boolean hasProgressOverride = hasPendingProgressOverride(flag, item);
+        boolean sameEpisode = hasProgressOverride || isSameHistoryEpisode(item);
         replay = replay || !sameEpisode;
-        long position = replay ? 0 : mHistory.getPosition();
-        mHistory.setPosition(position);
-        mShouldSkipOpening = replay;
-        mHistory.setEpisodeUrl(item.getUrl());
-        mHistory.setVodRemarks(item.getName());
-        mHistory.setVodFlag(getFlag().getFlag());
+        pendingHistoryFlag = flag;
+        pendingHistoryEpisode = item;
+        pendingHistoryPosition = hasProgressOverride ? pendingProgressPosition : replay ? 0 : mHistory.getPosition();
+        pendingHistorySkipOpening = replay;
+        mPlayers.setPosition(Math.max(mHistory.getOpening(), pendingHistoryPosition));
+    }
+
+    private void commitPendingHistoryUpdate() {
+        if (pendingHistoryFlag == null || pendingHistoryEpisode == null || mHistory == null) return;
+        mHistory.setPosition(pendingHistoryPosition);
+        mShouldSkipOpening = pendingHistorySkipOpening;
+        mHistory.setEpisodeUrl(pendingHistoryEpisode.getUrl());
+        mHistory.setVodRemarks(pendingHistoryEpisode.getName());
+        mHistory.setVodFlag(pendingHistoryFlag.getFlag());
         mHistory.setCreateTime(System.currentTimeMillis());
-        mPlayers.setPosition(Math.max(mHistory.getOpening(), mHistory.getPosition()));
+        clearPendingHistoryUpdate();
+    }
+
+    private void clearPendingHistoryUpdate() {
+        pendingHistoryFlag = null;
+        pendingHistoryEpisode = null;
+        pendingHistoryPosition = 0;
+        pendingHistorySkipOpening = false;
+        pendingProgressFlag = null;
+        pendingProgressEpisodeKey = null;
+        pendingProgressPosition = 0;
+    }
+
+    private boolean hasPendingProgressOverride(Flag flag, Episode episode) {
+        return flag != null
+                && episode != null
+                && TextUtils.equals(pendingProgressFlag, flag.getFlag())
+                && TextUtils.equals(pendingProgressEpisodeKey, getSourceSwitchEpisodeKey(episode));
+    }
+
+    private boolean isSameHistoryEpisode(Episode item) {
+        if (item == null || mHistory == null) return false;
+        if (item.equals(mHistory.getEpisode())) return true;
+        return item.getName() != null && item.getName().equalsIgnoreCase(mHistory.getVodRemarks());
     }
 
     private void checkKeep() {
@@ -2225,6 +2265,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onTimeChanged() {
         onTimeChangeDisplaySpeed();
+        if (hasPendingHistoryUpdate()) return;
         long position, duration;
         mHistory.setPosition(position = mPlayers.getPosition());
         mHistory.setDuration(duration = mPlayers.getDuration());
@@ -2232,7 +2273,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
-                App.execute(() -> mHistory.update());
+                History snapshot = mHistory.copy();
+                App.execute(snapshot::update);
             }
         }
 
@@ -2252,6 +2294,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             mClock.setCallback(null);
             checkNext();
         }
+    }
+
+    private boolean hasPendingHistoryUpdate() {
+        return pendingHistoryEpisode != null;
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -2536,6 +2582,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         pendingPlaybackFlag = null;
         pendingPlaybackId = null;
         pendingPlaybackToken = null;
+        clearPendingHistoryUpdate();
     }
 
     private void scheduleSourceSwitchTimeout() {
@@ -2822,20 +2869,20 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void applySourceSwitchProgress(Flag flag, Episode episode) {
         if (!isSourceSwitching() || mHistory == null || episode == null) return;
-        mHistory.setVodFlag(flag.getFlag());
-        mHistory.setVodRemarks(episode.getName());
-        mHistory.setEpisodeUrl(episode.getUrl());
-        mHistory.setPosition(Math.max(sourceSwitchPosition, 0));
+        setPendingProgressOverride(flag, episode, sourceSwitchPosition);
     }
 
     private void applyFlagSwitchProgress(Flag flag, Episode episode) {
         if (mHistory == null || flag == null || episode == null) return;
         long position = getCurrentSwitchPosition();
         if (position <= 0) position = flagSwitchPosition;
-        mHistory.setVodFlag(flag.getFlag());
-        mHistory.setVodRemarks(episode.getName());
-        mHistory.setEpisodeUrl(episode.getUrl());
-        mHistory.setPosition(Math.max(position, 0));
+        setPendingProgressOverride(flag, episode, position);
+    }
+
+    private void setPendingProgressOverride(Flag flag, Episode episode, long position) {
+        pendingProgressFlag = flag == null ? null : flag.getFlag();
+        pendingProgressEpisodeKey = getSourceSwitchEpisodeKey(episode);
+        pendingProgressPosition = Math.max(position, 0);
     }
 
     public boolean isUseParse() {

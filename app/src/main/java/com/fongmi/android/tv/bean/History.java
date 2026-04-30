@@ -325,6 +325,10 @@ public class History {
         return Episode.create(getVodRemarks(), getEpisodeUrl());
     }
 
+    public History copy() {
+        return copy(this);
+    }
+
     public int getSiteVisible() {
         return TextUtils.isEmpty(getSiteName()) ? View.GONE : View.VISIBLE;
     }
@@ -466,6 +470,7 @@ public class History {
                 setVodFlag(flag.getFlag());
                 setPosition(item.getPosition());
                 setVodRemarks(episode.getName());
+                setEpisodeUrl(episode.getUrl());
                 checkParam(item);
                 break;
             }
