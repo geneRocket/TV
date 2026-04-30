@@ -42,11 +42,16 @@ public class KeyboardAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     }
 
     public void toggle() {
+        int oldSize = getItemCount();
         Setting.putZhuyin(!Setting.isZhuyin());
-        mItems.removeAll(Setting.isZhuyin() ? enList : twList);
+        mItems.removeAll(enList);
+        mItems.removeAll(twList);
         mItems.addAll(icons.size(), Setting.isZhuyin() ? twList : enList);
-        notifyItemRangeRemoved(icons.size(), Setting.isZhuyin() ? enList.size() : twList.size());
-        notifyItemRangeInserted(icons.size(), Setting.isZhuyin() ? twList.size() : enList.size());
+        int newSize = getItemCount();
+        int changed = Math.min(oldSize, newSize) - icons.size();
+        if (changed > 0) notifyItemRangeChanged(icons.size(), changed);
+        if (newSize > oldSize) notifyItemRangeInserted(oldSize, newSize - oldSize);
+        else if (oldSize > newSize) notifyItemRangeRemoved(newSize, oldSize - newSize);
     }
 
     @Override

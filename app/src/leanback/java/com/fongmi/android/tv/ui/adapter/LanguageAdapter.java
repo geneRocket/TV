@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.databinding.AdapterLanguageBinding;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class LanguageAdapter extends RecyclerView.Adapter<LanguageAdapter.ViewHolder> {
@@ -17,7 +18,7 @@ public class LanguageAdapter extends RecyclerView.Adapter<LanguageAdapter.ViewHo
 
     public LanguageAdapter(OnClickListener listener, List<String> items) {
         this.mListener = listener;
-        this.mItems = items;
+        this.mItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
     }
 
     public interface OnClickListener {

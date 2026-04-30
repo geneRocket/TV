@@ -32,7 +32,7 @@ public class CustomSearchView extends CustomEditText {
     @Override
     protected void onFocusChanged(boolean gainFocus, int direction, @Nullable Rect previouslyFocusedRect) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
-        if (gainFocus) startAnimation(flicker);
+        if (gainFocus && flicker != null) startAnimation(flicker);
         else clearAnimation();
     }
 }

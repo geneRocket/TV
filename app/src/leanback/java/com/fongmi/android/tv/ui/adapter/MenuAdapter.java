@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.databinding.AdapterMenuBinding;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MenuAdapter extends RecyclerView.Adapter<MenuAdapter.ViewHolder> {
@@ -16,7 +17,7 @@ public class MenuAdapter extends RecyclerView.Adapter<MenuAdapter.ViewHolder> {
 
     public MenuAdapter(OnClickListener listener, List<String> items) {
         this.mListener = listener;
-        this.mItems = items;
+        this.mItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
     }
 
     public interface OnClickListener {

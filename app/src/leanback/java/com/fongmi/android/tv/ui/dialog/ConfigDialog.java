@@ -95,6 +95,7 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     private void initView() {
         binding.text.setText(url = getUrl());
         binding.text.setSelection(TextUtils.isEmpty(url) ? 0 : url.length());
+        binding.text.requestFocus();
         binding.positive.setText(edit ? R.string.dialog_edit : R.string.dialog_positive);
         binding.code.setImageBitmap(QRCode.getBitmap(Server.get().getAddress(3), 200, 0));
         binding.info.setText(ResUtil.getString(R.string.push_info, Server.get().getAddress()).replace("，", "\n"));
@@ -156,8 +157,8 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     }
 
     private void onPositive(View view) {
-        String name = binding.name.getText().toString().trim();
-        String text = UrlUtil.fixUrl(binding.text.getText().toString().trim());
+        String name = binding.name.getText() == null ? "" : binding.name.getText().toString().trim();
+        String text = UrlUtil.fixUrl(binding.text.getText() == null ? "" : binding.text.getText().toString().trim());
         if (edit) Config.find(url, type).url(text).name(name).update();
         if (text.isEmpty()) Config.delete(url, type);
         Config config = name.isEmpty() ? Config.find(text, type) : Config.find(text, name, type);
@@ -214,7 +215,7 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
         if (event.getType() != ServerEvent.Type.SETTING) return;
         binding.name.setText(event.getName());
         binding.text.setText(event.getText());
-        binding.text.setSelection(binding.text.getText().length());
+        binding.text.setSelection(binding.text.getText() == null ? 0 : binding.text.getText().length());
     }
 
     @Override

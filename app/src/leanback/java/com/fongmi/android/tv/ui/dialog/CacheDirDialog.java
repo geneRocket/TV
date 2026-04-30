@@ -33,7 +33,7 @@ public class CacheDirDialog implements CacheDirAdapter.OnClickListener {
     public CacheDirDialog(Activity activity) {
         mItems = new ArrayList<>();
         mItems.add(activity.getCacheDir().getAbsolutePath());
-        for(File dir : activity.getExternalCacheDirs()) mItems.add(dir.getAbsolutePath());
+        for(File dir : activity.getExternalCacheDirs()) if (dir != null) mItems.add(dir.getAbsolutePath());
         String cacheDir = Setting.getThunderCacheDir();
         position = 0;
         for(int i=0; i<mItems.size(); i++) {
@@ -68,7 +68,11 @@ public class CacheDirDialog implements CacheDirAdapter.OnClickListener {
         binding.recycler.setItemAnimator(null);
         if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(getCount(), 16));
         binding.recycler.setLayoutManager(new GridLayoutManager(dialog.getContext(), getCount()));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(position));
+        position = Math.max(0, Math.min(position, adapter.getItemCount() - 1));
+        binding.recycler.post(() -> {
+            binding.recycler.scrollToPosition(position);
+            binding.recycler.requestFocus();
+        });
 
     }
 

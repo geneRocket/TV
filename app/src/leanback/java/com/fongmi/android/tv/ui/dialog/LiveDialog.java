@@ -53,7 +53,11 @@ public class LiveDialog implements LiveAdapter.OnClickListener {
         binding.recycler.setHasFixedSize(true);
         binding.recycler.setItemAnimator(null);
         if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(LiveConfig.getHomeIndex()));
+        int position = Math.max(0, Math.min(LiveConfig.getHomeIndex(), adapter.getItemCount() - 1));
+        binding.recycler.post(() -> {
+            binding.recycler.scrollToPosition(position);
+            binding.recycler.requestFocus();
+        });
     }
 
     private void setDialog() {

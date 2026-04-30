@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.databinding.AdapterCacheDirBinding;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CacheDirAdapter extends RecyclerView.Adapter<CacheDirAdapter.ViewHolder> {
@@ -18,7 +19,7 @@ public class CacheDirAdapter extends RecyclerView.Adapter<CacheDirAdapter.ViewHo
 
     public CacheDirAdapter(OnClickListener listener, List<String> items) {
         this.mListener = listener;
-        this.mItems = items;
+        this.mItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
         setHasStableIds(true);
     }
 

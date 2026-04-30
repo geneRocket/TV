@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Activity;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AlertDialog;
@@ -80,6 +81,20 @@ public class BackupDialog implements BackupAdapter.OnClickListener {
 
     @Override
     public void onDeleteClick(String item) {
-        if (adapter.remove(item) == 0) dialog.dismiss();
+        int index = adapter.remove(item);
+        if (adapter.getItemCount() == 0) {
+            dialog.dismiss();
+            return;
+        }
+        focusAfterDelete(index);
+    }
+
+    private void focusAfterDelete(int index) {
+        if (index == -1) return;
+        int targetIndex = index == adapter.getItemCount() ? index - 1 : index;
+        binding.recycler.post(() -> {
+            View view = binding.recycler.getLayoutManager() == null ? null : binding.recycler.getLayoutManager().findViewByPosition(targetIndex);
+            if (view != null) view.requestFocus();
+        });
     }
 }

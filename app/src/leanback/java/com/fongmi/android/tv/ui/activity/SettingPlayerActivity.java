@@ -38,6 +38,17 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
         return getString(value ? R.string.setting_on : R.string.setting_off);
     }
 
+    private int safeIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        return Math.max(0, Math.min(index, items.length - 1));
+    }
+
+    private int nextIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        index = safeIndex(index, items);
+        return index == items.length - 1 ? 0 : index + 1;
+    }
+
     @Override
     protected ViewBinding getBinding() {
         return mBinding = ActivitySettingPlayerBinding.inflate(getLayoutInflater());
@@ -50,14 +61,14 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
         mBinding.uaText.setText(Setting.getUa());
         mBinding.tunnelText.setText(getSwitch(Setting.isTunnel()));
         mBinding.bufferText.setText(String.valueOf(Setting.getBuffer()));
-        mBinding.rtspText.setText((rtsp = ResUtil.getStringArray(R.array.select_rtsp))[Setting.getRtsp()]);
-        mBinding.flagText.setText((flag = ResUtil.getStringArray(R.array.select_flag))[Setting.getFlag()]);
-        mBinding.httpText.setText((http = ResUtil.getStringArray(R.array.select_exo_http))[Setting.getHttp()]);
-        mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[Setting.getScale()]);
-        mBinding.playerText.setText((player = ResUtil.getStringArray(R.array.select_player))[Setting.getPlayer()]);
-        mBinding.decodeText.setText((decode = ResUtil.getStringArray(R.array.select_decode))[Setting.getDecode(Setting.getPlayer())]);
-        mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[Setting.getRender()]);
-        mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[Setting.isCaption() ? 1 : 0]);
+        mBinding.rtspText.setText((rtsp = ResUtil.getStringArray(R.array.select_rtsp))[safeIndex(Setting.getRtsp(), rtsp)]);
+        mBinding.flagText.setText((flag = ResUtil.getStringArray(R.array.select_flag))[safeIndex(Setting.getFlag(), flag)]);
+        mBinding.httpText.setText((http = ResUtil.getStringArray(R.array.select_exo_http))[safeIndex(Setting.getHttp(), http)]);
+        mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[safeIndex(Setting.getScale(), scale)]);
+        mBinding.playerText.setText((player = ResUtil.getStringArray(R.array.select_player))[safeIndex(Setting.getPlayer(), player)]);
+        mBinding.decodeText.setText((decode = ResUtil.getStringArray(R.array.select_decode))[safeIndex(Setting.getDecode(Setting.getPlayer()), decode)]);
+        mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[safeIndex(Setting.getRender(), render)]);
+        mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[safeIndex(Setting.isCaption() ? 1 : 0, caption)]);
     }
 
     @Override
@@ -94,26 +105,26 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
     }
 
     private void setRtsp(View view) {
-        int index = Setting.getRtsp();
-        Setting.putRtsp(index = index == rtsp.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getRtsp(), rtsp);
+        Setting.putRtsp(index);
         mBinding.rtspText.setText(rtsp[index]);
     }
 
     private void setHttp(View view) {
-        int index = Setting.getHttp();
-        Setting.putHttp(index = index == http.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getHttp(), http);
+        Setting.putHttp(index);
         mBinding.httpText.setText(http[index]);
     }
 
     private void setFlag(View view) {
-        int index = Setting.getFlag();
-        Setting.putFlag(index = index == flag.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getFlag(), flag);
+        Setting.putFlag(index);
         mBinding.flagText.setText(flag[index]);
     }
 
     private void setScale(View view) {
-        int index = Setting.getScale();
-        Setting.putScale(index = index == scale.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getScale(), scale);
+        Setting.putScale(index);
         mBinding.scaleText.setText(scale[index]);
     }
 
@@ -128,23 +139,23 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
     }
 
     private void setPlayer(View view) {
-        int index = Setting.getPlayer();
-        Setting.putPlayer(index = index == player.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getPlayer(), player);
+        Setting.putPlayer(index);
         mBinding.playerText.setText(player[index]);
-        mBinding.decodeText.setText(decode[Setting.getDecode(index)]);
+        mBinding.decodeText.setText(decode[safeIndex(Setting.getDecode(index), decode)]);
         setVisible();
     }
 
     private void setDecode(View view) {
         int player = Setting.getPlayer();
-        int index = Setting.getDecode(player);
-        Setting.putDecode(player, index = index == decode.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getDecode(player), decode);
+        Setting.putDecode(player, index);
         mBinding.decodeText.setText(decode[index]);
     }
 
     private void setRender(View view) {
-        int index = Setting.getRender();
-        Setting.putRender(index = index == render.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getRender(), render);
+        Setting.putRender(index);
         mBinding.renderText.setText(render[index]);
         if (Setting.isTunnel() && Setting.getRender() == 1) setTunnel(view);
     }
@@ -157,7 +168,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
 
     private void setCaption(View view) {
         Setting.putCaption(!Setting.isCaption());
-        mBinding.captionText.setText(caption[Setting.isCaption() ? 1 : 0]);
+        mBinding.captionText.setText(caption[safeIndex(Setting.isCaption() ? 1 : 0, caption)]);
     }
 
     private boolean onCaption(View view) {

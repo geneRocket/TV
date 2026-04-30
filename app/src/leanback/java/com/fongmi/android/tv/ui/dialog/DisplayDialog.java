@@ -49,7 +49,10 @@ public class DisplayDialog {
         binding.recycler.setItemAnimator(null);
         if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
         binding.recycler.setLayoutManager(new GridLayoutManager(dialog.getContext(), 1));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(0));
+        binding.recycler.post(() -> {
+            binding.recycler.scrollToPosition(0);
+            binding.recycler.requestFocus();
+        });
 
     }
 

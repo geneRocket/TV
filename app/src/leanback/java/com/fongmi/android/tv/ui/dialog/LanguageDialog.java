@@ -62,7 +62,11 @@ public class LanguageDialog implements LanguageAdapter.OnClickListener {
         binding.recycler.setItemAnimator(null);
         if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(getCount(), 16));
         binding.recycler.setLayoutManager(new GridLayoutManager(dialog.getContext(), getCount()));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(Setting.getLanguage()));
+        int position = Math.max(0, Math.min(Setting.getLanguage(), adapter.getItemCount() - 1));
+        binding.recycler.post(() -> {
+            binding.recycler.scrollToPosition(position);
+            binding.recycler.requestFocus();
+        });
 
     }
 

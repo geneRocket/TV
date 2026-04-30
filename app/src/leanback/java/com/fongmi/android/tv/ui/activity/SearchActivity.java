@@ -174,7 +174,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         cancelSuggestRequest();
         mBinding.hint.setText(R.string.search_suggest);
         mWordAdapter.addAll(Collections.emptyList());
-        mSuggestOneCall = OkHttp.newCall(OkHttp.client(SEARCH_HINT_TIMEOUT), "https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box?format=json&page_num=0&page_size=10&key=" + URLEncoder.encode(Trans.z2p(text)));
+        mSuggestOneCall = OkHttp.newCall(OkHttp.client(SEARCH_HINT_TIMEOUT), "https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box?format=json&page_num=0&page_size=10&key=" + encodeKeyword(text));
         mSuggestOneCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
@@ -188,7 +188,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                 }
             }
         });
-        mSuggestTwoCall = OkHttp.newCall(OkHttp.client(SEARCH_HINT_TIMEOUT), "https://suggest.video.iqiyi.com/?if=mobile&key=" + URLEncoder.encode(Trans.z2p(text)));
+        mSuggestTwoCall = OkHttp.newCall(OkHttp.client(SEARCH_HINT_TIMEOUT), "https://suggest.video.iqiyi.com/?if=mobile&key=" + encodeKeyword(text));
         mSuggestTwoCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
@@ -202,6 +202,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                 }
             }
         });
+    }
+
+    private String encodeKeyword(String text) {
+        try {
+            return URLEncoder.encode(Trans.z2p(text), "UTF-8");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private void cancelSuggestTask() {
@@ -220,13 +228,17 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mHotCall = null;
     }
 
+    private String getKeyword() {
+        return mBinding.keyword.getText() == null ? "" : mBinding.keyword.getText().toString().trim();
+    }
+
     private boolean isSuggestRequestValid(Call call, String requestKeyword) {
         boolean currentCall = call == mSuggestOneCall || call == mSuggestTwoCall;
-        return currentCall && requestKeyword.equals(mBinding.keyword.getText().toString().trim());
+        return currentCall && requestKeyword.equals(getKeyword());
     }
 
     private boolean isHotRequestValid(Call call) {
-        return call == mHotCall && TextUtils.isEmpty(mBinding.keyword.getText().toString().trim());
+        return call == mHotCall && TextUtils.isEmpty(getKeyword());
     }
 
     @Override
@@ -237,12 +249,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     @Override
     public void onDataChanged(int size) {
+        boolean refocusKeyword = size == 0 && mBinding.recordLayout.hasFocus();
         mBinding.recordLayout.setVisibility(size == 0 ? View.GONE : View.VISIBLE);
+        if (refocusKeyword) mBinding.keyword.requestFocus();
     }
 
     @Override
     public void onSearch() {
-        String keyword = mBinding.keyword.getText().toString().trim();
+        String keyword = getKeyword();
         mBinding.keyword.setSelection(mBinding.keyword.length());
         Util.hideKeyboard(mBinding.keyword);
         if (TextUtils.isEmpty(keyword)) return;

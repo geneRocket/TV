@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 import androidx.leanback.widget.HorizontalGridView;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
 public class CustomHorizontalGridView extends HorizontalGridView {
@@ -44,8 +45,7 @@ public class CustomHorizontalGridView extends HorizontalGridView {
             View found = FocusFinder.getInstance().findNextFocus(this, focused, direction);
             if (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT) {
                 if ((found == null || found.getId() != R.id.text) && getScrollState() == SCROLL_STATE_IDLE) {
-                    focused.clearAnimation();
-                    focused.startAnimation(shake);
+                    shake(focused);
                     return null;
                 }
             }
@@ -59,8 +59,8 @@ public class CustomHorizontalGridView extends HorizontalGridView {
     }
 
     public boolean executeKeyEvent(@NonNull KeyEvent event) {
-        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT) return arrowScroll(FOCUS_LEFT);
-        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT) return arrowScroll(FOCUS_RIGHT);
+        if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isLeftKey(event)) return arrowScroll(FOCUS_LEFT);
+        if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isRightKey(event)) return arrowScroll(FOCUS_RIGHT);
         return false;
     }
 
@@ -92,7 +92,7 @@ public class CustomHorizontalGridView extends HorizontalGridView {
     }
 
     private void shake(View currentFocused) {
-        if (currentFocused != null && getScrollState() == SCROLL_STATE_IDLE) {
+        if (currentFocused != null && shake != null && getScrollState() == SCROLL_STATE_IDLE) {
             currentFocused.clearAnimation();
             currentFocused.startAnimation(shake);
         }

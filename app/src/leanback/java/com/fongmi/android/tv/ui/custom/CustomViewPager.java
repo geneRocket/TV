@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.viewpager.widget.ViewPager;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
 public class CustomViewPager extends ViewPager {
@@ -53,8 +54,8 @@ public class CustomViewPager extends ViewPager {
     public boolean executeKeyEvent(@NonNull KeyEvent event) {
         if (findFocus() instanceof TextView) return false;
         if (getCurrentItem() == noScrollItem) return false;
-        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT) return arrowScroll(FOCUS_LEFT);
-        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT) return arrowScroll(FOCUS_RIGHT);
+        if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isLeftKey(event)) return arrowScroll(FOCUS_LEFT);
+        if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isRightKey(event)) return arrowScroll(FOCUS_RIGHT);
         return false;
     }
 
@@ -161,7 +162,7 @@ public class CustomViewPager extends ViewPager {
     }
 
     private void shake(View currentFocused) {
-        if (currentFocused != null) {
+        if (currentFocused != null && shake != null) {
             currentFocused.clearAnimation();
             currentFocused.startAnimation(shake);
         }

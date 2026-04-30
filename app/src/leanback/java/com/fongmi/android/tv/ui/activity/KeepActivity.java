@@ -2,12 +2,14 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.view.View;
 
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.databinding.ActivityKeepBinding;
@@ -39,6 +41,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     @Override
     protected void initView() {
+        mBinding.empty.text.setText(R.string.empty_keep);
         setRecyclerView();
         getKeep();
     }
@@ -59,11 +62,16 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mKeepRequestId) return;
                 mAdapter.addAll(items);
+                updateEmptyView();
                 if (mAdapter.getItemCount() > 0) mBinding.recycler.post(() -> {
                     if (!isFinishing() && !isDestroyed()) mBinding.recycler.requestFocus();
                 });
             });
         });
+    }
+
+    private void updateEmptyView() {
+        mBinding.empty.getRoot().setVisibility(mAdapter.getItemCount() > 0 ? View.GONE : View.VISIBLE);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -85,8 +93,16 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     public void onItemDelete(Keep item) {
         mKeepRequestId++;
         mOpenRequestId++;
-        mAdapter.delete(item.delete());
+        int index = mAdapter.delete(item.delete());
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
+        updateEmptyView();
+        if (index != -1 && mAdapter.getItemCount() > 0) {
+            int targetIndex = index == mAdapter.getItemCount() ? index - 1 : index;
+            mBinding.recycler.post(() -> {
+                View view = mBinding.recycler.getLayoutManager() == null ? null : mBinding.recycler.getLayoutManager().findViewByPosition(targetIndex);
+                if (view != null) view.requestFocus();
+            });
+        }
     }
 
     @Override

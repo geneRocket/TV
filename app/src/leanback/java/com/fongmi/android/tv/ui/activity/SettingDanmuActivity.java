@@ -37,6 +37,17 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
         return getString(value ? R.string.setting_on : R.string.setting_off);
     }
 
+    private int safeIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        return Math.max(0, Math.min(index, items.length - 1));
+    }
+
+    private int nextIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        index = safeIndex(index, items);
+        return index == items.length - 1 ? 0 : index + 1;
+    }
+
     @Override
     protected void initView() {
         mBinding.danmuLoad.requestFocus();
@@ -44,7 +55,7 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
         mBinding.danmuSizeText.setText(String.valueOf(Setting.getDanmuSize()));
         mBinding.danmuLineText.setText(String.valueOf(Setting.getDanmuLine(3)));
         mBinding.danmuAlphaText.setText(String.valueOf(Setting.getDanmuAlpha()));
-        mBinding.danmuSpeedText.setText((danmuSpeed = ResUtil.getStringArray(R.array.select_danmu_speed))[Setting.getDanmuSpeed()]);
+        mBinding.danmuSpeedText.setText((danmuSpeed = ResUtil.getStringArray(R.array.select_danmu_speed))[safeIndex(Setting.getDanmuSpeed(), danmuSpeed)]);
     }
 
     @Override
@@ -92,8 +103,8 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     }
 
     private void setDanmuSpeed(View view) {
-        int index = Setting.getDanmuSpeed();
-        Setting.putDanmuSpeed(index = index == danmuSpeed.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getDanmuSpeed(), danmuSpeed);
+        Setting.putDanmuSpeed(index);
         mBinding.danmuSpeedText.setText(danmuSpeed[index]);
     }
 

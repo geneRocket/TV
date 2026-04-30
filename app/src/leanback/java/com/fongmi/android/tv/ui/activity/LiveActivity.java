@@ -84,6 +84,10 @@ import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
 public class LiveActivity extends BaseActivity implements Clock.Callback, GroupPresenter.OnClickListener, ChannelPresenter.OnClickListener, EpgDataPresenter.OnClickListener, CustomKeyDownLive.Listener, CustomLiveListView.Callback, TrackDialog.Listener, PlayerDialog.Listener, PassCallback, LiveCallback {
 
+    private static String textOf(TextView view) {
+        return view == null || view.getText() == null ? "" : view.getText().toString();
+    }
+
     private ActivityLiveBinding mBinding;
     private ArrayObjectAdapter mChannelAdapter;
     private ArrayObjectAdapter mEpgDataAdapter;
@@ -493,7 +497,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void onPlayer() {
-        PlayerDialog.create().select(mPlayers.getPlayer()).title(mBinding.widget.title.getText().toString()).show(this);
+        PlayerDialog.create().select(mPlayers.getPlayer()).title(textOf(mBinding.widget.title)).show(this);
         hideControl();
     }
 
@@ -925,8 +929,8 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     private void setMetadata() {
         if (mChannel == null) return;
-        String title = mBinding.widget.name.getText().toString();
-        String artist = mBinding.widget.play.getText().toString();
+        String title = textOf(mBinding.widget.name);
+        String artist = textOf(mBinding.widget.play);
         mPlayers.setMetadata(title, artist, mChannel.getLogo(), getDefaultArtwork());
     }
 

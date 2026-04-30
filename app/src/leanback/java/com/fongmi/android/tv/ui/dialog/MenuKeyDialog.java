@@ -66,7 +66,11 @@ public class MenuKeyDialog implements MenuAdapter.OnClickListener {
         binding.recycler.setItemAnimator(null);
         if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(getCount(), 16));
         binding.recycler.setLayoutManager(new GridLayoutManager(dialog.getContext(), getCount()));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(Setting.getHomeMenuKey()));
+        int position = Math.max(0, Math.min(Setting.getHomeMenuKey(), adapter.getItemCount() - 1));
+        binding.recycler.post(() -> {
+            binding.recycler.scrollToPosition(position);
+            binding.recycler.requestFocus();
+        });
 
     }
 

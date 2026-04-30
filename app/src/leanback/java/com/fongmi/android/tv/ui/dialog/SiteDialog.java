@@ -93,7 +93,13 @@ public class SiteDialog implements SiteAdapter.OnClickListener{
         if (decoration != null) binding.recycler.removeItemDecoration(decoration);
         binding.recycler.addItemDecoration(decoration = new SpaceItemDecoration(getCount(), 16));
         binding.recycler.setLayoutManager(new GridLayoutManager(dialog.getContext(), getCount()));
-        if (!binding.mode.hasFocus()) binding.recycler.post(() -> binding.recycler.scrollToPosition(VodConfig.getHomeIndex()));
+        if (!binding.mode.hasFocus()) {
+            int position = Math.max(0, Math.min(VodConfig.getHomeIndex(), adapter.getItemCount() - 1));
+            binding.recycler.post(() -> {
+                binding.recycler.scrollToPosition(position);
+                binding.recycler.requestFocus();
+            });
+        }
     }
 
     private void setDialog() {

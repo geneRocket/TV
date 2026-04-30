@@ -57,26 +57,39 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
         return getString(value ? R.string.setting_on : R.string.setting_off);
     }
 
+    private int safeIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        return Math.max(0, Math.min(index, items.length - 1));
+    }
+
+    private int nextIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        index = safeIndex(index, items);
+        return index == items.length - 1 ? 0 : index + 1;
+    }
+
     @Override
     protected void initView() {
         mBinding.quality.requestFocus();
-        mBinding.qualityText.setText((quality = ResUtil.getStringArray(R.array.select_quality))[Setting.getQuality()]);
-        mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[Setting.getSize()]);
-        mBinding.episodeText.setText((episode = ResUtil.getStringArray(R.array.select_episode))[Setting.getEpisode()]);
+        mBinding.qualityText.setText((quality = ResUtil.getStringArray(R.array.select_quality))[safeIndex(Setting.getQuality(), quality)]);
+        mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[safeIndex(Setting.getSize(), size)]);
+        mBinding.episodeText.setText((episode = ResUtil.getStringArray(R.array.select_episode))[safeIndex(Setting.getEpisode(), episode)]);
         mBinding.speedText.setText(getSpeedText());
-        mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = ResUtil.getStringArray(R.array.select_fullscreen_menu_key))[Setting.getFullscreenMenuKey()]);
+        mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = ResUtil.getStringArray(R.array.select_fullscreen_menu_key))[safeIndex(Setting.getFullscreenMenuKey(), fullscreenMenuKey)]);
         mBinding.homeSiteLockText.setText(getSwitch(Setting.isHomeSiteLock()));
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
-        mBinding.smallWindowBackKeyText.setText((smallWindowBackKey = ResUtil.getStringArray(R.array.select_small_window_back_key))[Setting.getSmallWindowBackKey()]);
-        mBinding.homeMenuKeyText.setText((ResUtil.getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
+        mBinding.smallWindowBackKeyText.setText((smallWindowBackKey = ResUtil.getStringArray(R.array.select_small_window_back_key))[safeIndex(Setting.getSmallWindowBackKey(), smallWindowBackKey)]);
+        String[] homeMenuKey = ResUtil.getStringArray(R.array.select_home_menu_key);
+        mBinding.homeMenuKeyText.setText(homeMenuKey[safeIndex(Setting.getHomeMenuKey(), homeMenuKey)]);
         mBinding.aggregatedSearchText.setText(getSwitch(Setting.isAggregatedSearch()));
-        mBinding.homeUIText.setText((homeUI = ResUtil.getStringArray(R.array.select_home_ui))[Setting.getHomeUI()]);
+        mBinding.homeUIText.setText((homeUI = ResUtil.getStringArray(R.array.select_home_ui))[safeIndex(Setting.getHomeUI(), homeUI)]);
         mBinding.homeHistoryText.setText(getSwitch(Setting.isHomeHistory()));
         mBinding.cacheDirText.setText(Setting.getThunderCacheDir());
         mBinding.removeAdText.setText(getSwitch(Setting.isRemoveAd()));
-        mBinding.languageText.setText((ResUtil.getStringArray(R.array.select_language))[Setting.getLanguage()]);
-        mBinding.parseWebviewText.setText((parseWebview = ResUtil.getStringArray(R.array.select_parse_webview))[Setting.getParseWebView()]);
-        mBinding.configCacheText.setText((configCache = ResUtil.getStringArray(R.array.select_config_cache))[Setting.getConfigCache()]);
+        String[] language = ResUtil.getStringArray(R.array.select_language);
+        mBinding.languageText.setText(language[safeIndex(Setting.getLanguage(), language)]);
+        mBinding.parseWebviewText.setText((parseWebview = ResUtil.getStringArray(R.array.select_parse_webview))[safeIndex(Setting.getParseWebView(), parseWebview)]);
+        mBinding.configCacheText.setText((configCache = ResUtil.getStringArray(R.array.select_config_cache))[safeIndex(Setting.getConfigCache(), configCache)]);
     }
 
     @Override
@@ -105,22 +118,22 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     }
 
     private void setQuality(View view) {
-        int index = Setting.getQuality();
-        Setting.putQuality(index = index == quality.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getQuality(), quality);
+        Setting.putQuality(index);
         mBinding.qualityText.setText(quality[index]);
         RefreshEvent.image();
     }
 
     private void setSize(View view) {
-        int index = Setting.getSize();
-        Setting.putSize(index = index == size.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getSize(), size);
+        Setting.putSize(index);
         mBinding.sizeText.setText(size[index]);
         RefreshEvent.size();
     }
 
     private void setEpisode(View view) {
-        int index = Setting.getEpisode();
-        Setting.putEpisode(index = index == episode.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getEpisode(), episode);
+        Setting.putEpisode(index);
         mBinding.episodeText.setText(episode[index]);
     }
 
@@ -147,8 +160,8 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     }
 
     private void setFullscreenMenuKey(View view) {
-        int index = Setting.getFullscreenMenuKey();
-        Setting.putFullscreenMenuKey(index = index == fullscreenMenuKey.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getFullscreenMenuKey(), fullscreenMenuKey);
+        Setting.putFullscreenMenuKey(index);
         mBinding.fullscreenMenuKeyText.setText(fullscreenMenuKey[index]);
     }
 
@@ -163,8 +176,8 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     }
 
     private void setSmallWindowBackKey(View view) {
-        int index = Setting.getSmallWindowBackKey();
-        Setting.putSmallWindowBackKey(index = index == smallWindowBackKey.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getSmallWindowBackKey(), smallWindowBackKey);
+        Setting.putSmallWindowBackKey(index);
         mBinding.smallWindowBackKeyText.setText(smallWindowBackKey[index]);
     }
 
@@ -178,8 +191,8 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     }
 
     private void setHomeUI(View view) {
-        int index = Setting.getHomeUI();
-        Setting.putHomeUI(index = index == homeUI.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getHomeUI(), homeUI);
+        Setting.putHomeUI(index);
         mBinding.homeUIText.setText(homeUI[index]);
     }
 
@@ -210,15 +223,15 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     }
 
     private void setParseWebview(View view) {
-        int index = Setting.getParseWebView();
-        Setting.putParseWebView(index = index == parseWebview.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getParseWebView(), parseWebview);
+        Setting.putParseWebView(index);
         mBinding.parseWebviewText.setText(parseWebview[index]);
         if (index == 1 && QbSdk.getTbsVersion(App.get()) <= 0) X5WebViewDialog.create(this).show();
     }
 
     private void setConfigCache(View view) {
-        int index = Setting.getConfigCache();
-        Setting.putConfigCache(index = index == configCache.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getConfigCache(), configCache);
+        Setting.putConfigCache(index);
         mBinding.configCacheText.setText(configCache[index]);
     }
 
@@ -243,7 +256,8 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     public void setLanguage(int lang) {
         Setting.putLanguage(lang);
         LanguageUtil.setLocale(LanguageUtil.getLocale(Setting.getLanguage()));
-        mBinding.languageText.setText((ResUtil.getStringArray(R.array.select_language))[Setting.getLanguage()]);
+        String[] language = ResUtil.getStringArray(R.array.select_language);
+        mBinding.languageText.setText(language[safeIndex(Setting.getLanguage(), language)]);
         App.post(() -> Util.restartApp(this), 1000);
     }
 
@@ -272,7 +286,8 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     @Override
     public void onMenuKeyItemClick(int position) {
         Setting.putHomeMenuKey(position);
-        mBinding.homeMenuKeyText.setText((ResUtil.getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
+        String[] homeMenuKey = ResUtil.getStringArray(R.array.select_home_menu_key);
+        mBinding.homeMenuKeyText.setText(homeMenuKey[safeIndex(Setting.getHomeMenuKey(), homeMenuKey)]);
     }
 
 }

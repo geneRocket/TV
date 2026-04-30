@@ -122,7 +122,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
             child.itemView.setOnKeyListener(new View.OnKeyListener() {
                 @Override
                 public boolean onKey(View v, int keyCode, KeyEvent event) {
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isDownKey(event)) {
                         View lastItem =  binding.episodeVert.getLayoutManager().findViewByPosition(itemCount - 1);
                         if (lastItem != null) lastItem.requestFocus();
                     }

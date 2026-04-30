@@ -61,7 +61,6 @@ public class MenuDialog implements MenuAdapter.OnClickListener {
     private void initView() {
         setRecyclerView();
         setDialog();
-        binding.recycler.requestFocus();
     }
 
     private void setRecyclerView() {
@@ -70,7 +69,10 @@ public class MenuDialog implements MenuAdapter.OnClickListener {
         binding.recycler.setItemAnimator(null);
         if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(getCount(), 16));
         binding.recycler.setLayoutManager(new GridLayoutManager(dialog.getContext(), getCount()));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(0));
+        binding.recycler.post(() -> {
+            binding.recycler.scrollToPosition(0);
+            binding.recycler.requestFocus();
+        });
 
     }
 

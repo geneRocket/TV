@@ -49,10 +49,10 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
         File file = new File(Path.tv(), item + "." + AppDatabase.BACKUP_SUFFIX);
         if (file.exists()) file.delete();
         int index = mItems.indexOf(item);
-        if (index == -1) return getItemCount();
+        if (index == -1) return index;
         mItems.remove(index);
         notifyItemRemoved(index);
-        return getItemCount();
+        return index;
     }
 
     @Override

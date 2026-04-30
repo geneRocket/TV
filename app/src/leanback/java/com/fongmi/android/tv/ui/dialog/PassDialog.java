@@ -45,7 +45,7 @@ public class PassDialog extends BaseDialog {
     }
 
     private void onPass(View view) {
-        String pass = binding.pass.getText().toString().trim();
+        String pass = binding.pass.getText() == null ? "" : binding.pass.getText().toString().trim();
         if (pass.length() > 0) callback.setPass(pass);
         dismiss();
     }

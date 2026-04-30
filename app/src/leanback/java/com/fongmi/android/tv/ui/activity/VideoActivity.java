@@ -144,6 +144,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
     };
 
+    private static int safeIndex(int index, int length) {
+        if (length <= 0) return 0;
+        return Math.max(0, Math.min(index, length - 1));
+    }
+
+    private static String textOf(TextView view) {
+        return view == null || view.getText() == null ? "" : view.getText().toString();
+    }
+
     private static class RecoveryState {
 
         private int toggleCount;
@@ -1006,7 +1015,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             child.itemView.setOnKeyListener(new View.OnKeyListener() {
                 @Override
                 public boolean onKey(View v, int keyCode, KeyEvent event) {
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isDownKey(event)) {
                         View lastItem =  getEpisodeView().getLayoutManager().findViewByPosition(itemCount - 1);
                         if (lastItem != null) lastItem.requestFocus();
                     }
@@ -1051,12 +1060,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.init(getExo(), getIjk());
         ExoUtil.setSubtitleView(mBinding.exo);
         IjkUtil.setSubtitleView(mBinding.ijk);
-        mBinding.control.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
+        mBinding.control.reset.setText(getResetText());
     }
 
     private void setDanmuViewSettings() {
         float[] range = {2.4f, 1.8f, 1.2f, 0.8f};
-        float speed = range[Setting.getDanmuSpeed()] / Math.max(mPlayers.getSpeed(), 0.1f);
+        float speed = range[safeIndex(Setting.getDanmuSpeed(), range.length)] / Math.max(mPlayers.getSpeed(), 0.1f);
         float alpha = Setting.getDanmuAlpha() / 100.0f;
         float sizeScale = isFullscreen() ? 1.2f * Setting.getDanmuSize() : 0.8f * Setting.getDanmuSize();
         int maxLine = Setting.getDanmuLine(3);
@@ -1066,6 +1075,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         maxLines.put(BaseDanmaku.TYPE_SCROLL_LR, maxLine);
         maxLines.put(BaseDanmaku.TYPE_FIX_BOTTOM, maxLine);
         mDanmakuContext.setMaximumLines(maxLines).setScrollSpeedFactor(speed).setDanmakuTransparency(alpha).setScaleTextSize(sizeScale);
+    }
+
+    private String getResetText() {
+        String[] reset = ResUtil.getStringArray(R.array.select_reset);
+        return reset[safeIndex(Setting.getReset(), reset.length)];
     }
 
     private void setDanmuView() {
@@ -1787,7 +1801,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private boolean onResetToggle() {
         Setting.putReset(Math.abs(Setting.getReset() - 1));
-        setPlainTextIfChanged(mBinding.control.reset, ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
+        setPlainTextIfChanged(mBinding.control.reset, getResetText());
         return true;
     }
 
@@ -1848,7 +1862,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onPlayer() {
-        PlayerDialog.create().select(mPlayers.getPlayer()).title(mBinding.widget.title.getText().toString()).show(this);
+        PlayerDialog.create().select(mPlayers.getPlayer()).title(textOf(mBinding.widget.title)).show(this);
         hideControl();
     }
 
@@ -2126,7 +2140,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onSearchPage() {
-        String keyword = mHistory == null ? mBinding.name.getText().toString().trim() : mHistory.getVodName();
+        String keyword = mHistory == null ? textOf(mBinding.name).trim() : mHistory.getVodName();
         if (TextUtils.isEmpty(keyword)) keyword = getName();
         if (TextUtils.isEmpty(keyword)) return;
         SearchActivity.start(this, keyword, true);
@@ -2155,7 +2169,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         keep.setCid(getSiteCid());
         keep.setSiteName(getSite().getName());
         keep.setVodPic(mBinding.video.getTag().toString());
-        keep.setVodName(mBinding.name.getText().toString());
+        keep.setVodName(textOf(mBinding.name));
         keep.setCreateTime(System.currentTimeMillis());
         keep.save();
     }
@@ -2290,7 +2304,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setMetadata() {
-        String title = mHistory == null ? mBinding.name.getText().toString() : mHistory.getVodName();
+        String title = mHistory == null ? textOf(mBinding.name) : mHistory.getVodName();
         Episode current = mEpisodeAdapter.size() > 0 ? getEpisode() : null;
         String episode = current == null ? title : current.getName();
         String artist = title.equals(episode) ? "" : getString(R.string.play_now, episode);
@@ -2463,7 +2477,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private String getCurrentSwitchKeyword() {
         if (mHistory != null && !TextUtils.isEmpty(mHistory.getVodName())) return mHistory.getVodName();
-        return mBinding == null ? getName() : mBinding.name.getText().toString();
+        return mBinding == null ? getName() : textOf(mBinding.name);
     }
 
     private long getCurrentSwitchPosition() {

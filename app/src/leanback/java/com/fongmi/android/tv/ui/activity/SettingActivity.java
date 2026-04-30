@@ -72,6 +72,17 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         return list.toArray(new String[0]);
     }
 
+    private int safeIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        return Math.max(0, Math.min(index, items.length - 1));
+    }
+
+    private int nextIndex(int index, String[] items) {
+        if (items == null || items.length == 0) return 0;
+        index = safeIndex(index, items);
+        return index == items.length - 1 ? 0 : index + 1;
+    }
+
     @Override
     protected ViewBinding getBinding() {
         return mBinding = ActivitySettingBinding.inflate(getLayoutInflater());
@@ -83,10 +94,11 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         mBinding.vodUrl.setText(getVodConfigDesc());
         mBinding.liveUrl.setText(getLiveConfigDesc());
         mBinding.wallUrl.setText(WallConfig.getDesc());
-        mBinding.dohText.setText(getDohList()[getDohIndex()]);
+        String[] doh = getDohList();
+        mBinding.dohText.setText(doh.length == 0 ? "" : doh[safeIndex(getDohIndex(), doh)]);
         mBinding.versionText.setText(BuildConfig.VERSION_NAME);
         mBinding.proxyText.setText(UrlUtil.scheme(Setting.getProxy()));
-        mBinding.backupText.setText((backup = ResUtil.getStringArray(R.array.select_backup))[Setting.getBackupMode()]);
+        mBinding.backupText.setText((backup = ResUtil.getStringArray(R.array.select_backup))[safeIndex(Setting.getBackupMode(), backup)]);
         mBinding.aboutText.setText(BuildConfig.FLAVOR_mode + "-" + BuildConfig.FLAVOR_api + "-" + BuildConfig.FLAVOR_abi);
         setCacheText();
     }
@@ -454,8 +466,8 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     }
 
     private boolean onBackupMode(View view) {
-        int index = Setting.getBackupMode();
-        Setting.putBackupMode(index = index == backup.length - 1 ? 0 : ++index);
+        int index = nextIndex(Setting.getBackupMode(), backup);
+        Setting.putBackupMode(index);
         mBinding.backupText.setText(backup[index]);
         return true;
     }

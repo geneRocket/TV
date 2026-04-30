@@ -30,8 +30,9 @@ public class CustomKeyboard implements KeyboardAdapter.OnClickListener {
 
     @Override
     public void onTextClick(String text) {
-        StringBuilder sb = new StringBuilder(binding.keyword.getText().toString());
+        StringBuilder sb = new StringBuilder(binding.keyword.getText() == null ? "" : binding.keyword.getText().toString());
         int cursor = binding.keyword.getSelectionStart();
+        if (cursor < 0) cursor = sb.length();
         if (binding.keyword.length() > 19) return;
         sb.insert(cursor, text);
         binding.keyword.setText(sb.toString());
@@ -41,8 +42,9 @@ public class CustomKeyboard implements KeyboardAdapter.OnClickListener {
     @Override
     @SuppressLint("NonConstantResourceId")
     public void onIconClick(int resId) {
-        StringBuilder sb = new StringBuilder(binding.keyword.getText().toString());
+        StringBuilder sb = new StringBuilder(binding.keyword.getText() == null ? "" : binding.keyword.getText().toString());
         int cursor = binding.keyword.getSelectionStart();
+        if (cursor < 0) cursor = sb.length();
         switch (resId) {
             case R.drawable.ic_setting_home:
                 callback.showDialog();

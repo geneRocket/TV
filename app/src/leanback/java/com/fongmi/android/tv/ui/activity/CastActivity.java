@@ -10,6 +10,7 @@ import android.os.IBinder;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -58,6 +59,10 @@ import org.greenrobot.eventbus.ThreadMode;
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
 public class CastActivity extends BaseActivity implements CustomKeyDownCast.Listener, TrackDialog.Listener, PlayerDialog.Listener, RenderControl, ServiceConnection, Clock.Callback {
+
+    private static String textOf(TextView view) {
+        return view == null || view.getText() == null ? "" : view.getText().toString();
+    }
 
     private ActivityCastBinding mBinding;
     private DLNARendererService mService;
@@ -220,7 +225,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void onPlayer() {
-        PlayerDialog.create().select(mPlayers.getPlayer()).title(mBinding.widget.title.getText().toString()).show(this);
+        PlayerDialog.create().select(mPlayers.getPlayer()).title(textOf(mBinding.widget.title)).show(this);
         hideControl();
     }
 
@@ -365,7 +370,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void setMetadata() {
-        mPlayers.setMetadata(mBinding.widget.title.getText().toString(), "", "", getDefaultArtwork());
+        mPlayers.setMetadata(textOf(mBinding.widget.title), "", "", getDefaultArtwork());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

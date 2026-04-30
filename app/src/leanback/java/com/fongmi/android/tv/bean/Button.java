@@ -41,8 +41,9 @@ public class Button {
         for(int i=0; i<buttonsArr.length; i++) {
             Integer id = parseId(buttonsArr[i]);
             if (id == null) continue;
-            if (allButtons.containsKey(id)) buttonList.add(allButtons.get(id));
+            if (allButtons.containsKey(id) && !buttonList.contains(allButtons.get(id))) buttonList.add(allButtons.get(id));
         }
+        for (Button button : all()) if (!buttonList.contains(button)) buttonList.add(button);
         return buttonList;
     }
 
@@ -69,7 +70,7 @@ public class Button {
         for(int i=0; i<buttonsArr.length; i++) {
             Integer id = parseId(buttonsArr[i]);
             if (id == null) continue;
-            if (allButtons.containsKey(id)) buttonList.add(allButtons.get(id));
+            if (allButtons.containsKey(id) && !buttonList.contains(allButtons.get(id))) buttonList.add(allButtons.get(id));
         }
         return buttonList;
     }

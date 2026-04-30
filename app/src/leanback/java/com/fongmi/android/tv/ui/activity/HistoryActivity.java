@@ -42,6 +42,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     protected void initView() {
+        mBinding.empty.text.setText(R.string.empty_history);
         setRecyclerView();
         getHistory();
     }
@@ -66,18 +67,19 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mHistoryRequestId) return;
                 mAdapter.addAll(items);
-                updateDeleteView();
+                updateViews();
                 mBinding.recycler.post(() -> {
-                    if (!isFinishing() && !isDestroyed()) mBinding.recycler.requestFocus();
+                    if (!isFinishing() && !isDestroyed() && mAdapter.getItemCount() > 0) mBinding.recycler.requestFocus();
                 });
             });
         });
     }
 
-    private void updateDeleteView() {
+    private void updateViews() {
         boolean visible = mAdapter.getItemCount() > 0;
         mBinding.delete.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.delete.setFocusable(visible);
+        mBinding.empty.getRoot().setVisibility(visible ? View.GONE : View.VISIBLE);
     }
 
     private void onDelete(View view) {
@@ -86,7 +88,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
                 mHistoryRequestId++;
                 History.deleteLoaded();
                 mAdapter.clear();
-                updateDeleteView();
+                updateViews();
             }).show();
         } else if (mAdapter.getItemCount() > 0) {
             mAdapter.setDelete(true);
@@ -110,11 +112,9 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         mHistoryRequestId++;
         int index = mAdapter.delete(item.delete());
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
-        updateDeleteView();
-        if (mAdapter.getItemCount() > 0) {
-            int nextIndex = index + 1;
-            if (index == mAdapter.getItemCount()) nextIndex = index - 1;
-            int targetIndex = nextIndex;
+        updateViews();
+        if (index != -1 && mAdapter.getItemCount() > 0) {
+            int targetIndex = index == mAdapter.getItemCount() ? index - 1 : index;
             mBinding.recycler.post(() -> {
                 View view = mBinding.recycler.getLayoutManager() == null ? null : mBinding.recycler.getLayoutManager().findViewByPosition(targetIndex);
                 if (view != null) view.requestFocus();

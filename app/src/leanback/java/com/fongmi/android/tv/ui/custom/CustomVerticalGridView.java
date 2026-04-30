@@ -12,6 +12,7 @@ import androidx.leanback.widget.VerticalGridView;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.utils.KeyUtil;
 
 import java.util.Arrays;
 import java.util.List;
@@ -44,6 +45,10 @@ public class CustomVerticalGridView extends VerticalGridView {
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable ViewHolder child, int position, int subposition) {
                 if (pressDown && position == 1) hideHeader();
                 if (pressUp && position == 0) showHeader();
+                if (position >= 0) {
+                    pressDown = false;
+                    pressUp = false;
+                }
             }
         });
     }
@@ -68,8 +73,8 @@ public class CustomVerticalGridView extends VerticalGridView {
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) return moveTop && moveToTop();
-        pressUp = event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP;
-        pressDown = event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN;
+        pressUp = KeyUtil.isUpKey(event);
+        pressDown = KeyUtil.isDownKey(event);
         return super.dispatchKeyEvent(event);
     }
 

@@ -50,7 +50,7 @@ public class CustomTitleView extends AppCompatTextView {
     @Override
     protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
-        if (focused) startAnimation(flicker);
+        if (focused && flicker != null) startAnimation(flicker);
         else clearAnimation();
     }
 

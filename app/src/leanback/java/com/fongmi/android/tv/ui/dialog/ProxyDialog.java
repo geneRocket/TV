@@ -63,6 +63,7 @@ public class ProxyDialog implements DialogInterface.OnDismissListener {
         String text = Setting.getProxy();
         binding.text.setText(text);
         binding.text.setSelection(TextUtils.isEmpty(text) ? 0 : text.length());
+        binding.text.requestFocus();
         binding.code.setImageBitmap(QRCode.getBitmap(Server.get().getAddress(3), 200, 0));
         binding.info.setText(ResUtil.getString(R.string.push_info, Server.get().getAddress()).replace("，", "\n"));
     }
@@ -104,7 +105,7 @@ public class ProxyDialog implements DialogInterface.OnDismissListener {
     }
 
     private void onPositive(View view) {
-        callback.setProxy(binding.text.getText().toString().trim());
+        callback.setProxy(binding.text.getText() == null ? "" : binding.text.getText().toString().trim());
         dialog.dismiss();
     }
 
