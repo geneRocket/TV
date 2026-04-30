@@ -2762,7 +2762,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean hasEpisode(Flag flag) {
-        if (sourceSwitchSingleEpisode) return flag != null;
+        if (sourceSwitchSingleEpisode) return flag != null && !flag.getEpisodes().isEmpty();
+        if (flag != null && flag.getEpisodes().size() == 1) return false;
         return flag != null && flag.find(sourceSwitchEpisode, !TextUtils.isEmpty(sourceSwitchEpisode)) != null;
     }
 
