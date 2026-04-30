@@ -504,6 +504,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setPendingSearchToken(null);
             host.resetSearchTaskState();
             host.mQuickKeys.clear();
+            host.cancelSearchTasks();
             if (host.mExecutor == null) return;
             host.mExecutor.shutdownNow();
             host.mExecutor = null;
@@ -641,7 +642,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 sites.add(site);
             }
             int generation = host.beginSearchTaskState(sites.size());
-            for (Site site : sites) host.mExecutor.execute(() -> search(site, keyword, generation, token));
+            for (Site site : sites) host.mSearchTasks.add(host.mExecutor.submit(() -> search(site, keyword, generation, token)));
             if (sites.isEmpty()) host.onSearchTasksSettled(generation);
         }
 
@@ -693,6 +694,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private CustomKeyDownVod mKeyDown;
     private ExecutorService mExecutor;
     private final ExecutorService mDetailExecutor = ThreadPools.newSingle("video-detail");
+    private final Set<Future<?>> mSearchTasks = Collections.synchronizedSet(new HashSet<>());
     private SiteViewModel mViewModel;
     private List<Danmaku> mDanmakus;
     private final Set<String> mBroken = new HashSet<>();
@@ -2625,6 +2627,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private synchronized boolean hasPendingSearchTasks() {
         return mSearchPendingCount > 0;
+    }
+
+    private void cancelSearchTasks() {
+        synchronized (mSearchTasks) {
+            for (Future<?> task : mSearchTasks) task.cancel(true);
+            mSearchTasks.clear();
+        }
     }
 
     private void onSearchTasksSettled(int generation) {

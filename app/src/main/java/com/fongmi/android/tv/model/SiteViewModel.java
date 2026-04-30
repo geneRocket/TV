@@ -299,8 +299,10 @@ public class SiteViewModel extends ViewModel {
     public void searchContent(Site site, String keyword, boolean quick, String token) throws Throwable {
         String original = keyword == null ? "" : keyword.trim();
         String query = Trans.t2s(keyword);
+        throwIfInterrupted();
         if (site.getType() == 3) {
             String searchContent = site.spider().searchContent(query, quick);
+            throwIfInterrupted();
             SpiderDebug.log(site.getName() + "," + searchContent);
             post(site, Result.fromJson(searchContent), original, token);
         } else {
@@ -308,8 +310,10 @@ public class SiteViewModel extends ViewModel {
             params.put("wd", query);
             params.put("quick", String.valueOf(quick));
             String searchContent = call(site, params, true);
+            throwIfInterrupted();
             SpiderDebug.log(site.getName() + "," + searchContent);
             Result result = Result.fromType(site.getType(), searchContent);
+            throwIfInterrupted();
             post(site, quick ? result : fetchPic(site, result), original, token);
         }
     }
@@ -487,6 +491,10 @@ public class SiteViewModel extends ViewModel {
         Result result = Result.empty();
         result.setParse(0);
         return result;
+    }
+
+    private void throwIfInterrupted() throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
     }
 
     @Override
