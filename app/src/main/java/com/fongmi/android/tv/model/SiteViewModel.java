@@ -61,6 +61,7 @@ public class SiteViewModel extends ViewModel {
     private final ExecutorService executor = ThreadPools.newFixed("site-vm", Math.max(2, Constant.THREAD_POOL / 2));
     private final CopyOnWriteArrayList<PendingRequest> pendingRequests = new CopyOnWriteArrayList<>();
     private final ConcurrentHashMap<String, PendingRequest> activeRequests = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CopyOnWriteArrayList<Call>> activeSearchCalls = new ConcurrentHashMap<>();
 
     private static final String REQUEST_RESULT = "result";
     private static final String REQUEST_PLAYER = "player";
@@ -312,13 +313,21 @@ public class SiteViewModel extends ViewModel {
             ArrayMap<String, String> params = new ArrayMap<>();
             params.put("wd", query);
             params.put("quick", String.valueOf(quick));
-            String searchContent = call(site, params, true);
+            String searchContent = call(site, params, true, token);
             throwIfInterrupted();
             SpiderDebug.log(site.getName() + "," + searchContent);
             Result result = Result.fromType(site.getType(), searchContent);
             throwIfInterrupted();
-            post(site, quick ? result : fetchPic(site, result), original, token);
+            post(site, quick ? result : fetchPic(site, result, token), original, token);
         }
+    }
+
+    public void cancelSearch(String token) {
+        if (TextUtils.isEmpty(token)) return;
+        CopyOnWriteArrayList<Call> calls = activeSearchCalls.remove(token);
+        if (calls == null) return;
+        for (Call call : calls) call.cancel();
+        calls.clear();
     }
 
     public void searchContent(Site site, String keyword, String page) {
@@ -347,13 +356,24 @@ public class SiteViewModel extends ViewModel {
     }
 
     private String call(Site site, ArrayMap<String, String> params, boolean limit) throws IOException {
-        Call call = fetchExt(site, params, limit).length() <= 1000 ? OkHttp.newCall(site.getApi(), site.getHeaders(), params) : OkHttp.newCall(site.getApi(), site.getHeaders(), OkHttp.toBody(params));
-        return call(call);
+        return call(site, params, limit, "");
+    }
+
+    private String call(Site site, ArrayMap<String, String> params, boolean limit, String token) throws IOException {
+        Call call = fetchExt(site, params, limit, token).length() <= 1000 ? OkHttp.newCall(site.getApi(), site.getHeaders(), params) : OkHttp.newCall(site.getApi(), site.getHeaders(), OkHttp.toBody(params));
+        return call(call, token);
     }
 
     private String call(Call call) throws IOException {
+        return call(call, "");
+    }
+
+    private String call(Call call, String token) throws IOException {
+        addSearchCall(token, call);
         try (Response res = call.execute()) {
             return body(res);
+        } finally {
+            removeSearchCall(token, call);
         }
     }
 
@@ -364,21 +384,37 @@ public class SiteViewModel extends ViewModel {
     }
 
     private String fetchExt(Site site, ArrayMap<String, String> params, boolean limit) throws IOException {
+        return fetchExt(site, params, limit, "");
+    }
+
+    private String fetchExt(Site site, ArrayMap<String, String> params, boolean limit, String token) throws IOException {
         String extend = site.getExt();
-        if (extend.startsWith("http")) extend = fetchExt(site);
+        if (extend.startsWith("http")) extend = fetchExt(site, token);
         if (!extend.isEmpty()) params.put("extend", extend);
         return extend;
     }
 
     private String fetchExt(Site site) throws IOException {
-        try (Response res = OkHttp.newCall(site.getExt(), site.getHeaders()).execute()) {
+        return fetchExt(site, "");
+    }
+
+    private String fetchExt(Site site, String token) throws IOException {
+        Call call = OkHttp.newCall(site.getExt(), site.getHeaders());
+        addSearchCall(token, call);
+        try (Response res = call.execute()) {
             if (!res.isSuccessful()) return "";
             site.setExt(body(res));
             return site.getExt();
+        } finally {
+            removeSearchCall(token, call);
         }
     }
 
     private Result fetchPic(Site site, Result result) throws Exception {
+        return fetchPic(site, result, "");
+    }
+
+    private Result fetchPic(Site site, Result result, String token) throws Exception {
         if (site.getType() > 2 || result.getList().isEmpty() || result.getList().get(0).getVodPic().length() > 0) return result;
         ArrayList<String> ids = new ArrayList<>();
         if (site.getCategories().isEmpty()) for (Vod item : result.getList()) ids.add(item.getVodId());
@@ -387,9 +423,22 @@ public class SiteViewModel extends ViewModel {
         ArrayMap<String, String> params = new ArrayMap<>();
         params.put("ac", site.getType() == 0 ? "videolist" : "detail");
         params.put("ids", TextUtils.join(",", ids));
-        String response = call(OkHttp.newCall(site.getApi(), site.getHeaders(), params));
+        String response = call(OkHttp.newCall(site.getApi(), site.getHeaders(), params), token);
         result.setList(Result.fromType(site.getType(), response).getList());
         return result;
+    }
+
+    private void addSearchCall(String token, Call call) {
+        if (TextUtils.isEmpty(token) || call == null) return;
+        activeSearchCalls.computeIfAbsent(token, key -> new CopyOnWriteArrayList<>()).add(call);
+    }
+
+    private void removeSearchCall(String token, Call call) {
+        if (TextUtils.isEmpty(token) || call == null) return;
+        CopyOnWriteArrayList<Call> calls = activeSearchCalls.get(token);
+        if (calls == null) return;
+        calls.remove(call);
+        if (calls.isEmpty()) activeSearchCalls.remove(token, calls);
     }
 
     private void post(Site site, Result result, String keyword, String token) {
@@ -509,6 +558,8 @@ public class SiteViewModel extends ViewModel {
         }
         pendingRequests.clear();
         activeRequests.clear();
+        for (String token : activeSearchCalls.keySet()) cancelSearch(token);
+        activeSearchCalls.clear();
         ThreadPools.shutdown(executor);
     }
 }

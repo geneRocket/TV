@@ -3,7 +3,9 @@ package com.fongmi.android.tv.player.danmu;
 import android.graphics.Color;
 import android.text.TextUtils;
 
+import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.bean.Danmu;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 
@@ -11,6 +13,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +28,9 @@ import master.flame.danmaku.danmaku.model.android.DanmakuFactory;
 import master.flame.danmaku.danmaku.model.android.Danmakus;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.danmaku.util.DanmakuUtils;
+import okhttp3.Headers;
+import okhttp3.Request;
+import okhttp3.Response;
 
 public class Parser extends BaseDanmakuParser {
 
@@ -44,9 +51,20 @@ public class Parser extends BaseDanmakuParser {
     private String getContent(String path) {
         if (TextUtils.isEmpty(path)) return "";
         if (path.startsWith("file")) return Path.read(path);
-        if (path.startsWith("http")) return OkHttp.string(path);
+        if (path.startsWith("http") || path.startsWith("//")) return request(path);
         if (new File(path).exists()) return Path.read(path);
         return path;
+    }
+
+    private String request(String path) {
+        String url = UrlUtil.stripTag(UrlUtil.normalize(path, ""));
+        Map<String, String> headers = UrlUtil.getTagHeaders(path);
+        try (Response response = OkHttp.client(Constant.TIMEOUT_PLAY).newCall(new Request.Builder().url(url).headers(Headers.of(headers)).build()).execute()) {
+            if (!response.isSuccessful() || response.body() == null) return "";
+            return response.body().string();
+        } catch (IOException e) {
+            return "";
+        }
     }
 
     @Override

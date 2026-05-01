@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.view.KeyEvent;
@@ -48,6 +49,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private static final String EXTRA_KEYWORD = "keyword";
     private static final String EXTRA_AUTO = "auto";
     private static final int SEARCH_HINT_TIMEOUT = 5000;
+    private static final int SEARCH_DEBOUNCE_MS = 800;
 
     private ActivitySearchBinding mBinding;
     private RecordAdapter mRecordAdapter;
@@ -57,6 +59,8 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private Call mSuggestOneCall;
     private Call mSuggestTwoCall;
     private String mSuggestKeyword;
+    private String mLastSearchKeyword;
+    private long mLastSearchAt;
     private final Runnable mSuggestTask = new Runnable() {
         @Override
         public void run() {
@@ -260,6 +264,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         mBinding.keyword.setSelection(mBinding.keyword.length());
         Util.hideKeyboard(mBinding.keyword);
         if (TextUtils.isEmpty(keyword)) return;
+        if (isDuplicateSearch(keyword)) return;
         cancelHotRequest();
         cancelSuggestTask();
         cancelSuggestRequest();
@@ -267,6 +272,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         App.post(() -> {
             if (!isFinishing() && !isDestroyed()) mRecordAdapter.add(keyword);
         }, 250);
+    }
+
+    private boolean isDuplicateSearch(String keyword) {
+        long now = SystemClock.elapsedRealtime();
+        boolean duplicate = keyword.equals(mLastSearchKeyword) && now - mLastSearchAt < SEARCH_DEBOUNCE_MS;
+        mLastSearchKeyword = keyword;
+        mLastSearchAt = now;
+        return duplicate;
     }
 
     @Override

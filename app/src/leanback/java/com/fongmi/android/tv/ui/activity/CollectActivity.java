@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -42,8 +43,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Future;
 
 public class CollectActivity extends BaseActivity {
+
+    private static final long RESULT_FLUSH_DELAY = 80;
 
     private ActivityCollectBinding mBinding;
     private ArrayObjectAdapter mAdapter;
@@ -54,7 +58,13 @@ public class CollectActivity extends BaseActivity {
     private final Set<String> mCollectKeys = new HashSet<>();
     private final Map<String, Collect> mCollectMap = new LinkedHashMap<>();
     private final Map<String, Set<String>> mVodKeys = new HashMap<>();
+    private final List<List<Vod>> mPendingResults = new ArrayList<>();
+    private final Set<Future<?>> mSearchTasks = new HashSet<>();
     private View mOldView;
+    private String mSearchToken;
+    private boolean mPagerDirty;
+    private boolean mFlushScheduled;
+    private final Runnable mFlushResults = this::flushResults;
 
     public static void start(Activity activity, String keyword) {
         start(activity, keyword, false);
@@ -112,9 +122,15 @@ public class CollectActivity extends BaseActivity {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.search.observe(this, result -> {
             if (isFinishing() || isDestroyed()) return;
-            if (!result.getKeyword().equals(getKeyword().trim())) return;
-            updateCollects(result.getList());
+            if (!isCurrentSearchResult(result)) return;
+            enqueueResult(result.getList());
         });
+    }
+
+    private boolean isCurrentSearchResult(com.fongmi.android.tv.bean.Result result) {
+        return result != null
+                && TextUtils.equals(result.getKeyword(), getKeyword().trim())
+                && TextUtils.equals(result.getRequestToken(), mSearchToken);
     }
 
     private void setPager() {
@@ -145,6 +161,11 @@ public class CollectActivity extends BaseActivity {
         mAdapter.clear();
         mCollectMap.clear();
         mVodKeys.clear();
+        mPendingResults.clear();
+        App.removeCallbacks(mFlushResults);
+        mSearchToken = "collect:" + System.currentTimeMillis();
+        mPagerDirty = false;
+        mFlushScheduled = false;
         Collect all = Collect.all();
         mCollectKeys.clear();
         mCollectKeys.add(all.getSite().getKey());
@@ -156,7 +177,7 @@ public class CollectActivity extends BaseActivity {
         mBinding.pager.setCurrentItem(0, false);
         mExecutor = new PauseExecutor(Math.max(2, Math.min(6, Constant.THREAD_POOL)));
         mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
-        for (Site site : mSites) mExecutor.execute(() -> search(site));
+        for (Site site : mSites) mSearchTasks.add(mExecutor.submit(() -> search(site)));
     }
 
     private void addCollect(List<Vod> items) {
@@ -165,7 +186,27 @@ public class CollectActivity extends BaseActivity {
         if (!mCollectKeys.add(collect.getSite().getKey())) return;
         mCollectMap.put(collect.getSite().getKey(), collect);
         mAdapter.add(collect);
-        syncPager();
+        mPagerDirty = true;
+    }
+
+    private void enqueueResult(List<Vod> items) {
+        if (items == null || items.isEmpty()) return;
+        mPendingResults.add(items);
+        if (mFlushScheduled) return;
+        mFlushScheduled = true;
+        App.post(mFlushResults, RESULT_FLUSH_DELAY);
+    }
+
+    private void flushResults() {
+        mFlushScheduled = false;
+        if (isFinishing() || isDestroyed() || mPendingResults.isEmpty()) return;
+        List<List<Vod>> batches = new ArrayList<>(mPendingResults);
+        mPendingResults.clear();
+        for (List<Vod> items : batches) updateCollects(items);
+        if (mPagerDirty) {
+            mPagerDirty = false;
+            syncPager();
+        }
     }
 
     private void updateCollects(List<Vod> items) {
@@ -233,13 +274,19 @@ public class CollectActivity extends BaseActivity {
     private void search(Site site) {
         if (isFinishing() || isDestroyed() || mExecutor == null) return;
         try {
-            mViewModel.searchContent(site, getKeyword(), false);
+            mViewModel.searchContent(site, getKeyword(), false, mSearchToken);
         } catch (Throwable e) {
             ThreadPools.log(e, "Collect search failed for " + site.getName());
         }
     }
 
     private void stop() {
+        App.removeCallbacks(mFlushResults);
+        mPendingResults.clear();
+        mFlushScheduled = false;
+        if (mViewModel != null) mViewModel.cancelSearch(mSearchToken);
+        for (Future<?> task : mSearchTasks) task.cancel(true);
+        mSearchTasks.clear();
         if (mExecutor == null) return;
         mExecutor.shutdownNow();
         mExecutor = null;
