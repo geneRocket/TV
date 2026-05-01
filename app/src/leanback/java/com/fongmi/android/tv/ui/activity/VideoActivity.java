@@ -773,6 +773,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private Flag pendingHistoryFlag;
     private Episode pendingHistoryEpisode;
     private long pendingHistoryPosition;
+    private long lastPlaybackAttemptPosition;
     private boolean pendingHistorySkipOpening;
     private String pendingProgressFlag;
     private String pendingProgressEpisodeKey;
@@ -2181,6 +2182,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         pendingHistoryFlag = flag;
         pendingHistoryEpisode = item;
         pendingHistoryPosition = hasProgressOverride ? pendingProgressPosition : replay ? 0 : mHistory.getPosition();
+        lastPlaybackAttemptPosition = pendingHistoryPosition;
         pendingHistorySkipOpening = replay;
         mPlayers.setPosition(Math.max(mHistory.getOpening(), pendingHistoryPosition));
     }
@@ -2193,6 +2195,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistory.setVodRemarks(pendingHistoryEpisode.getName());
         mHistory.setVodFlag(pendingHistoryFlag.getFlag());
         mHistory.setCreateTime(System.currentTimeMillis());
+        mLastHistorySaveAt = System.currentTimeMillis();
+        saveHistorySnapshot();
+        lastPlaybackAttemptPosition = 0;
         clearPendingHistoryUpdate();
     }
 
@@ -2273,8 +2278,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
-                History snapshot = mHistory.copy();
-                App.execute(snapshot::update);
+                saveHistorySnapshot();
             }
         }
 
@@ -2555,7 +2559,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long getCurrentSwitchPosition() {
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
+        if (pendingHistoryEpisode != null && pendingHistoryPosition > 0) return pendingHistoryPosition;
+        if (lastPlaybackAttemptPosition > 0) return lastPlaybackAttemptPosition;
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
+    }
+
+    private void saveHistorySnapshot() {
+        if (mHistory == null || Setting.isIncognito()) return;
+        History snapshot = mHistory.copy();
+        App.execute(snapshot::update);
     }
 
     private boolean isCurrentSingleEpisode() {

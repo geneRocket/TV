@@ -3,6 +3,7 @@ package com.fongmi.android.tv.bean;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.google.gson.JsonElement;
 import com.google.gson.annotations.SerializedName;
 
@@ -66,6 +67,11 @@ public class Url {
 
     public Url set(int position) {
         this.position = getValues().isEmpty() ? 0 : Math.max(0, Math.min(position, getValues().size() - 1));
+        return this;
+    }
+
+    public Url normalize(String baseUri) {
+        for (Value value : getValues()) value.setV(UrlUtil.normalize(value.getV(), baseUri));
         return this;
     }
 

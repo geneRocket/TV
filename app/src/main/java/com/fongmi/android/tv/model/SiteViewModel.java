@@ -23,6 +23,7 @@ import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.ThreadPools;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
@@ -227,8 +228,9 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(playerContent);
                 Result result = Result.fromJson(playerContent);
                 if (result.getFlag().isEmpty()) result.setFlag(flag);
-                result.setUrl(Source.get().fetch(result));
                 result.setHeader(site.getHeader());
+                result.getUrl().normalize(site.getApi());
+                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
                 result.setKey(key);
                 return result;
             } else if (site.getType() == 4) {
@@ -239,31 +241,32 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(playerContent);
                 Result result = Result.fromJson(playerContent);
                 if (result.getFlag().isEmpty()) result.setFlag(flag);
-                result.setUrl(Source.get().fetch(result));
                 result.setHeader(site.getHeader());
+                result.getUrl().normalize(site.getApi());
+                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
                 result.setKey(key);
                 return result;
             } else if (site.isEmpty() && "push_agent".equals(key)) {
                 Result result = new Result();
                 result.setParse(0);
                 result.setFlag(flag);
-                result.setUrl(Url.create().add(id));
-                result.setUrl(Source.get().fetch(result));
+                result.setUrl(Url.create().add(UrlUtil.normalize(id, "")));
+                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), ""));
                 return result;
             } else {
                 Result result = new Result();
-                Url url = Url.create().add(id);
+                Url url = Url.create().add(UrlUtil.normalize(id, site.getApi()));
                 String type = Uri.parse(id).getQueryParameter("type");
                 if ("json".equals(type)) {
                     result = Result.fromJson(call(OkHttp.newCall(id, site.getHeaders())));
-                    url = result.getUrl();
+                    url = result.getUrl().normalize(site.getApi());
                 }
                 result.setUrl(url);
                 if (result.getFlag().isEmpty()) result.setFlag(flag);
                 result.setHeader(site.getHeader());
                 if (result.getPlayUrl().isEmpty()) result.setPlayUrl(site.getPlayUrl());
                 result.setKey(key);
-                result.setUrl(Source.get().fetch(result));
+                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
                 if (!"json".equals(type)) result.setParse(Sniffer.isVideoFormat(url.v()) && result.getPlayUrl().isEmpty() ? 0 : 1);
                 SpiderDebug.log(result.toString());
                 return result;

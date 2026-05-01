@@ -37,7 +37,7 @@ public class VodRectHolder extends BaseVodHolder {
         binding.remark.setVisibility(item.getRemarkVisible());
         binding.getRoot().setOnClickListener(v -> listener.onItemClick(item));
         binding.getRoot().setOnLongClickListener(v -> listener.onLongClick(item));
-        ImgUtil.rect(item.getVodName(), item.getVodPic(), binding.image);
+        ImgUtil.rect(item.getVodName(), item.getVodPic(), item.getSite(), binding.image);
     }
 
     @Override

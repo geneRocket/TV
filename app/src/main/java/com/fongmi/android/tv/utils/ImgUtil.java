@@ -21,12 +21,14 @@ import com.bumptech.glide.signature.ObjectKey;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
+import com.fongmi.android.tv.bean.Site;
 import com.github.catvod.utils.Json;
 import com.google.common.net.HttpHeaders;
 
 import java.util.Map;
 
 import jahirfiquitiva.libs.textdrawable.TextDrawable;
+import okhttp3.Headers;
 
 public class ImgUtil {
 
@@ -52,14 +54,26 @@ public class ImgUtil {
         load(text, url, view, ImageView.ScaleType.CENTER, true);
     }
 
+    public static void rect(String text, String url, Site site, ImageView view) {
+        load(text, url, site, view, ImageView.ScaleType.CENTER, true);
+    }
+
     public static void oval(String text, String url, ImageView view) {
         load(text, url, view, ImageView.ScaleType.CENTER, false);
     }
 
+    public static void oval(String text, String url, Site site, ImageView view) {
+        load(text, url, site, view, ImageView.ScaleType.CENTER, false);
+    }
+
     public static void load(String text, String url, ImageView view, ImageView.ScaleType scaleType, boolean rect) {
+        load(text, url, null, view, scaleType, rect);
+    }
+
+    public static void load(String text, String url, Site site, ImageView view, ImageView.ScaleType scaleType, boolean rect) {
         view.setScaleType(scaleType);
         Glide.with(view).clear(view);
-        if (!TextUtils.isEmpty(url)) Glide.with(view).asBitmap().load(getUrl(url)).placeholder(R.drawable.ic_img_loading).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view, scaleType)).into(view);
+        if (!TextUtils.isEmpty(url)) Glide.with(view).asBitmap().load(getUrl(url, site)).placeholder(R.drawable.ic_img_loading).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view, scaleType)).into(view);
         else if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), rect));
         else view.setImageResource(R.drawable.ic_img_error);
     }
@@ -96,19 +110,45 @@ public class ImgUtil {
     }
 
     public static Object getUrl(String url) {
-        url = UrlUtil.convert(url);
+        return getUrl(url, null);
+    }
+
+    public static Object getUrl(String url, Site site) {
+        url = normalizeUrl(url, site);
         if (url.startsWith("data:")) return url;
         LazyHeaders.Builder builder = new LazyHeaders.Builder();
         String headers = getParam(url, TAG_HEADERS);
         String cookie = getParam(url, TAG_COOKIE);
         String referer = getParam(url, TAG_REFERER);
         String userAgent = getParam(url, TAG_USER_AGENT);
+        addHeaders(builder, site == null ? null : site.getHeaders());
         if (!TextUtils.isEmpty(headers)) addHeader(builder, headers);
         if (!TextUtils.isEmpty(cookie)) builder.addHeader(HttpHeaders.COOKIE, cookie);
         if (!TextUtils.isEmpty(referer)) builder.addHeader(HttpHeaders.REFERER, referer);
         if (!TextUtils.isEmpty(userAgent)) builder.addHeader(HttpHeaders.USER_AGENT, userAgent);
         url = stripParam(url);
         return TextUtils.isEmpty(url) ? null : new GlideUrl(url, builder.build());
+    }
+
+    private static String normalizeUrl(String url, Site site) {
+        url = firstPic(TextUtils.isEmpty(url) ? "" : url.trim().replace("&amp;", "&"));
+        if ((url.startsWith("\"") && url.endsWith("\"")) || (url.startsWith("'") && url.endsWith("'"))) url = url.substring(1, url.length() - 1).trim();
+        int index = findFirstTag(url);
+        String suffix = index < 0 ? "" : url.substring(index);
+        String link = index < 0 ? url : url.substring(0, index);
+        if (link.startsWith("//")) link = "https:" + link;
+        if (site != null && !TextUtils.isEmpty(site.getApi()) && UrlUtil.scheme(link).isEmpty() && !link.startsWith("data:")) link = UrlUtil.resolve(site.getApi(), link);
+        return UrlUtil.convert(link + suffix);
+    }
+
+    private static String firstPic(String url) {
+        for (String separator : new String[]{"$$$", "&&", "\n", "\r", "\t"}) {
+            int index = url.indexOf(separator);
+            if (index > 0) return url.substring(0, index).trim();
+        }
+        int comma = url.indexOf(",");
+        int nextHttp = url.indexOf("http", Math.max(comma, 0) + 1);
+        return comma > 0 && nextHttp > comma ? url.substring(0, comma).trim() : url;
     }
 
     private static String getParam(String url, String tag) {
@@ -148,6 +188,11 @@ public class ImgUtil {
             for (Map.Entry<String, String> entry : map.entrySet()) builder.addHeader(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
         } catch (Exception ignored) {
         }
+    }
+
+    private static void addHeaders(LazyHeaders.Builder builder, Headers headers) {
+        if (headers == null) return;
+        for (String name : headers.names()) builder.addHeader(UrlUtil.fixHeader(name), headers.get(name));
     }
 
     private static RequestListener<Bitmap> getListener(ImageView view) {

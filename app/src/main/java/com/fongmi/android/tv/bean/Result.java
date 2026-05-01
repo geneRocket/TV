@@ -379,11 +379,13 @@ public class Result implements Parcelable {
     }
 
     public String getRealUrl() {
-        return getPlayUrl() + getUrl().v();
+        return UrlUtil.stripTag(getPlayUrl() + getUrl().v());
     }
 
     public Map<String, String> getHeaders() {
-        return fixHeaders(Json.toMap(getHeader()));
+        Map<String, String> headers = fixHeaders(Json.toMap(getHeader()));
+        headers.putAll(UrlUtil.getTagHeaders(getPlayUrl() + getUrl().v()));
+        return headers;
     }
 
     private Map<String, String> fixHeaders(Map<String, String> headers) {

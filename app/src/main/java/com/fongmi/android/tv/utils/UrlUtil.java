@@ -4,10 +4,19 @@ import android.net.Uri;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.server.Server;
+import com.github.catvod.utils.Json;
 import com.github.catvod.utils.UriUtil;
 import com.google.common.net.HttpHeaders;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 public class UrlUtil {
+
+    private static final String TAG_HEADERS = "@Headers=";
+    private static final String TAG_COOKIE = "@Cookie=";
+    private static final String TAG_REFERER = "@Referer=";
+    private static final String TAG_USER_AGENT = "@User-Agent=";
 
     public static Uri uri(String url) {
         return Uri.parse(TextUtils.isEmpty(url) ? "" : url.trim().replace("\\", ""));
@@ -48,6 +57,76 @@ public class UrlUtil {
         if ("file".equals(scheme)) return url.replace("file://", Server.get().getAddress("/file/"));
         if ("proxy".equals(scheme)) return url.replace("proxy://", Server.get().getAddress("/proxy?"));
         return url;
+    }
+
+    public static String normalize(String url, String baseUri) {
+        url = TextUtils.isEmpty(url) ? "" : url.trim().replace("&amp;", "&");
+        if ((url.startsWith("\"") && url.endsWith("\"")) || (url.startsWith("'") && url.endsWith("'"))) url = url.substring(1, url.length() - 1).trim();
+        int index = findFirstTag(url);
+        String suffix = index < 0 ? "" : url.substring(index);
+        String link = index < 0 ? url : url.substring(0, index);
+        if (link.startsWith("//")) link = "https:" + link;
+        if (!TextUtils.isEmpty(baseUri) && scheme(link).isEmpty() && !link.startsWith("data:") && isRelativePath(link)) link = resolve(baseUri, link);
+        return convert(link + suffix);
+    }
+
+    private static boolean isRelativePath(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        if (url.startsWith("/") || url.startsWith("./") || url.startsWith("../") || url.startsWith("?")) return true;
+        return url.contains("/") || url.matches(".*\\.[A-Za-z0-9]{2,5}([?#].*)?$");
+    }
+
+    public static String stripTag(String url) {
+        int index = findFirstTag(url);
+        return index < 0 ? url : url.substring(0, index);
+    }
+
+    public static Map<String, String> getTagHeaders(String url) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        try {
+            String value = getParam(url, TAG_HEADERS);
+            if (!TextUtils.isEmpty(value)) headers.putAll(fixHeaders(Json.toMap(Json.parse(value))));
+            value = getParam(url, TAG_COOKIE);
+            if (!TextUtils.isEmpty(value)) headers.put(HttpHeaders.COOKIE, value);
+            value = getParam(url, TAG_REFERER);
+            if (!TextUtils.isEmpty(value)) headers.put(HttpHeaders.REFERER, value);
+            value = getParam(url, TAG_USER_AGENT);
+            if (!TextUtils.isEmpty(value)) headers.put(HttpHeaders.USER_AGENT, value);
+        } catch (Exception ignored) {
+        }
+        return headers;
+    }
+
+    private static Map<String, String> fixHeaders(Map<String, String> headers) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : headers.entrySet()) result.put(fixHeader(entry.getKey()), entry.getValue());
+        return result;
+    }
+
+    private static String getParam(String url, String tag) {
+        int start = url.indexOf(tag);
+        if (start < 0) return "";
+        start += tag.length();
+        int end = findNextTag(url, start);
+        return (end < 0 ? url.substring(start) : url.substring(start, end)).trim();
+    }
+
+    private static int findFirstTag(String url) {
+        int index = -1;
+        for (String tag : new String[]{TAG_HEADERS, TAG_COOKIE, TAG_REFERER, TAG_USER_AGENT}) {
+            int found = url.indexOf(tag);
+            if (found >= 0 && (index < 0 || found < index)) index = found;
+        }
+        return index;
+    }
+
+    private static int findNextTag(String url, int start) {
+        int index = -1;
+        for (String tag : new String[]{TAG_HEADERS, TAG_COOKIE, TAG_REFERER, TAG_USER_AGENT}) {
+            int found = url.indexOf(tag, start);
+            if (found >= 0 && (index < 0 || found < index)) index = found;
+        }
+        return index;
     }
 
     public static String fixUrl(String url) {

@@ -674,8 +674,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
         stopParse();
         removeReadyFallback();
-        this.headers = checkUa(headers);
-        this.url = url;
+        this.headers = checkUa(mergeInlineHeaders(headers, url));
+        this.url = UrlUtil.stripTag(UrlUtil.normalize(url, ""));
         this.format = format;
         this.drm = drm;
         this.forceLive = forceLive;
@@ -693,6 +693,13 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         App.post(runnable, timeout);
         PlayerEvent.prepare();
         Logger.t(TAG).d(url);
+    }
+
+    private Map<String, String> mergeInlineHeaders(Map<String, String> headers, String url) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (headers != null) result.putAll(headers);
+        result.putAll(UrlUtil.getTagHeaders(url));
+        return result;
     }
 
     private void removeTimeoutCheck() {
