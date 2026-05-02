@@ -20,6 +20,7 @@ import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.utils.ThreadPools;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 
 import java.io.IOException;
@@ -29,6 +30,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -38,6 +40,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import okhttp3.Headers;
+import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
@@ -115,7 +119,8 @@ public class LiveViewModel extends ViewModel {
     public void getEpg(Channel item) {
         TimeZone timeZone = resolveTimeZone(null, item.getEpg(), currentTimeZone);
         String date = createDateFormat(timeZone).format(new Date());
-        String url = item.getEpg().replace("{date}", date);
+        String epg = item.getEpg().replace("{date}", date);
+        String url = epg.startsWith("file") ? epg : UrlUtil.normalize(epg, "");
         List<SimpleDateFormat> formats = createTimeFormats(timeZone);
         execute(EPG, () -> {
             if (!url.startsWith("http")) return item.getData().selected();
@@ -125,7 +130,9 @@ public class LiveViewModel extends ViewModel {
     }
 
     private String requestString(String url, int timeout) throws Exception {
-        try (Response response = OkHttp.newCall(OkHttp.client(timeout), url).execute()) {
+        Map<String, String> headers = UrlUtil.getTagHeaders(url);
+        Request request = new Request.Builder().url(UrlUtil.stripTag(url)).headers(Headers.of(headers)).build();
+        try (Response response = OkHttp.client(timeout).newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
             ResponseBody body = response.body();
             return body == null ? "" : body.string();
@@ -137,7 +144,7 @@ public class LiveViewModel extends ViewModel {
         execute(URL, () -> {
             request.setMsg(null);
             Source.get().stop();
-            request.setUrl(Source.get().fetch(request));
+            request.setUrl(UrlUtil.normalize(Source.get().fetch(request), ""));
             return request;
         }, error -> urlFallback(request, error));
     }
@@ -145,7 +152,7 @@ public class LiveViewModel extends ViewModel {
     public void getUrl(Channel item, EpgData data) {
         Channel request = snapshot(item);
         execute(URL, () -> {
-            request.setUrl(request.getCatchup().format(request.getCurrent(), data));
+            request.setUrl(UrlUtil.normalize(request.getCatchup().format(request.getCurrent(), data), ""));
             return request;
         }, error -> urlFallback(request, error));
     }

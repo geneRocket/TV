@@ -134,10 +134,17 @@ public class LiveParser {
     }
 
     private static String getText(String url, Map<String, String> header) {
+        if (url == null) return "";
+        Map<String, String> headers = new HashMap<>();
+        if (header != null) headers.putAll(header);
+        headers.putAll(UrlUtil.getTagHeaders(url));
+        String clean = UrlUtil.stripTag(url.trim());
+        if (clean.startsWith("file")) return Path.read(clean);
+        url = UrlUtil.stripTag(UrlUtil.normalize(url, ""));
         if (url.startsWith("file")) return Path.read(url);
-        if (url.startsWith("http")) return OkHttp.string(url, header);
-        if (url.startsWith("assets") || url.startsWith("proxy")) return getText(UrlUtil.convert(url), header);
-        if (url.length() > 0 && url.length() % 4 == 0) return getText(new String(Base64.decode(url, Base64.DEFAULT)), header);
+        if (url.startsWith("http")) return OkHttp.string(url, headers);
+        if (url.startsWith("assets") || url.startsWith("proxy")) return getText(UrlUtil.convert(url), headers);
+        if (url.length() > 0 && url.length() % 4 == 0) return getText(new String(Base64.decode(url, Base64.DEFAULT)), headers);
         return "";
     }
 

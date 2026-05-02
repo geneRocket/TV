@@ -390,6 +390,7 @@ public class Channel {
         if (!getUa().isEmpty()) headers.put(HttpHeaders.USER_AGENT, getUa());
         if (!getOrigin().isEmpty()) headers.put(HttpHeaders.ORIGIN, getOrigin());
         if (!getReferer().isEmpty()) headers.put(HttpHeaders.REFERER, getReferer());
+        headers.putAll(UrlUtil.getTagHeaders(TextUtils.isEmpty(getUrl()) ? getCurrent() : getUrl()));
         return headers;
     }
 

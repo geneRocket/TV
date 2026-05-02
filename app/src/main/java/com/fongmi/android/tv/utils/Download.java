@@ -9,7 +9,10 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.Map;
 
+import okhttp3.Headers;
+import okhttp3.Request;
 import okhttp3.Response;
 
 public class Download {
@@ -58,7 +61,9 @@ public class Download {
 
     private void runDownload() throws Exception {
         Path.create(file);
-        try (Response response = OkHttp.newCall(url).execute()) {
+        Map<String, String> headers = UrlUtil.getTagHeaders(url);
+        Request request = new Request.Builder().url(UrlUtil.stripTag(UrlUtil.normalize(url, ""))).headers(Headers.of(headers)).build();
+        try (Response response = OkHttp.client().newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IllegalStateException(response.code() + " " + response.message());
             if (response.body() == null) throw new IllegalStateException("Empty download body");
             download(response.body().byteStream(), Math.max(1, Double.parseDouble(response.header(HttpHeaders.CONTENT_LENGTH, "1"))));
