@@ -1,3 +1,18 @@
+import inspect
+
+
+def accepts_args(func, count):
+    try:
+        sig = inspect.signature(func)
+        params = list(sig.parameters.values())
+        positional = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        required = [p for p in positional if p.default is p.empty]
+        has_varargs = any(p.kind == p.VAR_POSITIONAL for p in params)
+        return count >= len(required) and (has_varargs or count <= len(positional))
+    except Exception:
+        return True
+
+
 class Runner():
     def __init__(self, spider):
         self.spider = spider
@@ -24,12 +39,16 @@ class Runner():
         return self.spider.detailContent(ids)
 
     def searchContent(self, key, quick, pg="1"):
-        return self.spider.searchContent(key, quick, pg)
+        if accepts_args(self.spider.searchContent, 3):
+            return self.spider.searchContent(key, quick, pg)
+        return self.spider.searchContent(key, quick)
 
     def playerContent(self, flag, id, vipFlags):
         return self.spider.playerContent(flag, id, vipFlags)
 
-    def liveContent(self):
+    def liveContent(self, url=""):
+        if accepts_args(self.spider.liveContent, 1):
+            return self.spider.liveContent(url)
         return self.spider.liveContent()
 
     def localProxy(self, param):

@@ -20,6 +20,10 @@ public class PyLoader {
         return new SpiderNull();
     }
 
+    public Spider getCached(String key) {
+        return null;
+    }
+
     public Object[] proxyInvoke(Map<String, String> params) {
         return null;
     }

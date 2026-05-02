@@ -38,6 +38,10 @@ public class PyLoader {
         return spiders.computeIfAbsent(key, k -> createSpider(k, api, ext));
     }
 
+    public Spider getCached(String key) {
+        return spiders.get(key);
+    }
+
     private Spider createSpider(String key, String api, String ext) {
         try {
             Spider spider = loader.spider(App.get(), api);
@@ -52,7 +56,7 @@ public class PyLoader {
 
     public Object[] proxyInvoke(Map<String, String> params) {
         try {
-            if (!params.containsKey("siteKey")) return recent == null ? null : getSpider(recent).proxy(params);
+            if (!params.containsKey("siteKey")) return recent == null ? null : getRecent(recent).proxy(params);
             return BaseLoader.get().getSpider(params).proxy(params);
         } catch (Throwable e) {
             e.printStackTrace();
@@ -60,8 +64,8 @@ public class PyLoader {
         }
     }
 
-    private Spider getSpider(String key) {
-        Spider spider = spiders.get(key);
+    private Spider getRecent(String key) {
+        Spider spider = getCached(key);
         return spider == null ? new SpiderNull() : spider;
     }
 }

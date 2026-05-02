@@ -86,11 +86,21 @@ public class BaseLoader {
     }
 
     public Spider getSpider(String key) {
+        Spider cached = getCached(key);
+        if (cached != null) return cached;
         Site site = VodConfig.get().getSite(key);
         Live live = LiveConfig.get().getLive(key);
         if (!site.isEmpty()) return site.spider();
         if (!live.isEmpty()) return live.spider();
         return new SpiderNull();
+    }
+
+    private Spider getCached(String key) {
+        Spider spider = jarLoader.getCached(key);
+        if (spider != null) return spider;
+        spider = jsLoader.getCached(key);
+        if (spider != null) return spider;
+        return pyLoader.getCached(key);
     }
 
     public void setRecent(String key, String api, String jar) {

@@ -170,6 +170,11 @@ public class JarLoader {
         }
     }
 
+    public Spider getCached(String key) {
+        for (Spider spider : spiders.values()) if (spider != null && key.equals(spider.siteKey)) return spider;
+        return null;
+    }
+
     private String getSpiderName(String api) {
         int index = api.indexOf("csp_");
         if (index < 0) return "";

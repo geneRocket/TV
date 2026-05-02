@@ -343,7 +343,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     private boolean isVideoFormat(String url) {
         try {
             Logger.t(TAG).d(url);
-            Spider spider = VodConfig.get().getSite(key).spider();
+            Spider spider = VodConfig.get().getSite(key).recent().spider();
             if (spider.manualVideoCheck()) return spider.isVideoFormat(url);
             return Sniffer.isVideoFormat(url);
         } catch (Exception ignored) {

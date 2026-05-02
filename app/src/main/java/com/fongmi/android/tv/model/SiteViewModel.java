@@ -305,7 +305,7 @@ public class SiteViewModel extends ViewModel {
         String query = Trans.t2s(keyword);
         throwIfInterrupted();
         if (site.getType() == 3) {
-            String searchContent = site.spider().searchContent(query, quick);
+            String searchContent = site.recent().spider().searchContent(query, quick);
             throwIfInterrupted();
             SpiderDebug.log(site.getName() + "," + searchContent);
             post(site, Result.fromJson(searchContent), original, token);
@@ -333,7 +333,7 @@ public class SiteViewModel extends ViewModel {
     public void searchContent(Site site, String keyword, String page) {
         execute(result, () -> {
             if (site.getType() == 3) {
-                String searchContent = site.spider().searchContent(Trans.t2s(keyword), false, page);
+                String searchContent = site.recent().spider().searchContent(Trans.t2s(keyword), false, page);
                 SpiderDebug.log(site.getName() + "," + searchContent);
                 Result result = Result.fromJson(searchContent);
                 for (Vod vod : result.getList()) vod.setSite(site);
