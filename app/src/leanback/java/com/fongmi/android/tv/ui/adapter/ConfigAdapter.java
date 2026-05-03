@@ -73,7 +73,10 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     }
 
     public List<Config> getSelected() {
-        return new ArrayList<>(mSelected);
+        List<Config> selected = new ArrayList<>();
+        if (mItems == null) return selected;
+        for (Config item : mItems) if (mSelected.contains(item)) selected.add(item);
+        return selected;
     }
 
     public void select(List<String> urls) {

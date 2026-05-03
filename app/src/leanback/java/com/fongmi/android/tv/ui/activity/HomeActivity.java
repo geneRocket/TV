@@ -218,6 +218,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         updateHomeTitle();
         if (getHome().getKey().isEmpty()) {
             mPendingHomeToken = null;
+            showHomeContent();
+            setLoading(false);
             return;
         }
         mFocus = getCurrentFocus();

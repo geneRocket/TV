@@ -22,6 +22,7 @@ import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.QRCode;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -93,7 +94,7 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     }
 
     private void initView() {
-        binding.text.setText(url = getUrl());
+        binding.text.setText(url = getInitialUrl());
         binding.text.setSelection(TextUtils.isEmpty(url) ? 0 : url.length());
         binding.text.requestFocus();
         binding.positive.setText(edit ? R.string.dialog_edit : R.string.dialog_positive);
@@ -120,6 +121,11 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
             if (actionId == EditorInfo.IME_ACTION_DONE) binding.positive.performClick();
             return true;
         });
+    }
+
+    private String getInitialUrl() {
+        if (!edit && (type == 0 || type == 1)) return "";
+        return getUrl();
     }
 
     private String getUrl() {
@@ -159,6 +165,10 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
     private void onPositive(View view) {
         String name = binding.name.getText() == null ? "" : binding.name.getText().toString().trim();
         String text = UrlUtil.fixUrl(binding.text.getText() == null ? "" : binding.text.getText().toString().trim());
+        if (!edit && text.isEmpty()) {
+            Notify.show(R.string.error_empty);
+            return;
+        }
         if (edit) Config.find(url, type).url(text).name(name).update();
         if (text.isEmpty()) Config.delete(url, type);
         Config config = name.isEmpty() ? Config.find(text, type) : Config.find(text, name, type);

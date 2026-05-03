@@ -396,7 +396,10 @@ public class Config {
     public static Config find(String url, String name, int type) {
         Config item = URL_CACHE.get(cacheKey(url, type));
         if (item == null) item = cache(AppDatabase.get().getConfigDao().find(url, type));
-        return item == null ? copy(create(type, url, name)) : copy(item).type(type).name(name);
+        if (item == null) return copy(create(type, url, name));
+        Config config = copy(item).type(type).name(name);
+        if (!TextUtils.isEmpty(name) && !name.equals(item.getName())) config.save();
+        return config;
     }
 
     public static Config find(Config config) {
@@ -406,13 +409,19 @@ public class Config {
     public static Config find(Config config, int type) {
         Config item = URL_CACHE.get(cacheKey(config.getUrl(), type));
         if (item == null) item = cache(AppDatabase.get().getConfigDao().find(config.getUrl(), type));
-        return item == null ? copy(create(type, config.getUrl(), config.getName())) : copy(item).type(type).name(config.getName());
+        if (item == null) return copy(create(type, config.getUrl(), config.getName()));
+        Config result = copy(item).type(type).name(config.getName());
+        if (!TextUtils.isEmpty(config.getName()) && !config.getName().equals(item.getName())) result.save();
+        return result;
     }
 
     public static Config find(Depot depot, int type) {
         Config item = URL_CACHE.get(cacheKey(depot.getUrl(), type));
         if (item == null) item = cache(AppDatabase.get().getConfigDao().find(depot.getUrl(), type));
-        return item == null ? copy(create(type, depot.getUrl(), depot.getName())) : copy(item).type(type).name(depot.getName());
+        if (item == null) return copy(create(type, depot.getUrl(), depot.getName()));
+        Config config = copy(item).type(type).name(depot.getName());
+        if (!TextUtils.isEmpty(depot.getName()) && !depot.getName().equals(item.getName())) config.save();
+        return config;
     }
 
     // Synchronous write methods (safe if caller is in App.execute())

@@ -10,6 +10,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
@@ -18,8 +19,14 @@ import com.fongmi.android.tv.databinding.DialogConfigBinding;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.utils.FileChooser;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 public class ConfigDialog {
 
@@ -60,19 +67,22 @@ public class ConfigDialog {
     }
 
     private void initDialog() {
-        dialog = new MaterialAlertDialogBuilder(binding.getRoot().getContext()).setTitle(type == 0 ? R.string.setting_vod : type == 1 ? R.string.setting_live : R.string.setting_wall).setView(binding.getRoot()).setPositiveButton(edit ? R.string.dialog_edit : R.string.dialog_positive, this::onPositive).setNegativeButton(R.string.dialog_negative, this::onNegative).create();
+        dialog = new MaterialAlertDialogBuilder(binding.getRoot().getContext()).setTitle(type == 0 ? R.string.setting_vod : type == 1 ? R.string.setting_live : R.string.setting_wall).setView(binding.getRoot()).setPositiveButton(edit ? R.string.dialog_edit : R.string.dialog_positive, null).setNegativeButton(R.string.dialog_negative, this::onNegative).create();
         dialog.getWindow().setDimAmount(0);
         dialog.show();
     }
 
     private void initView() {
-        binding.name.setText(getConfig().getName());
-        binding.url.setText(ori = getConfig().getUrl());
+        Config config = getConfig();
+        boolean addingMulti = !edit && (type == 0 || type == 1);
+        binding.name.setText(addingMulti || config == null ? "" : config.getName());
+        binding.url.setText(ori = addingMulti || config == null ? "" : config.getUrl());
         binding.input.setVisibility(edit ? View.VISIBLE : View.GONE);
         binding.url.setSelection(TextUtils.isEmpty(ori) ? 0 : ori.length());
     }
 
     private void initEvent() {
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v -> onPositive());
         binding.choose.setEndIconOnClickListener(this::onChoose);
         binding.url.addTextChangedListener(new CustomTextListener() {
             @Override
@@ -121,13 +131,51 @@ public class ConfigDialog {
         }
     }
 
-    private void onPositive(DialogInterface dialog, int which) {
+    private void onPositive() {
         String url = UrlUtil.fixUrl(binding.url.getText().toString().trim());
         String name = binding.name.getText().toString().trim();
+        if (!edit && url.isEmpty()) {
+            Notify.show(R.string.error_empty);
+            return;
+        }
         if (edit) Config.find(ori, type).url(url).name(name).update();
         if (url.isEmpty()) Config.delete(ori, type);
-        callback.setConfig(Config.find(url, type));
+        Config config = name.isEmpty() ? Config.find(url, type) : Config.find(url, name, type);
+        if (!edit && (type == 0 || type == 1) && !config.isEmpty()) callback.setConfigs(mergeConfigs(config));
+        else callback.setConfig(config);
         dialog.dismiss();
+    }
+
+    private List<Config> mergeConfigs(Config config) {
+        List<Config> items = new ArrayList<>();
+        Set<String> urls = new LinkedHashSet<>();
+        for (String url : getEnabledUrls()) {
+            if (!urls.add(url)) continue;
+            items.add(Config.find(url, type));
+        }
+        if (urls.add(config.getUrl())) items.add(config);
+        else items.set(findConfigIndex(items, config.getUrl()), config);
+        return items;
+    }
+
+    private int findConfigIndex(List<Config> items, String url) {
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).getUrl().equals(url)) return i;
+        }
+        return 0;
+    }
+
+    private List<String> getEnabledUrls() {
+        String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
+        List<String> urls = new ArrayList<>();
+        for (String item : value.split("[\\n\\r,，;；|]+")) {
+            String url = item.trim();
+            if (!url.isEmpty()) urls.add(url);
+        }
+        if (!urls.isEmpty()) return urls;
+        String current = type == 0 ? VodConfig.getUrl() : LiveConfig.getUrl();
+        if (!current.isEmpty()) urls.add(current);
+        return urls;
     }
 
     private void onNegative(DialogInterface dialog, int which) {

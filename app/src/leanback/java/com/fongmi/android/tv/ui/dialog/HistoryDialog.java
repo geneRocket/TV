@@ -8,6 +8,7 @@ import android.view.WindowManager;
 import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
@@ -16,6 +17,7 @@ import com.fongmi.android.tv.databinding.DialogConfigHistoryBinding;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.ui.adapter.ConfigAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -62,9 +64,15 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
 
     private void setView() {
         binding.add.setVisibility(View.VISIBLE);
-        binding.add.setOnClickListener(v -> getOnAdd().run());
+        binding.add.setOnClickListener(v -> onAddClick());
         binding.negative.setOnClickListener(v -> dialog.dismiss());
         binding.positive.setOnClickListener(v -> onPositive());
+    }
+
+    private void onAddClick() {
+        Runnable action = getOnAdd();
+        dialog.dismiss();
+        activity.getWindow().getDecorView().post(action);
     }
 
     private void setRecyclerView() {
@@ -108,6 +116,7 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
     @Override
     public void onDeleteClick(Config item) {
         int index = adapter.remove(item);
+        if (multi) syncEnabledConfigs();
         if (adapter.getItemCount() == 0) {
             dialog.dismiss();
             return;
@@ -127,7 +136,10 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
     private void onPositive() {
         if (!multi) return;
         List<Config> selected = adapter.getSelected();
-        if (selected.isEmpty()) return;
+        if (selected.isEmpty()) {
+            Notify.show(R.string.error_empty);
+            return;
+        }
         if (selected.size() == 1) callback.setConfig(selected.get(0));
         else callback.setConfigs(selected);
         dialog.dismiss();
@@ -146,5 +158,29 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
         if (type == 0 && !VodConfig.getUrl().isEmpty()) urls.add(VodConfig.getUrl());
         if (type == 1 && !LiveConfig.getUrl().isEmpty()) urls.add(LiveConfig.getUrl());
         return urls;
+    }
+
+    private void syncEnabledConfigs() {
+        List<Config> selected = adapter.getSelected();
+        if (type == 0) {
+            Setting.putVodConfigDesc(getConfigsDesc(selected));
+            Setting.putVodConfigUrls(getConfigsUrls(selected));
+        } else if (type == 1) {
+            Setting.putLiveConfigDesc(getConfigsDesc(selected));
+            Setting.putLiveConfigUrls(getConfigsUrls(selected));
+        }
+    }
+
+    private String getConfigsDesc(List<Config> configs) {
+        if (configs.isEmpty()) return "";
+        if (configs.size() == 1) return configs.get(0).getDesc();
+        if (configs.size() == 2) return configs.get(0).getDesc() + " + " + configs.get(1).getDesc();
+        return configs.get(0).getDesc() + " +" + (configs.size() - 1);
+    }
+
+    private String getConfigsUrls(List<Config> configs) {
+        List<String> urls = new ArrayList<>();
+        for (Config config : configs) urls.add(config.getUrl());
+        return String.join("\n", urls);
     }
 }

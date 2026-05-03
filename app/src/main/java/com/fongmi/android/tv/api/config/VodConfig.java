@@ -15,6 +15,7 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.bean.Header;
@@ -32,6 +33,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 public class VodConfig {
 
@@ -229,18 +232,15 @@ public class VodConfig {
 
     private void loadConfigs(List<Config> configs, Callback callback) {
         List<String> urls = new ArrayList<>();
-        Set<String> loaded = new LinkedHashSet<>();
         JsonObject merged = new JsonObject();
         Throwable error = null;
         int success = 0;
-        for (Config item : configs) {
+        for (ConfigResult result : loadConfigResults(configs, false)) {
             try {
-                String url = item.getUrl();
-                if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
-                JsonObject object = loadObject(url, 0);
-                cacheConfig(item, object);
-                urls.add(url);
-                mergeConfig(merged, object, item);
+                if (result.error != null) throw result.error;
+                if (result.cacheable) cacheConfig(result.config, result.object);
+                urls.add(result.config.getUrl());
+                mergeConfig(merged, result.object, result.config);
                 success++;
             } catch (Throwable e) {
                 error = e;
@@ -261,23 +261,15 @@ public class VodConfig {
     private void loadConfigsCache(List<Config> configs, Callback callback) {
         setLoadUrls(getConfigUrls(configs));
         List<String> urls = new ArrayList<>();
-        Set<String> loaded = new LinkedHashSet<>();
         JsonObject merged = new JsonObject();
         Throwable error = null;
         int success = 0;
-        for (Config item : configs) {
+        for (ConfigResult result : loadConfigResults(configs, true)) {
             try {
-                String url = item.getUrl();
-                if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
-                JsonObject object;
-                if (!TextUtils.isEmpty(item.getJson()) && item.isCache()) {
-                    object = Json.parse(item.getJson()).getAsJsonObject();
-                } else {
-                    object = loadObject(url, 0);
-                    cacheConfig(item, object);
-                }
-                urls.add(url);
-                mergeConfig(merged, object, item);
+                if (result.error != null) throw result.error;
+                if (result.cacheable) cacheConfig(result.config, result.object);
+                urls.add(result.config.getUrl());
+                mergeConfig(merged, result.object, result.config);
                 success++;
             } catch (Throwable e) {
                 error = e;
@@ -293,6 +285,58 @@ public class VodConfig {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
             App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
         }
+    }
+
+    private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
+        List<Config> unique = getUniqueConfigs(configs);
+        if (unique.isEmpty()) return Collections.emptyList();
+        ExecutorService executor = ThreadPools.newFixed("vod-config", Math.min(unique.size(), com.fongmi.android.tv.Constant.THREAD_POOL));
+        List<Future<ConfigResult>> futures = new ArrayList<>();
+        List<ConfigResult> results = new ArrayList<>();
+        try {
+            for (Config item : unique) futures.add(executor.submit(() -> loadConfigResult(item, cache)));
+            for (Future<ConfigResult> future : futures) {
+                try {
+                    results.add(future.get());
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                }
+            }
+        } catch (Throwable e) {
+            e.printStackTrace();
+        } finally {
+            ThreadPools.shutdown(executor);
+        }
+        return results;
+    }
+
+    private ConfigResult loadConfigResult(Config item, boolean cache) {
+        try {
+            if (cache && !TextUtils.isEmpty(item.getJson()) && item.isCache()) {
+                return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
+            }
+            return ConfigResult.success(item, loadObject(item.getUrl(), 0), true);
+        } catch (Throwable e) {
+            if (!TextUtils.isEmpty(item.getJson())) {
+                try {
+                    return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
+                } catch (Throwable ignored) {
+                    // Fall through to the original fetch error.
+                }
+            }
+            return ConfigResult.error(item, e);
+        }
+    }
+
+    private List<Config> getUniqueConfigs(List<Config> configs) {
+        List<Config> items = new ArrayList<>();
+        Set<String> loaded = new LinkedHashSet<>();
+        for (Config item : configs) {
+            String url = item.getUrl();
+            if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
+            items.add(item);
+        }
+        return items;
     }
 
     private List<String> getConfigUrls(List<Config> configs) {
@@ -522,6 +566,29 @@ public class VodConfig {
         if (names.size() == 1) Setting.putLiveConfigDesc(names.get(0));
         else if (names.size() == 2) Setting.putLiveConfigDesc(names.get(0) + " + " + names.get(1));
         else Setting.putLiveConfigDesc(names.get(0) + " +" + (names.size() - 1));
+    }
+
+    private static class ConfigResult {
+
+        private final Config config;
+        private final JsonObject object;
+        private final Throwable error;
+        private final boolean cacheable;
+
+        private ConfigResult(Config config, JsonObject object, Throwable error, boolean cacheable) {
+            this.config = config;
+            this.object = object;
+            this.error = error;
+            this.cacheable = cacheable;
+        }
+
+        private static ConfigResult success(Config config, JsonObject object, boolean cacheable) {
+            return new ConfigResult(config, object, null, cacheable);
+        }
+
+        private static ConfigResult error(Config config, Throwable error) {
+            return new ConfigResult(config, null, error, false);
+        }
     }
 
     private void initParse(JsonObject object) {
