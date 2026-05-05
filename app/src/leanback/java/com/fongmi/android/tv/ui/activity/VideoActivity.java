@@ -1171,6 +1171,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         mPlayers.reset();
         mPlayers.stop();
+        clearDanmakuView();
     }
 
     private void requestPlayback(Flag flag, Episode episode, boolean replay) {
@@ -1185,6 +1186,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         prepareHistoryUpdate(flag, episode, replay);
         mPlayers.clear();
         mPlayers.stop();
+        clearDanmakuView();
         showProgress();
         setMetadata();
         hidePreview();
@@ -1218,9 +1220,22 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setDanmaku(Danmaku item) {
+        if (item == null || item.isEmpty()) {
+            mPlayers.setDanmakus(null);
+            clearDanmakuView();
+            return;
+        }
         mPlayers.setDanmaku(item);
         mDanmakus = mPlayers.getDanmakus();
         prepareDanmaku(mPlayers.getDanmaku());
+    }
+
+    private void clearDanmakuView() {
+        mPreparedDanmakuUrl = null;
+        mDanmakus = mPlayers.getDanmakus();
+        mBinding.danmaku.release();
+        mBinding.danmaku.setVisibility(View.GONE);
+        ++mDanmakuRequestId;
     }
 
     private void prepareDanmaku(Danmaku item) {
@@ -1269,7 +1284,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean hasDanmakuSource() {
-        return Setting.isDanmuLoad() && mDanmakus != null && !mDanmakus.isEmpty();
+        if (!Setting.isDanmuLoad() || mDanmakus == null) return false;
+        for (Danmaku item : mDanmakus) if (item != null && !item.isEmpty()) return true;
+        return false;
     }
 
     private int getMaxLines() {

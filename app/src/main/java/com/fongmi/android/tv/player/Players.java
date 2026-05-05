@@ -232,7 +232,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void setDanmaku(Danmaku item) {
-        if (item == null) return;
+        if (item == null || item.isEmpty()) return;
         if (danmakus == null) danmakus = new ArrayList<>();
         boolean exists = false;
         for (Danmaku source : danmakus) {
@@ -353,6 +353,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private boolean haveDanmu() {
         return danmuView != null && danmuView.isPrepared();
+    }
+
+    private void pauseDanmu() {
+        if (haveDanmu()) danmuView.pause();
     }
 
     public boolean canAdjustSpeed() {
@@ -509,7 +513,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (isExo()) pauseExo();
         if (isIjk()) pauseIjk();
         if (session != null) session.setActive(false);
-        if (haveDanmu()) danmuView.pause();
+        pauseDanmu();
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
     }
 
@@ -550,7 +554,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         releaseIjk();
         removeTimeoutCheck();
         removeReadyFallback();
-        if (haveDanmu()) danmuView.pause();
+        pauseDanmu();
     }
 
     public void start(Channel channel, int timeout) {
@@ -904,6 +908,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         switch (player.getPlaybackState()) {
             case Player.STATE_IDLE:
                 setPlayerState(Player.STATE_IDLE);
+                if (events.contains(Player.EVENT_PLAYER_ERROR)) pauseDanmu();
                 setPlaybackState(events.contains(Player.EVENT_PLAYER_ERROR) ? PlaybackStateCompat.STATE_ERROR : PlaybackStateCompat.STATE_NONE);
                 break;
             case Player.STATE_READY:
@@ -918,6 +923,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
                 break;
             case Player.STATE_ENDED:
                 setPlayerState(Player.STATE_ENDED);
+                pauseDanmu();
                 setPlaybackState(PlaybackStateCompat.STATE_STOPPED);
                 break;
         }
@@ -957,6 +963,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public void onPlayerError(@NonNull PlaybackException error) {
         Logger.t(TAG).e(error.errorCode + "," + url);
+        pauseDanmu();
         if (isPlaylistStuck(error)) {
             ErrorEvent.url(0, error.errorCode);
             return;
@@ -1000,6 +1007,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public boolean onError(IMediaPlayer mp, int what, int extra) {
         setPlaybackState(PlaybackStateCompat.STATE_ERROR);
+        pauseDanmu();
         ErrorEvent.url(1);
         return true;
     }
@@ -1013,6 +1021,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     @Override
     public void onCompletion(IMediaPlayer mp) {
         setPlayerState(Player.STATE_ENDED);
+        pauseDanmu();
     }
 
     @Override

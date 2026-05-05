@@ -114,8 +114,13 @@ public class Parser extends BaseDanmakuParser {
     }
 
     private void setText(String text) {
+        text = decodeXmlString(text);
+        if (TextUtils.isEmpty(text)) {
+            item = null;
+            return;
+        }
         item.index = index++;
-        DanmakuUtils.fillText(item, decodeXmlString(text));
+        DanmakuUtils.fillText(item, text);
         if (item.getType() == BaseDanmaku.TYPE_SPECIAL && text.startsWith("[") && text.endsWith("]")) setSpecial();
     }
 

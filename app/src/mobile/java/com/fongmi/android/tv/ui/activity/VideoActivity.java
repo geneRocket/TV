@@ -550,6 +550,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mClock.setCallback(null);
         mPlayers.reset();
         mPlayers.stop();
+        clearDanmakuView();
         getDetail();
     }
 
@@ -658,6 +659,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         updateHistory(episode, replay);
         mPlayers.clear();
         mPlayers.stop();
+        clearDanmakuView();
         showProgress();
         setMetadata();
         hidePreview();
@@ -695,9 +697,22 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     public void setDanmaku(Danmaku item) {
+        if (item == null || item.isEmpty()) {
+            mPlayers.setDanmakus(null);
+            clearDanmakuView();
+            return;
+        }
         mPlayers.setDanmaku(item);
         mDanmakus = mPlayers.getDanmakus();
         prepareDanmaku(mPlayers.getDanmaku());
+    }
+
+    private void clearDanmakuView() {
+        mPreparedDanmakuUrl = null;
+        mDanmakus = mPlayers.getDanmakus();
+        mBinding.danmaku.release();
+        mBinding.danmaku.setVisibility(View.GONE);
+        ++mDanmakuRequestId;
     }
 
     public void chooseDanmakuFile() {
@@ -710,7 +725,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void prepareDanmaku(Danmaku item) {
         final int requestId = ++mDanmakuRequestId;
-        boolean blocked = !Setting.isDanmuLoad() || !Setting.isDanmu() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode());
+        boolean blocked = !Setting.isDanmuLoad() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode());
         if (blocked) {
             mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
@@ -731,12 +746,22 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPreparedDanmakuUrl = item.getUrl();
         mBinding.danmaku.release();
         App.execute(() -> {
-            Parser parser = new Parser(item.getUrl());
-            App.post(() -> {
-                if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                mBinding.danmaku.prepare(parser, mDanmakuContext);
-                showDanmu();
-            });
+            try {
+                Parser parser = new Parser(item.getUrl());
+                App.post(() -> {
+                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    mBinding.danmaku.prepare(parser, mDanmakuContext);
+                    showDanmu();
+                });
+            } catch (Throwable e) {
+                ThreadPools.log(e, "Danmaku prepare failed.");
+                App.post(() -> {
+                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    mPreparedDanmakuUrl = null;
+                    mBinding.danmaku.release();
+                    mBinding.danmaku.setVisibility(View.GONE);
+                });
+            }
         });
     }
 
@@ -1574,6 +1599,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mClock.setCallback(null);
         mPlayers.reset();
         mPlayers.stop();
+        clearDanmakuView();
     }
 
     private void onError(ErrorEvent event) {

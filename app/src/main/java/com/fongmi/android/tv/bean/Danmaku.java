@@ -10,7 +10,9 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Danmaku {
 
@@ -23,8 +25,8 @@ public class Danmaku {
 
     public static Danmaku create(String name, String url) {
         Danmaku item = new Danmaku();
-        item.name = name;
-        item.url = url;
+        item.name = clean(name);
+        item.url = clean(url);
         return item;
     }
 
@@ -68,32 +70,85 @@ public class Danmaku {
 
     private static Danmaku from(JsonObject object) {
         Danmaku item = new Danmaku();
-        item.name = Json.safeString(object, "name");
-        item.url = Json.safeString(object, "url");
-        if (TextUtils.isEmpty(item.url)) item.url = Json.safeString(object, "path");
+        item.name = clean(Json.safeString(object, "name"));
+        item.url = withHeaders(clean(Json.safeString(object, "url")), object);
+        if (TextUtils.isEmpty(item.url)) item.url = withHeaders(clean(Json.safeString(object, "path")), object);
         String selected = Json.safeString(object, "selected");
         item.selected = "1".equals(selected) || "true".equalsIgnoreCase(selected);
         return item;
     }
 
+    private static String withHeaders(String url, JsonObject object) {
+        if (TextUtils.isEmpty(url)) return "";
+        StringBuilder builder = new StringBuilder(url);
+        appendHeaders(builder, object);
+        appendText(builder, object, "cookie", "@Cookie=");
+        appendText(builder, object, "Cookie", "@Cookie=");
+        appendText(builder, object, "referer", "@Referer=");
+        appendText(builder, object, "ref", "@Referer=");
+        appendText(builder, object, "ua", "@User-Agent=");
+        appendText(builder, object, "userAgent", "@User-Agent=");
+        appendText(builder, object, "User-Agent", "@User-Agent=");
+        return builder.toString();
+    }
+
+    private static void appendHeaders(StringBuilder builder, JsonObject object) {
+        JsonObject headers = new JsonObject();
+        putHeaders(headers, object.get("header"));
+        putHeaders(headers, object.get("headers"));
+        if (!headers.entrySet().isEmpty()) builder.append("@Headers=").append(headers);
+    }
+
+    private static void putHeaders(JsonObject headers, JsonElement element) {
+        if (element == null || !element.isJsonObject()) return;
+        for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet()) {
+            String value = clean(Json.safeString(element.getAsJsonObject(), entry.getKey()));
+            if (!TextUtils.isEmpty(entry.getKey()) && !TextUtils.isEmpty(value)) headers.addProperty(entry.getKey(), value);
+        }
+    }
+
+    private static void appendText(StringBuilder builder, JsonObject object, String key, String tag) {
+        String value = clean(Json.safeString(object, key));
+        if (TextUtils.isEmpty(value)) return;
+        builder.append(tag).append(value);
+    }
+
     private static List<Danmaku> normalize(List<Danmaku> items) {
-        List<Danmaku> result = new ArrayList<>();
+        Map<String, Danmaku> deduped = new LinkedHashMap<>();
         boolean hasSelected = false;
         for (Danmaku item : items) {
             if (item == null || item.isEmpty()) continue;
-            if (item.selected) hasSelected = true;
-            result.add(item);
+            Danmaku source = deduped.get(item.getUrl());
+            if (source == null) {
+                deduped.put(item.getUrl(), item);
+                source = item;
+            }
+            if (item.selected) {
+                source.selected = true;
+                hasSelected = true;
+            }
+        }
+        List<Danmaku> result = new ArrayList<>(deduped.values());
+        hasSelected = false;
+        for (Danmaku item : result) {
+            if (!item.selected) continue;
+            if (hasSelected) item.selected = false;
+            else hasSelected = true;
         }
         if (!result.isEmpty() && !hasSelected) result.get(0).selected = true;
         return result;
     }
 
+    private static String clean(String value) {
+        return TextUtils.isEmpty(value) ? "" : value.trim();
+    }
+
     public String getName() {
-        return TextUtils.isEmpty(name) ? getDisplayName() : name;
+        return TextUtils.isEmpty(clean(name)) ? getDisplayName() : clean(name);
     }
 
     public String getUrl() {
-        return TextUtils.isEmpty(url) ? "" : url;
+        return clean(url);
     }
 
     public boolean isSelected() {
