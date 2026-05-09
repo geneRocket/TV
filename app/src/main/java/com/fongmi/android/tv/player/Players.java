@@ -212,9 +212,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void setSub(Sub sub) {
         this.sub = sub;
-        if (isIjk()) return;
         if (TextUtils.isEmpty(url)) return;
-        setPosition(getPosition());
+        long current = getPosition();
+        if (isIjk()) setPlayer(EXO);
+        setPosition(current);
         setMediaSource();
     }
 

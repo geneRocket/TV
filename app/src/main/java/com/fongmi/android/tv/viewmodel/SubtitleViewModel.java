@@ -250,6 +250,7 @@ public class SubtitleViewModel extends ViewModel {
             public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
                 ThreadPools.log(e, "Subtitle resolve failed.");
+                if (seq == resolveSeq.get()) subtitleLoader.loadSubtitle(subtitle);
             }
 
             @Override

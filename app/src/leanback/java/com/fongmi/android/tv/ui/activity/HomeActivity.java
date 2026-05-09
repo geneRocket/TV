@@ -155,7 +155,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             if ("text/plain".equals(intent.getType()) || UrlUtil.path(intent.getData()).endsWith(".m3u")) {
-                loadLive("file:/" + FileChooser.getPathFromUri(this, intent.getData()));
+                String path = FileChooser.getPathFromUri(this, intent.getData());
+                if (TextUtils.isEmpty(path)) Notify.show(R.string.error_empty);
+                else loadLive("file:/" + path);
             } else {
                 VideoActivity.push(this, intent.getData().toString());
             }

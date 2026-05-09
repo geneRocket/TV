@@ -45,7 +45,7 @@ public class Parser extends BaseDanmakuParser {
     private int index;
 
     public Parser(String path) {
-        this.danmu = Danmu.fromXml(getContent(path));
+        this.danmu = Danmu.from(getContent(path));
     }
 
     private String getContent(String path) {

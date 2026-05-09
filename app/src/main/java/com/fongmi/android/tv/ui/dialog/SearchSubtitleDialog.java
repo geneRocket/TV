@@ -13,6 +13,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Subtitle;
 import com.fongmi.android.tv.bean.SubtitleData;
@@ -181,8 +182,14 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
             adapter.clear();
             viewModel.getSearchResultSubtitleUrls(item);
         } else {
-            if (listener != null) listener.onSubtitleSelected(item);
-            dismiss();
+            binding.loading.setVisibility(View.VISIBLE);
+            binding.recycler.setVisibility(View.GONE);
+            binding.previous.setEnabled(false);
+            binding.next.setEnabled(false);
+            viewModel.getSubtitleUrl(item, subtitle -> App.post(() -> {
+                if (listener != null) listener.onSubtitleSelected(subtitle);
+                dismiss();
+            }));
         }
     }
 

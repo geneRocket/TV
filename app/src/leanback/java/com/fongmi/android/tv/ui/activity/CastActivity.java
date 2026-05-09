@@ -363,7 +363,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void setTrackVisible(boolean visible) {
-        mBinding.control.text.setVisibility(visible && mPlayers.haveTrack(C.TRACK_TYPE_TEXT) ? View.VISIBLE : View.GONE);
+        mBinding.control.text.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.control.volume.setVisibility(visible && mPlayers.isExo() ? View.VISIBLE : View.GONE);
         mBinding.control.audio.setVisibility(visible && mPlayers.haveTrack(C.TRACK_TYPE_AUDIO) ? View.VISIBLE : View.GONE);
         mBinding.control.video.setVisibility(visible && mPlayers.haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
@@ -433,7 +433,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     public void onSubtitleClick() {
         App.post(this::hideControl, 200);
         SubtitleView subtitleView = mPlayers.isIjk() ? getIjk().getSubtitleView() : getExo().getSubtitleView();
-        App.post(() -> SubtitleDialog.create().view(subtitleView).full(true).show(this), 200);
+        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> mPlayers.setSub(Sub.from(subtitle.getUrl()))).full(true).show(this), 200);
     }
 
     @Override

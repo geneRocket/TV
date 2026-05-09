@@ -38,6 +38,7 @@ import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.bean.Live;
+import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.ActivityLiveBinding;
 import com.fongmi.android.tv.event.ActionEvent;
@@ -826,7 +827,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     public void onSubtitleClick() {
         App.post(this::hideControl, 200);
         SubtitleView subtitleView = mPlayers.isIjk() ? getIjk().getSubtitleView() : getExo().getSubtitleView();
-        App.post(() -> SubtitleDialog.create().view(subtitleView).full(true).show(this), 200);
+        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> mPlayers.setSub(Sub.from(subtitle.getUrl()))).full(true).show(this), 200);
     }
 
     @Override

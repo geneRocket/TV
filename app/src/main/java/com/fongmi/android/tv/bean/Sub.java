@@ -28,6 +28,7 @@ public class Sub {
     private int flag;
 
     public static Sub from(String path) {
+        if (TextUtils.isEmpty(path)) return new Sub();
         if (path.startsWith("http")) {
             return http(path);
         } else {

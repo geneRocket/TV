@@ -1417,7 +1417,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         } else {
             finalVideoName = videoName;
         }
-        App.post(() -> SubtitleDialog.create().view(subtitleView).name(finalVideoName).full(isFullscreen()).show(this), 200);
+        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> mPlayers.setSub(Sub.from(subtitle.getUrl()))).name(finalVideoName).full(isFullscreen()).show(this), 200);
     }
 
     @Override

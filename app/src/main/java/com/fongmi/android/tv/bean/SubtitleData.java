@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.bean;
 
 import java.util.List;
+import java.util.Collections;
 
 public class SubtitleData {
 
@@ -18,7 +19,7 @@ public class SubtitleData {
     }
 
     public List<Subtitle> getSubtitleList() {
-        return subtitleList;
+        return subtitleList == null ? Collections.emptyList() : subtitleList;
     }
 
     public void setSubtitleList(List<Subtitle> subtitleList) {

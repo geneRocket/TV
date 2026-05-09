@@ -22,6 +22,7 @@ public final class SubtitleDialog extends BaseDialog {
 
     private DialogSubtitleBinding binding;
     private SubtitleView subtitleView;
+    private SearchSubtitleDialog.Listener listener;
     private boolean full;
     private String name;
 
@@ -31,6 +32,11 @@ public final class SubtitleDialog extends BaseDialog {
 
     public SubtitleDialog view(SubtitleView subtitleView) {
         this.subtitleView = subtitleView;
+        return this;
+    }
+
+    public SubtitleDialog listener(SearchSubtitleDialog.Listener listener) {
+        this.listener = listener;
         return this;
     }
 
@@ -116,7 +122,7 @@ public final class SubtitleDialog extends BaseDialog {
                 videoTitle = getActivity().getTitle().toString();
             }
         }
-        SearchSubtitleDialog.create().title(videoTitle).show(getActivity());
+        SearchSubtitleDialog.create().title(videoTitle).listener(listener).show(getActivity());
     }
 
     @Override

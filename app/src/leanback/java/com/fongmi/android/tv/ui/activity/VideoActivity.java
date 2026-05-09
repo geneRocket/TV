@@ -781,6 +781,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private CustomTarget<Drawable> mArtworkTarget;
 
     public static void push(FragmentActivity activity, String text) {
+        if (TextUtils.isEmpty(text)) return;
         if (FileChooser.isValid(activity, Uri.parse(text))) file(activity, FileChooser.getPathFromUri(activity, Uri.parse(text)));
         else start(activity, Sniffer.getUrl(text));
     }
@@ -2281,7 +2282,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         } else {
             finalVideoName = videoName;
         }
-        App.post(() -> SubtitleDialog.create().view(subtitleView).name(finalVideoName).full(isFullscreen()).show(this), 200);
+        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> mPlayers.setSub(Sub.from(subtitle.getUrl()))).name(finalVideoName).full(isFullscreen()).show(this), 200);
     }
 
     @Override
@@ -2376,7 +2377,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setTrackVisible(boolean visible) {
-        setVisibilityIfChanged(mBinding.control.text, visible && (mPlayers.haveTrack(C.TRACK_TYPE_TEXT) || mPlayers.isExo()) ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.control.text, visible ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.control.volume, visible && mPlayers.isExo() ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.control.audio, visible && mPlayers.haveTrack(C.TRACK_TYPE_AUDIO) ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.control.video, visible && mPlayers.haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
