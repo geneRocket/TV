@@ -187,6 +187,7 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
         mHistory = History.find(getHistoryKey());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
+        mHistory.findEpisode(item.getVodFlags());
     }
 
     private History createHistory(Vod item) {

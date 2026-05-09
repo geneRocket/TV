@@ -545,6 +545,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mHistory = History.find(host.getHistoryKey());
             host.mHistory = host.mHistory == null ? createHistory(item) : host.mHistory;
             if (!TextUtils.isEmpty(host.getMark())) host.mHistory.setVodRemarks(host.getMark());
+            host.mHistory.findEpisode(item.getVodFlags());
             if (Setting.isIncognito() && host.mHistory.getKey().equals(host.getHistoryKey())) host.mHistory.delete();
             host.setPlainTextIfChanged(host.mBinding.control.opening, host.mHistory.getOpening() == 0 ? host.getString(R.string.play_op) : host.mPlayers.stringToTime(host.mHistory.getOpening()));
             host.setPlainTextIfChanged(host.mBinding.control.ending, host.mHistory.getEnding() == 0 ? host.getString(R.string.play_ed) : host.mPlayers.stringToTime(host.mHistory.getEnding()));

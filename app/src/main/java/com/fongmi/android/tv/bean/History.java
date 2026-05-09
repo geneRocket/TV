@@ -13,6 +13,8 @@ import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.utils.Util;
+import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
@@ -24,6 +26,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -354,13 +357,42 @@ public class History {
         if (cids.size() == 1) return get(cids.get(0));
         List<History> items = cache(AppDatabase.get().getHistoryDao().find(cids));
         items.sort(Comparator.comparingLong(History::getCreateTime).reversed());
-        return copy(items);
+        return copy(unique(items, true));
     }
 
     public static List<History> get(int cid) {
         List<History> items = cache(AppDatabase.get().getHistoryDao().find(cid));
         items.sort(Comparator.comparingLong(History::getCreateTime).reversed());
-        return copy(items);
+        return copy(unique(items, false));
+    }
+
+    private static List<History> unique(List<History> items, boolean crossCid) {
+        Map<String, History> unique = new LinkedHashMap<>();
+        for (History item : items) {
+            String key = uniqueKey(item, crossCid);
+            History old = unique.get(key);
+            if (old == null || item.getCreateTime() > old.getCreateTime()) unique.put(key, item);
+        }
+        return new ArrayList<>(unique.values());
+    }
+
+    private static String uniqueKey(History item, boolean crossCid) {
+        String name = normalizedName(item.getVodName());
+        String scope = crossCid ? "" : item.getCid() + "@";
+        if (TextUtils.isEmpty(name)) return scope + item.getCid() + "@" + item.getKey();
+        return scope + name;
+    }
+
+    private static String normalizedName(String name) {
+        if (TextUtils.isEmpty(name)) return "";
+        String value = Trans.s2t(name).trim().toLowerCase(Locale.US);
+        String old;
+        do {
+            old = value;
+            value = value.replaceAll("(?i)[\\s\\p{P}\\p{S}]+$", "");
+            value = value.replaceAll("(?i)(?:粤语版|国语版|普通话版|粤语中字|国语中字|国粤双语|双语版|中英双字|中文字幕|中字|粤语|国语|普通话|高清版|hd中字|hd|bd|正片|全集)$", "");
+        } while (!old.equals(value));
+        return value.replaceAll("[\\s\\p{P}\\p{S}]+", "");
     }
 
     private static List<Integer> getLoadedCids() {
@@ -412,11 +444,24 @@ public class History {
         if (getSpeed() == 1) setSpeed(item.getSpeed());
     }
 
+    private void checkProgress(History item) {
+        if (item == null) return;
+        if (item.getCreateTime() < getCreateTime()) return;
+        setPosition(item.getPosition());
+        if (item.getDuration() > 0) setDuration(item.getDuration());
+        if (item.getCreateTime() > getCreateTime()) setCreateTime(item.getCreateTime());
+    }
+
     private void merge(List<History> items, boolean force) {
         for (History item : items) {
-            if (getDuration() > 0 && item.getDuration() > 0 && Math.abs(getDuration() - item.getDuration()) > 10 * 60 * 1000) continue;
+            if (getDuration() > 0 && item.getDuration() > 0) {
+                long diff = Math.abs(getDuration() - item.getDuration());
+                long threshold = Math.min(getDuration() / 10, 10 * 60 * 1000);
+                if (diff > threshold) continue;
+            }
             if (!force && getKey().equals(item.getKey())) continue;
             checkParam(item);
+            checkProgress(item);
             item.delete();
         }
     }
@@ -449,31 +494,83 @@ public class History {
     }
 
     public List<History> find() {
-        List<History> items = AppDatabase.get().getHistoryDao().findByName(getCid(), getVodName());
+        String name = normalizedName(getVodName());
+        List<Integer> cids = getLoadedCids();
+        List<History> items = TextUtils.isEmpty(name) ? AppDatabase.get().getHistoryDao().findByName(cids, getVodName()) : findByNormalizedName(name, cids);
         Map<String, History> unique = new LinkedHashMap<>();
         for (History item : cache(items)) unique.put(item.getKey(), item);
         return copy(new ArrayList<>(unique.values()));
     }
 
-    public void findEpisode(List<Flag> flags) {
-        if (flags.size() > 0) {
-            setVodFlag(flags.get(0).getFlag());
-            if (flags.get(0).getEpisodes().size() > 0) {
-                setVodRemarks(flags.get(0).getEpisodes().get(0).getName());
-            }
+    private List<History> findByNormalizedName(String name, List<Integer> cids) {
+        List<History> result = new ArrayList<>();
+        for (History item : AppDatabase.get().getHistoryDao().find(cids)) {
+            if (name.equals(normalizedName(item.getVodName()))) result.add(item);
         }
+        return result;
+    }
+
+    public void findEpisode(List<Flag> flags) {
+        if (flags.size() > 0 && TextUtils.isEmpty(getVodFlag())) {
+            setVodFlag(flags.get(0).getFlag());
+        }
+        if (flags.size() > 0 && TextUtils.isEmpty(getVodRemarks()) && flags.get(0).getEpisodes().size() > 0) {
+            setVodRemarks(flags.get(0).getEpisodes().get(0).getName());
+        }
+        EpisodeMatch best = null;
         for (History item : find()) {
-            if (getPosition() > 0) break;
-            for (Flag flag : flags) {
-                Episode episode = flag.find(item.getVodRemarks(), true);
-                if (episode == null) continue;
-                setVodFlag(flag.getFlag());
-                setPosition(item.getPosition());
-                setVodRemarks(episode.getName());
-                setEpisodeUrl(episode.getUrl());
-                checkParam(item);
-                break;
-            }
+            EpisodeMatch match = findEpisode(flags, item.getVodRemarks());
+            if (match == null) continue;
+            if (best == null || item.getCreateTime() > best.history.getCreateTime() || (best.history.getPosition() <= 0 && item.getPosition() > 0)) best = match.history(item);
+        }
+        if (best == null) return;
+        setVodFlag(best.flag.getFlag());
+        setVodRemarks(best.episode.getName());
+        setEpisodeUrl(best.episode.getUrl());
+        checkParam(best.history);
+        checkProgress(best.history);
+    }
+
+    private EpisodeMatch findEpisode(List<Flag> flags, String remarks) {
+        if (TextUtils.isEmpty(remarks)) return null;
+        for (Flag flag : flags) {
+            Episode episode = flag.find(remarks, true);
+            if (episode != null) return new EpisodeMatch(flag, episode);
+        }
+        return null;
+    }
+
+    private boolean isSameEpisode(History item) {
+        if (item == null) return false;
+        if (!TextUtils.isEmpty(getEpisodeUrl()) && TextUtils.equals(getEpisodeUrl(), item.getEpisodeUrl())) return true;
+        return isSameEpisodeName(getVodRemarks(), item.getVodRemarks());
+    }
+
+    private boolean isSameEpisode(EpisodeMatch target, EpisodeMatch match) {
+        if (match == null) return false;
+        if (target == null) return true;
+        return isSameEpisodeName(target.episode.getName(), match.episode.getName());
+    }
+
+    private boolean isSameEpisodeName(String first, String second) {
+        if (TextUtils.isEmpty(first) || TextUtils.isEmpty(second)) return false;
+        return first.equalsIgnoreCase(second) || Util.getDigit(first) == Util.getDigit(second) && Util.getDigit(first) != -1;
+    }
+
+    private static class EpisodeMatch {
+
+        private final Flag flag;
+        private final Episode episode;
+        private History history;
+
+        private EpisodeMatch(Flag flag, Episode episode) {
+            this.flag = flag;
+            this.episode = episode;
+        }
+
+        private EpisodeMatch history(History history) {
+            this.history = history;
+            return this;
         }
     }
 
