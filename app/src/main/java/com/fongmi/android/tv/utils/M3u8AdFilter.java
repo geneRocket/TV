@@ -30,7 +30,8 @@ public final class M3u8AdFilter {
 
     public static boolean isLikelyM3u8(String contentType, String url) {
         String ct = contentType == null ? "" : contentType.toLowerCase(Locale.US);
-        return ct.contains("mpegurl") || ct.contains("vnd.apple.mpegurl") || (!TextUtils.isEmpty(url) && url.contains(".m3u8"));
+        String lowerUrl = url == null ? "" : url.toLowerCase(Locale.US);
+        return ct.contains("mpegurl") || ct.contains("vnd.apple.mpegurl") || lowerUrl.contains(".m3u8");
     }
 
     public static byte[] filterMinorHost(byte[] bytes, String baseUrl) {
@@ -40,10 +41,11 @@ public final class M3u8AdFilter {
         if (headerIndex > 0) content = content.substring(headerIndex);
         if (isSubtitleWhitelisted(baseUrl)) return toBytesOrOriginal(content, bytes);
         registerSubtitlePlaylists(content, baseUrl);
+        content = filterAdVariantPlaylists(content, baseUrl);
         if (!content.contains("#EXTINF")) return toBytesOrOriginal(content, bytes);
         List<Record> records = parseRecords(content, baseUrl);
         if (isSubtitlePlaylist(content, records)) return toBytesOrOriginal(content, bytes);
-        records = filterAdTagSegments(records);
+        records = filterAdTagSegments(records, baseUrl);
         String filtered = filterMinorHostSegments(records, content);
         if (!startsWithM3uHeader(filtered)) return toBytesOrOriginal(content, bytes);
         return toBytesOrOriginal(filtered, bytes);
@@ -85,7 +87,7 @@ public final class M3u8AdFilter {
         if (!content.contains("#EXT-X-MEDIA")) return;
         String[] lines = content.split("\n", -1);
         for (String raw : lines) {
-            String line = raw.endsWith("\r") ? raw.substring(0, raw.length() - 1) : raw;
+            String line = trimLineEnd(raw);
             if (!line.startsWith("#EXT-X-MEDIA:")) continue;
             String type = parseAttributeString(line, "TYPE");
             if (!"SUBTITLES".equalsIgnoreCase(type) && !"CLOSED-CAPTIONS".equalsIgnoreCase(type)) continue;
@@ -170,6 +172,73 @@ public final class M3u8AdFilter {
                 || lower.endsWith(".xml");
     }
 
+    private static String filterAdVariantPlaylists(String content, String baseUrl) {
+        if (!content.contains("#EXT-X-STREAM-INF") && !content.contains("#EXT-X-I-FRAME-STREAM-INF")) return content;
+        String[] lines = content.split("\n", -1);
+        boolean[] remove = new boolean[lines.length];
+        int variants = 0;
+        int ads = 0;
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = trimLineEnd(lines[i]);
+            if (line.startsWith("#EXT-X-I-FRAME-STREAM-INF")) {
+                variants++;
+                if (isLikelyAdPlaylistUri(parseAttributeString(line, "URI"), baseUrl) || containsAdKeyword(line)) {
+                    remove[i] = true;
+                    ads++;
+                }
+                continue;
+            }
+            if (!line.startsWith("#EXT-X-STREAM-INF")) continue;
+            int uriIndex = findNextUriLine(lines, i + 1);
+            if (uriIndex < 0) continue;
+            variants++;
+            String uri = trimLineEnd(lines[uriIndex]);
+            if (isLikelyAdPlaylistUri(uri, baseUrl) || containsAdKeyword(line)) {
+                remove[i] = true;
+                remove[uriIndex] = true;
+                ads++;
+            }
+        }
+
+        if (ads <= 0 || ads >= variants) return content;
+        StringBuilder sb = new StringBuilder(content.length());
+        for (int i = 0; i < lines.length; i++) {
+            if (remove[i]) continue;
+            sb.append(lines[i]);
+            if (i < lines.length - 1) sb.append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static int findNextUriLine(String[] lines, int start) {
+        for (int i = start; i < lines.length; i++) {
+            String line = trimLineEnd(lines[i]).trim();
+            if (line.isEmpty()) continue;
+            if (line.startsWith("#")) return -1;
+            return i;
+        }
+        return -1;
+    }
+
+    private static String trimLineEnd(String raw) {
+        return raw.endsWith("\r") ? raw.substring(0, raw.length() - 1) : raw;
+    }
+
+    private static boolean isLikelyAdPlaylistUri(String uri, String baseUrl) {
+        if (TextUtils.isEmpty(uri)) return false;
+        String resolved = resolveUri(baseUrl, uri).toLowerCase(Locale.US).trim();
+        int hash = resolved.indexOf('#');
+        if (hash >= 0) resolved = resolved.substring(0, hash);
+        return containsAdKeyword(resolved) && isLikelyPlaylistResource(resolved);
+    }
+
+    private static boolean isLikelyPlaylistResource(String uri) {
+        int query = uri.indexOf('?');
+        String path = query >= 0 ? uri.substring(0, query) : uri;
+        return path.endsWith(".m3u8") || path.endsWith(".m3u");
+    }
+
     private static String filterMinorHostSegments(List<Record> records, String original) {
         Map<String, Integer> hostCount = new HashMap<>();
         int segmentCount = 0;
@@ -211,7 +280,7 @@ public final class M3u8AdFilter {
         return sb.toString();
     }
 
-    private static List<Record> filterAdTagSegments(List<Record> records) {
+    private static List<Record> filterAdTagSegments(List<Record> records, String baseUrl) {
         List<Record> kept = new ArrayList<>(records.size());
         boolean cueAdOpen = false;
         double cueAdSeconds = 0;
@@ -237,6 +306,7 @@ public final class M3u8AdFilter {
                     continue;
                 }
                 if (record.line.startsWith("#EXT-X-CUE-")) continue;
+                if (isStandaloneAdResourceTag(record.line, baseUrl)) continue;
                 kept.add(record);
                 continue;
             }
@@ -270,6 +340,15 @@ public final class M3u8AdFilter {
         return kept;
     }
 
+    private static boolean isStandaloneAdResourceTag(String line, String baseUrl) {
+        if (TextUtils.isEmpty(line)) return false;
+        String lower = line.toLowerCase(Locale.US);
+        if (!lower.startsWith("#ext-x-part:")
+                && !lower.startsWith("#ext-x-preload-hint:")
+                && !lower.startsWith("#ext-x-map:")) return false;
+        return isLikelyAdSegmentUri(resolveUri(baseUrl, parseAttributeString(line, "URI")));
+    }
+
     private static double nextRemaining(double remaining, double segmentDuration) {
         if (remaining <= 0) return 0;
         if (segmentDuration > 0) return Math.max(0, remaining - segmentDuration);
@@ -282,7 +361,7 @@ public final class M3u8AdFilter {
         List<String> pending = new ArrayList<>();
 
         for (String raw : lines) {
-            String line = raw.endsWith("\r") ? raw.substring(0, raw.length() - 1) : raw;
+            String line = trimLineEnd(raw);
             if (isSegmentTag(line) || (!pending.isEmpty() && isSegmentFollowTag(line))) {
                 pending.add(line);
                 continue;
@@ -308,7 +387,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isSegmentFollowTag(String line) {
-        return line.startsWith("#EXT-X-BYTERANGE");
+        return line.startsWith("#EXT-X-BYTERANGE") || line.startsWith("#EXT-X-GAP");
     }
 
     private static double parseExtInfDuration(List<String> tags) {
