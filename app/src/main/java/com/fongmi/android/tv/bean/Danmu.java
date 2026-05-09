@@ -3,6 +3,7 @@ package com.fongmi.android.tv.bean;
 import android.text.TextUtils;
 
 import com.github.catvod.utils.Json;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -84,7 +85,12 @@ public class Danmu {
     private static void collect(JsonElement element, List<Data> data) {
         if (element == null || element.isJsonNull()) return;
         if (element.isJsonArray()) {
-            for (JsonElement item : element.getAsJsonArray()) collect(item, data);
+            Data item = parseArray(element.getAsJsonArray());
+            if (item != null) {
+                data.add(item);
+                return;
+            }
+            for (JsonElement child : element.getAsJsonArray()) collect(child, data);
         } else if (element.isJsonObject()) {
             collectObject(element.getAsJsonObject(), data);
         } else if (element.isJsonPrimitive()) {
@@ -98,20 +104,45 @@ public class Danmu {
             data.add(item);
             return;
         }
-        for (String key : new String[]{"comments", "danmaku", "danmus", "danmakus", "items", "list", "data", "result", "barrage_list", "barrageList", "bulletInfos", "bulletInfo"}) {
+        for (String key : new String[]{"comments", "danmuku", "danmukuList", "danmaku", "danmakus", "danmus", "danmu", "danmuList", "danmu_list", "items", "list", "rows", "data", "result", "barrage", "barrages", "barrage_list", "barrageList", "bulletInfos", "bulletInfo"}) {
             JsonElement value = object.get(key);
             if (value != null) collect(value, data);
         }
     }
 
+    private static Data parseArray(JsonArray array) {
+        if (array.size() < 4 || !isPrimitive(array, 0) || !isPrimitive(array, 1)) return null;
+        String time = at(array, 0);
+        if (!isNumber(time)) return null;
+        String type = at(array, 1);
+        String text;
+        String size;
+        String color;
+        if (array.size() >= 5 && !isNumber(type)) {
+            color = at(array, 2);
+            size = array.size() >= 7 ? at(array, array.size() - 1) : at(array, 3);
+            text = at(array, 4);
+        } else if (array.size() >= 5) {
+            size = at(array, 2);
+            color = at(array, 3);
+            text = at(array, 4);
+        } else {
+            size = String.valueOf(DEFAULT_SIZE);
+            color = at(array, 2);
+            text = at(array, 3);
+        }
+        if (TextUtils.isEmpty(text)) return null;
+        return Data.create(buildParam(time, type, size, color), text);
+    }
+
     private static Data parseObject(JsonObject object) {
         String param = first(object, "p", "param");
-        String text = first(object, "m", "text", "content", "message", "msg", "comment", "body");
+        String text = first(object, "m", "text", "content", "message", "msg", "comment", "body", "value", "word", "danmaku", "danmu", "dm");
         if (!TextUtils.isEmpty(param) && !TextUtils.isEmpty(text)) return Data.create(param, text);
         if (TextUtils.isEmpty(text)) return null;
-        String time = first(object, "time", "stime", "showTime", "show_time", "timepoint", "timePoint", "time_offset", "timeOffset", "position", "pos", "progress");
+        String time = first(object, "time", "stime", "showTime", "show_time", "playTime", "play_time", "timepoint", "timePoint", "time_offset", "timeOffset", "position", "pos", "progress", "videoTime", "vpos", "at", "ts");
         if (TextUtils.isEmpty(time)) return null;
-        String type = first(object, "type", "mode");
+        String type = first(object, "type", "mode", "positionType");
         String size = first(object, "size", "font", "fontSize", "fontsize");
         String color = first(object, "color", "colour", "fontColor", "font_color", "contentStyle");
         return Data.create(buildParam(time, type, size, color), text);
@@ -186,7 +217,7 @@ public class Danmu {
     }
 
     private static String buildParam(String time, String type, String size, String color) {
-        return buildParam(time, type, parseInt(size, DEFAULT_SIZE), color);
+        return buildParam(time, type, parseSize(size), color);
     }
 
     private static String buildParam(String time, String type, int size, String color) {
@@ -200,6 +231,12 @@ public class Danmu {
     }
 
     private static int normalizeType(String value) {
+        if (!TextUtils.isEmpty(value)) {
+            String text = value.trim().toLowerCase(Locale.US);
+            if (text.contains("top")) return 5;
+            if (text.contains("bottom") || text.contains("btm")) return 4;
+            if (text.contains("right") || text.contains("scroll") || text.contains("normal") || text.contains("rtl")) return 1;
+        }
         int type = parseInt(value, DEFAULT_TYPE);
         if (type == 6) return 1;
         if (type == 3) return 1;
@@ -210,7 +247,11 @@ public class Danmu {
         if (TextUtils.isEmpty(value)) return DEFAULT_COLOR;
         String text = value.trim();
         try {
-            if (text.startsWith("#")) return Integer.parseInt(text.substring(1), 16);
+            if (text.startsWith("#")) {
+                String hex = text.substring(1);
+                if (hex.length() == 3) hex = "" + hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2);
+                return Integer.parseInt(hex, 16);
+            }
             if (text.startsWith("0x") || text.startsWith("0X")) return Integer.parseInt(text.substring(2), 16);
             return Integer.parseInt(text);
         } catch (Exception e) {
@@ -226,12 +267,37 @@ public class Danmu {
         }
     }
 
+    private static int parseSize(String value) {
+        if (TextUtils.isEmpty(value)) return DEFAULT_SIZE;
+        String text = value.trim().toLowerCase(Locale.US);
+        if (text.endsWith("px")) text = text.substring(0, text.length() - 2);
+        return parseInt(text, DEFAULT_SIZE);
+    }
+
     private static float parseFloat(String value, float def) {
         try {
             return TextUtils.isEmpty(value) ? def : Float.parseFloat(value.trim());
         } catch (Exception e) {
             return def;
         }
+    }
+
+    private static boolean isNumber(String value) {
+        if (TextUtils.isEmpty(value)) return false;
+        try {
+            Float.parseFloat(value.trim());
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean isPrimitive(JsonArray array, int index) {
+        return array.size() > index && array.get(index) != null && array.get(index).isJsonPrimitive();
+    }
+
+    private static String at(JsonArray array, int index) {
+        return isPrimitive(array, index) ? array.get(index).getAsString() : "";
     }
 
     public List<Data> getData() {
