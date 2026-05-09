@@ -462,7 +462,7 @@ public class History {
             if (!force && getKey().equals(item.getKey())) continue;
             checkParam(item);
             checkProgress(item);
-            item.delete();
+            item.deleteSelf();
         }
     }
 
@@ -487,6 +487,11 @@ public class History {
     }
 
     public History delete() {
+        for (History item : find()) item.deleteSelf();
+        return deleteSelf();
+    }
+
+    private History deleteSelf() {
         AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
         AppDatabase.get().getTrackDao().delete(getKey());
         removeCache(getCid(), getKey());
