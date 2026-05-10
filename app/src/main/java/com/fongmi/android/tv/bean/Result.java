@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.gson.ExtAdapter;
 import com.fongmi.android.tv.gson.FilterAdapter;
 import com.fongmi.android.tv.gson.MsgAdapter;
 import com.fongmi.android.tv.gson.UrlAdapter;
@@ -66,6 +67,7 @@ public class Result implements Parcelable {
     @SerializedName("flag")
     private String flag;
     @SerializedName("danmaku")
+    @JsonAdapter(ExtAdapter.class)
     private String danmaku;
     @SerializedName("format")
     private String format;

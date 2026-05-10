@@ -70,6 +70,8 @@ public class Parser extends BaseDanmakuParser {
     @Override
     protected Danmakus parse() {
         Danmakus result = new Danmakus(IDanmakus.ST_BY_TIME);
+        index = 0;
+        item = null;
         for (Danmu.Data data : danmu.getData()) {
             if (index >= MAX_DANMAKU_ITEMS) break;
             String[] values = data.getParam().split(",");
@@ -96,6 +98,7 @@ public class Parser extends BaseDanmakuParser {
         try {
             int type = Integer.parseInt(values[1]);
             long time = (long) (Float.parseFloat(values[0]) * 1000);
+            if (time < 0) return false;
             float size = Float.parseFloat(values[2]) * (mDispDensity - 0.6f);
             int color = (int) ((0x00000000ff000000L | Long.parseLong(values[3])) & 0x00000000ffffffffL);
             item = mContext.mDanmakuFactory.createDanmaku(type, mContext);

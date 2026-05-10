@@ -44,6 +44,7 @@ public class Danmaku {
         try {
             JsonElement element = Json.parse(text);
             if (element.isJsonPrimitive()) return normalize(new ArrayList<>(Collections.singletonList(create("", element.getAsString()))));
+            if (isRawContent(element)) return normalize(new ArrayList<>(Collections.singletonList(create("", text))));
             if (element.isJsonArray()) return fromArray(element.getAsJsonArray());
             if (element.isJsonObject()) return fromObject(element.getAsJsonObject());
         } catch (Exception ignored) {
@@ -66,6 +67,49 @@ public class Danmaku {
         if (object.has("urls") && object.get("urls").isJsonArray()) return fromArray(object.getAsJsonArray("urls"));
         if (object.has("list") && object.get("list").isJsonArray()) return fromArray(object.getAsJsonArray("list"));
         return Collections.emptyList();
+    }
+
+    private static boolean isRawContent(JsonElement element) {
+        if (element == null || element.isJsonNull()) return false;
+        if (element.isJsonArray()) return isRawArray(element.getAsJsonArray());
+        if (element.isJsonObject()) return isRawObject(element.getAsJsonObject());
+        return false;
+    }
+
+    private static boolean isRawArray(JsonArray array) {
+        if (array.size() == 0) return false;
+        JsonElement first = array.get(0);
+        if (first == null || first.isJsonNull()) return false;
+        if (first.isJsonArray()) return isRawDanmuArray(first.getAsJsonArray());
+        if (first.isJsonObject()) return isRawDanmuObject(first.getAsJsonObject());
+        if (first.isJsonPrimitive()) return first.getAsString().split(",", 5).length >= 5;
+        return false;
+    }
+
+    private static boolean isRawObject(JsonObject object) {
+        if (object.has("url") || object.has("path") || object.has("urls")) return false;
+        if (isRawDanmuObject(object)) return true;
+        for (String key : new String[]{"comments", "danmuku", "danmukuList", "danmaku", "danmakus", "danmus", "danmu", "danmuList", "danmu_list", "items", "rows", "data", "result", "barrage", "barrages", "barrage_list", "barrageList", "bulletInfos", "bulletInfo"}) {
+            JsonElement value = object.get(key);
+            if (value != null && isRawContent(value)) return true;
+        }
+        JsonElement list = object.get("list");
+        return list != null && isRawContent(list);
+    }
+
+    private static boolean isRawDanmuArray(JsonArray array) {
+        return array.size() >= 4 && array.get(0).isJsonPrimitive() && array.get(1).isJsonPrimitive();
+    }
+
+    private static boolean isRawDanmuObject(JsonObject object) {
+        boolean hasText = hasAny(object, "m", "text", "content", "message", "msg", "comment", "body", "value", "word", "danmaku", "danmu", "dm");
+        boolean hasTime = hasAny(object, "time", "stime", "showTime", "show_time", "playTime", "play_time", "timepoint", "timePoint", "time_offset", "timeOffset", "position", "pos", "progress", "videoTime", "vpos", "at", "ts");
+        return (hasAny(object, "p", "param") && hasText) || (hasText && hasTime);
+    }
+
+    private static boolean hasAny(JsonObject object, String... keys) {
+        for (String key : keys) if (object.has(key)) return true;
+        return false;
     }
 
     private static Danmaku from(JsonObject object) {

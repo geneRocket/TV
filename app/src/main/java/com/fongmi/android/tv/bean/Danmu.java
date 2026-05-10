@@ -203,9 +203,15 @@ public class Danmu {
 
     private static void addPrimitive(String value, List<Data> data) {
         if (TextUtils.isEmpty(value)) return;
-        String[] parts = value.split(",", 5);
+        String[] parts = value.split(",", 9);
         if (parts.length < 5) return;
-        data.add(Data.create(buildParam(parts[0], parts[1], DEFAULT_SIZE, parts[2]), parts[4]));
+        if (!isNumber(parts[1])) {
+            String size = parts.length >= 7 ? parts[parts.length - 1] : parts[3];
+            data.add(Data.create(buildParam(parts[0], parts[1], size, parts[2]), parts[4]));
+        } else {
+            String text = parts.length >= 9 ? parts[8] : parts[4];
+            data.add(Data.create(buildParam(parts[0], parts[1], parts[2], parts[3]), text));
+        }
     }
 
     private static String first(JsonObject object, String... keys) {
@@ -252,7 +258,7 @@ public class Danmu {
                 if (hex.length() == 3) hex = "" + hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2);
                 return Integer.parseInt(hex, 16);
             }
-            if (text.startsWith("0x") || text.startsWith("0X")) return Integer.parseInt(text.substring(2), 16);
+            if (text.startsWith("0x") || text.startsWith("0X")) return (int) (Long.parseLong(text.substring(2), 16) & 0x00ffffff);
             return Integer.parseInt(text);
         } catch (Exception e) {
             return DEFAULT_COLOR;

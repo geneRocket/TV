@@ -41,7 +41,7 @@ public class FileChooserDialog {
 
     public void show(Activity activity) {
         dialog = new ChooserDialog(activity);
-        if (mode == MODE_DANMAKU) dialog.withFilter(false, false, "xml", "txt");
+        if (mode == MODE_DANMAKU) dialog.withFilter(false, false, "xml", "txt", "json");
         else dialog.withFilter(false, false, "srt", "ass", "scc", "stl", "ttml");
         dialog.withStartFile(Path.downloadPath());
         dialog.withChosenListener(this::onChoosePath);

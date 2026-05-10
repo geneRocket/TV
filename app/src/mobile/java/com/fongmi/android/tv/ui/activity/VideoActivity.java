@@ -719,7 +719,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("*/*");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"text/*", "application/xml"});
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"text/*", "application/xml", "application/json"});
         startActivityForResult(Intent.createChooser(intent, ""), REQUEST_DANMAKU_FILE);
     }
 
@@ -752,6 +752,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                     if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
                     mBinding.danmaku.prepare(parser, mDanmakuContext);
                     showDanmu();
+                    mPlayers.prepared();
                 });
             } catch (Throwable e) {
                 ThreadPools.log(e, "Danmaku prepare failed.");
@@ -1047,6 +1048,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onDecode(boolean save) {
+        capturePlaybackPosition();
         mPlayers.toggleDecode(save);
         mPlayers.init(getExo(), getIjk());
         mPlayers.setMediaSource();
@@ -1354,6 +1356,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.setPosition(Math.max(mHistory.getOpening(), mHistory.getPosition()));
     }
 
+    private void capturePlaybackPosition() {
+        long position = mPlayers.getPosition();
+        if (position <= 0) return;
+        mPlayers.setPosition(position);
+        if (mHistory != null) mHistory.setPosition(position);
+    }
+
     private boolean isSameHistoryEpisode(Episode item) {
         if (item == null || mHistory == null) return false;
         if (item.equals(mHistory.getEpisode())) return true;
@@ -1568,6 +1577,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void onExoCheck(ErrorEvent event) {
         if (event.getCode() == PlaybackException.ERROR_CODE_IO_UNSPECIFIED || event.getCode() >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED && event.getCode() <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) mPlayers.setFormat(ExoUtil.getMimeType(event.getCode()));
+        capturePlaybackPosition();
         mPlayers.setMediaSource();
     }
 
@@ -1582,6 +1592,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void nextPlayer() {
+        capturePlaybackPosition();
         mPlayers.nextPlayer();
         setPlayerView();
         setDecodeView();

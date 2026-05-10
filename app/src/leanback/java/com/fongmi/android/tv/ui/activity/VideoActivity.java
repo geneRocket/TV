@@ -1271,6 +1271,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                         if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
                         mBinding.danmaku.prepare(parser, mDanmakuContext);
                         showDanmu();
+                        mPlayers.prepared();
                     });
                 } catch (Throwable e) {
                     ThreadPools.log(e, "Danmaku prepare failed.");
