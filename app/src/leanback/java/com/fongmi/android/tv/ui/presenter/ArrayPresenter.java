@@ -64,6 +64,9 @@ public class ArrayPresenter extends Presenter {
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
+        ViewHolder holder = (ViewHolder) viewHolder;
+        holder.view.setOnClickListener(null);
+        holder.binding.text.setOnTouchListener(null);
     }
 
     public static class ViewHolder extends Presenter.ViewHolder {

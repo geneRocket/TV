@@ -718,6 +718,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private final PlaybackStateController mPlaybackState = new PlaybackStateController(this);
     private int groupSize;
     private long mLastHistorySaveAt;
+    private long mLastSavedHistoryPosition = -1;
+    private long mLastSavedHistoryDuration = -1;
     private boolean mShouldSkipOpening;
     private Runnable mR1;
     private Runnable mR2;
@@ -1604,11 +1606,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onTimeChangeDisplaySpeed() {
-        boolean hasDialog = hasBottomSheetDialog();
-        boolean visible = shouldShowDisplaySpeed(hasDialog);
         long position = mPlayers.getPosition();
-        if (Setting.isDisplayDuration() && visible && position > 0) setPlainTextIfChanged(mBinding.display.duration, mPlayers.getPositionTime(0) + "/" + mPlayers.getDurationTime());
-        if (Setting.isDisplayMiniProgress() && visible && position > 0 && (mPlayers.isVod())) mBinding.display.progress.setProgress((int)(position * 100 / mPlayers.getDuration()));
+        long duration = mPlayers.getDuration();
+        if (isVisible(mBinding.display.duration) && position > 0) setPlainTextIfChanged(mBinding.display.duration, mPlayers.getPositionTime(0) + "/" + mPlayers.getDurationTime());
+        if (isVisible(mBinding.display.progress) && position > 0 && duration > 0) mBinding.display.progress.setProgress((int)(position * 100 / duration));
         showDisplayInfo();
     }
 
@@ -1830,8 +1831,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistory.setDuration(duration);
         if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
             mLastHistorySaveAt = System.currentTimeMillis();
-            History snapshot = mHistory.copy();
-            App.execute(snapshot::update);
+            saveHistorySnapshot();
         }
     }
 
@@ -1941,12 +1941,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setProgressVisible(boolean visible) {
-        setVisibilityIfChanged(mBinding.widget.progress, visible ? View.VISIBLE : View.GONE);
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        boolean changed = mBinding.widget.progress.getVisibility() != visibility;
+        setVisibilityIfChanged(mBinding.widget.progress, visibility);
         if (visible) {
             hideError();
         } else {
             App.removeCallbacks(mR3);
         }
+        if (changed) showDisplayInfo();
     }
 
     private void startProgressPolling() {
@@ -2033,11 +2036,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void showControl(View view) {
+        boolean changed = !isVisible(mBinding.control.getRoot());
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.getRoot(), View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.episodes, Setting.getFullscreenMenuKey() == 0 ? View.VISIBLE : View.GONE);
         view.requestFocus();
         setControlNextFocus();
+        if (changed) showDisplayInfo();
         setR1Callback();
     }
 
@@ -2047,10 +2052,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void hideControl(boolean hideInfo) {
         cancelPendingSourceSwitchTarget();
-        if (hideInfo) hideInfo();
+        boolean infoChanged = hideInfo && isVisible(mBinding.widget.info);
+        if (hideInfo) setVisibilityIfChanged(mBinding.widget.info, View.GONE);
+        boolean changed = isVisible(mBinding.control.getRoot());
         setPlainTextIfChanged(mBinding.control.text, getString(R.string.play_track_text));
         setVisibilityIfChanged(mBinding.control.getRoot(), View.GONE);
         App.removeCallbacks(mR1);
+        if (infoChanged || changed) showDisplayInfo();
     }
 
     private void hideCenter() {
@@ -2301,7 +2309,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
-                saveHistorySnapshot();
+                if (position != mLastSavedHistoryPosition || duration != mLastSavedHistoryDuration) {
+                    saveHistorySnapshot();
+                }
             }
         }
 
@@ -2589,6 +2599,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void saveHistorySnapshot() {
         if (mHistory == null || Setting.isIncognito()) return;
+        mLastSavedHistoryPosition = mHistory.getPosition();
+        mLastSavedHistoryDuration = mHistory.getDuration();
         History snapshot = mHistory.copy();
         App.execute(snapshot::update);
     }

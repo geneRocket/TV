@@ -59,7 +59,6 @@ public class EpisodePresenter extends Presenter {
     public void onBindViewHolder(Presenter.ViewHolder viewHolder, Object object) {
         Episode item = (Episode) object;
         ViewHolder holder = (ViewHolder) viewHolder;
-        holder.binding.text.setMaxEms(Product.getEms());
         holder.binding.text.setActivated(item.isActivated());
         holder.binding.text.setText(item.getDesc().concat(item.getName()));
         holder.binding.text.setNextFocusUpId(numColumns > 0 ? (item.getIndex() < numColumns ? nextFocusUp : 0) : nextFocusUp);
@@ -69,6 +68,7 @@ public class EpisodePresenter extends Presenter {
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
+        viewHolder.view.setOnClickListener(null);
     }
 
     public static class ViewHolder extends Presenter.ViewHolder {
@@ -78,6 +78,7 @@ public class EpisodePresenter extends Presenter {
         public ViewHolder(@NonNull AdapterEpisodeBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            this.binding.text.setMaxEms(Product.getEms());
         }
     }
 }

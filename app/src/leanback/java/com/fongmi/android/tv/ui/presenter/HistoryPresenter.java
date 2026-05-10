@@ -81,6 +81,10 @@ public class HistoryPresenter extends Presenter {
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
+        ViewHolder holder = (ViewHolder) viewHolder;
+        holder.view.setOnClickListener(null);
+        holder.view.setOnLongClickListener(null);
+        ImgUtil.clear(holder.binding.image);
     }
 
     public static class ViewHolder extends Presenter.ViewHolder {

@@ -50,6 +50,7 @@ public class QuickPresenter extends Presenter {
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
+        viewHolder.view.setOnClickListener(null);
     }
 
     public static class ViewHolder extends Presenter.ViewHolder {

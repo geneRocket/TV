@@ -112,6 +112,12 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         ImgUtil.loadVod(item.getVodName(), item.getVodPic(), holder.binding.image);
     }
 
+    @Override
+    public void onViewRecycled(@NonNull ViewHolder holder) {
+        super.onViewRecycled(holder);
+        ImgUtil.clear(holder.binding.image);
+    }
+
     private void setFocusListener(AdapterVodBinding binding) {
         binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> {
             binding.name.setSelected(hasFocus);

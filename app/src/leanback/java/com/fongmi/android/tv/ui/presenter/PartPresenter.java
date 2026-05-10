@@ -36,13 +36,13 @@ public class PartPresenter extends Presenter {
         String text = object.toString();
         ViewHolder holder = (ViewHolder) viewHolder;
         holder.binding.text.setText(text);
-        holder.binding.text.setMaxEms(Product.getEms());
         holder.binding.text.setNextFocusUpId(nextFocusUp);
         setOnClickListener(holder, view -> mListener.onItemClick(text));
     }
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
+        viewHolder.view.setOnClickListener(null);
     }
 
     public static class ViewHolder extends Presenter.ViewHolder {
@@ -52,6 +52,7 @@ public class PartPresenter extends Presenter {
         public ViewHolder(@NonNull AdapterPartBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            this.binding.text.setMaxEms(Product.getEms());
         }
     }
 }
