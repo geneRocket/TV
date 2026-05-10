@@ -1202,9 +1202,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void applyPlayerResult(Result result) {
         if (!isCurrentPlayerResult(result)) return;
+        String token = pendingPlaybackToken;
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         mPlayers.start(result, isUseParse(), getSite().getTimeout());
+        if (!TextUtils.equals(token, pendingPlaybackToken)) return;
         mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
         setQualityVisible(result.getUrl().isMulti());
         setDanmakus(result.getDanmakus());
