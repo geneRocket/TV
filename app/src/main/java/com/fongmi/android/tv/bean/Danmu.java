@@ -140,12 +140,12 @@ public class Danmu {
         String text = first(object, "m", "text", "content", "message", "msg", "comment", "body", "value", "word", "danmaku", "danmu", "dm");
         if (!TextUtils.isEmpty(param) && !TextUtils.isEmpty(text)) return Data.create(param, text);
         if (TextUtils.isEmpty(text)) return null;
-        String time = first(object, "time", "stime", "showTime", "show_time", "playTime", "play_time", "timepoint", "timePoint", "time_offset", "timeOffset", "position", "pos", "progress", "videoTime", "vpos", "at", "ts");
-        if (TextUtils.isEmpty(time)) return null;
+        TimeField time = firstTime(object);
+        if (TextUtils.isEmpty(time.value)) return null;
         String type = first(object, "type", "mode", "positionType");
         String size = first(object, "size", "font", "fontSize", "fontsize");
         String color = first(object, "color", "colour", "fontColor", "font_color", "contentStyle");
-        return Data.create(buildParam(time, type, size, color), text);
+        return Data.create(buildParam(time.value, time.milliseconds, type, size, color), text);
     }
 
     private static void collectXml(Element element, List<Data> data) {
@@ -165,12 +165,12 @@ public class Danmu {
         String text = firstXml(element, "text", "content", "message", "msg", "comment", "body");
         if (TextUtils.isEmpty(text)) text = leafText(element);
         if (TextUtils.isEmpty(text)) return null;
-        String time = firstXml(element, "time", "stime", "showTime", "show_time", "playTime", "play_time", "timepoint", "timePoint", "time_offset", "timeOffset", "position", "pos", "progress");
-        if (TextUtils.isEmpty(time)) return null;
+        TimeField time = firstTime(element);
+        if (TextUtils.isEmpty(time.value)) return null;
         String type = firstXml(element, "type", "mode");
         String size = firstXml(element, "size", "font", "fontSize", "fontsize");
         String color = firstXml(element, "color", "colour", "fontColor", "font_color");
-        return Data.create(buildParam(time, type, size, color), text);
+        return Data.create(buildParam(time.value, time.milliseconds, type, size, color), text);
     }
 
     private static String firstXml(Element element, String... keys) {
@@ -222,17 +222,45 @@ public class Danmu {
         return "";
     }
 
+    private static TimeField firstTime(JsonObject object) {
+        for (String key : new String[]{"time", "stime", "showTime", "show_time", "playTime", "play_time", "timepoint", "timePoint", "videoTime", "at", "ts"}) {
+            String value = Json.safeString(object, key);
+            if (!TextUtils.isEmpty(value)) return new TimeField(value, false);
+        }
+        for (String key : new String[]{"time_offset", "timeOffset", "position", "pos", "progress", "vpos"}) {
+            String value = Json.safeString(object, key);
+            if (!TextUtils.isEmpty(value)) return new TimeField(value, true);
+        }
+        return TimeField.EMPTY;
+    }
+
+    private static TimeField firstTime(Element element) {
+        for (String key : new String[]{"time", "stime", "showTime", "show_time", "playTime", "play_time", "timepoint", "timePoint"}) {
+            String value = firstXml(element, key);
+            if (!TextUtils.isEmpty(value)) return new TimeField(value, false);
+        }
+        for (String key : new String[]{"time_offset", "timeOffset", "position", "pos", "progress", "vpos"}) {
+            String value = firstXml(element, key);
+            if (!TextUtils.isEmpty(value)) return new TimeField(value, true);
+        }
+        return TimeField.EMPTY;
+    }
+
     private static String buildParam(String time, String type, String size, String color) {
-        return buildParam(time, type, parseSize(size), color);
+        return buildParam(time, false, type, size, color);
     }
 
-    private static String buildParam(String time, String type, int size, String color) {
-        return String.format(Locale.US, "%s,%d,%d,%d", normalizeTime(time), normalizeType(type), size, normalizeColor(color));
+    private static String buildParam(String time, boolean milliseconds, String type, String size, String color) {
+        return buildParam(time, milliseconds, type, parseSize(size), color);
     }
 
-    private static String normalizeTime(String value) {
+    private static String buildParam(String time, boolean milliseconds, String type, int size, String color) {
+        return String.format(Locale.US, "%s,%d,%d,%d", normalizeTime(time, milliseconds), normalizeType(type), size, normalizeColor(color));
+    }
+
+    private static String normalizeTime(String value, boolean milliseconds) {
         float time = parseFloat(value, 0);
-        if (time > 1000) time /= 1000f;
+        if (milliseconds) time /= 1000f;
         return String.valueOf(time);
     }
 
@@ -331,6 +359,19 @@ public class Danmu {
 
         public String getText() {
             return TextUtils.isEmpty(text) ? "" : text;
+        }
+    }
+
+    private static class TimeField {
+
+        private static final TimeField EMPTY = new TimeField("", false);
+
+        private final String value;
+        private final boolean milliseconds;
+
+        private TimeField(String value, boolean milliseconds) {
+            this.value = value;
+            this.milliseconds = milliseconds;
         }
     }
 }
