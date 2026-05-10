@@ -16,6 +16,11 @@ import java.util.Map;
 
 public class Danmaku {
 
+    private static final String[] SOURCE_LIST_KEYS = {
+            "urls", "list", "comments", "danmuku", "danmukuList", "danmaku", "danmakus", "danmus", "danmu", "danmuList", "danmu_list",
+            "items", "rows", "data", "result", "barrage", "barrages", "barrage_list", "barrageList", "bulletInfos", "bulletInfo"
+    };
+
     @SerializedName("name")
     private String name;
     @SerializedName(value = "url", alternate = {"path"})
@@ -64,8 +69,10 @@ public class Danmaku {
 
     private static List<Danmaku> fromObject(JsonObject object) {
         if (object.has("url") || object.has("path")) return normalize(new ArrayList<>(Collections.singletonList(from(object))));
-        if (object.has("urls") && object.get("urls").isJsonArray()) return fromArray(object.getAsJsonArray("urls"));
-        if (object.has("list") && object.get("list").isJsonArray()) return fromArray(object.getAsJsonArray("list"));
+        for (String key : SOURCE_LIST_KEYS) {
+            JsonElement value = object.get(key);
+            if (value != null && value.isJsonArray()) return fromArray(value.getAsJsonArray());
+        }
         return Collections.emptyList();
     }
 
@@ -89,12 +96,11 @@ public class Danmaku {
     private static boolean isRawObject(JsonObject object) {
         if (object.has("url") || object.has("path") || object.has("urls")) return false;
         if (isRawDanmuObject(object)) return true;
-        for (String key : new String[]{"comments", "danmuku", "danmukuList", "danmaku", "danmakus", "danmus", "danmu", "danmuList", "danmu_list", "items", "rows", "data", "result", "barrage", "barrages", "barrage_list", "barrageList", "bulletInfos", "bulletInfo"}) {
+        for (String key : SOURCE_LIST_KEYS) {
             JsonElement value = object.get(key);
             if (value != null && isRawContent(value)) return true;
         }
-        JsonElement list = object.get("list");
-        return list != null && isRawContent(list);
+        return false;
     }
 
     private static boolean isRawDanmuArray(JsonArray array) {

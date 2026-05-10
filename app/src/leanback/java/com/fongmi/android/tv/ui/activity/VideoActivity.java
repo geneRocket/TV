@@ -1267,27 +1267,30 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
         mPreparedDanmakuUrl = item.getUrl();
         mBinding.danmaku.release();
-        if (hasSource) {
-            App.execute(() -> {
-                try {
-                    Parser parser = new Parser(item.getUrl());
-                    App.post(() -> {
-                        if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                        mBinding.danmaku.prepare(parser, mDanmakuContext);
-                        showDanmu();
-                        mPlayers.prepared();
-                    });
-                } catch (Throwable e) {
-                    ThreadPools.log(e, "Danmaku prepare failed.");
-                    App.post(() -> {
-                        if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                        mPreparedDanmakuUrl = null;
-                        mBinding.danmaku.release();
-                        mBinding.danmaku.setVisibility(View.GONE);
-                    });
-                }
-            });
-        }
+        App.execute(() -> {
+            try {
+                Parser parser = new Parser(item.getUrl());
+                App.post(() -> {
+                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    mBinding.danmaku.prepare(parser, mDanmakuContext);
+                    showDanmu();
+                    mPlayers.prepared();
+                });
+            } catch (Throwable e) {
+                ThreadPools.log(e, "Danmaku prepare failed.");
+                App.post(() -> {
+                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    mPreparedDanmakuUrl = null;
+                    mBinding.danmaku.release();
+                    mBinding.danmaku.setVisibility(View.GONE);
+                });
+            }
+        });
+    }
+
+    private void refreshDanmaku() {
+        setDanmuViewSettings();
+        prepareDanmaku(mPlayers.getDanmaku());
     }
 
     private boolean hasDanmakuSource() {
@@ -2087,6 +2090,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void reconcilePlaybackUiState() {
+        refreshDanmaku();
         if (mPlayers.isBuffering()) {
             mPlaybackState.onBuffering();
         } else if (mPlayers.isReady()) {
