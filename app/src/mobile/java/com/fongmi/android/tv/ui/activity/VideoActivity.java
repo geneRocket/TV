@@ -496,6 +496,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.setDanmuView(mBinding.danmaku);
         setDanmuViewSettings();
         mDanmakuContext.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3).setDanmakuMargin(8);
+        mPlayers.setDanmuVisible(Setting.isDanmu());
         checkDanmuImg();
     }
 
@@ -923,10 +924,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onDanmu() {
-        Setting.putDanmu(!Setting.isDanmu());
+        if (!Setting.isDanmu()) {
+            Setting.putDanmu(true);
+            prepareDanmaku(mPlayers.getDanmaku());
+        } else {
+            Setting.putDanmu(false);
+            showDanmu();
+        }
         checkDanmuImg();
-        showDanmu();
-        if (Setting.isDanmu()) mPlayers.prepared();
+        mPlayers.prepared();
     }
 
     private void onDanmuSetting() {
@@ -934,8 +940,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void showDanmu() {
-        if (Setting.isDanmu()) mBinding.danmaku.show();
-        else mBinding.danmaku.hide();
+        mPlayers.setDanmuVisible(Setting.isDanmu());
     }
 
     private void checkPlay() {
@@ -1469,9 +1474,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
             mBinding.control.play.performClick();
         } else if (ActionEvent.NEXT.equals(event.getAction())) {
-            mBinding.control.next.performClick();
+            checkNext();
         } else if (ActionEvent.PREV.equals(event.getAction())) {
-            mBinding.control.prev.performClick();
+            checkPrev();
         } else if (ActionEvent.STOP.equals(event.getAction())) {
             finish();
         }

@@ -1120,8 +1120,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setDanmuViewSettings();
         mDanmakuContext.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3).setDanmakuMargin(8);
         mDanmuVisible = Setting.isDanmu();
+        mPlayers.setDanmuVisible(mDanmuVisible);
         setDanmuText();
-        showDanmu();
     }
 
     private void setDisplayView() {
@@ -1737,8 +1737,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void showDanmu() {
-        if (mDanmuVisible) mBinding.danmaku.show();
-        else mBinding.danmaku.hide();
+        mPlayers.setDanmuVisible(mDanmuVisible);
     }
 
     private boolean onDanmuAdd() {
@@ -1758,11 +1757,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             FileChooserDialog.create().player(mPlayers).mode(FileChooserDialog.MODE_DANMAKU).show(this);
             return true;
         }
-        int current = 0;
+        int current = -1;
         for (int i = 0; i < mDanmakus.size(); i++) if (mDanmakus.get(i).isSelected()) current = i;
-        int next = (current + 1) % mDanmakus.size();
-        setDanmaku(mDanmakus.get(next));
-        Notify.show(mDanmakus.get(next).getName());
+        if (current == mDanmakus.size() - 1) {
+            FileChooserDialog.create().player(mPlayers).mode(FileChooserDialog.MODE_DANMAKU).show(this);
+        } else {
+            int next = (current + 1) % mDanmakus.size();
+            setDanmaku(mDanmakus.get(next));
+            Notify.show(mDanmakus.get(next).getName());
+        }
         return true;
     }
 
@@ -2317,7 +2320,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         } else {
             finalVideoName = videoName;
         }
-        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> mPlayers.setSub(Sub.from(subtitle.getUrl()))).name(finalVideoName).full(isFullscreen()).show(this), 200);
+        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> {
+            int oldPlayer = mPlayers.getPlayer();
+            mPlayers.setSub(Sub.from(subtitle.getUrl()));
+            if (oldPlayer != mPlayers.getPlayer()) {
+                setPlayerView();
+                setDecodeView();
+            }
+        }).name(finalVideoName).full(isFullscreen()).show(this), 200);
     }
 
     @Override
@@ -2337,7 +2347,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             }
         }
 
-        // 片头跳过检测（仅在开播阶段执行一次，避免后续手动回拖被再次强制跳过）
+        // 片头跳过检测
         if (mShouldSkipOpening) {
             long opening = mHistory.getOpening();
             if (opening <= 0 || position >= opening) {
@@ -2365,9 +2375,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
             onKeyCenter();
         } else if (ActionEvent.NEXT.equals(event.getAction())) {
-            mBinding.control.next.performClick();
+            checkNext();
         } else if (ActionEvent.PREV.equals(event.getAction())) {
-            mBinding.control.prev.performClick();
+            checkPrev();
         } else if (ActionEvent.STOP.equals(event.getAction())) {
             finish();
         }

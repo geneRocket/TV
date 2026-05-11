@@ -85,6 +85,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private ParseJob parseJob;
     private List<Danmaku> danmakus;
     private List<Sub> subs;
+    private boolean danmuVisible;
     private Method danmuSetSpeed;
     private Method danmuSetSpeedFactor;
     private boolean danmuMethodResolved;
@@ -144,6 +145,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         playerState = Player.STATE_IDLE;
         timeout = Constant.TIMEOUT_PLAY;
         danmakus = new ArrayList<>();
+        danmuVisible = Setting.isDanmu();
         createSession(activity);
     }
 
@@ -506,7 +508,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (session != null) session.setActive(true);
         if (isExo()) playExo();
         if (isIjk()) playIjk();
-        if (haveDanmu()) danmuView.resume();
+        updateDanmuPlayingState();
         setPlaybackState(PlaybackStateCompat.STATE_PLAYING);
     }
 
@@ -921,6 +923,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
             case Player.STATE_BUFFERING:
                 setPlayerState(Player.STATE_BUFFERING);
                 setPlaybackState(PlaybackStateCompat.STATE_BUFFERING);
+                updateDanmuPlayingState();
                 break;
             case Player.STATE_ENDED:
                 setPlayerState(Player.STATE_ENDED);
@@ -990,6 +993,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         switch (what) {
             case IMediaPlayer.MEDIA_INFO_BUFFERING_START:
                 setPlayerState(Player.STATE_BUFFERING);
+                updateDanmuPlayingState();
                 break;
             case IMediaPlayer.MEDIA_INFO_BUFFERING_END:
                 if (!pendingReady) setPlayerState(Player.STATE_READY);
@@ -1033,17 +1037,22 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         });
     }
 
+    public void setDanmuVisible(boolean visible) {
+        this.danmuVisible = visible;
+        updateDanmuPlayingState();
+    }
+
     private void updateDanmuPlayingState() {
         if (danmuView == null || !danmuView.isPrepared()) return;
 
-        if (!Setting.isDanmu()) {
+        if (!danmuVisible) {
             danmuView.hide();
             danmuView.pause();
             return;
         }
         danmuView.show();
         applyDanmuSpeed();
-        if (isPlaying()) {
+        if (isPlaying() && !isBuffering()) {
             danmuView.start(getPosition());
         } else {
             danmuView.pause();
