@@ -262,7 +262,7 @@ public final class M3u8AdFilter {
 
         // 修复：判断 null 而不是 TextUtils.isEmpty(majorHost)，允许空字符串成为 majorHost
         if (majorHost == null) return build(records, original.length());
-        if ((majorCount * 10) < (segmentCount * 6)) return build(records, original.length());
+        if ((majorCount * 10) < (segmentCount * 5)) return build(records, original.length());
 
         StringBuilder sb = new StringBuilder(original.length());
         for (Record record : records) {
@@ -488,8 +488,12 @@ public final class M3u8AdFilter {
             if (token.isEmpty()) continue;
             if (token.equals("ad")
                     || token.equals("ads")
+                    || token.equals("adv")
                     || token.equals("advert")
                     || token.equals("advertisement")
+                    || token.equals("advertising")
+                    || token.equals("videoad")
+                    || token.equals("playad")
                     || token.equals("commercial")
                     || token.equals("bumper")
                     || token.equals("insert")
