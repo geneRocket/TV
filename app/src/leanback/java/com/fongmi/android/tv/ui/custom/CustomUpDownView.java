@@ -31,29 +31,25 @@ public class CustomUpDownView extends AppCompatTextView {
         this.downListener = downListener;
     }
 
-    private boolean hasEvent(KeyEvent event) {
-        return event.getAction() == KeyEvent.ACTION_DOWN && ((upListener != null && KeyUtil.isUpKey(event)) || (downListener != null && KeyUtil.isDownKey(event)));
-    }
-
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (hasEvent(event)) return onKeyDown(event);
-        else return super.dispatchKeyEvent(event);
-    }
-
-    private boolean onKeyDown(KeyEvent event) {
-        if (upListener != null && KeyUtil.isUpKey(event)) upListener.onUp();
-        if (downListener != null && KeyUtil.isDownKey(event)) downListener.onDown();
-        return true;
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (upListener != null && KeyUtil.isUpKey(event)) {
+                if (upListener.onUp()) return true;
+            } else if (downListener != null && KeyUtil.isDownKey(event)) {
+                if (downListener.onDown()) return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     public interface UpListener {
 
-        void onUp();
+        boolean onUp();
     }
 
     public interface DownListener {
 
-        void onDown();
+        boolean onDown();
     }
 }

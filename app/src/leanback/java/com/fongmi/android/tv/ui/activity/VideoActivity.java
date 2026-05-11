@@ -707,6 +707,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean initTrack;
     private boolean initAuto;
     private boolean autoMode;
+    private boolean mDanmuVisible;
     private boolean useParse;
     private volatile boolean mSearchActive;
     private int mSearchGeneration;
@@ -992,8 +993,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.control.ending.setDownListener(this::onEndingSub);
         mBinding.control.opening.setUpListener(this::onOpeningAdd);
         mBinding.control.opening.setDownListener(this::onOpeningSub);
-        mBinding.control.text.setUpListener(this::onSubtitleClick);
-        mBinding.control.text.setDownListener(this::onSubtitleClick);
+        mBinding.control.text.setUpListener(this::onSubtitleUpDown);
+        mBinding.control.text.setDownListener(this::onSubtitleUpDown);
         mBinding.control.loop.setOnClickListener(view -> onLoop());
         mBinding.control.danmu.setOnClickListener(view -> onDanmu());
         mBinding.control.danmu.setOnLongClickListener(view -> onDanmakuSource());
@@ -1118,6 +1119,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.setDanmuView(mBinding.danmaku);
         setDanmuViewSettings();
         mDanmakuContext.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3).setDanmakuMargin(8);
+        mDanmuVisible = Setting.isDanmu();
         setDanmuText();
         showDanmu();
     }
@@ -1717,31 +1719,38 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onDanmu() {
-        Setting.putDanmu(!Setting.isDanmu());
+        if (!Setting.isDanmu()) {
+            Setting.putDanmu(true);
+            mDanmuVisible = true;
+            refreshDanmaku();
+        } else {
+            mDanmuVisible = !mDanmuVisible;
+            showDanmu();
+        }
         setDanmuText();
-        showDanmu();
-        refreshDanmaku();
         mPlayers.prepared();
     }
 
     private void setDanmuText() {
-        mBinding.control.danmu.setActivated(Setting.isDanmu());
+        mBinding.control.danmu.setActivated(mDanmuVisible);
         setPlainTextIfChanged(mBinding.control.danmu, ResUtil.getString(R.string.play_danmu));
     }
 
     private void showDanmu() {
-        if (Setting.isDanmu()) mBinding.danmaku.show();
+        if (mDanmuVisible) mBinding.danmaku.show();
         else mBinding.danmaku.hide();
     }
 
-    private void onDanmuAdd() {
-        if (Setting.isDanmu()) return;
+    private boolean onDanmuAdd() {
+        if (mDanmuVisible) return false;
         onDanmu();
+        return true;
     }
 
-    private void onDanmuSub() {
-        if (!Setting.isDanmu()) return;
+    private boolean onDanmuSub() {
+        if (!mDanmuVisible) return false;
         onDanmu();
+        return true;
     }
 
     private boolean onDanmakuSource() {
@@ -1787,20 +1796,20 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         
     }
 
-    private void onSpeedAdd() {
+    private boolean onSpeedAdd() {
+        if (mPlayers.getSpeed() >= 5.0f) return false;
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.addSpeed(0.25f));
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        
-        
+        return true;
     }
 
-    private void onSpeedSub() {
+    private boolean onSpeedSub() {
+        if (mPlayers.getSpeed() <= 0.2f) return false;
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.subSpeed(0.25f));
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        
-        
+        return true;
     }
 
     private boolean onSpeedLong() {
@@ -1840,6 +1849,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.releasePlayer();
     }
 
+    private boolean onSubtitleUpDown() {
+        onSubtitleClick();
+        return true;
+    }
+
     private void onReset() {
         onReset(isReplay());
     }
@@ -1862,12 +1876,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setOpening(current);
     }
 
-    private void onOpeningAdd() {
+    private boolean onOpeningAdd() {
+        if (mHistory.getOpening() >= mPlayers.getDuration() / 2) return false;
         setOpening(Math.min(mHistory.getOpening() + 1000, mPlayers.getDuration() / 2));
+        return true;
     }
 
-    private void onOpeningSub() {
+    private boolean onOpeningSub() {
+        if (mHistory.getOpening() <= 0) return false;
         setOpening(Math.max(0, mHistory.getOpening() - 1000));
+        return true;
     }
 
     private boolean onOpeningReset() {
@@ -1887,12 +1905,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setEnding(duration - current);
     }
 
-    private void onEndingAdd() {
+    private boolean onEndingAdd() {
+        if (mHistory.getEnding() >= mPlayers.getDuration() / 2) return false;
         setEnding(Math.min(mPlayers.getDuration() / 2, mHistory.getEnding() + 1000));
+        return true;
     }
 
-    private void onEndingSub() {
+    private boolean onEndingSub() {
+        if (mHistory.getEnding() <= 0) return false;
         setEnding(Math.max(0, mHistory.getEnding() - 1000));
+        return true;
     }
 
     private boolean onEndingReset() {

@@ -192,8 +192,8 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mBinding.control.video.setOnClickListener(this::onTrack);
         mBinding.control.speed.setUpListener(this::onSpeedAdd);
         mBinding.control.speed.setDownListener(this::onSpeedSub);
-        mBinding.control.text.setUpListener(this::onSubtitleClick);
-        mBinding.control.text.setDownListener(this::onSubtitleClick);
+        mBinding.control.text.setUpListener(this::onSubtitleUpDown);
+        mBinding.control.text.setDownListener(this::onSubtitleUpDown);
         mBinding.control.home.setOnClickListener(view -> onHome());
         mBinding.control.line.setOnClickListener(view -> onLine());
         mBinding.control.scale.setOnClickListener(view -> onScale());
@@ -443,6 +443,11 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         hideControl();
     }
 
+    private boolean onSubtitleUpDown() {
+        onSubtitleClick();
+        return true;
+    }
+
     private void onHome() {
         LiveDialog.create(this).show();
         hideControl();
@@ -463,12 +468,16 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         setTextIfChanged(mBinding.control.speed, mPlayers.addSpeed());
     }
 
-    private void onSpeedAdd() {
+    private boolean onSpeedAdd() {
+        if (mPlayers.getSpeed() >= 5.0f) return false;
         setTextIfChanged(mBinding.control.speed, mPlayers.addSpeed(0.25f));
+        return true;
     }
 
-    private void onSpeedSub() {
+    private boolean onSpeedSub() {
+        if (mPlayers.getSpeed() <= 0.2f) return false;
         setTextIfChanged(mBinding.control.speed, mPlayers.subSpeed(0.25f));
+        return true;
     }
 
     private boolean onSpeedLong() {

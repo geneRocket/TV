@@ -124,8 +124,8 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mBinding.control.seek.setListener(mPlayers);
         mBinding.control.speed.setUpListener(this::onSpeedAdd);
         mBinding.control.speed.setDownListener(this::onSpeedSub);
-        mBinding.control.text.setUpListener(this::onSubtitleClick);
-        mBinding.control.text.setDownListener(this::onSubtitleClick);
+        mBinding.control.text.setUpListener(this::onSubtitleUpDown);
+        mBinding.control.text.setDownListener(this::onSubtitleUpDown);
         mBinding.control.text.setOnClickListener(this::onTrack);
         mBinding.control.audio.setOnClickListener(this::onTrack);
         mBinding.control.video.setOnClickListener(this::onTrack);
@@ -207,16 +207,25 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mBinding.control.speed.setText(mPlayers.addSpeed());
     }
 
-    private void onSpeedAdd() {
+    private boolean onSpeedAdd() {
+        if (mPlayers.getSpeed() >= 5.0f) return false;
         mBinding.control.speed.setText(mPlayers.addSpeed(0.25f));
+        return true;
     }
 
-    private void onSpeedSub() {
+    private boolean onSpeedSub() {
+        if (mPlayers.getSpeed() <= 0.2f) return false;
         mBinding.control.speed.setText(mPlayers.subSpeed(0.25f));
+        return true;
     }
 
     private boolean onSpeedLong() {
         mBinding.control.speed.setText(mPlayers.toggleSpeed());
+        return true;
+    }
+
+    private boolean onSubtitleUpDown() {
+        onSubtitleClick();
         return true;
     }
 
