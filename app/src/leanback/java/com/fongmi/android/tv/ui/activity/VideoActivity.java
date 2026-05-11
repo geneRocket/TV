@@ -1250,16 +1250,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void prepareDanmaku(Danmaku item) {
         final int requestId = ++mDanmakuRequestId;
         if (!Setting.isDanmu()) {
+            mPreparedDanmakuUrl = null;
+            mBinding.danmaku.release();
+            mBinding.danmaku.setVisibility(View.GONE);
             showDanmu();
             mPlayers.prepared();
             return;
         }
         boolean hasSource = item != null && !item.isEmpty();
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
+        mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         if (!hasSource) {
             mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
-            mBinding.danmaku.setVisibility(View.GONE);
             return;
         }
         if (TextUtils.equals(mPreparedDanmakuUrl, item.getUrl())) {
@@ -1269,7 +1272,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
         mPreparedDanmakuUrl = item.getUrl();
         mBinding.danmaku.release();
-        mBinding.danmaku.setVisibility(View.VISIBLE);
         App.execute(() -> {
             try {
                 Parser parser = new Parser(item.getUrl());
@@ -1719,14 +1721,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onDanmu() {
-        if (!Setting.isDanmu()) {
-            Setting.putDanmu(true);
-            mDanmuVisible = true;
-            refreshDanmaku();
-        } else {
-            mDanmuVisible = !mDanmuVisible;
-            showDanmu();
-        }
+        Setting.putDanmu(!Setting.isDanmu());
+        mDanmuVisible = Setting.isDanmu();
+        refreshDanmaku();
         setDanmuText();
         mPlayers.prepared();
     }
