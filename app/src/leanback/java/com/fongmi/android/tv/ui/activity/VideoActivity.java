@@ -758,7 +758,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean mArrayRevSort;
     private boolean mArrayRevPlay;
     private boolean mDisplayTrafficPolling;
-    private String mPreparedDanmakuUrl;
     private boolean pendingSiteSwitch;
     private boolean sourceSwitching;
     private boolean sourceSwitchSingleEpisode;
@@ -1240,7 +1239,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void clearDanmakuView() {
-        mPreparedDanmakuUrl = null;
         mDanmakus = mPlayers.getDanmakus();
         mBinding.danmaku.release();
         mBinding.danmaku.setVisibility(View.GONE);
@@ -1250,7 +1248,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void prepareDanmaku(Danmaku item) {
         final int requestId = ++mDanmakuRequestId;
         if (!Setting.isDanmu()) {
-            mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
             mBinding.danmaku.setVisibility(View.GONE);
             showDanmu();
@@ -1261,16 +1258,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         if (!hasSource) {
-            mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
             return;
         }
-        if (TextUtils.equals(mPreparedDanmakuUrl, item.getUrl())) {
-            showDanmu();
-            mPlayers.prepared();
-            return;
-        }
-        mPreparedDanmakuUrl = item.getUrl();
         mBinding.danmaku.release();
         App.execute(() -> {
             try {
@@ -1285,7 +1275,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 ThreadPools.log(e, "Danmaku prepare failed.");
                 App.post(() -> {
                     if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                    mPreparedDanmakuUrl = null;
                     mBinding.danmaku.release();
                     mBinding.danmaku.setVisibility(View.GONE);
                 });

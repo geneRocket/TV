@@ -177,7 +177,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private String pendingPlaybackId;
     private String pendingPlaybackToken;
     private String pendingSearchToken;
-    private String mPreparedDanmakuUrl;
     private Runnable mR0;
     private Runnable mR1;
     private Runnable mR2;
@@ -709,7 +708,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void clearDanmakuView() {
-        mPreparedDanmakuUrl = null;
         mDanmakus = mPlayers.getDanmakus();
         mBinding.danmaku.release();
         mBinding.danmaku.setVisibility(View.GONE);
@@ -728,7 +726,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         final int requestId = ++mDanmakuRequestId;
         boolean blocked = !Setting.isDanmuLoad() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode());
         if (blocked) {
-            mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
             mBinding.danmaku.setVisibility(View.GONE);
             return;
@@ -736,15 +733,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         boolean hasSource = item != null && !item.isEmpty();
         mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         if (!hasSource) {
-            mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
             return;
         }
-        if (TextUtils.equals(mPreparedDanmakuUrl, item.getUrl())) {
-            showDanmu();
-            return;
-        }
-        mPreparedDanmakuUrl = item.getUrl();
         mBinding.danmaku.release();
         App.execute(() -> {
             try {
@@ -759,7 +750,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 ThreadPools.log(e, "Danmaku prepare failed.");
                 App.post(() -> {
                     if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                    mPreparedDanmakuUrl = null;
                     mBinding.danmaku.release();
                     mBinding.danmaku.setVisibility(View.GONE);
                 });
