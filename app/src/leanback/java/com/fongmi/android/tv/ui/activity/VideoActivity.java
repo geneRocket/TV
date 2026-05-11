@@ -1118,7 +1118,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.setDanmuView(mBinding.danmaku);
         setDanmuViewSettings();
         mDanmakuContext.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3).setDanmakuMargin(8);
-        mBinding.control.danmu.setActivated(Setting.isDanmu());
+        setDanmuText();
+        showDanmu();
     }
 
     private void setDisplayView() {
@@ -1246,27 +1247,27 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void prepareDanmaku(Danmaku item) {
         final int requestId = ++mDanmakuRequestId;
-        if (!Setting.isDanmuLoad()) {
-            mPreparedDanmakuUrl = null;
-            mBinding.danmaku.release();
-            mBinding.danmaku.setVisibility(View.GONE);
-            setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
+        if (!Setting.isDanmu()) {
+            showDanmu();
+            mPlayers.prepared();
             return;
         }
         boolean hasSource = item != null && !item.isEmpty();
-        mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         if (!hasSource) {
             mPreparedDanmakuUrl = null;
             mBinding.danmaku.release();
+            mBinding.danmaku.setVisibility(View.GONE);
             return;
         }
         if (TextUtils.equals(mPreparedDanmakuUrl, item.getUrl())) {
             showDanmu();
+            mPlayers.prepared();
             return;
         }
         mPreparedDanmakuUrl = item.getUrl();
         mBinding.danmaku.release();
+        mBinding.danmaku.setVisibility(View.VISIBLE);
         App.execute(() -> {
             try {
                 Parser parser = new Parser(item.getUrl());
@@ -1291,12 +1292,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void refreshDanmaku() {
         setDanmuViewSettings();
         prepareDanmaku(mPlayers.getDanmaku());
-    }
-
-    private boolean hasDanmakuSource() {
-        if (!Setting.isDanmuLoad() || mDanmakus == null) return false;
-        for (Danmaku item : mDanmakus) if (item != null && !item.isEmpty()) return true;
-        return false;
     }
 
     private int getMaxLines() {
@@ -1723,9 +1718,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void onDanmu() {
         Setting.putDanmu(!Setting.isDanmu());
-        mBinding.control.danmu.setActivated(Setting.isDanmu());
+        setDanmuText();
         showDanmu();
-        if (Setting.isDanmu() && hasDanmakuSource()) mPlayers.prepared();
+        refreshDanmaku();
+        mPlayers.prepared();
+    }
+
+    private void setDanmuText() {
+        mBinding.control.danmu.setActivated(Setting.isDanmu());
+        setPlainTextIfChanged(mBinding.control.danmu, ResUtil.getString(R.string.play_danmu));
     }
 
     private void showDanmu() {
@@ -1734,19 +1735,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onDanmuAdd() {
-        int line = Setting.getDanmuLine(3);
-        line = Math.min(line + 1, 15);
-        Setting.putDanmuLine(line);
-        setPlainTextIfChanged(mBinding.control.danmu, line + ResUtil.getString(R.string.lines));
-        setDanmuViewSettings();
+        if (Setting.isDanmu()) return;
+        onDanmu();
     }
 
     private void onDanmuSub() {
-        int line = Setting.getDanmuLine(3);
-        line = Math.max(line - 1, 1);
-        Setting.putDanmuLine(line);
-        setPlainTextIfChanged(mBinding.control.danmu, line + ResUtil.getString(R.string.lines));
-        setDanmuViewSettings();
+        if (!Setting.isDanmu()) return;
+        onDanmu();
     }
 
     private boolean onDanmakuSource() {
@@ -2040,6 +2035,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void showControl(View view) {
         boolean changed = !isVisible(mBinding.control.getRoot());
+        setDanmuText();
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.getRoot(), View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.episodes, Setting.getFullscreenMenuKey() == 0 ? View.VISIBLE : View.GONE);

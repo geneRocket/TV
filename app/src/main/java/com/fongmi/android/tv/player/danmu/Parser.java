@@ -50,6 +50,7 @@ public class Parser extends BaseDanmakuParser {
 
     private String getContent(String path) {
         if (TextUtils.isEmpty(path)) return "";
+        path = UrlUtil.convert(path);
         if (path.startsWith("file")) return Path.read(path);
         if (path.startsWith("http") || path.startsWith("//")) return request(path);
         if (new File(path).exists()) return Path.read(path);

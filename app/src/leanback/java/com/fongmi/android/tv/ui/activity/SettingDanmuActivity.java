@@ -2,7 +2,9 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.view.KeyEvent;
 import android.view.View;
+import android.widget.TextView;
 
 import androidx.viewbinding.ViewBinding;
 
@@ -13,9 +15,7 @@ import com.fongmi.android.tv.impl.DanmuAlphaCallback;
 import com.fongmi.android.tv.impl.DanmuLineCallback;
 import com.fongmi.android.tv.impl.DanmuSizeCallback;
 import com.fongmi.android.tv.ui.base.BaseActivity;
-import com.fongmi.android.tv.ui.dialog.DanmuAlphaDialog;
-import com.fongmi.android.tv.ui.dialog.DanmuLineDialog;
-import com.fongmi.android.tv.ui.dialog.DanmuSizeDialog;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
 public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallback, DanmuSizeCallback, DanmuAlphaCallback {
@@ -51,7 +51,8 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     @Override
     protected void initView() {
         mBinding.danmuLoad.requestFocus();
-        mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmuLoad()));
+        ((TextView) mBinding.danmuLoad.getChildAt(0)).setText(R.string.play_danmu);
+        mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmu()));
         mBinding.danmuSizeText.setText(String.valueOf(Setting.getDanmuSize()));
         mBinding.danmuLineText.setText(String.valueOf(Setting.getDanmuLine(3)));
         mBinding.danmuAlphaText.setText(String.valueOf(Setting.getDanmuAlpha()));
@@ -65,10 +66,29 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
         mBinding.danmuLoad.setOnClickListener(this::setDanmuLoad);
         mBinding.danmuAlpha.setOnClickListener(this::onDanmuAlpha);
         mBinding.danmuSpeed.setOnClickListener(this::setDanmuSpeed);
+        mBinding.danmuSize.setOnKeyListener(this::onDanmuSizeKey);
+        mBinding.danmuLine.setOnKeyListener(this::onDanmuLineKey);
+        mBinding.danmuAlpha.setOnKeyListener(this::onDanmuAlphaKey);
+        mBinding.danmuSpeed.setOnKeyListener(this::onDanmuSpeedKey);
     }
 
     private void onDanmuSize(View view) {
-        DanmuSizeDialog.create(this).show();
+        float size = Setting.getDanmuSize();
+        if (size >= 2.0f) size = 0.6f;
+        else size += 0.2f;
+        setDanmuSize((float) (Math.round(size * 10.0) / 10.0));
+    }
+
+    private boolean onDanmuSizeKey(View v, int keyCode, KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (KeyUtil.isLeftKey(event)) {
+            setDanmuSize((float) (Math.round(Math.max(0.6f, Setting.getDanmuSize() - 0.2f) * 10.0) / 10.0));
+            return true;
+        } else if (KeyUtil.isRightKey(event)) {
+            setDanmuSize((float) (Math.round(Math.min(2.0f, Setting.getDanmuSize() + 0.2f) * 10.0) / 10.0));
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -78,12 +98,27 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     }
 
     private void onDanmuLine(View view) {
-        DanmuLineDialog.create(this).show();
+        int line = Setting.getDanmuLine(3);
+        if (line >= 15) line = 1;
+        else line++;
+        setDanmuLine(line);
+    }
+
+    private boolean onDanmuLineKey(View v, int keyCode, KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (KeyUtil.isLeftKey(event)) {
+            setDanmuLine(Math.max(1, Setting.getDanmuLine(3) - 1));
+            return true;
+        } else if (KeyUtil.isRightKey(event)) {
+            setDanmuLine(Math.min(15, Setting.getDanmuLine(3) + 1));
+            return true;
+        }
+        return false;
     }
 
     private void setDanmuLoad(View view) {
-        Setting.putDanmuLoad(!Setting.isDanmuLoad());
-        mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmuLoad()));
+        Setting.putDanmu(!Setting.isDanmu());
+        mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmu()));
     }
 
     @Override
@@ -93,7 +128,22 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     }
 
     private void onDanmuAlpha(View view) {
-        DanmuAlphaDialog.create(this).show();
+        int alpha = Setting.getDanmuAlpha();
+        if (alpha >= 100) alpha = 10;
+        else alpha += 10;
+        setDanmuAlpha(alpha);
+    }
+
+    private boolean onDanmuAlphaKey(View v, int keyCode, KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (KeyUtil.isLeftKey(event)) {
+            setDanmuAlpha(Math.max(10, Setting.getDanmuAlpha() - 10));
+            return true;
+        } else if (KeyUtil.isRightKey(event)) {
+            setDanmuAlpha(Math.min(100, Setting.getDanmuAlpha() + 10));
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -106,6 +156,22 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
         int index = nextIndex(Setting.getDanmuSpeed(), danmuSpeed);
         Setting.putDanmuSpeed(index);
         mBinding.danmuSpeedText.setText(danmuSpeed[index]);
+    }
+
+    private boolean onDanmuSpeedKey(View v, int keyCode, KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (KeyUtil.isLeftKey(event)) {
+            int index = safeIndex(Setting.getDanmuSpeed() - 1, danmuSpeed);
+            Setting.putDanmuSpeed(index);
+            mBinding.danmuSpeedText.setText(danmuSpeed[index]);
+            return true;
+        } else if (KeyUtil.isRightKey(event)) {
+            int index = safeIndex(Setting.getDanmuSpeed() + 1, danmuSpeed);
+            Setting.putDanmuSpeed(index);
+            mBinding.danmuSpeedText.setText(danmuSpeed[index]);
+            return true;
+        }
+        return false;
     }
 
 
