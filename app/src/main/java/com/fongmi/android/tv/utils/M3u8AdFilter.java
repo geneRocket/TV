@@ -245,6 +245,7 @@ public final class M3u8AdFilter {
         for (Record record : records) {
             if (!record.segment) continue;
             segmentCount++;
+            // 修复：将空 Host 计入统计，防止相对路径视频的广告过滤失效
             String h = record.host == null ? "" : record.host;
             hostCount.put(h, hostCount.getOrDefault(h, 0) + 1);
         }
@@ -259,9 +260,8 @@ public final class M3u8AdFilter {
             }
         }
 
+        // 修复：判断 null 而不是 TextUtils.isEmpty(majorHost)，允许空字符串成为 majorHost
         if (majorHost == null) return build(records, original.length());
-        
-        // 增强：更严格的判定比例，如果主 Host 占比低于 50%，可能是一个多源混合的流，不强行过滤
         if ((majorCount * 10) < (segmentCount * 5)) return build(records, original.length());
 
         StringBuilder sb = new StringBuilder(original.length());
@@ -270,8 +270,7 @@ public final class M3u8AdFilter {
                 sb.append(record.line).append('\n');
             } else {
                 String h = record.host == null ? "" : record.host;
-                // 增强：允许空 Host（相对路径），且过滤非主 Host 分片
-                if (h.isEmpty() || majorHost.equals(h)) {
+                if (TextUtils.isEmpty(h) || majorHost.equals(h)) {
                     for (String tag : record.tags) sb.append(tag).append('\n');
                     sb.append(record.line).append('\n');
                 }
@@ -507,50 +506,7 @@ public final class M3u8AdFilter {
                     || token.equals("scte35")
                     || token.equals("stitched")
                     || token.equals("vast")
-                    || token.equals("vmap")
-                    || token.equals("spot")
-                    || token.equals("popup")
-                    || token.equals("banner")
-                    || token.equals("announcement")
-                    || token.equals("notice")
-                    || token.equals("floating")
-                    || token.equals("overlay")
-                    || token.equals("partner")
-                    || token.equals("sponsored")
-                    || token.equals("googleads")
-                    || token.equals("doubleclick")
-                    || token.equals("telemetry")
-                    || token.equals("analytics")
-                    || token.equals("tracking")
-                    || token.equals("log")
-                    || token.equals("report")
-                    || token.equals("umeng")
-                    || token.equals("bugly")
-                    || token.equals("mobs")
-                    || token.equals("mobads")
-                    || token.equals("pili")
-                    || token.equals("union")
-                    || token.equals("delivery")
-                    || token.equals("v-ad")
-                    || token.equals("click")
-                    || token.equals("statistic")
-                    || token.equals("monitor")
-                    || token.equals("shiguang")
-                    || token.equals("xunfei")
-                    || token.equals("pangle")
-                    || token.equals("gdt")
-                    || token.equals("toutiao")
-                    || token.equals("byteimg")
-                    || token.equals("mopub")
-                    || token.equals("applovin")
-                    || token.equals("unityads")
-                    || token.equals("ironSource")
-                    || token.equals("adcolony")
-                    || token.equals("vungle")
-                    || token.equals("tapjoy")
-                    || token.equals("chartboost")
-                    || token.equals("fyber")
-                    || token.equals("mintegral")) return true;
+                    || token.equals("vmap")) return true;
         }
         return false;
     }
@@ -558,8 +514,7 @@ public final class M3u8AdFilter {
     private static boolean isExplicitAdRecord(Record record) {
         if (!record.segment) return false;
         if (hasExplicitAdTag(record.tags)) return true;
-        if (isLikelyAdSegmentUri(record.line)) return true;
-        return record.duration > 0 && record.duration < 16 && hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
+        return isLikelyAdSegmentUri(record.line);
     }
 
     private static boolean hasExplicitAdTag(List<String> tags) {
