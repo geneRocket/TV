@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.view.KeyEvent;
 import android.view.View;
-import android.widget.TextView;
 
 import androidx.viewbinding.ViewBinding;
 
@@ -51,7 +50,6 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     @Override
     protected void initView() {
         mBinding.danmuLoad.requestFocus();
-        ((TextView) mBinding.danmuLoad.getChildAt(0)).setText(R.string.play_danmu);
         mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmu()));
         mBinding.danmuSizeText.setText(String.valueOf(Setting.getDanmuSize()));
         mBinding.danmuLineText.setText(String.valueOf(Setting.getDanmuLine(3)));
@@ -66,6 +64,7 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
         mBinding.danmuLoad.setOnClickListener(this::setDanmuLoad);
         mBinding.danmuAlpha.setOnClickListener(this::onDanmuAlpha);
         mBinding.danmuSpeed.setOnClickListener(this::setDanmuSpeed);
+        mBinding.danmuLoad.setOnKeyListener(this::onDanmuLoadKey);
         mBinding.danmuSize.setOnKeyListener(this::onDanmuSizeKey);
         mBinding.danmuLine.setOnKeyListener(this::onDanmuLineKey);
         mBinding.danmuAlpha.setOnKeyListener(this::onDanmuAlphaKey);
@@ -117,8 +116,25 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     }
 
     private void setDanmuLoad(View view) {
-        Setting.putDanmu(!Setting.isDanmu());
-        mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmu()));
+        setDanmuLoad(!Setting.isDanmu());
+    }
+
+    private void setDanmuLoad(boolean enabled) {
+        Setting.putDanmu(enabled);
+        mBinding.danmuLoadText.setText(getSwitch(enabled));
+    }
+
+    private boolean onDanmuLoadKey(View v, int keyCode, KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (KeyUtil.isLeftKey(event)) {
+            setDanmuLoad(false);
+            return true;
+        }
+        if (KeyUtil.isRightKey(event)) {
+            setDanmuLoad(true);
+            return true;
+        }
+        return false;
     }
 
     @Override

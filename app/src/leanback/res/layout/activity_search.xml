@@ -52,7 +52,8 @@
             android:layout_marginEnd="12dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:nextFocusLeft="@id/record"
+            android:nextFocusLeft="@id/recordRecycler"
+            android:nextFocusRight="@id/keyword"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_search_mic" />
 
@@ -71,7 +72,8 @@
             android:inputType="textCapWords|textAutoCorrect|textAutoComplete"
             android:letterSpacing="0.02"
             android:maxLength="255"
-            android:nextFocusRight="@id/word"
+            android:nextFocusLeft="@id/mic"
+            android:nextFocusRight="@id/wordRecycler"
             android:singleLine="true"
             android:textColor="@color/white"
             android:textColorHint="@color/white"
@@ -83,6 +85,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_below="@+id/keyword"
+            android:nextFocusLeft="@id/mic"
+            android:nextFocusRight="@id/wordRecycler"
             android:overScrollMode="never"
             app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
             app:spanCount="6"
@@ -112,6 +116,7 @@
             android:layout_height="match_parent"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:nextFocusLeft="@id/keyboard"
             android:overScrollMode="never"
             android:paddingBottom="24dp"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
@@ -120,4 +125,3 @@
 
     </LinearLayout>
 </LinearLayout>
-

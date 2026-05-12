@@ -61,6 +61,12 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         return index;
     }
 
+    public void clear() {
+        mItems.clear();
+        setDelete(false);
+        notifyDataSetChanged();
+    }
+
     public boolean isDelete() {
         return delete;
     }

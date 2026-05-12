@@ -5,24 +5,36 @@
     android:keepScreenOn="true"
     android:orientation="vertical">
 
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingStart="24dp"
         android:paddingTop="24dp"
         android:paddingEnd="24dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:layout_gravity="start"
             android:text="@string/home_keep"
             android:textColor="@color/white"
             android:textSize="24sp" />
 
-    </FrameLayout>
+        <ImageView
+            android:id="@+id/delete"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/selector_image"
+            android:src="@drawable/ic_action_delete"
+            android:focusable="false"
+            android:visibility="gone" />
+
+    </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"

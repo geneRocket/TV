@@ -80,6 +80,11 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         mBinding.delete.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.delete.setFocusable(visible);
         mBinding.empty.getRoot().setVisibility(visible ? View.GONE : View.VISIBLE);
+        mBinding.empty.getRoot().setFocusable(!visible);
+        mBinding.empty.getRoot().setFocusableInTouchMode(!visible);
+        if (!visible) mBinding.empty.getRoot().post(() -> {
+            if (!isFinishing() && !isDestroyed()) mBinding.empty.getRoot().requestFocus();
+        });
     }
 
     private void onDelete(View view) {

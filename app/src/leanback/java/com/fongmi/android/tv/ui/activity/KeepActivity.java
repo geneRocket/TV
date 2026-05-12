@@ -17,6 +17,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.ui.adapter.KeepAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -46,6 +47,11 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         getKeep();
     }
 
+    @Override
+    protected void initEvent() {
+        mBinding.delete.setOnClickListener(this::onDelete);
+    }
+
     private void setRecyclerView() {
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setItemAnimator(null);
@@ -71,7 +77,32 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     }
 
     private void updateEmptyView() {
-        mBinding.empty.getRoot().setVisibility(mAdapter.getItemCount() > 0 ? View.GONE : View.VISIBLE);
+        boolean visible = mAdapter.getItemCount() > 0;
+        mBinding.delete.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.delete.setFocusable(visible);
+        mBinding.empty.getRoot().setVisibility(visible ? View.GONE : View.VISIBLE);
+        mBinding.empty.getRoot().setFocusable(!visible);
+        mBinding.empty.getRoot().setFocusableInTouchMode(!visible);
+        if (!visible) mBinding.empty.getRoot().post(() -> {
+            if (!isFinishing() && !isDestroyed()) mBinding.empty.getRoot().requestFocus();
+        });
+    }
+
+    private void onDelete(View view) {
+        if (mAdapter.isDelete()) {
+            new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_keep).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+                mKeepRequestId++;
+                mOpenRequestId++;
+                Keep.deleteAll();
+                mAdapter.clear();
+                updateEmptyView();
+                RefreshEvent.keep();
+            }).show();
+        } else if (mAdapter.getItemCount() > 0) {
+            mAdapter.setDelete(true);
+        } else {
+            mBinding.delete.setVisibility(View.GONE);
+        }
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

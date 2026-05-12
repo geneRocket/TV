@@ -255,6 +255,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     public void onDataChanged(int size) {
         boolean refocusKeyword = size == 0 && mBinding.recordLayout.hasFocus();
         mBinding.recordLayout.setVisibility(size == 0 ? View.GONE : View.VISIBLE);
+        mBinding.mic.setNextFocusLeftId(size == 0 ? mBinding.mic.getId() : mBinding.recordRecycler.getId());
         if (refocusKeyword) mBinding.keyword.requestFocus();
     }
 
