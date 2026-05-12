@@ -526,7 +526,7 @@ public class History {
         for (History item : find()) {
             EpisodeMatch match = findEpisode(flags, item.getVodRemarks());
             if (match == null) continue;
-            if (best == null || item.getCreateTime() > best.history.getCreateTime()) best = match.history(item);
+            if (best == null || item.getCreateTime() > best.history.getCreateTime() || (best.history.getPosition() <= 0 && item.getPosition() > 0)) best = match.history(item);
         }
         if (best == null) return;
         setVodFlag(best.flag.getFlag());
