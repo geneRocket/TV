@@ -1118,9 +1118,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.setDanmuView(mBinding.danmaku);
         setDanmuViewSettings();
         mDanmakuContext.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3).setDanmakuMargin(8);
-        mDanmuVisible = Setting.isDanmu();
-        mPlayers.setDanmuVisible(mDanmuVisible);
-        setDanmuText();
+        syncDanmuVisible();
     }
 
     private void setDisplayView() {
@@ -1247,7 +1245,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void prepareDanmaku(Danmaku item) {
         final int requestId = ++mDanmakuRequestId;
-        if (!Setting.isDanmu()) {
+        syncDanmuVisible();
+        if (!mDanmuVisible) {
             mBinding.danmaku.release();
             mBinding.danmaku.setVisibility(View.GONE);
             showDanmu();
@@ -1283,6 +1282,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void refreshDanmaku() {
+        syncDanmuVisible();
         setDanmuViewSettings();
         prepareDanmaku(mPlayers.getDanmaku());
     }
@@ -1711,10 +1711,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void onDanmu() {
         Setting.putDanmu(!Setting.isDanmu());
-        mDanmuVisible = Setting.isDanmu();
         refreshDanmaku();
-        setDanmuText();
         mPlayers.prepared();
+    }
+
+    private void syncDanmuVisible() {
+        mDanmuVisible = Setting.isDanmu();
+        setDanmuText();
+        showDanmu();
     }
 
     private void setDanmuText() {
@@ -2046,7 +2050,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void showControl(View view) {
         boolean changed = !isVisible(mBinding.control.getRoot());
-        setDanmuText();
+        syncDanmuVisible();
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.getRoot(), View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.episodes, Setting.getFullscreenMenuKey() == 0 ? View.VISIBLE : View.GONE);

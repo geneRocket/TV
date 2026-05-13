@@ -45,7 +45,7 @@ public class Danmaku {
 
     public static List<Danmaku> arrayFrom(String value) {
         if (TextUtils.isEmpty(value)) return Collections.emptyList();
-        String text = value.trim();
+        String text = stripBom(value.trim());
         try {
             JsonElement element = Json.parse(text);
             if (element.isJsonPrimitive()) return normalize(new ArrayList<>(Collections.singletonList(create("", element.getAsString()))));
@@ -54,7 +54,7 @@ public class Danmaku {
             if (element.isJsonObject()) return fromObject(element.getAsJsonObject());
         } catch (Exception ignored) {
         }
-        return normalize(new ArrayList<>(Collections.singletonList(create("", value))));
+        return normalize(new ArrayList<>(Collections.singletonList(create("", text))));
     }
 
     private static List<Danmaku> fromArray(JsonArray array) {
@@ -71,8 +71,18 @@ public class Danmaku {
         if (object.has("url") || object.has("path")) return normalize(new ArrayList<>(Collections.singletonList(from(object))));
         for (String key : SOURCE_LIST_KEYS) {
             JsonElement value = object.get(key);
-            if (value != null && value.isJsonArray()) return fromArray(value.getAsJsonArray());
+            List<Danmaku> items = fromElement(value);
+            if (!items.isEmpty()) return items;
         }
+        return Collections.emptyList();
+    }
+
+    private static List<Danmaku> fromElement(JsonElement element) {
+        if (element == null || element.isJsonNull()) return Collections.emptyList();
+        if (element.isJsonPrimitive()) return arrayFrom(element.getAsString());
+        if (isRawContent(element)) return normalize(new ArrayList<>(Collections.singletonList(create("", element.toString()))));
+        if (element.isJsonArray()) return fromArray(element.getAsJsonArray());
+        if (element.isJsonObject()) return fromObject(element.getAsJsonObject());
         return Collections.emptyList();
     }
 
@@ -191,6 +201,10 @@ public class Danmaku {
 
     private static String clean(String value) {
         return TextUtils.isEmpty(value) ? "" : value.trim();
+    }
+
+    private static String stripBom(String value) {
+        return !TextUtils.isEmpty(value) && value.charAt(0) == '\ufeff' ? value.substring(1) : value;
     }
 
     public String getName() {

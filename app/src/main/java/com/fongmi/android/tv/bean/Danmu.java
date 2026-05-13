@@ -38,13 +38,13 @@ public class Danmu {
 
     public static Danmu from(String str) {
         if (TextUtils.isEmpty(str)) return new Danmu();
-        String text = str.trim();
+        String text = stripBom(str.trim());
         if (text.startsWith("{") || text.startsWith("[")) return fromJson(text);
-        Danmu danmu = fromXml(str);
+        Danmu danmu = fromXml(text);
         if (!danmu.getData().isEmpty()) return danmu;
-        danmu = fromGenericXml(str);
+        danmu = fromGenericXml(text);
         if (!danmu.getData().isEmpty()) return danmu;
-        return fromJson(str);
+        return fromJson(text);
     }
 
     public static Danmu fromXml(String str) {
@@ -324,6 +324,10 @@ public class Danmu {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private static String stripBom(String value) {
+        return !TextUtils.isEmpty(value) && value.charAt(0) == '\ufeff' ? value.substring(1) : value;
     }
 
     private static boolean isPrimitive(JsonArray array, int index) {
