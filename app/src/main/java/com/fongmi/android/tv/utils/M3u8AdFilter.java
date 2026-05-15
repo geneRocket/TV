@@ -1112,6 +1112,7 @@ public final class M3u8AdFilter {
 
         String lower = uri.toLowerCase(Locale.US).trim();
 
+        if (AdBlocker.isAdUrl(lower)) return true;
         if (containsAdQueryKey(lower)) return true;
         if (containsAdKeyword(lower)) return true;
         if (containsAdPathPart(lower)) return true;

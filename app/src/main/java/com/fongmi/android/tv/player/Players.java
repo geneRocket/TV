@@ -41,6 +41,7 @@ import com.fongmi.android.tv.impl.SessionCallback;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.AdBlocker;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
@@ -584,6 +585,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
             ErrorEvent.extract(result.getMsg());
         } else if (result.getParse(1) == 1 || result.getJx() == 1) {
             startParse(result, useParse);
+        } else if (Setting.isRemoveAd() && AdBlocker.isAdUrl(result.getRealUrl())) {
+            ErrorEvent.url(0);
         } else if (isIllegal(result.getRealUrl())) {
             ErrorEvent.url(0);
         } else {
@@ -896,6 +899,10 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     @Override
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
+        if (Setting.isRemoveAd() && AdBlocker.isAdUrl(url)) {
+            ErrorEvent.parse();
+            return;
+        }
         if (!TextUtils.isEmpty(from)) Notify.show(ResUtil.getString(R.string.parse_from, from));
         setMediaSource(headers, url, format, drm, subs, timeout, forceLive);
     }

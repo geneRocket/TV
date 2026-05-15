@@ -27,10 +27,10 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
-import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.ui.dialog.WebDialog;
+import com.fongmi.android.tv.utils.AdBlocker;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.WebViewUtil;
@@ -43,10 +43,8 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 import okhttp3.Request;
 import okhttp3.Response;
@@ -66,10 +64,6 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     private String from;
     private String key;
     private volatile boolean stopped;
-    private int vodAdsHash;
-    private int liveAdsHash;
-    private List<Pattern> vodAdPatterns = Collections.emptyList();
-    private List<Pattern> liveAdPatterns = Collections.emptyList();
 
     public static CustomWebView create(@NonNull Context context) {
         initTbs();
@@ -148,7 +142,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 String host = request.getUrl().getHost();
-                if (TextUtils.isEmpty(host) || isAd(host)) return empty;
+                if (TextUtils.isEmpty(host) || isAd(url, host)) return empty;
                 Map<String, String> headers = request.getRequestHeaders();
                 if (url.contains("challenges.cloudflare.com/turnstile")) App.post(() -> showDialog());
                 if (detect && url.contains("player/?url=")) onParseAdd(headers, url);
@@ -302,42 +296,8 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
         }
     }
 
-    private boolean isAd(String host) {
-        List<String> vodAds = VodConfig.get().getAds();
-        List<String> liveAds = LiveConfig.get().getAds();
-        for (String ad : vodAds) if (host.contains(ad)) return true;
-        for (String ad : liveAds) if (host.contains(ad)) return true;
-        ensureAdPatterns(vodAds, liveAds);
-        for (Pattern ad : vodAdPatterns) if (ad.matcher(host).find()) return true;
-        for (Pattern ad : liveAdPatterns) if (ad.matcher(host).find()) return true;
-        return false;
-    }
-
-    private void ensureAdPatterns(List<String> vodAds, List<String> liveAds) {
-        int vodHash = vodAds.hashCode();
-        int liveHash = liveAds.hashCode();
-        if (vodHash != vodAdsHash) {
-            vodAdsHash = vodHash;
-            vodAdPatterns = compilePatterns(vodAds);
-        }
-        if (liveHash != liveAdsHash) {
-            liveAdsHash = liveHash;
-            liveAdPatterns = compilePatterns(liveAds);
-        }
-    }
-
-    private List<Pattern> compilePatterns(List<String> ads) {
-        if (ads.isEmpty()) return Collections.emptyList();
-        List<Pattern> patterns = new ArrayList<>(ads.size());
-        for (String ad : ads) {
-            if (TextUtils.isEmpty(ad)) continue;
-            try {
-                patterns.add(Pattern.compile(ad));
-            } catch (Exception e) {
-                patterns.add(Pattern.compile(Pattern.quote(ad)));
-            }
-        }
-        return patterns;
+    private boolean isAd(String url, String host) {
+        return AdBlocker.isAdHost(host) || AdBlocker.isAdUrl(url);
     }
 
     private boolean isVideoFormat(String url) {
