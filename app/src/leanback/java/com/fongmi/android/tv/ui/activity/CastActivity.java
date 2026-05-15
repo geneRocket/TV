@@ -41,6 +41,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.service.StableDLNARendererService;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownCast;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
@@ -107,7 +108,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     protected void initView() {
-        mServiceBound = bindService(new Intent(this, DLNARendererService.class), this, Context.BIND_AUTO_CREATE);
+        mServiceBound = bindService(new Intent(this, StableDLNARendererService.class), this, Context.BIND_AUTO_CREATE);
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownCast.create(this);
         mPlayers = Players.create(this);
