@@ -501,7 +501,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void stopSearch() {
+            String token = host.pendingSearchToken;
             host.mSearchActive = false;
+            host.mViewModel.cancelSearch(token);
             host.setPendingSearchToken(null);
             host.resetSearchTaskState();
             host.mQuickKeys.clear();
@@ -655,6 +657,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             } catch (Throwable e) {
                 ThreadPools.log(e, "Video search failed for " + site.getName());
             } finally {
+                host.pruneSearchTasks();
                 if (host.onSearchTaskFinished(generation)) App.post(() -> host.onSearchTasksSettled(generation), 100);
             }
         }
@@ -1040,6 +1043,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void setEpisodeChildKeyListener(RecyclerView.ViewHolder child, int position) {
         if (getEpisodeView() != mBinding.episodeVert) return;
         if (child == null) return;
+        child.itemView.setOnKeyListener(null);
         int itemCount = getEpisodeView().getAdapter().getItemCount();
         if (itemCount <= 0) return;
         int columns = mEpisodePresenter.getNumColumns();
@@ -2452,6 +2456,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void advanceRecoveryFlow() {
+        if (!getSite().isChangeable()) return;
         if (isUseParse()) advanceParse();
         else advanceFlag();
     }
@@ -2749,6 +2754,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         synchronized (mSearchTasks) {
             for (Future<?> task : mSearchTasks) task.cancel(true);
             mSearchTasks.clear();
+        }
+    }
+
+    private void pruneSearchTasks() {
+        synchronized (mSearchTasks) {
+            mSearchTasks.removeIf(task -> task.isDone() || task.isCancelled());
         }
     }
 
