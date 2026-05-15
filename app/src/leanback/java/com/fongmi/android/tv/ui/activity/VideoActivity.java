@@ -299,6 +299,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             else if (host.shouldApplyFlagSwitchProgress(host.getFlag(), item)) host.applyFlagSwitchProgress(host.getFlag(), item);
             host.clearSourceSwitch();
             host.clearFlagSwitchTarget();
+            host.mContent.stopSearch();
             host.notifyItemChanged(host.getEpisodeView(), host.mEpisodeAdapter);
             host.onRefresh();
         }
@@ -308,6 +309,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mSelectedParsePosition = Math.max(0, host.mParseAdapter.indexOf(item));
             host.notifyItemChanged(host.mBinding.control.parse, host.mParseAdapter);
             if (notify) Notify.show(host.getString(R.string.play_switch_parse, item.getName()));
+            if (!host.isSourceSwitching()) host.mContent.stopSearch();
             host.onRefresh();
         }
 
@@ -761,6 +763,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean mArrayRevSort;
     private boolean mArrayRevPlay;
     private boolean mDisplayTrafficPolling;
+    private boolean mProgressTrafficPolling;
+    private boolean mFocusUpdateScheduled;
     private boolean pendingSiteSwitch;
     private boolean sourceSwitching;
     private boolean sourceSwitchSingleEpisode;
@@ -1175,6 +1179,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         clearPendingPlaybackRequest();
         clearPlaybackTimeout();
         mPlaybackState.clear();
+        stopProgressPolling();
         mClock.setCallback(null);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         mPlayers.reset();
@@ -1183,6 +1188,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void requestPlayback(Flag flag, Episode episode, boolean replay) {
+        clearPlaybackTimeout();
+        mPlaybackState.clear();
         CharSequence title = getString(R.string.detail_title, mBinding.name.getText(), episode.getName());
         if (!TextUtils.equals(mBinding.widget.title.getText(), title)) mBinding.widget.title.setText(title);
         if (!TextUtils.equals(mBinding.display.title.getText(), title)) mBinding.display.title.setText(title);
@@ -1213,7 +1220,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         mPlayers.start(result, isUseParse(), getSite().getTimeout());
         if (!TextUtils.equals(token, pendingPlaybackToken)) return;
-        mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.control.parse, isUseParse() ? View.VISIBLE : View.GONE);
         setQualityVisible(result.getUrl().isMulti());
         setDanmakus(result.getDanmakus());
         mQualityAdapter.addAll(result);
@@ -1573,6 +1580,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void updateFocus() {
+        mFocusUpdateScheduled = false;
         hasKeyEvent = false;
         mEpisodePresenter.setNextFocusDown(findFocusDown(Setting.getEpisode() == 0 ? 2 : 4));
         mEpisodePresenter.setNextFocusUp(findFocusUp(Setting.getEpisode() == 0 ? 2 : 4));
@@ -1964,20 +1972,25 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (visible) {
             hideError();
         } else {
-            App.removeCallbacks(mR3);
+            stopProgressPolling();
         }
         if (changed) showDisplayInfo();
     }
 
     private void startProgressPolling() {
-        App.removeCallbacks(mR3);
+        if (mProgressTrafficPolling) return;
+        mProgressTrafficPolling = true;
         App.post(mR3, 0);
+    }
+
+    private void stopProgressPolling() {
+        mProgressTrafficPolling = false;
+        App.removeCallbacks(mR3);
     }
 
     private void showProgress() {
         setProgressVisible(true);
         startProgressPolling();
-        hideError();
     }
 
     private void hideProgress() {
@@ -2098,7 +2111,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void setTraffic() {
         Traffic.setSpeed(mBinding.widget.traffic);
         if (!isBuffering()) {
-            App.removeCallbacks(mR3);
+            stopProgressPolling();
             return;
         }
         App.post(mR3, Constant.INTERVAL_TRAFFIC);
@@ -2118,10 +2131,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setR1Callback() {
+        App.removeCallbacks(mR1);
         App.post(mR1, Constant.INTERVAL_HIDE);
     }
 
     private void setR2Callback(long delayMillis) {
+        if (mFocusUpdateScheduled) App.removeCallbacks(mR2);
+        mFocusUpdateScheduled = true;
         App.post(mR2, delayMillis);
     }
 
@@ -2689,9 +2705,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void onPlaybackTimeout() {
         String token = pendingPlaybackTimeoutToken;
         if (TextUtils.isEmpty(token) || !TextUtils.equals(token, pendingPlaybackToken) || isBackground()) return;
+        boolean recoverable = isSourceSwitching() || isAutoMode();
         stopActivePlayback();
         showError(getString(R.string.error_play_timeout));
-        if (isSourceSwitching() || isAutoMode()) advanceRecoveryFlow();
+        if (recoverable) advanceRecoveryFlow();
     }
 
     private void setPendingSearchToken(String token) {
