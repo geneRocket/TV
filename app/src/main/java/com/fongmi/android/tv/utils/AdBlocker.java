@@ -54,8 +54,10 @@ public final class AdBlocker {
 
     private static int vodAdsHash;
     private static int liveAdsHash;
-    private static List<Pattern> vodPatterns = Collections.emptyList();
-    private static List<Pattern> livePatterns = Collections.emptyList();
+    private static List<Pattern> vodHostPatterns = Collections.emptyList();
+    private static List<Pattern> liveHostPatterns = Collections.emptyList();
+    private static List<Pattern> vodUrlPatterns = Collections.emptyList();
+    private static List<Pattern> liveUrlPatterns = Collections.emptyList();
 
     private AdBlocker() {
     }
@@ -63,27 +65,40 @@ public final class AdBlocker {
     public static boolean isAdUrl(String url) {
         if (TextUtils.isEmpty(url)) return false;
         String value = url.toLowerCase(Locale.US);
-        if (matchesConfiguredAds(value)) return true;
-        if (!Setting.isRemoveAd()) return false;
         Uri uri = UrlUtil.uri(value);
+        if (matchesConfiguredHost(uri.getHost()) || matchesConfiguredUrl(value)) return true;
+        if (!Setting.isRemoveAd()) return false;
         return hasDefaultAdHost(uri.getHost()) || hasDefaultAdSignal(uri);
     }
 
     public static boolean isAdHost(String host) {
         if (TextUtils.isEmpty(host)) return false;
         String value = host.toLowerCase(Locale.US);
-        if (matchesConfiguredAds(value)) return true;
+        if (matchesConfiguredHost(value)) return true;
         return Setting.isRemoveAd() && hasDefaultAdHost(value);
     }
 
-    private static boolean matchesConfiguredAds(String value) {
+    private static boolean matchesConfiguredHost(String host) {
+        if (TextUtils.isEmpty(host)) return false;
         List<String> vodAds = VodConfig.get().getAds();
         List<String> liveAds = LiveConfig.get().getAds();
-        for (String ad : vodAds) if (contains(value, ad)) return true;
-        for (String ad : liveAds) if (contains(value, ad)) return true;
+        String value = host.toLowerCase(Locale.US);
+        for (String ad : vodAds) if (isHostRule(ad) && contains(value, ad)) return true;
+        for (String ad : liveAds) if (isHostRule(ad) && contains(value, ad)) return true;
         ensurePatterns(vodAds, liveAds);
-        for (Pattern pattern : vodPatterns) if (pattern.matcher(value).find()) return true;
-        for (Pattern pattern : livePatterns) if (pattern.matcher(value).find()) return true;
+        for (Pattern pattern : vodHostPatterns) if (pattern.matcher(value).find()) return true;
+        for (Pattern pattern : liveHostPatterns) if (pattern.matcher(value).find()) return true;
+        return false;
+    }
+
+    private static boolean matchesConfiguredUrl(String value) {
+        List<String> vodAds = VodConfig.get().getAds();
+        List<String> liveAds = LiveConfig.get().getAds();
+        for (String ad : vodAds) if (isUrlRule(ad) && contains(value, ad)) return true;
+        for (String ad : liveAds) if (isUrlRule(ad) && contains(value, ad)) return true;
+        ensurePatterns(vodAds, liveAds);
+        for (Pattern pattern : vodUrlPatterns) if (pattern.matcher(value).find()) return true;
+        for (Pattern pattern : liveUrlPatterns) if (pattern.matcher(value).find()) return true;
         return false;
     }
 
@@ -96,19 +111,22 @@ public final class AdBlocker {
         int liveHash = liveAds.hashCode();
         if (vodHash != vodAdsHash) {
             vodAdsHash = vodHash;
-            vodPatterns = compilePatterns(vodAds);
+            vodHostPatterns = compilePatterns(vodAds, true);
+            vodUrlPatterns = compilePatterns(vodAds, false);
         }
         if (liveHash != liveAdsHash) {
             liveAdsHash = liveHash;
-            livePatterns = compilePatterns(liveAds);
+            liveHostPatterns = compilePatterns(liveAds, true);
+            liveUrlPatterns = compilePatterns(liveAds, false);
         }
     }
 
-    private static List<Pattern> compilePatterns(List<String> ads) {
+    private static List<Pattern> compilePatterns(List<String> ads, boolean hostOnly) {
         if (ads.isEmpty()) return Collections.emptyList();
         List<Pattern> patterns = new ArrayList<>(ads.size());
         for (String ad : ads) {
             if (TextUtils.isEmpty(ad)) continue;
+            if (hostOnly != isHostRule(ad)) continue;
             try {
                 patterns.add(Pattern.compile(ad, Pattern.CASE_INSENSITIVE));
             } catch (Exception e) {
@@ -116,6 +134,20 @@ public final class AdBlocker {
             }
         }
         return patterns;
+    }
+
+    private static boolean isHostRule(String rule) {
+        return !TextUtils.isEmpty(rule) && !isUrlRule(rule);
+    }
+
+    private static boolean isUrlRule(String rule) {
+        if (TextUtils.isEmpty(rule)) return false;
+        String value = rule.trim();
+        return value.contains("://")
+                || value.startsWith("/")
+                || value.contains("/")
+                || value.contains("?") && value.contains("=")
+                || value.contains("&") && value.contains("=");
     }
 
     private static boolean hasDefaultAdHost(String host) {
