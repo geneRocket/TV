@@ -993,11 +993,11 @@ public final class M3u8AdFilter {
             if (AD_KEYWORDS.contains(token)) return true;
 
             if (token.startsWith("ad") && token.length() <= 12) {
-                if (token.equals("ad") || token.startsWith("ads") || token.startsWith("adv")) return true;
+                if (token.equals("ad") || token.equals("ads") || token.equals("adv")) return true;
                 if (token.contains("roll") || token.contains("pod") || token.contains("break")) return true;
             }
 
-            if (token.endsWith("ad") && token.length() <= 12) return true;
+            if (hasEndingAdWord(token)) return true;
             if (token.contains("scte35")) return true;
             if (token.contains("vast")) return true;
             if (token.contains("vmap")) return true;
@@ -1160,12 +1160,32 @@ public final class M3u8AdFilter {
         for (String part : parts) {
             if (TextUtils.isEmpty(part)) continue;
             if (AD_PATH_PARTS.contains(part)) return true;
-            if (part.startsWith("ad") && part.length() <= 16) return true;
-            if (part.endsWith("ad") && part.length() <= 16) return true;
+            if (part.startsWith("ad") && part.length() <= 16 && hasAdBoundaryWord(part)) return true;
+            if (hasEndingAdWord(part)) return true;
             if (part.contains("adbreak") || part.contains("adpod")) return true;
         }
 
         return false;
+    }
+
+    private static boolean hasAdBoundaryWord(String value) {
+        return value.equals("ad")
+                || value.equals("ads")
+                || value.equals("adv")
+                || isAdNumber(value, "ad")
+                || isAdNumber(value, "ads")
+                || value.startsWith("advert")
+                || value.startsWith("adroll")
+                || value.startsWith("adpod")
+                || value.startsWith("adbreak");
+    }
+
+    private static boolean isAdNumber(String value, String prefix) {
+        return value.length() > prefix.length() && value.startsWith(prefix) && Character.isDigit(value.charAt(prefix.length()));
+    }
+
+    private static boolean hasEndingAdWord(String value) {
+        return value.equals("videoad") || value.equals("playad") || value.equals("preloadad");
     }
 
     private static String safeDecode(String value) {

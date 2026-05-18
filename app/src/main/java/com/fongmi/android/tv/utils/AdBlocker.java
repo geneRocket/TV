@@ -83,8 +83,8 @@ public final class AdBlocker {
         List<String> vodAds = VodConfig.get().getAds();
         List<String> liveAds = LiveConfig.get().getAds();
         String value = host.toLowerCase(Locale.US);
-        for (String ad : vodAds) if (isHostRule(ad) && contains(value, ad)) return true;
-        for (String ad : liveAds) if (isHostRule(ad) && contains(value, ad)) return true;
+        for (String ad : vodAds) if (isHostRule(ad) && matchesHostRule(value, ad)) return true;
+        for (String ad : liveAds) if (isHostRule(ad) && matchesHostRule(value, ad)) return true;
         ensurePatterns(vodAds, liveAds);
         for (Pattern pattern : vodHostPatterns) if (pattern.matcher(value).find()) return true;
         for (Pattern pattern : liveHostPatterns) if (pattern.matcher(value).find()) return true;
@@ -103,7 +103,29 @@ public final class AdBlocker {
     }
 
     private static boolean contains(String value, String ad) {
-        return !TextUtils.isEmpty(ad) && value.contains(ad.toLowerCase(Locale.US));
+        String rule = normalizeRule(ad);
+        return rule.length() >= 4 && value.contains(rule);
+    }
+
+    private static boolean matchesHostRule(String host, String ad) {
+        String rule = normalizeRule(ad);
+        if (TextUtils.isEmpty(rule) || isRegexRule(rule)) return false;
+        if (rule.length() < 4) return false;
+        if (rule.contains(".")) return host.equals(rule) || host.endsWith("." + rule);
+        for (String part : host.split("\\.")) if (part.equals(rule)) return true;
+        return false;
+    }
+
+    private static String normalizeRule(String rule) {
+        if (rule == null) return "";
+        String value = rule.trim().toLowerCase(Locale.US);
+        if (value.startsWith("regex:")) value = value.substring(6).trim();
+        return value;
+    }
+
+    private static boolean isRegexRule(String rule) {
+        if (TextUtils.isEmpty(rule)) return false;
+        return rule.trim().toLowerCase(Locale.US).startsWith("regex:");
     }
 
     private static void ensurePatterns(List<String> vodAds, List<String> liveAds) {
@@ -127,10 +149,11 @@ public final class AdBlocker {
         for (String ad : ads) {
             if (TextUtils.isEmpty(ad)) continue;
             if (hostOnly != isHostRule(ad)) continue;
+            if (!isRegexRule(ad)) continue;
             try {
-                patterns.add(Pattern.compile(ad, Pattern.CASE_INSENSITIVE));
+                patterns.add(Pattern.compile(normalizeRule(ad), Pattern.CASE_INSENSITIVE));
             } catch (Exception e) {
-                patterns.add(Pattern.compile(Pattern.quote(ad), Pattern.CASE_INSENSITIVE));
+                patterns.add(Pattern.compile(Pattern.quote(normalizeRule(ad)), Pattern.CASE_INSENSITIVE));
             }
         }
         return patterns;
@@ -169,7 +192,7 @@ public final class AdBlocker {
         for (String token : value.split("[^a-z0-9]+")) {
             if (TextUtils.isEmpty(token)) continue;
             if (DEFAULT_TOKENS.contains(token)) return true;
-            if (token.startsWith("ads") || token.startsWith("adv") || token.startsWith("advert")) return true;
+            if (token.startsWith("advert")) return true;
             if (token.startsWith("adbreak") || token.startsWith("adpod")) return true;
         }
         return false;
