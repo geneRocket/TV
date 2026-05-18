@@ -196,8 +196,14 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onServerEvent(ServerEvent event) {
-        if (event.getType() != ServerEvent.Type.PUSH) return;
-        VideoActivity.push(this, event.getText());
+        switch (event.getType()) {
+            case SEARCH:
+                CollectActivity.start(this, event.getText());
+                break;
+            case PUSH:
+                VideoActivity.push(this, event.getText());
+                break;
+        }
     }
 
     @Override
