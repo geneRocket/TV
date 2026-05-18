@@ -170,7 +170,7 @@ public class LiveConfig {
             parseConfig(Decoder.getJson(config.getUrl()), callback);
         } catch (Throwable e) {
             if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
-            else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
+            else loadCache(callback, e);
             e.printStackTrace();
         }
     }
@@ -206,6 +206,11 @@ public class LiveConfig {
     private void loadConfigCache(Callback callback) {
         if (!TextUtils.isEmpty(config.getJson()) && config.isCache()) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
         else loadConfig(callback);
+    }
+
+    private void loadCache(Callback callback, Throwable e) {
+        if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
+        else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
     }
 
     private void loadConfigsCache(List<Config> configs, Callback callback) {
@@ -431,7 +436,7 @@ public class LiveConfig {
             cacheConfig(target, loaded);
             return loaded.toString();
         } catch (Throwable e) {
-            if (!TextUtils.isEmpty(target.getJson()) && target.isCache()) return target.getJson();
+            if (!TextUtils.isEmpty(target.getJson())) return target.getJson();
             throw e;
         }
     }
