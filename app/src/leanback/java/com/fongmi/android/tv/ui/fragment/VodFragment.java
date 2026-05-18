@@ -342,6 +342,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         if (mFilters.isEmpty()) return;
         List<ListRow> rows = new ArrayList<>();
         for (Filter filter : mFilters) rows.add(getRow(filter));
+        setTopPadding(4);
         App.post(() -> {
             if (isAdded() && mBinding != null) mBinding.recycler.scrollToPosition(0);
         }, 48);
@@ -352,6 +353,12 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private void hideFilter() {
         int count = Math.min(mFilters.size(), mAdapter.size());
         if (count > 0) mAdapter.removeItems(0, count);
+        setTopPadding(12);
+    }
+
+    private void setTopPadding(int top) {
+        if (mBinding == null) return;
+        mBinding.recycler.setPadding(mBinding.recycler.getPaddingLeft(), ResUtil.dp2px(top), mBinding.recycler.getPaddingRight(), mBinding.recycler.getPaddingBottom());
     }
 
     public void toggleFilter(boolean open) {
