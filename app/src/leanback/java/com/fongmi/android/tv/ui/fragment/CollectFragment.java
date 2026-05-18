@@ -87,6 +87,7 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setItemAnimator(null);
         mBinding.recycler.setHeader(getActivity().findViewById(R.id.result), getActivity().findViewById(R.id.recycler));
+        mBinding.recycler.setPadding(mBinding.recycler.getPaddingLeft(), ResUtil.dp2px(12), mBinding.recycler.getPaddingRight(), mBinding.recycler.getPaddingBottom());
         mBinding.recycler.addOnScrollListener(mScroller = new CustomScroller(this));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
     }
