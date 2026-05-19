@@ -1256,7 +1256,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void prepareDanmaku(Danmaku item) {
         final int requestId = ++mDanmakuRequestId;
         syncDanmuVisible();
-        if (!mDanmuVisible) {
+        if (!Setting.isDanmuLoad() || !mDanmuVisible) {
             mBinding.danmaku.release();
             mBinding.danmaku.setVisibility(View.GONE);
             showDanmu();
