@@ -1,6 +1,9 @@
 package com.fongmi.android.tv;
 
 public class Constant {
+    private static final int MIN_THREAD_POOL = 4;
+    private static final int MAX_THREAD_POOL = 10;
+
     //快進時間單位
     public static final int INTERVAL_SEEK = 10 * 1000;
     //控件隱藏時間
@@ -27,6 +30,11 @@ public class Constant {
     public static final int TIMEOUT_SYNC = 2 * 1000;
     //传送超時時間
     public static final int TIMEOUT_TRANSMIT = 60 * 1000;
-    //搜尋線程數量
-    public static final int THREAD_POOL = 10;
+    //並行任務線程數量
+    public static final int THREAD_POOL = getThreadPool();
+
+    private static int getThreadPool() {
+        int cpu = Runtime.getRuntime().availableProcessors();
+        return Math.max(MIN_THREAD_POOL, Math.min(MAX_THREAD_POOL, cpu * 2));
+    }
 }

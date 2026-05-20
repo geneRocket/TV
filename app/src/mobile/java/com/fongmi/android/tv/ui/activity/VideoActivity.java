@@ -176,12 +176,14 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private String pendingPlaybackFlag;
     private String pendingPlaybackId;
     private String pendingPlaybackToken;
+    private String pendingPlaybackTimeoutToken;
     private String pendingSearchToken;
     private Runnable mR0;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
     private Runnable mR4;
+    private Runnable mR5;
     private Clock mClock;
     private PiP mPiP;
 
@@ -363,6 +365,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mR2 = this::setTraffic;
         mR3 = this::setOrient;
         mR4 = this::showEmpty;
+        mR5 = this::onPlaybackTimeout;
         mPiP = new PiP();
         setForeground(true);
         setRecyclerView();
@@ -535,6 +538,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void getDetail() {
         clearPendingPlaybackRequest();
+        clearPlaybackTimeout();
         String token = nextRequestToken("detail");
         setPendingDetailRequest(token);
         mViewModel.detailContentFast(getKey(), getId(), token);
@@ -654,6 +658,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.display.title.setText(mBinding.control.title.getText());
         String token = nextRequestToken("play");
         setPendingPlaybackRequest(getKey(), flag.getFlag(), episode.getUrl(), token);
+        schedulePlaybackTimeout(token);
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         updateHistory(episode, replay);
@@ -667,11 +672,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void setPlayer(Result result) {
         if (!isCurrentPlayerResult(result)) return;
+        String token = pendingPlaybackToken;
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.setParseVisible(isUseParse());
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);
         mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
+        if (!TextUtils.equals(token, pendingPlaybackToken)) return;
         setQualityVisible(result.getUrl().isMulti());
         mBinding.swipeLayout.setRefreshing(false);
         setDanmakus(result.getDanmakus());
@@ -728,6 +735,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (blocked) {
             mBinding.danmaku.release();
             mBinding.danmaku.setVisibility(View.GONE);
+            showDanmu();
+            mPlayers.prepared();
             return;
         }
         boolean hasSource = item != null && !item.isEmpty();
@@ -786,11 +795,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onItemClick(Result result) {
         try {
+            showProgress();
             mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
             mBinding.danmaku.hide();
         } catch (Exception e) {
+            ThreadPools.log(e, "Quality switch failed.");
+            showError(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.error_play_timeout) : e.getMessage());
             ErrorEvent.extract(e.getMessage());
-            e.printStackTrace();
         }
     }
 
@@ -1196,6 +1207,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void showError(String text) {
+        clearPlaybackTimeout();
         mBinding.widget.error.setVisibility(View.VISIBLE);
         mBinding.widget.text.setText(text);
         hideProgress();
@@ -1497,6 +1509,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 showProgress();
                 break;
             case Player.STATE_READY:
+                clearPlaybackTimeout();
                 stopSearch();
                 checkRotate();
                 setMetadata();
@@ -1783,6 +1796,24 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         pendingPlaybackFlag = null;
         pendingPlaybackId = null;
         pendingPlaybackToken = null;
+    }
+
+    private void schedulePlaybackTimeout(String token) {
+        pendingPlaybackTimeoutToken = token;
+        App.removeCallbacks(mR5);
+        App.post(mR5, Constant.TIMEOUT_PLAY);
+    }
+
+    private void clearPlaybackTimeout() {
+        pendingPlaybackTimeoutToken = null;
+        App.removeCallbacks(mR5);
+    }
+
+    private void onPlaybackTimeout() {
+        String token = pendingPlaybackTimeoutToken;
+        if (TextUtils.isEmpty(token) || !TextUtils.equals(token, pendingPlaybackToken) || !isForeground()) return;
+        pendingPlaybackTimeoutToken = null;
+        ErrorEvent.timeout();
     }
 
     private void setPendingSearchToken(String token) {
@@ -2132,13 +2163,14 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     protected void onDestroy() {
         super.onDestroy();
         stopSearch();
+        clearPlaybackTimeout();
         mClock.release();
         mPlayers.release();
         Timer.get().reset();
         App.post(mR0, 1000);
         Source.get().stop();
         RefreshEvent.history();
-        App.removeCallbacks(mR1, mR2, mR3, mR4);
+        App.removeCallbacks(mR1, mR2, mR3, mR4, mR5);
     }
 
 }
