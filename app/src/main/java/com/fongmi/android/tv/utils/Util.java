@@ -205,4 +205,23 @@ public class Util {
         return TextUtils.isEmpty(text) ? "" : text.toLowerCase(Locale.ROOT).replaceAll("[\\p{Punct}\\s]+", " ").trim();
     }
 
+    public static double similarity(String s1, String s2) {
+        String str1 = normalize(s1);
+        String str2 = normalize(s2);
+        if (str1.isEmpty() || str2.isEmpty()) return 0;
+        if (str1.equals(str2)) return 1.0;
+        int len1 = str1.length();
+        int len2 = str2.length();
+        int[][] dp = new int[len1 + 1][len2 + 1];
+        for (int i = 0; i <= len1; i++) dp[i][0] = i;
+        for (int j = 0; j <= len2; j++) dp[0][j] = j;
+        for (int i = 1; i <= len1; i++) {
+            for (int j = 1; j <= len2; j++) {
+                int cost = (str1.charAt(i - 1) == str2.charAt(j - 1)) ? 0 : 1;
+                dp[i][j] = Math.min(Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), dp[i - 1][j - 1] + cost);
+            }
+        }
+        return 1.0 - (double) dp[len1][len2] / Math.max(len1, len2);
+    }
+
 }

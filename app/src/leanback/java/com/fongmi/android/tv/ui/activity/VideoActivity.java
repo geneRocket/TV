@@ -136,18 +136,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private static final long SEEK_READY_STABLE_MS = 300;
     private static final long SEEK_BOUNCE_WINDOW_MS = 1500;
     private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 2500;
-    private static final int SOURCE_TITLE_CACHE_SIZE = 256;
     private static final int REQUEST_DANMAKU_FILE = 9998;
     private static final Map<String, List<String>> PART_CACHE = new LinkedHashMap<String, List<String>>(24, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, List<String>> eldest) {
             return size() > 24;
-        }
-    };
-    private static final Map<String, String> SOURCE_TITLE_CACHE = new LinkedHashMap<String, String>(SOURCE_TITLE_CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
-            return size() > SOURCE_TITLE_CACHE_SIZE;
         }
     };
 
@@ -478,6 +471,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             while (iterator.hasNext()) {
                 Vod item = iterator.next();
                 if (mismatch(item) || !host.mQuickKeys.add(getQuickKey(item))) iterator.remove();
+                else if (Util.similarity(item.getVodName(), host.getSourceSwitchKeyword()) > 0.95) host.mContent.stopSearch();
             }
             if (items.isEmpty()) return;
             host.mergeQuickItems(items);
@@ -631,7 +625,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             String token = host.nextRequestToken("search");
             host.setPendingSearchToken(token);
             host.mBinding.part.setTag(keyword);
-            host.setSourceSearchKeyword(keyword);
             startSearch(keyword, token);
         }
 
@@ -664,13 +657,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             }
         }
 
-        private boolean mismatch(Vod item) {
-            String brokenKey = host.getBrokenKey(item);
-            if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
-            if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
-            String keyword = Objects.toString(host.mBinding.part.getTag(), "");
-            return !host.matchSourceTitle(item.getVodName(), keyword);
-        }
+    private boolean mismatch(Vod item) {
+        String brokenKey = host.getBrokenKey(item);
+        if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
+        if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
+        return !host.matchSourceTitle(item.getVodName(), host.getSourceSwitchKeyword());
+    }
 
         private boolean isPass(Site item) {
             if (host.isAutoMode() && !item.isChangeable()) return false;
@@ -734,6 +726,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private Runnable mR5;
     private Runnable mR6;
     private Runnable mR7;
+    private Runnable mR8;
     private Call mPartCall;
     private Clock mClock;
     private View mFocus1;
@@ -773,8 +766,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String sourceSwitchKeyword;
     private String sourceSwitchTargetFlag;
     private String sourceSwitchTargetEpisodeKey;
-    private String sourceSearchKeyword;
-    private String sourceSearchNormalizedKeyword;
     private String sourceSearchActor;
     private String flagSwitchTargetFlag;
     private String flagSwitchTargetEpisodeKey;
@@ -969,6 +960,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mR5 = this::setDisplayTraffic;
         mR6 = this::onSourceSwitchTimeout;
         mR7 = this::onPlaybackTimeout;
+        mR8 = this::onFlagSelected;
         setBackground(false);
         setRecyclerView();
         setEpisodeView();
@@ -1025,8 +1017,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.flag.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                if (position < 0 || position >= mFlagAdapter.size()) return;
-                mPlaybackNavigation.switchFlag((Flag) mFlagAdapter.get(position), false);
+                App.post(mR8, 200);
             }
         });
         getEpisodeView().addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
@@ -1110,11 +1101,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         float sizeScale = isFullscreen() ? 1.2f * Setting.getDanmuSize() : 0.8f * Setting.getDanmuSize();
         int maxLine = Setting.getDanmuLine(3);
         HashMap<Integer, Integer> maxLines = new HashMap<>();
+        HashMap<Integer, Boolean> overlapping = new HashMap<>();
         maxLines.put(BaseDanmaku.TYPE_FIX_TOP, maxLine);
         maxLines.put(BaseDanmaku.TYPE_SCROLL_RL, maxLine);
         maxLines.put(BaseDanmaku.TYPE_SCROLL_LR, maxLine);
         maxLines.put(BaseDanmaku.TYPE_FIX_BOTTOM, maxLine);
-        mDanmakuContext.setMaximumLines(maxLines).setScrollSpeedFactor(speed).setDanmakuTransparency(alpha).setScaleTextSize(sizeScale);
+        overlapping.put(BaseDanmaku.TYPE_FIX_TOP, true);
+        overlapping.put(BaseDanmaku.TYPE_SCROLL_RL, true);
+        overlapping.put(BaseDanmaku.TYPE_SCROLL_LR, true);
+        overlapping.put(BaseDanmaku.TYPE_FIX_BOTTOM, true);
+        mDanmakuContext.setMaximumLines(maxLines).setScrollSpeedFactor(speed).setDanmakuTransparency(alpha).setScaleTextSize(sizeScale).setDuplicateMergingEnabled(true).preventOverlapping(overlapping);
     }
 
     private String getResetText() {
@@ -2199,7 +2195,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                     ResponseBody body = res.body();
                     items = body == null ? new ArrayList<>() : new ArrayList<>(Part.get(body.string()));
                 }
-                items.removeIf(keyword::equals);
+                Iterator<String> iterator = items.iterator();
+                while (iterator.hasNext()) if (iterator.next().equals(keyword)) iterator.remove();
                 synchronized (PART_CACHE) {
                     PART_CACHE.put(keyword, new ArrayList<>(items));
                 }
@@ -2702,6 +2699,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         App.removeCallbacks(mR7);
     }
 
+    private void onFlagSelected() {
+        int position = mBinding.flag.getSelectedPosition();
+        if (position < 0 || position >= mFlagAdapter.size()) return;
+        mPlaybackNavigation.switchFlag((Flag) mFlagAdapter.get(position), false);
+    }
+
     private void onPlaybackTimeout() {
         String token = pendingPlaybackTimeoutToken;
         if (TextUtils.isEmpty(token) || !TextUtils.equals(token, pendingPlaybackToken) || isBackground()) return;
@@ -2742,8 +2745,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private String getSourceSwitchKeyword() {
-        if (!TextUtils.isEmpty(sourceSwitchKeyword)) return sourceSwitchKeyword;
-        return getCurrentSwitchKeyword();
+        String keyword = Objects.toString(mBinding.part.getTag(), "");
+        return keyword.isEmpty() ? getCurrentSwitchKeyword() : keyword;
     }
 
     private synchronized int beginSearchTaskState(int count) {
@@ -2776,7 +2779,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void pruneSearchTasks() {
         synchronized (mSearchTasks) {
-            mSearchTasks.removeIf(task -> task.isDone() || task.isCancelled());
+            Iterator<Future<?>> iterator = mSearchTasks.iterator();
+            while (iterator.hasNext()) {
+                Future<?> task = iterator.next();
+                if (task.isDone() || task.isCancelled()) iterator.remove();
+            }
         }
     }
 
@@ -2786,38 +2793,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean matchSourceTitle(String title, String keyword) {
-        String source = normalizeSourceTitle(title);
-        String target = getSourceSearchNormalizedKeyword(keyword);
-        if (source.isEmpty() || target.isEmpty()) return false;
-        return source.equals(target) || source.contains(target) || target.contains(source);
-    }
-
-    private String normalizeSourceTitle(String text) {
-        String key = Objects.toString(text, "");
-        synchronized (SOURCE_TITLE_CACHE) {
-            String cached = SOURCE_TITLE_CACHE.get(key);
-            if (cached != null) return cached;
-        }
-        String value = key.trim().toLowerCase().replaceAll("[\\s\\p{Punct}]+", "");
-        synchronized (SOURCE_TITLE_CACHE) {
-            SOURCE_TITLE_CACHE.put(key, value);
-        }
-        return value;
-    }
-
-    private void setSourceSearchKeyword(String keyword) {
-        sourceSearchKeyword = Objects.toString(keyword, "");
-        sourceSearchNormalizedKeyword = normalizeSourceTitle(sourceSearchKeyword);
+        return Util.similarity(title, keyword) >= 0.7;
     }
 
     private void setSourceSearchActor(String actor) {
         sourceSearchActor = Objects.toString(actor, "");
-    }
-
-    private String getSourceSearchNormalizedKeyword(String keyword) {
-        String current = Objects.toString(keyword, "");
-        if (!TextUtils.equals(sourceSearchKeyword, current)) setSourceSearchKeyword(current);
-        return Objects.toString(sourceSearchNormalizedKeyword, "");
     }
 
     private void markCurrentSourceBroken() {
@@ -2840,40 +2820,37 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void mergeQuickItems(List<Vod> items) {
-        List<Vod> merged = new ArrayList<>();
-        for (int i = 0; i < mQuickAdapter.size(); i++) merged.add((Vod) mQuickAdapter.get(i));
-        merged.addAll(items);
-        Collections.sort(merged, this::compareQuickItem);
-        mQuickAdapter.setItems(merged, null);
+        App.post(() -> {
+            for (Vod item : items) {
+                int index = findQuickItemInsertPosition(item);
+                mQuickAdapter.add(index, item);
+            }
+        }, 100);
+    }
+
+    private int findQuickItemInsertPosition(Vod item) {
+        for (int i = 0; i < mQuickAdapter.size(); i++) {
+            if (compareQuickItem(item, (Vod) mQuickAdapter.get(i)) < 0) return i;
+        }
+        return mQuickAdapter.size();
     }
 
     private int compareQuickItem(Vod left, Vod right) {
-        int result = Integer.compare(getQuickMatchRank(left), getQuickMatchRank(right));
-        if (result != 0) return result;
-        result = Integer.compare(getQuickActorRank(left), getQuickActorRank(right));
+        double scoreLeft = Util.similarity(left.getVodName(), getSourceSwitchKeyword());
+        double scoreRight = Util.similarity(right.getVodName(), getSourceSwitchKeyword());
+        if (scoreLeft != scoreRight) return Double.compare(scoreRight, scoreLeft);
+        int result = Integer.compare(getQuickActorRank(left), getQuickActorRank(right));
         if (result != 0) return result;
         result = left.getSiteName().compareToIgnoreCase(right.getSiteName());
         if (result != 0) return result;
-        result = left.getVodName().compareToIgnoreCase(right.getVodName());
-        if (result != 0) return result;
         return left.getVodActor().compareToIgnoreCase(right.getVodActor());
-    }
-
-    private int getQuickMatchRank(Vod item) {
-        String source = normalizeSourceTitle(item.getVodName());
-        String target = getSourceSearchNormalizedKeyword(Objects.toString(mBinding.part.getTag(), ""));
-        if (source.isEmpty() || target.isEmpty()) return Integer.MAX_VALUE;
-        if (source.equals(target)) return 0;
-        if (source.contains(target)) return 1;
-        if (target.contains(source)) return 2;
-        return 3;
     }
 
     private int getQuickActorRank(Vod item) {
         String target = Objects.toString(sourceSearchActor, "");
         String source = item.getVodActor();
         if (TextUtils.isEmpty(target) || TextUtils.isEmpty(source)) return 2;
-        if (normalizeSourceTitle(source).equals(normalizeSourceTitle(target))) return 0;
+        if (Util.similarity(source, target) >= 0.8) return 0;
         return hasActorOverlap(source, target) ? 1 : 3;
     }
 
