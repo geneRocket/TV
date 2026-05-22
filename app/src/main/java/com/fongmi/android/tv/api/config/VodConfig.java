@@ -332,8 +332,9 @@ public class VodConfig {
         List<Config> items = new ArrayList<>();
         Set<String> loaded = new LinkedHashSet<>();
         for (Config item : configs) {
-            String url = item.getUrl();
+            String url = normalizeConfigUrl(item.getUrl());
             if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
+            if (!url.equals(item.getUrl())) item.url(url);
             items.add(item);
         }
         return items;
@@ -343,7 +344,7 @@ public class VodConfig {
         List<String> urls = new ArrayList<>();
         Set<String> loaded = new LinkedHashSet<>();
         for (Config item : configs) {
-            String url = item.getUrl();
+            String url = normalizeConfigUrl(item.getUrl());
             if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
             urls.add(url);
         }
@@ -357,7 +358,16 @@ public class VodConfig {
 
     private void setLoadUrls(List<String> urls) {
         this.loadUrls.clear();
-        if (urls != null) this.loadUrls.addAll(urls);
+        if (urls == null) return;
+        Set<String> loaded = new LinkedHashSet<>();
+        for (String url : urls) {
+            String value = normalizeConfigUrl(url);
+            if (!TextUtils.isEmpty(value) && loaded.add(value)) this.loadUrls.add(value);
+        }
+    }
+
+    private String normalizeConfigUrl(String url) {
+        return url == null ? "" : url.trim();
     }
 
     private JsonObject loadObject(String url, int depth) throws Throwable {

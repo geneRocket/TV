@@ -288,11 +288,16 @@ public class LiveConfig {
         List<Config> items = new ArrayList<>();
         Set<String> loaded = new LinkedHashSet<>();
         for (Config item : configs) {
-            String url = item.getUrl();
+            String url = normalizeConfigUrl(item.getUrl());
             if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
+            if (!url.equals(item.getUrl())) item.url(url);
             items.add(item);
         }
         return items;
+    }
+
+    private String normalizeConfigUrl(String url) {
+        return url == null ? "" : url.trim();
     }
 
     private void cacheConfig(Config item, JsonObject object) {

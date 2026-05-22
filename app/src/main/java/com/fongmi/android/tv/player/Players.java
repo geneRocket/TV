@@ -214,12 +214,18 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void setSub(Sub sub) {
+        if (isSameSub(sub)) return;
         this.sub = sub;
         if (TextUtils.isEmpty(url)) return;
         long current = getPosition();
         if (isIjk()) setPlayer(EXO);
         setPosition(current);
         setMediaSource();
+    }
+
+    private boolean isSameSub(Sub target) {
+        if (sub == null || target == null) return sub == target;
+        return TextUtils.equals(sub.getUrl(), target.getUrl());
     }
 
     public void setDanmakus(List<Danmaku> items) {
@@ -533,6 +539,11 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         setPlayerState(Player.STATE_IDLE);
     }
 
+    private void failIllegalUrl() {
+        stop();
+        ErrorEvent.url(0);
+    }
+
     public void release() {
         boolean current = Server.get().getPlayer() == this;
         stopParse();
@@ -572,7 +583,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         } else if (channel.getParse() == 1) {
             startParse(channel.result(), false);
         } else if (isIllegal(url)) {
-            ErrorEvent.url(0);
+            failIllegalUrl();
         } else {
             setMediaSource(channel, timeout);
         }
@@ -588,7 +599,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         } else if (Setting.isRemoveAd() && AdBlocker.isAdUrl(result.getRealUrl())) {
             ErrorEvent.url(0);
         } else if (isIllegal(result.getRealUrl())) {
-            ErrorEvent.url(0);
+            failIllegalUrl();
         } else {
             setMediaSource(result, timeout);
         }
@@ -690,6 +701,11 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         this.drm = drm;
         this.forceLive = forceLive;
         this.subs = checkSub(subs);
+        if (isIllegal(this.url)) {
+            pendingReady = false;
+            failIllegalUrl();
+            return;
+        }
         if (this.drm != null && isIjk()) setPlayer(EXO);
         // Wait for an actual render/play signal before reporting READY.
         this.pendingReady = true;

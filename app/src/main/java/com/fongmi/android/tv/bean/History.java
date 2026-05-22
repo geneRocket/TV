@@ -172,7 +172,7 @@ public class History {
     }
 
     public void setOpening(long opening) {
-        this.opening = opening;
+        this.opening = Math.max(0, opening);
     }
 
     public long getEnding() {
@@ -180,7 +180,7 @@ public class History {
     }
 
     public void setEnding(long ending) {
-        this.ending = ending;
+        this.ending = Math.max(0, ending);
     }
 
     public long getPosition() {
@@ -188,7 +188,7 @@ public class History {
     }
 
     public void setPosition(long position) {
-        this.position = position;
+        this.position = Math.max(0, position);
     }
 
     public long getDuration() {
@@ -196,7 +196,7 @@ public class History {
     }
 
     public void setDuration(long duration) {
-        this.duration = duration;
+        this.duration = Math.max(0, duration);
     }
 
     public float getSpeed() {
@@ -204,7 +204,7 @@ public class History {
     }
 
     public void setSpeed(float speed) {
-        this.speed = speed;
+        this.speed = speed > 0 && !Float.isNaN(speed) && !Float.isInfinite(speed) ? speed : 1;
     }
 
     public int getPlayer() {
@@ -482,6 +482,7 @@ public class History {
     }
 
     public History save() {
+        if (TextUtils.isEmpty(getKey())) return this;
         AppDatabase.get().getHistoryDao().insertOrUpdate(this);
         return cache(this);
     }

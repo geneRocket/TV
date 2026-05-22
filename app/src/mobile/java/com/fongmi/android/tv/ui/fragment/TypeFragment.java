@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.fragment;
 
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
@@ -32,8 +33,11 @@ import com.fongmi.android.tv.ui.custom.CustomScroller;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 public class TypeFragment extends BaseFragment implements CustomScroller.Callback, VodAdapter.OnClickListener, SwipeRefreshLayout.OnRefreshListener {
 
@@ -43,6 +47,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private SiteViewModel mViewModel;
     private VodAdapter mAdapter;
     private List<Page> mPages;
+    private Set<String> mVodKeys;
+    private String mPendingTypeId;
+    private String mPendingPage;
     private Page mPage;
 
     public static TypeFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
@@ -111,6 +118,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     protected void initView() {
         mScroller = new CustomScroller(this);
         mPages = new ArrayList<>();
+        mVodKeys = new HashSet<>();
         mExtends = getExtend();
         setRecyclerView();
         setViewModel();
@@ -145,6 +153,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     private void getHome() {
         mViewModel.homeContent();
+        mVodKeys.clear();
         mAdapter.clear();
     }
 
@@ -155,27 +164,60 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     private void getVideo(String typeId, String page) {
-        if ("1".equals(page)) mAdapter.clear();
+        if ("1".equals(page)) {
+            mVodKeys.clear();
+            mAdapter.clear();
+        }
+        mPendingTypeId = typeId;
+        mPendingPage = page;
         if ("1".equals(page) && !mBinding.swipeLayout.isRefreshing()) mBinding.progressLayout.showProgress();
         if (isHome() && "1".equals(page)) setAdapter(getParent().getResult());
         else mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
     }
 
     private void setAdapter(Result result) {
+        if (!isCurrentResult(result)) return;
         boolean first = mScroller.first();
-        int size = result.getList().size();
+        List<Vod> items = filterVodList(result == null ? null : result.getList());
+        int size = items.size();
         mBinding.progressLayout.showContent(first, size);
         mBinding.swipeLayout.setRefreshing(false);
-        if (size > 0) addVideo(result);
+        if (size > 0) addVideo(result, items);
         mScroller.endLoading(result);
         checkPosition(first);
         checkMore(size);
     }
 
-    private void addVideo(Result result) {
-        Style style = result.getList().get(0).getStyle(getStyle());
+    private void addVideo(Result result, List<Vod> items) {
+        Style style = items.get(0).getStyle(getStyle());
         if (!style.equals(mAdapter.getStyle())) setStyle(style);
-        mAdapter.addAll(result.getList());
+        mAdapter.addAll(items);
+    }
+
+    private List<Vod> filterVodList(List<Vod> items) {
+        List<Vod> filtered = new ArrayList<>();
+        if (items == null) return filtered;
+        for (Vod item : items) {
+            String key = getVodKey(item);
+            if (key.isEmpty() || !mVodKeys.add(key)) continue;
+            filtered.add(item);
+        }
+        return filtered;
+    }
+
+    private String getVodKey(Vod item) {
+        if (item == null) return "";
+        String id = item.getVodId();
+        String name = item.getVodName();
+        return getTypeId() + "@" + (id.isEmpty() ? name : id);
+    }
+
+    private boolean isCurrentResult(Result result) {
+        if (isHome()) return true;
+        if (result == null) return false;
+        return TextUtils.equals(result.getKey(), getKey())
+                && TextUtils.equals(result.getRequestTypeId(), mPendingTypeId)
+                && TextUtils.equals(result.getRequestPage(), mPendingPage);
     }
 
     private void checkPosition(boolean first) {
@@ -212,8 +254,10 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     public void setFilter(String key, Value value) {
+        String old = mExtends.get(key);
         if (value.isActivated()) mExtends.put(key, value.getV());
         else mExtends.remove(key);
+        if (Objects.equals(old, mExtends.get(key))) return;
         onRefresh();
     }
 
@@ -232,6 +276,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     @Override
     public void onItemClick(Vod item) {
+        if (item == null) return;
         if (item.isAction()) {
             mViewModel.action(getKey(), item.getAction());
         } else if (item.isFolder()) {
@@ -246,6 +291,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     @Override
     public boolean onLongClick(Vod item) {
+        if (item == null) return false;
         CollectActivity.start(getActivity(), item.getVodName());
         return true;
     }

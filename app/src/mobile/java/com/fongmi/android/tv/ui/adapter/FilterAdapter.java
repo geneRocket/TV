@@ -11,6 +11,7 @@ import com.fongmi.android.tv.databinding.AdapterFilterBinding;
 import com.fongmi.android.tv.impl.FilterCallback;
 
 import java.util.List;
+import java.util.Collections;
 
 public class FilterAdapter extends RecyclerView.Adapter<FilterAdapter.ViewHolder> {
 
@@ -19,7 +20,7 @@ public class FilterAdapter extends RecyclerView.Adapter<FilterAdapter.ViewHolder
 
     public FilterAdapter(FilterCallback listener, List<Filter> items) {
         this.mListener = listener;
-        this.mItems = items;
+        this.mItems = items == null ? Collections.emptyList() : items;
     }
 
     @Override

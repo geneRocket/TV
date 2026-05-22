@@ -8,9 +8,12 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterQuickBinding;
+import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> {
 
@@ -33,14 +36,28 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     }
 
     public void addAll(List<Vod> items) {
-        int position = mItems.size();
         if (items == null || items.isEmpty()) return;
-        mItems.addAll(items);
-        notifyItemRangeInserted(position, items.size());
+        int position = mItems.size();
+        List<Vod> added = filterNew(items);
+        if (added.isEmpty()) return;
+        mItems.addAll(added);
+        notifyItemRangeInserted(position, added.size());
     }
 
     public Vod get(int position) {
         return mItems.get(position);
+    }
+
+    public Vod poll(Set<String> broken, String currentKey, String currentId) {
+        while (!mItems.isEmpty()) {
+            Vod item = mItems.remove(0);
+            notifyItemRemoved(0);
+            if (item == null) continue;
+            if (item.getSiteKey().equals(currentKey) && item.getVodId().equals(currentId)) continue;
+            if (broken != null && broken.contains(key(item))) continue;
+            return item;
+        }
+        return null;
     }
 
     public void remove(int position) {
@@ -50,6 +67,26 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
 
     public boolean isEmpty() {
         return getItemCount() == 0;
+    }
+
+    private List<Vod> filterNew(List<Vod> items) {
+        List<Vod> added = new ArrayList<>();
+        Set<String> loaded = new HashSet<>();
+        for (Vod item : mItems) loaded.add(key(item));
+        for (Vod item : items) {
+            String key = key(item);
+            if (key.isEmpty() || !loaded.add(key)) continue;
+            added.add(item);
+        }
+        return added;
+    }
+
+    private String key(Vod item) {
+        if (item == null) return "";
+        String site = item.getSiteKey();
+        String id = item.getVodId();
+        String name = item.getVodName();
+        return site + "@" + (id.isEmpty() ? Util.normalize(name) : id);
     }
 
     @Override

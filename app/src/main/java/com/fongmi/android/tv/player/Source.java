@@ -1,9 +1,9 @@
 package com.fongmi.android.tv.player;
 
 import android.net.Uri;
+import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
@@ -19,6 +19,7 @@ import com.fongmi.android.tv.player.extractor.Video;
 import com.fongmi.android.tv.player.extractor.Youtube;
 import com.fongmi.android.tv.player.extractor.ZLive;
 import com.fongmi.android.tv.utils.ThreadPools;
+import com.fongmi.android.tv.utils.UrlUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -123,6 +124,7 @@ public class Source {
 
     public String fetch(Result result) throws Exception {
         String url = result.getUrl().v();
+        if (TextUtils.isEmpty(url)) return "";
         Extractor extractor = getExtractor(UrlUtil.uri(url));
         if (extractor != null) result.setParse(0);
         return extractor == null ? url : extractor.fetch(url);
@@ -130,7 +132,8 @@ public class Source {
 
     public String fetch(Channel channel) throws Exception {
         String url = channel.getCurrent();
-        Extractor extractor = getExtractor(Uri.parse(url));
+        if (TextUtils.isEmpty(url)) return "";
+        Extractor extractor = getExtractor(UrlUtil.uri(url));
         if (extractor != null) channel.setParse(0);
         return extractor == null ? url : extractor.fetch(url);
     }

@@ -94,6 +94,7 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.Traffic;
+import com.fongmi.android.tv.utils.Util;
 import com.github.bassaer.library.MDColor;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
@@ -679,7 +680,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         private String getQuickKey(Vod item) {
             String id = item.getVodId();
             if (!id.isEmpty()) return item.getSiteKey() + "@" + id;
-            return item.getSiteKey() + "@" + item.getVodName() + "@" + item.getVodPic() + "@" + item.getVodRemarks();
+            return item.getSiteKey() + "@" + Util.normalize(item.getVodName()) + "@" + item.getVodPic() + "@" + item.getVodRemarks();
         }
     }
 
@@ -2825,15 +2826,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private String getCurrentBrokenKey() {
-        return getBrokenKey(getKey(), getId());
+        return getBrokenKey(getKey(), getId(), getName());
     }
 
     private String getBrokenKey(Vod item) {
-        return getBrokenKey(item.getSiteKey(), item.getVodId());
+        return getBrokenKey(item.getSiteKey(), item.getVodId(), item.getVodName());
     }
 
-    private String getBrokenKey(String siteKey, String vodId) {
-        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return "";
+    private String getBrokenKey(String siteKey, String vodId, String vodName) {
+        if (TextUtils.isEmpty(siteKey)) return "";
+        if (TextUtils.isEmpty(vodId)) return siteKey + "@" + Util.normalize(vodName);
         return siteKey + "@" + vodId;
     }
 

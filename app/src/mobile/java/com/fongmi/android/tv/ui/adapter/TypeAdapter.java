@@ -43,11 +43,32 @@ public class TypeAdapter extends RecyclerView.Adapter<TypeAdapter.ViewHolder> {
     }
 
     public void addAll(Result result) {
+        String activated = getActivatedId();
         mItems.clear();
-        mItems.addAll(result.getTypes());
-        if (result.getList().size() > 0) mItems.add(0, home());
-        if (mItems.size() > 0) mItems.get(0).setActivated(true);
+        if (result != null) {
+            List<String> ids = new ArrayList<>();
+            for (Class item : result.getTypes()) {
+                if (item == null || ids.contains(item.getTypeId())) continue;
+                ids.add(item.getTypeId());
+                mItems.add(item);
+            }
+            if (result.getList().size() > 0) mItems.add(0, home());
+        }
+        setActivated(activated);
         notifyDataSetChanged();
+    }
+
+    private String getActivatedId() {
+        for (Class item : mItems) if (item.isActivated()) return item.getTypeId();
+        return "";
+    }
+
+    private void setActivated(String typeId) {
+        if (mItems.isEmpty()) return;
+        int position = 0;
+        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).getTypeId().equals(typeId)) position = i;
+        for (Class item : mItems) item.setActivated(false);
+        mItems.get(position).setActivated(true);
     }
 
     public void setActivated(int position) {
@@ -67,6 +88,11 @@ public class TypeAdapter extends RecyclerView.Adapter<TypeAdapter.ViewHolder> {
 
     public Class get(int position) {
         return mItems.get(position);
+    }
+
+    public int indexOf(String typeId) {
+        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).getTypeId().equals(typeId)) return i;
+        return 0;
     }
 
     @Override

@@ -83,6 +83,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     private Runnable mRunnable;
     private List<String> mHots;
     private final Random mRandom = new Random();
+    private String mSelectedTypeId;
     private Result mResult;
 
     public static VodFragment newInstance() {
@@ -131,6 +132,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
             @Override
             public void onPageSelected(int position) {
                 if (position < 0 || position >= mAdapter.getItemCount()) return;
+                mSelectedTypeId = mAdapter.get(position).getTypeId();
                 mBinding.type.smoothScrollToPosition(position);
                 mAdapter.setActivated(position);
                 setFabVisible(position);
@@ -196,7 +198,10 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     private void setAdapter(Result result) {
         mAdapter.addAll(handle(result));
         mBinding.pager.getAdapter().notifyDataSetChanged();
-        setFabVisible(0);
+        int position = mAdapter.indexOf(mSelectedTypeId);
+        mBinding.pager.setCurrentItem(position, false);
+        mAdapter.setActivated(position);
+        setFabVisible(position);
         hideProgress();
         checkRetry();
     }
@@ -261,7 +266,10 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     }
 
     private void onFilter(View view) {
-        if (mAdapter.getItemCount() > 0) FilterDialog.create().filter(mAdapter.get(mBinding.pager.getCurrentItem()).getFilters()).show(this);
+        if (mAdapter.getItemCount() == 0) return;
+        if (mBinding.pager.getCurrentItem() >= mAdapter.getItemCount()) return;
+        if (mAdapter.get(mBinding.pager.getCurrentItem()).getFilters().isEmpty()) return;
+        FilterDialog.create().filter(mAdapter.get(mBinding.pager.getCurrentItem()).getFilters()).show(this);
     }
 
     private void onHot(View view) {
@@ -293,6 +301,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         setSiteText();
         showProgress();
         setFabVisible(0);
+        mSelectedTypeId = null;
         mAdapter.clear();
         mViewModel.homeContent();
         mBinding.pager.setAdapter(new PageAdapter(getChildFragmentManager()));

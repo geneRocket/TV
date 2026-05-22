@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.viewmodel;
 
+import android.net.Uri;
 import android.text.TextUtils;
 
 import androidx.lifecycle.MutableLiveData;
@@ -17,6 +18,7 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +35,12 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class SubtitleViewModel extends ViewModel {
+
+    private static final String ASSRT_BASE_URL = "https://secure.assrt.net";
+    private static final String ASSRT_DOWNLOAD_URL = "https://assrt.net";
+    private static final String ASSRT_SEARCH_URL = ASSRT_BASE_URL + "/sub/";
+    private static final String ASSRT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.54 Safari/537.36";
+    private static final Pattern REGEX_SHOOTER_FILE_ONCLICK = Pattern.compile("onthefly\\(\"(\\d+)\",\"(\\d+)\",\"([\\s\\S]*)\"\\)");
 
     public MutableLiveData<SubtitleData> searchResult;
     private final AtomicInteger requestSeq;
@@ -85,30 +93,35 @@ public class SubtitleViewModel extends ViewModel {
     private void searchResultFromAssrt(String title, int page) {
         try {
             int seq = requestSeq.incrementAndGet();
+            int currentPage = Math.max(1, page);
+            String keyword = title == null ? "" : title.trim();
             cancelCall(currentSearchCall);
-            if (pagesTotal > 0 && page > pagesTotal) {
-                if (seq == requestSeq.get()) setSearchListData(new ArrayList<>(), page <= 1, true);
+            if (TextUtils.isEmpty(keyword)) {
+                if (seq == requestSeq.get()) setSearchListData(new ArrayList<>(), true, true);
                 return;
             }
-            if (page == 1) pagesTotal = -1;//第一页时 重置页大小
-            String searchApiUrl = "https://secure.assrt.net/sub/";
-            String url = searchApiUrl + "?searchword=" + title + "&sort=rank&page=" + page + "&no_redir=1";
+            if (pagesTotal > 0 && currentPage > pagesTotal) {
+                if (seq == requestSeq.get()) setSearchListData(new ArrayList<>(), currentPage <= 1, true);
+                return;
+            }
+            if (currentPage == 1) pagesTotal = -1;//第一页时 重置页大小
+            String url = ASSRT_SEARCH_URL + "?searchword=" + encode(keyword) + "&sort=rank&page=" + currentPage + "&no_redir=1";
 
-            Call call = subtitleClient.newCall(new Request.Builder().url(url).build());
+            Call call = subtitleClient.newCall(assrtRequest(url, ASSRT_BASE_URL));
             currentSearchCall = call;
             call.enqueue(new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
                     if (call.isCanceled()) return;
                     ThreadPools.log(e, "Subtitle search failed.");
-                    if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
+                    if (seq == requestSeq.get()) setSearchListData(null, currentPage <= 1, true);
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
-                    try (ResponseBody body = response.body()) {
-                        if (body == null) {
-                            if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
+                    try (Response res = response; ResponseBody body = res.body()) {
+                        if (!res.isSuccessful() || body == null) {
+                            if (seq == requestSeq.get()) setSearchListData(null, currentPage <= 1, true);
                             return;
                         }
                         String content = body.string();
@@ -121,12 +134,12 @@ public class SubtitleViewModel extends ViewModel {
                             if (TextUtils.isEmpty(href)) continue;
                             Subtitle one = new Subtitle();
                             one.setName(title);
-                            one.setUrl("https://assrt.net" + href);
+                            one.setUrl(assrtUrl(ASSRT_DOWNLOAD_URL, href));
                             one.setIsZip(true);
                             data.add(one);
                         }
                         if (seq != requestSeq.get()) return;
-                        setSearchListData(data, page <= 1, true);
+                        setSearchListData(data, currentPage <= 1, true);
                         Elements pages = doc.select(".pagelinkcard a");
                         if (pages.size() > 0) {
                             String[] ps = pages.last().text().split("/", 2);
@@ -140,7 +153,7 @@ public class SubtitleViewModel extends ViewModel {
                         }
                     } catch (Throwable th) {
                         ThreadPools.log(th, "Subtitle search parse failed.");
-                        if (seq == requestSeq.get()) setSearchListData(null, page <= 1, true);
+                        if (seq == requestSeq.get()) setSearchListData(null, currentPage <= 1, true);
                     }
                 }
             });
@@ -149,14 +162,16 @@ public class SubtitleViewModel extends ViewModel {
         }
     }
 
-    Pattern regexShooterFileOnclick = Pattern.compile("onthefly\\(\"(\\d+)\",\"(\\d+)\",\"([\\s\\S]*)\"\\)");
-
     private void getSearchResultSubtitleUrlsFromAssrt(Subtitle subtitle) {
         try {
             int seq = requestSeq.incrementAndGet();
-            String url = subtitle.getUrl();
             cancelCall(currentSearchCall);
-            Call call = subtitleClient.newCall(new Request.Builder().url(url).build());
+            if (subtitle == null || TextUtils.isEmpty(subtitle.getUrl())) {
+                if (seq == requestSeq.get()) setSearchListData(null, true, true);
+                return;
+            }
+            String url = subtitle.getUrl();
+            Call call = subtitleClient.newCall(assrtRequest(url, ASSRT_DOWNLOAD_URL));
             currentSearchCall = call;
             call.enqueue(new Callback() {
                 @Override
@@ -168,8 +183,8 @@ public class SubtitleViewModel extends ViewModel {
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
-                    try (ResponseBody body = response.body()) {
-                        if (body == null) {
+                    try (Response res = response; ResponseBody body = res.body()) {
+                        if (!res.isSuccessful() || body == null) {
                             if (seq == requestSeq.get()) setSearchListData(null, true, false);
                             return;
                         }
@@ -181,9 +196,9 @@ public class SubtitleViewModel extends ViewModel {
                             for (Element item : items) {
                                 String onclick = item.attr("onclick");
                                 if (TextUtils.isEmpty(onclick)) continue;
-                                Matcher matcher = regexShooterFileOnclick.matcher(onclick);
+                                Matcher matcher = REGEX_SHOOTER_FILE_ONCLICK.matcher(onclick);
                                 if (matcher.find()) {
-                                    String url = String.format("https://secure.assrt.net/download/%s/-/%s/%s", matcher.group(1), matcher.group(2), matcher.group(3));
+                                    String url = String.format(ASSRT_BASE_URL + "/download/%s/-/%s/%s", matcher.group(1), matcher.group(2), Uri.encode(matcher.group(3)));
                                     Subtitle one = new Subtitle();
                                     Element name = item.selectFirst("#filelist-name");
                                     one.setName(name == null ? matcher.group(3) : name.text());
@@ -206,7 +221,7 @@ public class SubtitleViewModel extends ViewModel {
                             }
                             String h2 = href.toLowerCase();
                             if (h2.endsWith("srt") || h2.endsWith("ass") || h2.endsWith("scc") || h2.endsWith("ttml")) {
-                                String url = "https://assrt.net" + href;
+                                String url = assrtUrl(ASSRT_DOWNLOAD_URL, href);
                                 Subtitle one = new Subtitle();
                                 String title = href.substring(href.lastIndexOf("/") + 1);
                                 try {
@@ -236,13 +251,8 @@ public class SubtitleViewModel extends ViewModel {
     private void getSubtitleUrlFromAssrt(Subtitle subtitle, SubtitleLoader subtitleLoader) {
         int seq = resolveSeq.incrementAndGet();
         cancelCall(currentResolveCall);
-        String ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.54 Safari/537.36";
-        Request request = new Request.Builder()
-                .url(subtitle.getUrl())
-                .get()
-                .addHeader("Referer", "https://secure.assrt.net")
-                .addHeader("User-Agent", ua)
-                .build();
+        if (subtitle == null || TextUtils.isEmpty(subtitle.getUrl()) || subtitleLoader == null) return;
+        Request request = assrtRequest(subtitle.getUrl(), ASSRT_BASE_URL);
         Call call = subtitleClient.newCall(request);
         currentResolveCall = call;
         call.enqueue(new Callback() {
@@ -257,13 +267,45 @@ public class SubtitleViewModel extends ViewModel {
             public void onResponse(Call call, Response response) throws IOException {
                 try (Response res = response) {
                     if (seq != resolveSeq.get()) return;
-                    String location = res.header("location");
+                    String location = normalizeAssrtLocation(res.header("location"));
                     subtitle.setUrl(TextUtils.isEmpty(location) ? subtitle.getUrl() : location);
                     if (seq != resolveSeq.get()) return;
                     subtitleLoader.loadSubtitle(subtitle);
                 }
             }
         });
+    }
+
+    private Request assrtRequest(String url, String referer) {
+        return new Request.Builder()
+                .url(url)
+                .get()
+                .addHeader("Referer", referer)
+                .addHeader("User-Agent", ASSRT_UA)
+                .build();
+    }
+
+    private String assrtUrl(String base, String href) {
+        if (TextUtils.isEmpty(href)) return "";
+        if (href.startsWith("http://") || href.startsWith("https://")) return href;
+        if (href.startsWith("//")) return "https:" + href;
+        if (href.startsWith("/")) return base + href;
+        return base + "/" + href;
+    }
+
+    private String normalizeAssrtLocation(String location) {
+        if (TextUtils.isEmpty(location)) return "";
+        String url = assrtUrl(ASSRT_BASE_URL, location.trim());
+        return url.startsWith("http://") || url.startsWith("https://") ? url : "";
+    }
+
+    private String encode(String value) {
+        try {
+            return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8.name());
+        } catch (Exception e) {
+            ThreadPools.log(e, "Subtitle query encode failed.");
+            return "";
+        }
     }
 
     @Override

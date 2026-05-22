@@ -22,6 +22,7 @@ import com.google.gson.JsonObject;
 
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -215,9 +216,18 @@ public class ParseJob implements ParseCallback {
     private void startWeb(List<Parse> items, String webUrl) {
         StringBuilder sb = new StringBuilder();
         for (Parse item : items) sb.append(item.getUrl()).append(";");
-        String jxs = URLEncoder.encode(Util.substring(sb.toString()));
-        String url = URLEncoder.encode(webUrl);
+        String jxs = encode(Util.substring(sb.toString()));
+        String url = encode(webUrl);
         startWeb(new HashMap<>(), Server.get().getAddress("/parse?jxs=" + jxs + "&url=" + url));
+    }
+
+    private String encode(String value) {
+        try {
+            return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8.name());
+        } catch (Exception e) {
+            ThreadPools.log(e, "Parse url encode failed.");
+            return "";
+        }
     }
 
     private void startWeb(String key, Parse item, String webUrl) {

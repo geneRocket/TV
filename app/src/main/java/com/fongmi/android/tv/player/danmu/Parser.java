@@ -5,6 +5,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.bean.Danmu;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
@@ -13,7 +14,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.io.File;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,6 +41,7 @@ public class Parser extends BaseDanmakuParser {
     private static final Pattern XML_NUMBER_ENTITY = Pattern.compile("&#(x?[0-9A-Fa-f]+);");
     private static final int MAX_DANMAKU_ITEMS = 6000;
     private static final int MAX_TEXT_LENGTH = 300;
+    private static final int MAX_CONTENT_BYTES = 2 * 1024 * 1024;
 
     private final Danmu danmu;
     private BaseDanmaku item;
@@ -62,10 +67,24 @@ public class Parser extends BaseDanmakuParser {
         Map<String, String> headers = UrlUtil.getTagHeaders(path);
         try (Response response = OkHttp.client(Constant.TIMEOUT_PLAY).newCall(new Request.Builder().url(url).headers(Headers.of(headers)).build()).execute()) {
             if (!response.isSuccessful() || response.body() == null) return "";
-            return response.body().string();
+            if (response.body().contentLength() > MAX_CONTENT_BYTES) return "";
+            return readLimited(response.body().byteStream());
         } catch (IOException e) {
             return "";
         }
+    }
+
+    private String readLimited(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (total > MAX_CONTENT_BYTES) return "";
+            output.write(buffer, 0, read);
+        }
+        return output.toString(StandardCharsets.UTF_8.name());
     }
 
     @Override
@@ -210,7 +229,7 @@ public class Parser extends BaseDanmakuParser {
                 }
             }
         } catch (JSONException e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Danmaku item parse failed.");
             item = null;
         } catch (Exception e) {
             item = null;

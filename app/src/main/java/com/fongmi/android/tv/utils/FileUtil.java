@@ -16,6 +16,9 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URLConnection;
 import java.text.DecimalFormat;
 import java.util.Enumeration;
@@ -25,6 +28,10 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 public class FileUtil {
+
+    private static final int BUFFER_SIZE = 8192;
+    private static final int MAX_ZIP_ENTRIES = 2048;
+    private static final long MAX_ZIP_BYTES = 512L * 1024 * 1024;
 
     public static File getWall(int index) {
         return Path.files("wallpaper_" + index);
@@ -39,55 +46,100 @@ public class FileUtil {
     }
 
     public static void zipFolder(File folder, File zip) {
-        try (ZipOutputStream zipOut = new ZipOutputStream(new FileOutputStream(zip))) {
-            folderToZip("", folder, zipOut);
+        if (folder == null || zip == null || !folder.isDirectory()) return;
+        try {
+            ensureParent(zip);
+            File target = zip.getCanonicalFile();
+            try (ZipOutputStream zipOut = new ZipOutputStream(new FileOutputStream(zip))) {
+                folderToZip("", folder, target, zipOut);
+            }
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Zip folder failed.");
         }
     }
 
-    private static void folderToZip(String parentPath, File folder, ZipOutputStream zipOut) throws Exception {
+    private static void folderToZip(String parentPath, File folder, File target, ZipOutputStream zipOut) throws Exception {
         File[] files = folder.listFiles();
         if (files == null) return;
         for (File file : files) {
+            if (file.getCanonicalFile().equals(target)) continue;
             if (file.isDirectory()) {
-                folderToZip(parentPath + file.getName() + "/", file, zipOut);
+                folderToZip(parentPath + file.getName() + "/", file, target, zipOut);
                 continue;
             }
             ZipEntry zipEntry = new ZipEntry(parentPath + file.getName());
             zipOut.putNextEntry(zipEntry);
 
             try (FileInputStream in = new FileInputStream(file)) {
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                while ((bytesRead = in.read(buffer)) != -1) {
-                    zipOut.write(buffer, 0, bytesRead);
-                }
+                copy(in, zipOut, Long.MAX_VALUE);
             }
+            zipOut.closeEntry();
         }
     }
+
     public static void extractGzip(File target, File path) {
-        byte[] buffer = new byte[1024];
-        try (GZIPInputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(target))); BufferedOutputStream os = new BufferedOutputStream(new FileOutputStream(path))) {
-            int read;
-            while ((read = is.read(buffer)) != -1) os.write(buffer, 0, read);
+        if (target == null || path == null) return;
+        try {
+            ensureParent(path);
+            try (GZIPInputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(target))); BufferedOutputStream os = new BufferedOutputStream(new FileOutputStream(path))) {
+                copy(is, os, MAX_ZIP_BYTES);
+            }
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Extract gzip failed.");
         }
     }
 
     public static void extractZip(File target, File path) {
+        if (target == null || path == null) return;
+        long total = 0;
+        int count = 0;
         try (ZipFile zip = new ZipFile(target)) {
+            if (!path.exists() && !path.mkdirs()) throw new IOException("Create output folder failed: " + path);
             Enumeration<?> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = (ZipEntry) entries.nextElement();
-                File out = new File(path, entry.getName());
-                if (entry.isDirectory()) out.mkdirs();
-                else Path.copy(zip.getInputStream(entry), out);
+                if (++count > MAX_ZIP_ENTRIES) throw new IOException("Too many zip entries: " + target);
+                File out = getZipOutputFile(path, entry);
+                if (entry.isDirectory()) {
+                    if (!out.exists() && !out.mkdirs()) throw new IOException("Create zip folder failed: " + out);
+                    continue;
+                }
+                ensureParent(out);
+                try (InputStream in = zip.getInputStream(entry); OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
+                    total += copy(in, os, MAX_ZIP_BYTES - total);
+                }
+                if (total > MAX_ZIP_BYTES) throw new IOException("Zip output is too large: " + target);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Extract zip failed.");
         }
+    }
+
+    private static File getZipOutputFile(File path, ZipEntry entry) throws Exception {
+        File root = path.getCanonicalFile();
+        File out = new File(root, entry.getName()).getCanonicalFile();
+        String rootPath = root.getPath() + File.separator;
+        if (!out.getPath().startsWith(rootPath)) throw new SecurityException("Unsafe zip entry: " + entry.getName());
+        File parent = out.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        return out;
+    }
+
+    private static long copy(InputStream in, OutputStream out, long limit) throws IOException {
+        byte[] buffer = new byte[BUFFER_SIZE];
+        long total = 0;
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            total += read;
+            if (total > limit) throw new IOException("Output exceeds limit");
+            out.write(buffer, 0, read);
+        }
+        return total;
+    }
+
+    private static void ensureParent(File file) throws IOException {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) throw new IOException("Create parent folder failed: " + parent);
     }
 
     public static void clearCache(Callback callback) {

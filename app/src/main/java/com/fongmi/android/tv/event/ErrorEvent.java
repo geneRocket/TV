@@ -61,6 +61,14 @@ public class ErrorEvent {
         return Type.URL.equals(getType());
     }
 
+    public boolean isExtract() {
+        return Type.EXTRACT.equals(getType());
+    }
+
+    public boolean isTimeout() {
+        return Type.TIMEOUT.equals(getType());
+    }
+
     public int getCode() {
         return code;
     }

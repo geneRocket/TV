@@ -83,8 +83,10 @@ android {
         if (variant.buildType.name == 'release' && (
                 variant.productFlavors[0].name == 'mobile'
                         || variant.productFlavors[0].name == 'leanback')) {
-            variant.mergeAssets.doLast {
-                delete(fileTree(dir: variant.mergeAssets.outputDir, includes: ['x5.tbs.apk']))
+            variant.mergeAssetsProvider.configure { task ->
+                task.doLast {
+                    delete(fileTree(dir: task.outputDir, includes: ['x5.tbs.apk']))
+                }
             }
         }
     }

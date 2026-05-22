@@ -31,7 +31,7 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
 
     public void addAll(List<Flag> items) {
         mItems.clear();
-        mItems.addAll(items);
+        if (items != null) for (Flag item : items) if (item != null && !item.getEpisodes().isEmpty()) mItems.add(item);
         notifyDataSetChanged();
     }
 
@@ -45,10 +45,12 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
     }
 
     public Flag getActivated() {
+        if (mItems.isEmpty()) return null;
         return mItems.get(getPosition());
     }
 
     public void setActivated(Flag flag) {
+        if (mItems.isEmpty() || flag == null) return;
         int oldPosition = getPosition();
         if (!mItems.contains(flag)) flag.setFlag(mItems.get(0).getFlag());
         for (Flag item : mItems) item.setActivated(flag);
@@ -62,6 +64,7 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
     }
 
     public void toggle(Episode episode) {
+        if (episode == null) return;
         for (Flag item : mItems) item.toggle(item.isActivated(), episode);
     }
 

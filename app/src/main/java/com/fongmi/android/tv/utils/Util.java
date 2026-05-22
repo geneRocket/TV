@@ -27,6 +27,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Formatter;
 import java.util.List;
+import java.util.Locale;
 
 public class Util {
 
@@ -198,6 +199,10 @@ public class Util {
         Intent mainIntent = Intent.makeRestartActivityTask(componentName);
         activity.startActivity(mainIntent);
         Runtime.getRuntime().exit(0);
+    }
+
+    public static String normalize(String text) {
+        return TextUtils.isEmpty(text) ? "" : text.toLowerCase(Locale.ROOT).replaceAll("[\\p{Punct}\\s]+", " ").trim();
     }
 
 }

@@ -302,7 +302,7 @@ public class SiteViewModel extends ViewModel {
 
     public void searchContent(Site site, String keyword, boolean quick, String token) throws Throwable {
         String original = keyword == null ? "" : keyword.trim();
-        String query = Trans.t2s(keyword);
+        String query = Trans.t2s(original);
         throwIfInterrupted();
         if (site.getType() == 3) {
             String searchContent = site.recent().spider().searchContent(query, quick);
@@ -467,6 +467,7 @@ public class SiteViewModel extends ViewModel {
         request.timeout = () -> {
             if (!completed.compareAndSet(false, true)) return;
             if (request.future != null) request.future.cancel(true);
+            if (isPlaybackRequest(requestKey)) Source.get().stop();
             finishRequest(request);
             poster.post(fallback.create(new TimeoutException()));
         };
@@ -493,6 +494,10 @@ public class SiteViewModel extends ViewModel {
             finishRequest(request);
             poster.post(fallback.create(e));
         }
+    }
+
+    private boolean isPlaybackRequest(String requestKey) {
+        return REQUEST_PLAYER.equals(requestKey) || REQUEST_DOWNLOAD.equals(requestKey);
     }
 
     private void finishRequest(PendingRequest request) {

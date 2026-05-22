@@ -42,7 +42,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
 
     public void addAll(List<Episode> items) {
         mItems.clear();
-        mItems.addAll(items);
+        if (items != null) for (Episode item : items) if (item != null) mItems.add(item);
         notifyDataSetChanged();
     }
 
@@ -56,10 +56,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
     }
 
     public Episode getActivated() {
+        if (mItems.isEmpty()) return null;
         return mItems.get(getPosition());
     }
 
     public Episode getNext() {
+        if (mItems.isEmpty()) return null;
         int current = getPosition();
         int max = getItemCount() - 1;
         current = ++current > max ? max : current;
@@ -67,6 +69,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
     }
 
     public Episode getPrev() {
+        if (mItems.isEmpty()) return null;
         int current = getPosition();
         current = --current < 0 ? 0 : current;
         return mItems.get(current);
