@@ -1,0 +1,4 @@
+interface:
+  display_name: "FongMi TV Project"
+  short_description: "Work effectively in this Android TV streaming app repo."
+  default_prompt: "Use this skill to understand the FongMi TV Android project structure, build variants, crawler loaders, playback flow, and safe verification commands before making changes."
