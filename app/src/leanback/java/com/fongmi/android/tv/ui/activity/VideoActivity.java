@@ -471,7 +471,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             while (iterator.hasNext()) {
                 Vod item = iterator.next();
                 if (mismatch(item) || !host.mQuickKeys.add(getQuickKey(item))) iterator.remove();
-                else if (Util.similarity(item.getVodName(), host.getSourceSwitchKeyword()) > 0.95) host.mContent.stopSearch();
             }
             if (items.isEmpty()) return;
             host.mergeQuickItems(items);
@@ -657,12 +656,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             }
         }
 
-    private boolean mismatch(Vod item) {
-        String brokenKey = host.getBrokenKey(item);
-        if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
-        if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
-        return !host.matchSourceTitle(item.getVodName(), host.getSourceSwitchKeyword());
-    }
+        private boolean mismatch(Vod item) {
+            String brokenKey = host.getBrokenKey(item);
+            if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
+            if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
+            return !host.matchSourceTitle(item.getVodName(), host.getSourceSwitchKeyword());
+        }
 
         private boolean isPass(Site item) {
             if (host.isAutoMode() && !item.isChangeable()) return false;
@@ -1017,6 +1016,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.flag.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                App.removeCallbacks(mR8);
                 App.post(mR8, 200);
             }
         });
@@ -2793,7 +2793,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean matchSourceTitle(String title, String keyword) {
-        return Util.similarity(title, keyword) >= 0.7;
+        String source = Util.normalize(title);
+        String target = Util.normalize(keyword);
+        if (source.isEmpty() || target.isEmpty()) return false;
+        return source.equals(target) || source.contains(target) || target.contains(source) || Util.similarity(source, target) >= 0.7;
     }
 
     private void setSourceSearchActor(String actor) {
@@ -2840,8 +2843,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         double scoreRight = Util.similarity(right.getVodName(), getSourceSwitchKeyword());
         if (scoreLeft != scoreRight) return Double.compare(scoreRight, scoreLeft);
         int result = Integer.compare(getQuickActorRank(left), getQuickActorRank(right));
-        if (result != 0) return result;
-        result = left.getSiteName().compareToIgnoreCase(right.getSiteName());
         if (result != 0) return result;
         return left.getVodActor().compareToIgnoreCase(right.getVodActor());
     }
@@ -3195,6 +3196,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         clearArtworkTarget();
         Source.get().stop();
         RefreshEvent.history();
-        App.removeCallbacks(mR1, mR2, mR3, mR4, mR5, mR6, mR7);
+        App.removeCallbacks(mR1, mR2, mR3, mR4, mR5, mR6, mR7, mR8);
     }
 }
