@@ -475,7 +475,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (items.isEmpty()) return;
             host.mergeQuickItems(items, result.getRequestToken());
             host.setVisibilityIfChanged(host.mBinding.quick, View.VISIBLE);
-            if (host.isInitAuto() || host.canAdvancePendingSourceSwitch()) host.mPlaybackNavigation.nextSite();
             App.removeCallbacks(host.mR4);
         }
 
@@ -2838,6 +2837,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 int index = findQuickItemInsertPosition(item);
                 mQuickAdapter.add(index, item);
             }
+            if (isInitAuto() || canAdvancePendingSourceSwitch()) mPlaybackNavigation.nextSite();
         }, 100);
     }
 
