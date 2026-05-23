@@ -66,6 +66,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     private SiteViewModel mViewModel;
     private PauseExecutor mExecutor;
     private List<Site> mSites;
+    private String mSearchToken;
     private final Runnable mAddRecord = () -> mRecordAdapter.add(mBinding.keyword.getText().toString().trim());
     private final Runnable mShowSite = () -> SiteDialog.create(this).search().show();
     private final Runnable mRequestRecordLayout = () -> mBinding.recordRecycler.requestLayout();
@@ -153,6 +154,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.search.observe(this, result -> {
+            if (!isCurrentSearchResult(result)) return;
             if (mCollectAdapter.getPosition() == 0) mSearchAdapter.addAll(result.getList());
             if (result.getList().isEmpty()) return;
             Collect collect = Collect.create(result.getList());
@@ -161,13 +163,21 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
             mCollectAdapter.add(result.getList());
         });
         mViewModel.result.observe(this, result -> {
-            boolean same = result.getList().size() > 0 && mCollectAdapter.getActivated().getSite().equals(result.getList().get(0).getSite());
+            boolean same = result.getList().size() > 0
+                    && TextUtils.equals(result.getKeyword(), mBinding.keyword.getText().toString().trim())
+                    && mCollectAdapter.getActivated().getSite().equals(result.getList().get(0).getSite());
             if (same) mCollectAdapter.getActivated().getList().addAll(result.getList());
             if (same) mCollectAdapter.getActivated().setPageCount(result.getPageCount());
             if (same) mSearchAdapter.addAll(result.getList());
             mScroller.endLoading(result);
             mCollectAdapter.getActivated().setPage(mScroller.getPage());
         });
+    }
+
+    private boolean isCurrentSearchResult(Result result) {
+        return result != null
+                && TextUtils.equals(result.getKeyword(), mBinding.keyword.getText().toString().trim())
+                && TextUtils.equals(result.getRequestToken(), mSearchToken);
     }
 
     private void checkKeyword() {
@@ -198,16 +208,17 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mBinding.agent.setVisibility(View.GONE);
         mBinding.view.setVisibility(View.VISIBLE);
         mBinding.result.setVisibility(View.VISIBLE);
-        if (mExecutor != null) mExecutor.shutdownNow();
+        stopSearch();
         mExecutor = new PauseExecutor(Math.max(2, Math.min(6, Constant.THREAD_POOL)));
         String keyword = mBinding.keyword.getText().toString().trim();
+        mSearchToken = "collect:" + System.currentTimeMillis();
         for (Site site : mSites) mExecutor.execute(() -> search(site, keyword));
         App.post(mAddRecord, 250);
     }
 
     private void search(Site site, String keyword) {
         try {
-            mViewModel.searchContent(site, keyword, false);
+            mViewModel.searchContent(site, keyword, false, mSearchToken);
         } catch (Throwable ignored) {
         }
     }
@@ -264,7 +275,14 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mBinding.result.setVisibility(View.GONE);
         mBinding.site.setVisibility(View.VISIBLE);
         mBinding.agent.setVisibility(View.VISIBLE);
+        stopSearch();
+    }
+
+    private void stopSearch() {
+        if (mViewModel != null) mViewModel.cancelSearch(mSearchToken);
         if (mExecutor != null) mExecutor.shutdownNow();
+        mExecutor = null;
+        mSearchToken = null;
     }
 
     @Override
@@ -338,8 +356,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         App.removeCallbacks(mAddRecord);
         App.removeCallbacks(mShowSite);
         App.removeCallbacks(mRequestRecordLayout);
-        if (mExecutor != null) mExecutor.shutdownNow();
-        mExecutor = null;
+        stopSearch();
     }
 
     @Override

@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.api.config.VodConfig;
@@ -38,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
 public class TypeFragment extends BaseFragment implements CustomScroller.Callback, VodAdapter.OnClickListener, SwipeRefreshLayout.OnRefreshListener {
 
@@ -50,6 +52,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private Set<String> mVodKeys;
     private String mPendingTypeId;
     private String mPendingPage;
+    private String mPendingExtend;
     private Page mPage;
 
     public static TypeFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
@@ -170,6 +173,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         }
         mPendingTypeId = typeId;
         mPendingPage = page;
+        mPendingExtend = getRequestExtend(mExtends);
         if ("1".equals(page) && !mBinding.swipeLayout.isRefreshing()) mBinding.progressLayout.showProgress();
         if (isHome() && "1".equals(page)) setAdapter(getParent().getResult());
         else mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
@@ -217,7 +221,13 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         if (result == null) return false;
         return TextUtils.equals(result.getKey(), getKey())
                 && TextUtils.equals(result.getRequestTypeId(), mPendingTypeId)
-                && TextUtils.equals(result.getRequestPage(), mPendingPage);
+                && TextUtils.equals(result.getRequestPage(), mPendingPage)
+                && TextUtils.equals(result.getRequestExtend(), mPendingExtend);
+    }
+
+    private String getRequestExtend(HashMap<String, String> extend) {
+        if (extend == null || extend.isEmpty()) return "";
+        return App.gson().toJson(new TreeMap<>(extend));
     }
 
     private void checkPosition(boolean first) {
