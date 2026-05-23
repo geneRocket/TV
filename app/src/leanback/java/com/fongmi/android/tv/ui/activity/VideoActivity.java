@@ -473,7 +473,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 if (mismatch(item) || !host.mQuickKeys.add(getQuickKey(item))) iterator.remove();
             }
             if (items.isEmpty()) return;
-            host.mergeQuickItems(items);
+            host.mergeQuickItems(items, result.getRequestToken());
             host.setVisibilityIfChanged(host.mBinding.quick, View.VISIBLE);
             if (host.isInitAuto() || host.canAdvancePendingSourceSwitch()) host.mPlaybackNavigation.nextSite();
             App.removeCallbacks(host.mR4);
@@ -557,6 +557,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.getIntent().putExtra("key", item.getSiteKey());
             host.getIntent().putExtra("pic", item.getVodPic());
             host.getIntent().putExtra("id", item.getVodId());
+            host.getIntent().putExtra("name", item.getVodName());
             host.mBinding.scroll.scrollTo(0, 0);
             host.clearPartRequest();
             host.setPartAdapter(Collections.emptyList());
@@ -669,9 +670,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         private String getQuickKey(Vod item) {
-            String id = item.getVodId();
-            if (!id.isEmpty()) return item.getSiteKey() + "@" + id;
-            return item.getSiteKey() + "@" + Util.normalize(item.getVodName()) + "@" + item.getVodPic() + "@" + item.getVodRemarks();
+            return host.getSourceKey(item);
         }
     }
 
@@ -2809,21 +2808,32 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private String getCurrentBrokenKey() {
-        return getBrokenKey(getKey(), getId(), getName());
+        return getSourceKey(getKey(), getId(), getCurrentSourceName());
     }
 
     private String getBrokenKey(Vod item) {
-        return getBrokenKey(item.getSiteKey(), item.getVodId(), item.getVodName());
+        return getSourceKey(item);
     }
 
-    private String getBrokenKey(String siteKey, String vodId, String vodName) {
+    private String getSourceKey(Vod item) {
+        return item == null ? "" : getSourceKey(item.getSiteKey(), item.getVodId(), item.getVodName());
+    }
+
+    private String getSourceKey(String siteKey, String vodId, String vodName) {
         if (TextUtils.isEmpty(siteKey)) return "";
-        if (TextUtils.isEmpty(vodId)) return siteKey + "@" + Util.normalize(vodName);
-        return siteKey + "@" + vodId;
+        if (!TextUtils.isEmpty(vodId)) return siteKey + "@" + vodId;
+        String name = Util.normalize(vodName);
+        return TextUtils.isEmpty(name) ? "" : siteKey + "@" + name;
     }
 
-    private void mergeQuickItems(List<Vod> items) {
+    private String getCurrentSourceName() {
+        String name = mBinding == null ? "" : textOf(mBinding.name);
+        return TextUtils.isEmpty(name) ? getName() : name;
+    }
+
+    private void mergeQuickItems(List<Vod> items, String token) {
         App.post(() -> {
+            if (!mSearchActive || !TextUtils.equals(token, pendingSearchToken)) return;
             for (Vod item : items) {
                 int index = findQuickItemInsertPosition(item);
                 mQuickAdapter.add(index, item);
