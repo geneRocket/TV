@@ -57,7 +57,7 @@ import okhttp3.Response;
 
 public class CollectActivity extends BaseActivity implements CustomScroller.Callback, SiteCallback, WordAdapter.OnClickListener, RecordAdapter.OnClickListener, CollectAdapter.OnClickListener, VodAdapter.OnClickListener {
 
-    private static final long RESULT_FLUSH_DELAY = 1000;
+    private static final long RESULT_FLUSH_DELAY = 500;
 
     private ActivityCollectBinding mBinding;
     private CollectAdapter mCollectAdapter;
