@@ -47,7 +47,7 @@ import java.util.concurrent.Future;
 
 public class CollectActivity extends BaseActivity {
 
-    private static final long RESULT_FLUSH_DELAY = 80;
+    private static final long RESULT_FLUSH_DELAY = 1000;
 
     private ActivityCollectBinding mBinding;
     private ArrayObjectAdapter mAdapter;

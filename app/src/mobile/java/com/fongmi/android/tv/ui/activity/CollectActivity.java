@@ -57,6 +57,8 @@ import okhttp3.Response;
 
 public class CollectActivity extends BaseActivity implements CustomScroller.Callback, SiteCallback, WordAdapter.OnClickListener, RecordAdapter.OnClickListener, CollectAdapter.OnClickListener, VodAdapter.OnClickListener {
 
+    private static final long RESULT_FLUSH_DELAY = 1000;
+
     private ActivityCollectBinding mBinding;
     private CollectAdapter mCollectAdapter;
     private SearchAdapter mSearchAdapter;
@@ -67,9 +69,12 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     private PauseExecutor mExecutor;
     private List<Site> mSites;
     private String mSearchToken;
+    private boolean mFlushScheduled;
+    private final List<Result> mPendingResults = new ArrayList<>();
     private final Runnable mAddRecord = () -> mRecordAdapter.add(mBinding.keyword.getText().toString().trim());
     private final Runnable mShowSite = () -> SiteDialog.create(this).search().show();
     private final Runnable mRequestRecordLayout = () -> mBinding.recordRecycler.requestLayout();
+    private final Runnable mFlushResults = this::flushResults;
 
     public static void start(Activity activity) {
         start(activity, "");
@@ -155,12 +160,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.search.observe(this, result -> {
             if (!isCurrentSearchResult(result)) return;
-            if (mCollectAdapter.getPosition() == 0) mSearchAdapter.addAll(result.getList());
-            if (result.getList().isEmpty()) return;
-            Collect collect = Collect.create(result.getList());
-            collect.setPageCount(result.getPageCount());
-            mCollectAdapter.add(collect);
-            mCollectAdapter.add(result.getList());
+            enqueueResult(result);
         });
         mViewModel.result.observe(this, result -> {
             boolean same = result.getList().size() > 0
@@ -201,6 +201,9 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     private void search() {
         if (empty()) return;
         App.removeCallbacks(mAddRecord);
+        App.removeCallbacks(mFlushResults);
+        mFlushScheduled = false;
+        mPendingResults.clear();
         mSearchAdapter.clear();
         mCollectAdapter.clear();
         Util.hideKeyboard(mBinding.keyword);
@@ -218,9 +221,34 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
 
     private void search(Site site, String keyword) {
         try {
-            mViewModel.searchContent(site, keyword, false, mSearchToken);
+            mViewModel.searchContent(site, keyword, site.isQuickSearch(), mSearchToken);
         } catch (Throwable ignored) {
         }
+    }
+
+    private void enqueueResult(Result result) {
+        mPendingResults.add(result);
+        if (mFlushScheduled) return;
+        mFlushScheduled = true;
+        App.post(mFlushResults, RESULT_FLUSH_DELAY);
+    }
+
+    private void flushResults() {
+        mFlushScheduled = false;
+        if (isFinishing() || isDestroyed() || mPendingResults.isEmpty()) return;
+        List<Result> results = new ArrayList<>(mPendingResults);
+        List<Vod> allItems = new ArrayList<>();
+        boolean allSelected = mCollectAdapter.getPosition() == 0;
+        mPendingResults.clear();
+        for (Result result : results) {
+            if (result.getList().isEmpty()) continue;
+            if (allSelected) allItems.addAll(result.getList());
+            Collect collect = Collect.create(result.getList());
+            collect.setPageCount(result.getPageCount());
+            mCollectAdapter.add(collect);
+            mCollectAdapter.add(result.getList());
+        }
+        if (allSelected && !allItems.isEmpty()) mSearchAdapter.addAll(allItems);
     }
 
     private void getHot() {
@@ -279,6 +307,9 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     }
 
     private void stopSearch() {
+        App.removeCallbacks(mFlushResults);
+        mFlushScheduled = false;
+        mPendingResults.clear();
         if (mViewModel != null) mViewModel.cancelSearch(mSearchToken);
         if (mExecutor != null) mExecutor.shutdownNow();
         mExecutor = null;
@@ -356,6 +387,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         App.removeCallbacks(mAddRecord);
         App.removeCallbacks(mShowSite);
         App.removeCallbacks(mRequestRecordLayout);
+        App.removeCallbacks(mFlushResults);
         stopSearch();
     }
 
