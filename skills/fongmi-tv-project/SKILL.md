@@ -1,6 +1,6 @@
 ---
 name: fongmi-tv-project
-description: Project-specific guidance for the FongMi TV Android repository. Use when working in ~/code/TV or answering questions about its Android Gradle modules, leanback/mobile source sets, Java/Python build flavors, CatVod jar/js/py crawler loaders, playback and extractor flow, Room database schema, local server endpoints, native libraries, or safe build and verification commands.
+description: Project-specific guidance for the FongMi TV Android repository. Use when working in /Users/wuwenjun/code/TV or answering questions about its Android Gradle modules, leanback/mobile source sets, Java/Python build flavors, CatVod jar/js/py crawler loaders, playback and extractor flow, Room database schema, local server endpoints, native libraries, or safe build and verification commands.
 ---
 
 # FongMi TV Project
@@ -35,6 +35,14 @@ Use this skill as the onboarding map for the FongMi TV Android app. It keeps the
 - `app/src/main/java/com/fongmi/android/tv/player`: Media3/IJK playback orchestration, parsing, cache, extractors, subtitles, danmaku.
 - `app/src/main/java/com/fongmi/android/tv/server`: local NanoHTTPD server and README-documented `/action`, `/cache`, `/proxy`, `/parse`, and media endpoints.
 - `app/src/main/java/com/fongmi/android/tv/db/AppDatabase.java`: Room database, schema version, migrations, backup/restore.
+
+## Multi-Config Site Keys
+
+- Multi-interface VOD loads prefix site keys as `cid@siteKey` via `VodConfig.siteKey`; `VodConfig.rawSiteKey` removes the prefix, and `VodConfig.siteCid` recovers the config id.
+- Search, quick source-switch candidates, and VOD list de-duplication should use full `item.getSiteKey()` so same site keys from different configs stay distinct.
+- History/keep keys intentionally persist `rawSiteKey + vodId + cid`; restore through `History.getSiteKey()` / `Keep.getSiteKey()` to recover the scoped key.
+- When checking async list/search results, compare request ownership (`key`, `page`, `token`, and filter `extend` where applicable) before mutating adapters. This is especially important for multi-interface search and fast filter changes.
+
 
 ## Verification
 

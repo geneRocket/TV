@@ -27,7 +27,7 @@ The `app` module has three flavor dimensions:
 
 Output APK names are generated as `${mode}-${api}-${abi}.apk`. Release builds enable minify and resource shrinking. `compileSdk` is `35`, `minSdk` is `23`, and `targetSdk` is intentionally `28`.
 
-Python builds depend on `chaquo/build.gradle`, which is configured for Python `3.8` via `~/.pyenv/shims/python3.8` and installs `lxml`, `ujson`, `pyquery`, `requests`, `jsonpath`, `pycryptodome`, and `beautifulsoup4`.
+Python builds depend on `chaquo/build.gradle`, which is configured for Python `3.8` via `/Users/wuwenjun/.pyenv/shims/python3.8` and installs `lxml`, `ujson`, `pyquery`, `requests`, `jsonpath`, `pycryptodome`, and `beautifulsoup4`.
 
 ## Source Sets
 
