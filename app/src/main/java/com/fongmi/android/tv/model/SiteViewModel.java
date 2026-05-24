@@ -139,6 +139,7 @@ public class SiteViewModel extends ViewModel {
         HashMap<String, String> extendSnapshot = extend == null ? new HashMap<>() : new HashMap<>(extend);
         executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> {
             Site site = VodConfig.get().getSite(key);
+            if (site.isEmpty()) return Result.empty();
             if (site.getType() == 3) {
                 Spider spider = site.recent().spider();
                 String categoryContent = spider.categoryContent(tid, page, filter, extendSnapshot);
@@ -197,6 +198,8 @@ public class SiteViewModel extends ViewModel {
             vod.setVodPic(ResUtil.getString(R.string.push_image));
             vod.setVodFlags(Flag.create(ResUtil.getString(R.string.push), ResUtil.getString(R.string.play), id));
             return prepareDetailResult(Result.vod(vod), preloadFlags);
+        } else if (site.isEmpty()) {
+            return Result.empty();
         } else {
             ArrayMap<String, String> params = new ArrayMap<>();
             params.put("ac", site.getType() == 0 ? "videolist" : "detail");
@@ -254,6 +257,8 @@ public class SiteViewModel extends ViewModel {
                 result.setUrl(Url.create().add(UrlUtil.normalize(id, "")));
                 result.setUrl(UrlUtil.normalize(Source.get().fetch(result), ""));
                 return result;
+            } else if (site.isEmpty()) {
+                return emptyRequestResult();
             } else {
                 Result result = new Result();
                 Url url = Url.create().add(UrlUtil.normalize(id, site.getApi()));
@@ -290,6 +295,7 @@ public class SiteViewModel extends ViewModel {
     public void action(String key, String action) {
         executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> {
             Site site = VodConfig.get().getSite(key);
+            if (site.isEmpty()) return Result.empty();
             if (site.getType() == 3) return Result.fromJson(site.recent().spider().action(action));
             if (site.getType() == 4) return Result.fromJson(OkHttp.string(action));
             return Result.empty();
