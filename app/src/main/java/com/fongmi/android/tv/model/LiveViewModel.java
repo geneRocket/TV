@@ -169,10 +169,18 @@ public class LiveViewModel extends ViewModel {
     private TimeZone resolveTimeZone(String value, String epg, TimeZone fallback) {
         try {
             if ((value == null || value.isEmpty()) && epg != null && epg.contains("serverTimeZone=")) value = Uri.parse(epg).getQueryParameter("serverTimeZone");
-            return value == null || value.isEmpty() ? fallback : TimeZone.getTimeZone(value);
+            if (value == null || value.isEmpty()) return fallback;
+            TimeZone timeZone = TimeZone.getTimeZone(value);
+            if ("GMT".equals(timeZone.getID()) && !isGmtTimeZone(value)) return fallback;
+            return timeZone;
         } catch (Exception ignored) {
             return fallback;
         }
+    }
+
+    private boolean isGmtTimeZone(String value) {
+        String normalized = value == null ? "" : value.trim().toUpperCase(Locale.US);
+        return "GMT".equals(normalized) || "UTC".equals(normalized) || normalized.startsWith("GMT+") || normalized.startsWith("GMT-");
     }
 
     private SimpleDateFormat createDateFormat(TimeZone timeZone) {
@@ -243,6 +251,7 @@ public class LiveViewModel extends ViewModel {
         task.timeout = () -> {
             if (!completed.compareAndSet(false, true)) return;
             if (task.future != null) task.future.cancel(true);
+            if (timeout == Constant.TIMEOUT_PARSE_LIVE) Source.get().stop();
             clearTask(task);
             poster.post(fallback.create(new TimeoutException()), seq);
         };
