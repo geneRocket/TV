@@ -13,6 +13,7 @@
     <string name="home_recommend">Recommend</string>
     <string name="empty_keep">No keep records</string>
     <string name="empty_history">No watch history</string>
+    <string name="play_switch_empty">No available source found</string>
 
     <!-- Collect -->
     <string name="collect_result">Search results for <xliff:g name="name">%s</xliff:g></string>

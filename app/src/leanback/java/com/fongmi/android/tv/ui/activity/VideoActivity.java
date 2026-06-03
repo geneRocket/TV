@@ -490,7 +490,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void advanceSearch(boolean force) {
-            if (host.mQuickAdapter.size() == 0) initSearch(host.getSourceSwitchKeyword(), true);
+            if (host.mQuickAdapter.size() == 0) initSearch(host.getSourceSwitchKeyword(), !force, true);
             else if (host.isAutoMode() || force || host.isSourceSwitching()) host.mPlaybackNavigation.nextSite();
         }
 
@@ -617,10 +617,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             return history;
         }
 
-        private void initSearch(String keyword, boolean auto) {
+        private void initSearch(String keyword, boolean auto, boolean advance) {
             stopSearch();
             host.setAutoMode(auto);
-            host.setInitAuto(auto);
+            host.setInitAuto(advance);
+            host.setManualSourceSearch(!auto);
             String token = host.nextRequestToken("search");
             host.setPendingSearchToken(token);
             host.mBinding.part.setTag(keyword);
@@ -757,6 +758,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean mFocusUpdateScheduled;
     private boolean pendingSiteSwitch;
     private boolean sourceSwitching;
+    private boolean manualSourceSearch;
     private boolean sourceSwitchSingleEpisode;
     private String sourceSwitchFlag;
     private String sourceSwitchEpisode;
@@ -2550,6 +2552,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         this.autoMode = autoMode;
     }
 
+    private boolean isManualSourceSearch() {
+        return manualSourceSearch;
+    }
+
+    private void setManualSourceSearch(boolean manualSourceSearch) {
+        this.manualSourceSearch = manualSourceSearch;
+    }
+
     private boolean isSourceSwitching() {
         return sourceSwitching;
     }
@@ -2583,6 +2593,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         clearSourceSwitchTimeout();
         setPendingSiteSwitch(false);
         sourceSwitching = false;
+        manualSourceSearch = false;
         sourceSwitchSingleEpisode = false;
         sourceSwitchFlag = null;
         sourceSwitchEpisode = null;
@@ -2786,8 +2797,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onSearchTasksSettled(int generation) {
-        if (generation != mSearchGeneration || !isSourceSwitching() || isPendingSiteSwitch()) return;
-        if (mQuickAdapter.size() == 0 && !hasPendingSearchTasks()) clearSourceSwitch();
+        if (generation != mSearchGeneration || isPendingSiteSwitch() || mQuickAdapter.size() > 0 || hasPendingSearchTasks()) return;
+        if (isSourceSwitching()) clearSourceSwitch();
+        else if (isManualSourceSearch()) {
+            setManualSourceSearch(false);
+            mContent.stopSearch();
+            Notify.show(R.string.play_switch_empty);
+        }
     }
 
     private boolean matchSourceTitle(String title, String keyword) {
