@@ -439,15 +439,22 @@ public class LiveConfig {
     }
 
     private String loadDepotConfig(Config target) throws Throwable {
+        if (!TextUtils.isEmpty(target.getJson())) {
+            if (!target.isCache()) App.execute(() -> refreshDepotCache(target));
+            return target.getJson();
+        }
+        String text = Decoder.getJson(target.getUrl());
+        if (Json.invalid(text)) return text;
+        JsonObject loaded = loadObject(Json.parse(text).getAsJsonObject(), 0);
+        cacheConfig(target, loaded);
+        return loaded.toString();
+    }
+
+    private void refreshDepotCache(Config target) {
         try {
             String text = Decoder.getJson(target.getUrl());
-            if (Json.invalid(text)) return text;
-            JsonObject loaded = loadObject(Json.parse(text).getAsJsonObject(), 0);
-            cacheConfig(target, loaded);
-            return loaded.toString();
-        } catch (Throwable e) {
-            if (!TextUtils.isEmpty(target.getJson())) return target.getJson();
-            throw e;
+            if (!Json.invalid(text)) cacheConfig(target, loadObject(Json.parse(text).getAsJsonObject(), 0));
+        } catch (Throwable ignored) {
         }
     }
 

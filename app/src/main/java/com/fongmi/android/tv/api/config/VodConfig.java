@@ -492,13 +492,19 @@ public class VodConfig {
     }
 
     private JsonObject loadDepotObject(Config target) throws Throwable {
+        if (!TextUtils.isEmpty(target.getJson())) {
+            if (!target.isCache()) App.execute(() -> refreshDepotCache(target));
+            return Json.parse(target.getJson()).getAsJsonObject();
+        }
+        JsonObject loaded = loadObject(target.getUrl(), 0);
+        cacheConfig(target, loaded);
+        return loaded;
+    }
+
+    private void refreshDepotCache(Config target) {
         try {
-            JsonObject loaded = loadObject(target.getUrl(), 0);
-            cacheConfig(target, loaded);
-            return loaded;
-        } catch (Throwable e) {
-            if (!TextUtils.isEmpty(target.getJson())) return Json.parse(target.getJson()).getAsJsonObject();
-            throw e;
+            cacheConfig(target, loadObject(target.getUrl(), 0));
+        } catch (Throwable ignored) {
         }
     }
 
