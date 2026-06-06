@@ -9,17 +9,13 @@ import com.github.catvod.net.interceptor.AuthInterceptor;
 import com.github.catvod.net.interceptor.ProxyRequestInterceptor;
 import com.github.catvod.net.interceptor.RequestInterceptor;
 import com.github.catvod.net.interceptor.ResponseInterceptor;
-import com.github.catvod.utils.Path;
 
-import java.io.File;
 import java.net.ProxySelector;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import okhttp3.Cache;
 import okhttp3.Call;
-import okhttp3.ConnectionPool;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
@@ -182,7 +178,6 @@ public class OkHttp {
 
     private static OkHttpClient.Builder getBuilder() {
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
-                .connectionPool(new ConnectionPool(32, 5, TimeUnit.MINUTES))
                 .addInterceptor(requestInterceptor())
                 .addInterceptor(authInterceptor())
                 .addNetworkInterceptor(responseInterceptor())
