@@ -1,11 +1,22 @@
 # TV
 -keep class com.fongmi.android.tv.bean.** { *; }
 
+# Optimization
+-repackageclasses ''
+-allowaccessmodification
+-mergeinterfacesaggressively
+-overloadaggressively
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+}
+
 # Gson
 -keepattributes Signature
 -keepattributes *Annotation*
 -dontwarn sun.misc.**
--keep class com.google.gson.** { *; }
+-keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.TypeAdapter
 -keep class * implements com.google.gson.TypeAdapterFactory
 -keep class * implements com.google.gson.JsonSerializer
@@ -29,8 +40,9 @@
 
 # OkHttp
 -dontwarn okhttp3.**
--keep class okio.** { *; }
--keep class okhttp3.** { *; }
+-dontwarn okio.**
+-dontwarn javax.annotation.**
+-dontwarn org.conscrypt.**
 
 # CatVod
 -keep class com.github.catvod.Proxy { *; }
