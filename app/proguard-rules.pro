@@ -4,6 +4,7 @@
 # Gson
 -keepattributes Signature
 -keepattributes *Annotation*
+-keepattributes JavascriptInterface
 -dontwarn sun.misc.**
 -keep class com.google.gson.** { *; }
 -keep class * extends com.google.gson.TypeAdapter
@@ -11,6 +12,9 @@
 -keep class * implements com.google.gson.JsonSerializer
 -keep class * implements com.google.gson.JsonDeserializer
 -keepclassmembers,allowobfuscation class * { @com.google.gson.annotations.SerializedName <fields>; }
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
 -keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
 -keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
 
@@ -34,8 +38,9 @@
 
 # CatVod
 -keep class com.github.catvod.Proxy { *; }
+-keep class com.github.catvod.bean.** { *; }
 -keep class com.github.catvod.crawler.** { *; }
--keep class * extends com.github.catvod.crawler.Spider
+-keep class * extends com.github.catvod.crawler.Spider { *; }
 
 # Cling
 -dontwarn javax.**
