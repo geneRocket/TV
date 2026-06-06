@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.video.VideoRendererEventListener;
 
 import com.fongmi.android.tv.player.DynamicVolumeRenderersFactory;
+import com.fongmi.android.tv.player.Players;
 
 import java.util.ArrayList;
 
@@ -25,9 +26,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
     public NextRenderersFactory(@NonNull Context context, int decode) {
         super(context);
         setEnableDecoderFallback(true);
-        // 修改点 1: 无论 decode 参数如何，都只开启 MODE_ON。
-        // MODE_PREFER 会暗示 ExoPlayer 尝试将其放在前面，我们要强制最低优先级，所以只用 ON。
-        setExtensionRendererMode(EXTENSION_RENDERER_MODE_ON);
+        setExtensionRendererMode(decode == Players.SOFT ? EXTENSION_RENDERER_MODE_PREFER : EXTENSION_RENDERER_MODE_ON);
     }
 
     @Override

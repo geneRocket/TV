@@ -53,13 +53,18 @@ public class ExoUtil {
                         bufferForPlaybackMs,
                         bufferForPlaybackAfterRebufferMs)
                 .setPrioritizeTimeOverSizeThresholds(true)
-                .setBackBuffer(1500, false)
+                .setBackBuffer(30000, true)
                 .build();
     }
 
     public static TrackSelector buildTrackSelector() {
         DefaultTrackSelector trackSelector = new DefaultTrackSelector(App.get());
-        trackSelector.setParameters(trackSelector.buildUponParameters().setPreferredTextLanguage(Locale.getDefault().getISO3Language()).setForceHighestSupportedBitrate(true).setTunnelingEnabled(Setting.isTunnel()));
+        trackSelector.setParameters(trackSelector.buildUponParameters()
+                .setPreferredTextLanguage(Locale.getDefault().getISO3Language())
+                .setForceHighestSupportedBitrate(true)
+                .setTunnelingEnabled(Setting.isTunnel())
+                .setAllowVideoMixedMimeTypeAdaptiveness(true)
+                .setAllowVideoNonSeamlessAdaptiveness(true));
         return trackSelector;
     }
 

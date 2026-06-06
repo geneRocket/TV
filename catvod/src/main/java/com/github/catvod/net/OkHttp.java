@@ -11,6 +11,7 @@ import com.github.catvod.net.interceptor.RequestInterceptor;
 import com.github.catvod.net.interceptor.ResponseInterceptor;
 import com.github.catvod.utils.Path;
 
+import java.io.File;
 import java.net.ProxySelector;
 import java.util.Map;
 import java.util.Objects;
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 import okhttp3.Cache;
 import okhttp3.Call;
+import okhttp3.ConnectionPool;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
@@ -179,7 +181,19 @@ public class OkHttp {
     }
 
     private static OkHttpClient.Builder getBuilder() {
-        OkHttpClient.Builder builder = new OkHttpClient.Builder().addInterceptor(requestInterceptor()).addInterceptor(authInterceptor()).addNetworkInterceptor(responseInterceptor()).addInterceptor(new ProxyRequestInterceptor(selector())).connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS).readTimeout(TIMEOUT, TimeUnit.MILLISECONDS).writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS).dns(dns()).hostnameVerifier((hostname, session) -> true).followRedirects(true).sslSocketFactory(new SSLCompat(), SSLCompat.TM);
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectionPool(new ConnectionPool(32, 5, TimeUnit.MINUTES))
+                .addInterceptor(requestInterceptor())
+                .addInterceptor(authInterceptor())
+                .addNetworkInterceptor(responseInterceptor())
+                .addInterceptor(new ProxyRequestInterceptor(selector()))
+                .connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
+                .readTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
+                .writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
+                .dns(dns())
+                .hostnameVerifier((hostname, session) -> true)
+                .followRedirects(true)
+                .sslSocketFactory(new SSLCompat(), SSLCompat.TM);
         builder.proxyAuthenticator(authenticator());
         builder.proxySelector(selector());
         return builder;
