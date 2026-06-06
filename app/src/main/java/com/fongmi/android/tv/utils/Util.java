@@ -13,6 +13,8 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.Parcelable;
 import android.provider.Settings;
+import android.text.Html;
+import android.text.Spanned;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.Window;
@@ -199,6 +201,15 @@ public class Util {
         Intent mainIntent = Intent.makeRestartActivityTask(componentName);
         activity.startActivity(mainIntent);
         Runtime.getRuntime().exit(0);
+    }
+
+    public static Spanned fromHtml(String text) {
+        if (TextUtils.isEmpty(text)) return Html.fromHtml("");
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            return Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY);
+        } else {
+            return Html.fromHtml(text);
+        }
     }
 
     public static String normalize(String text) {

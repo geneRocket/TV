@@ -6,7 +6,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.text.Html;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -590,10 +589,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setText(host.mBinding.area, R.string.detail_area, item.getVodArea());
             host.setText(host.mBinding.type, R.string.detail_type, item.getTypeName());
             host.setText(host.mBinding.site, R.string.detail_site, host.getSite().getName());
-            host.setText(host.mBinding.actor, R.string.detail_actor, Html.fromHtml(item.getVodActor()).toString());
+            host.setText(host.mBinding.actor, R.string.detail_actor, Util.fromHtml(item.getVodActor()).toString());
             if (!host.isSourceSwitching()) host.setSourceSearchActor(item.getVodActor());
-            host.setText(host.mBinding.content, R.string.detail_content, Html.fromHtml(item.getVodContent()).toString());
-            host.setText(host.mBinding.director, R.string.detail_director, Html.fromHtml(item.getVodDirector()).toString());
+            host.setText(host.mBinding.content, R.string.detail_content, Util.fromHtml(item.getVodContent()).toString());
+            host.setText(host.mBinding.director, R.string.detail_director, Util.fromHtml(item.getVodDirector()).toString());
             host.mFlagAdapter.setItems(item.getVodFlags(), null);
             host.mBinding.content.setMaxLines(host.getMaxLines());
             host.mBinding.video.requestFocus();
@@ -2858,14 +2857,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int findQuickItemInsertPosition(Vod item) {
+        double score = Util.similarity(item.getVodName(), getSourceSwitchKeyword());
         for (int i = 0; i < mQuickAdapter.size(); i++) {
-            if (compareQuickItem(item, (Vod) mQuickAdapter.get(i)) < 0) return i;
+            if (compareQuickItem(item, score, (Vod) mQuickAdapter.get(i)) < 0) return i;
         }
         return mQuickAdapter.size();
     }
 
-    private int compareQuickItem(Vod left, Vod right) {
-        double scoreLeft = Util.similarity(left.getVodName(), getSourceSwitchKeyword());
+    private int compareQuickItem(Vod left, double scoreLeft, Vod right) {
         double scoreRight = Util.similarity(right.getVodName(), getSourceSwitchKeyword());
         if (scoreLeft != scoreRight) return Double.compare(scoreRight, scoreLeft);
         int result = Integer.compare(getQuickActorRank(left), getQuickActorRank(right));
