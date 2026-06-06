@@ -994,7 +994,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         if (!Setting.isChange() || mChannel == null) return;
         if (!mChannel.isLast()) {
             nextLine(true);
-        } else if (isGone(mBinding.recycler)) {
+        } else {
             mChannel.setLine(0);
             nextChannel();
         }

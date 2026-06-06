@@ -190,6 +190,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void onPlayerReady() {
+            host.mPlayers.reset();
             state.resetToggle();
             state.resetError();
         }
@@ -2469,7 +2470,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void advanceRecoveryFlow() {
-        if (!getSite().isChangeable()) return;
+        if (!Setting.isChange() || !getSite().isChangeable()) return;
         if (isUseParse()) advanceParse();
         else advanceFlag();
     }
@@ -2477,9 +2478,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void advanceParse() {
         int position = getParsePosition();
         boolean last = position == mParseAdapter.size() - 1;
-        boolean pass = position == 0 || last;
         if (last) initParse();
-        if (pass) advanceFlag();
+        if (last) advanceFlag();
         else mPlaybackNavigation.nextParse();
     }
 
@@ -2490,7 +2490,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void advanceFlag() {
-        int position = isGone(mBinding.flag) ? -1 : getFlagPosition();
+        int position = getFlagPosition();
         if (position == mFlagAdapter.size() - 1) mContent.advanceSearch(false);
         else mPlaybackNavigation.nextFlag();
     }
