@@ -10,7 +10,7 @@ android {
     flavorDimensions = ["abi"]
 
     defaultConfig {
-        minSdk 23
+        minSdk 24
         targetSdk 28
         python {
             buildPython("/Users/wuwenjun/.pyenv/shims/python3.8")

@@ -368,29 +368,22 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     @Override
     public void onItemClick(Func item) {
-        switch (item.getResId()) {
-            case R.string.home_history_short:
-                HistoryActivity.start(getActivity());
-                break;
-            case R.string.home_vod:
-                Result result = getHomeActicity().mResult == null ? null : getHomeActicity().mResult.copyForVod();
-                VodActivity.start(getActivity(), result);
-                break;
-            case R.string.home_live:
-                LiveActivity.start(getActivity());
-                break;
-            case R.string.home_search:
-                SearchActivity.start(getActivity());
-                break;
-            case R.string.home_keep:
-                KeepActivity.start(getActivity());
-                break;
-            case R.string.home_push:
-                PushActivity.start(getActivity());
-                break;
-            case R.string.home_setting:
-                SettingActivity.start(getActivity());
-                break;
+        int resId = item.getResId();
+        if (resId == R.string.home_history_short) {
+            HistoryActivity.start(getActivity());
+        } else if (resId == R.string.home_vod) {
+            Result result = getHomeActicity().mResult == null ? null : getHomeActicity().mResult.copyForVod();
+            VodActivity.start(getActivity(), result);
+        } else if (resId == R.string.home_live) {
+            LiveActivity.start(getActivity());
+        } else if (resId == R.string.home_search) {
+            SearchActivity.start(getActivity());
+        } else if (resId == R.string.home_keep) {
+            KeepActivity.start(getActivity());
+        } else if (resId == R.string.home_push) {
+            PushActivity.start(getActivity());
+        } else if (resId == R.string.home_setting) {
+            SettingActivity.start(getActivity());
         }
     }
 
