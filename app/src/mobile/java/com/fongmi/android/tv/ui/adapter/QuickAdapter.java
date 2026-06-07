@@ -11,6 +11,8 @@ import com.fongmi.android.tv.databinding.AdapterQuickBinding;
 import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +44,16 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
         if (added.isEmpty()) return;
         mItems.addAll(added);
         notifyItemRangeInserted(position, added.size());
+    }
+
+    public void sort(Comparator<Vod> comparator) {
+        Collections.sort(mItems, comparator);
+        notifyDataSetChanged();
+    }
+
+    public void sort(Comparator<Vod> comparator) {
+        Collections.sort(mItems, comparator);
+        notifyDataSetChanged();
     }
 
     public Vod get(int position) {

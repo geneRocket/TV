@@ -2796,9 +2796,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onSearchTasksSettled(int generation) {
-        if (generation != mSearchGeneration || isPendingSiteSwitch() || mQuickAdapter.size() > 0 || hasPendingSearchTasks()) return;
-        if (isSourceSwitching()) clearSourceSwitch();
-        else if (isManualSourceSearch()) {
+        if (generation != mSearchGeneration || isPendingSiteSwitch() || hasPendingSearchTasks()) return;
+        if (isInitAuto() && mQuickAdapter.size() > 0) {
+            setInitAuto(false);
+            mPlaybackNavigation.nextSite();
+        } else if (isSourceSwitching() && mQuickAdapter.size() == 0) {
+            clearSourceSwitch();
+        } else if (isManualSourceSearch()) {
             setManualSourceSearch(false);
             mContent.stopSearch();
             Notify.show(R.string.play_switch_empty);
@@ -2852,7 +2856,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 int index = findQuickItemInsertPosition(item);
                 mQuickAdapter.add(index, item);
             }
-            if (isInitAuto() || canAdvancePendingSourceSwitch()) mPlaybackNavigation.nextSite();
+            if (isInitAuto()) {
+                if (!hasPendingSearchTasks() || mQuickAdapter.size() >= 10) {
+                    setInitAuto(false);
+                    mPlaybackNavigation.nextSite();
+                }
+            } else if (canAdvancePendingSourceSwitch()) {
+                mPlaybackNavigation.nextSite();
+            }
         }, 100);
     }
 

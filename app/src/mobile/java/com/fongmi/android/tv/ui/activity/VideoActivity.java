@@ -1739,10 +1739,14 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         List<Vod> items = new ArrayList<>(result.getList());
         Iterator<Vod> iterator = items.iterator();
         while (iterator.hasNext()) if (mismatch(iterator.next())) iterator.remove();
-        items.sort((a, b) -> Integer.compare(searchRank(a), searchRank(b)));
         mBinding.quick.setVisibility(View.VISIBLE);
         mQuickAdapter.addAll(items);
-        if (isInitAuto()) nextSite();
+        mQuickAdapter.sort((a, b) -> Integer.compare(searchRank(a), searchRank(b)));
+        if (isInitAuto()) {
+            if (mSearchPendingCount == 0 || mQuickAdapter.getItemCount() >= 10) {
+                nextSite();
+            }
+        }
         if (items.isEmpty()) return;
         App.removeCallbacks(mR4);
     }
@@ -1755,8 +1759,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (generation != mSearchGeneration) return;
         if (mSearchPendingCount > 0) mSearchPendingCount--;
         if (mSearchPendingCount == 0) App.post(() -> {
-            if (generation != mSearchGeneration || !mSearchActive || !mQuickAdapter.isEmpty()) return;
-            if (isInitAuto() || isAutoMode()) showEmpty();
+            if (generation != mSearchGeneration || !mSearchActive) return;
+            if (isInitAuto() && !mQuickAdapter.isEmpty()) nextSite();
+            else if (mQuickAdapter.isEmpty() && (isInitAuto() || isAutoMode())) showEmpty();
         });
     }
 

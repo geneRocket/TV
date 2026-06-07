@@ -539,7 +539,7 @@ public class VodConfig {
         String spider = Json.safeString(object, "spider");
         for (JsonElement element : Json.safeListElement(object, "sites")) {
             Site site = Site.objectFrom(element, spider);
-            if (!site.isEmpty()) site.setKey(siteKey(config.getId(), site.getKey()));
+            if (!site.isEmpty() && !isScopedSiteKey(site.getKey())) site.setKey(siteKey(config.getId(), site.getKey()));
             if (siteMap.containsKey(site.getKey())) continue;
             site.setJar(parseJar(site, spider));
             site = site.trans().sync();
@@ -813,7 +813,7 @@ public class VodConfig {
     public void setHome(Site home) {
         this.home = home;
         this.home.setActivated(true);
-        config.home(rawSiteKey(home.getKey())).save();
+        config.home(isScopedSiteKey(home.getKey()) && siteCid(home.getKey(), config.getId()) != config.getId() ? home.getKey() : rawSiteKey(home.getKey())).save();
         for (Site item : getSites()) item.setActivated(home);
     }
 
