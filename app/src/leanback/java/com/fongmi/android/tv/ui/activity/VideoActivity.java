@@ -589,10 +589,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setText(host.mBinding.area, R.string.detail_area, item.getVodArea());
             host.setText(host.mBinding.type, R.string.detail_type, item.getTypeName());
             host.setText(host.mBinding.site, R.string.detail_site, host.getSite().getName());
-            host.setText(host.mBinding.actor, R.string.detail_actor, Util.fromHtml(item.getVodActor()).toString());
+            App.execute(() -> {
+                SpannableStringBuilder actor = host.getSpan(R.string.detail_actor, Util.fromHtml(item.getVodActor()).toString());
+                SpannableStringBuilder content = host.getSpan(R.string.detail_content, Util.fromHtml(item.getVodContent()).toString());
+                SpannableStringBuilder director = host.getSpan(R.string.detail_director, Util.fromHtml(item.getVodDirector()).toString());
+                App.post(() -> {
+                    if (host.isFinishing() || host.isDestroyed()) return;
+                    host.setText(host.mBinding.actor, actor);
+                    host.setText(host.mBinding.content, content);
+                    host.setText(host.mBinding.director, director);
+                });
+            });
             if (!host.isSourceSwitching()) host.setSourceSearchActor(item.getVodActor());
-            host.setText(host.mBinding.content, R.string.detail_content, Util.fromHtml(item.getVodContent()).toString());
-            host.setText(host.mBinding.director, R.string.detail_director, Util.fromHtml(item.getVodDirector()).toString());
             host.mFlagAdapter.setItems(item.getVodFlags(), null);
             host.mBinding.content.setMaxLines(host.getMaxLines());
             host.mBinding.video.requestFocus();
@@ -633,7 +641,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mQuickKeys.clear();
             List<Site> sites = new ArrayList<>();
             Set<String> keys = new HashSet<>();
-            host.mExecutor = ThreadPools.newFixed("video-search", Math.max(2, Math.min(6, Constant.THREAD_POOL)));
+            host.mExecutor = ThreadPools.newFixed("video-search", Constant.THREAD_POOL);
             host.mSearchActive = true;
             for (Site site : VodConfig.get().getSites()) {
                 if (!isPass(site)) continue;
@@ -1300,6 +1308,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (isGone(mBinding.remark)) ++lines;
         if (isGone(mBinding.director)) ++lines;
         return lines;
+    }
+
+    private void setText(TextView view, SpannableStringBuilder span) {
+        view.setText(span, TextView.BufferType.SPANNABLE);
+        view.setVisibility(span.length() > 0 ? View.VISIBLE : View.GONE);
+        view.setLinkTextColor(MDColor.YELLOW_500);
+        CustomMovement.bind(view);
+        view.setTag(span.toString());
     }
 
     private void setText(TextView view, int resId, String text) {
@@ -2315,7 +2331,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onSubtitleClick() {
-        App.post(this::hideControl, 200);
+        App.post(mR1, 200);
         SubtitleView subtitleView = mPlayers.isIjk() ? getIjk().getSubtitleView() : getExo().getSubtitleView();
         String videoName = getName();
         Episode current = mEpisodeAdapter != null && mEpisodeAdapter.size() > 0 ? getEpisode() : null;
@@ -2327,14 +2343,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         } else {
             finalVideoName = videoName;
         }
-        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> {
-            int oldPlayer = mPlayers.getPlayer();
-            mPlayers.setSub(Sub.from(subtitle.getUrl()));
-            if (oldPlayer != mPlayers.getPlayer()) {
-                setPlayerView();
-                setDecodeView();
-            }
-        }).name(finalVideoName).full(isFullscreen()).show(this), 200);
+        App.post(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            SubtitleDialog.create().view(subtitleView).listener(subtitle -> {
+                int oldPlayer = mPlayers.getPlayer();
+                mPlayers.setSub(Sub.from(subtitle.getUrl()));
+                if (oldPlayer != mPlayers.getPlayer()) {
+                    setPlayerView();
+                    setDecodeView();
+                }
+            }).name(finalVideoName).full(isFullscreen()).show(this);
+        }, 200);
     }
 
     @Override
