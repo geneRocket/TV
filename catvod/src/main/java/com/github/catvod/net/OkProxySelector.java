@@ -51,6 +51,7 @@ public class OkProxySelector extends ProxySelector {
 
     public boolean contains(String host) {
         if (host == null) return false;
+        if (hosts.contains(host)) return true;
         for (String h : hosts) if (Util.containOrMatch(host, h)) return true;
         return false;
     }
