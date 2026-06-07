@@ -603,7 +603,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (!host.isSourceSwitching()) host.setSourceSearchActor(item.getVodActor());
             host.mFlagAdapter.setItems(item.getVodFlags(), null);
             host.mBinding.content.setMaxLines(host.getMaxLines());
-            host.mBinding.video.requestFocus();
+            if (!host.isSourceSwitching()) host.mBinding.video.requestFocus();
             host.setArtwork(item.getVodPic());
             host.getPart(item.getVodName());
             App.removeCallbacks(host.mR4);
