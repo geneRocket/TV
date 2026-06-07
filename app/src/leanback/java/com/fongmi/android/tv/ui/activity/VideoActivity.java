@@ -3032,16 +3032,28 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         hasKeyEvent = true;
+        boolean up = event.getAction() == KeyEvent.ACTION_UP;
         if (mBinding.progressLayout.isContent() && !isFullscreen() && KeyUtil.isBackKey(event) && Setting.getSmallWindowBackKey() == 1 && getCurrentFocus() != mBinding.video) {
-            mFocus1 = mBinding.video;
-            getFocus1().requestFocus();
+            if (up) {
+                mFocus1 = mBinding.video;
+                getFocus1().requestFocus();
+            }
             return true;
         }
-        if (isFullscreen() && KeyUtil.isMenuKey(event) && Setting.getFullscreenMenuKey() == 0) onToggle();
-        if (isFullscreen() && KeyUtil.isMenuKey(event) && Setting.getFullscreenMenuKey() == 1) onEpisodes();
-        if (isVisible(mBinding.control.getRoot())) setR1Callback();
-        if (isVisible(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
-        if (isFullscreen() && isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event)) return mKeyDown.onKeyDown(event);
+        if (isFullscreen() && KeyUtil.isMenuKey(event)) {
+            if (up) {
+                if (Setting.getFullscreenMenuKey() == 0) onToggle();
+                else onEpisodes();
+            }
+            return true;
+        }
+        if (isVisible(mBinding.control.getRoot())) {
+            setR1Callback();
+            mFocus2 = getCurrentFocus();
+        }
+        if (isFullscreen() && isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event)) {
+            return mKeyDown.onKeyDown(event);
+        }
         return super.dispatchKeyEvent(event);
     }
 

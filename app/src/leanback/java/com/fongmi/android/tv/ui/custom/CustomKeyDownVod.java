@@ -129,14 +129,14 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     private int addTime() {
         if (!isMoveAdd) holdSecond = 0;
         isMoveAdd = true;
-        holdSecond += 1;
+        holdSecond++;
         return getDelta(holdSecond, isMoveAdd);
     }
 
     private int subTime() {
         if (isMoveAdd) holdSecond = 0;
         isMoveAdd = false;
-        holdSecond += 1;
+        holdSecond++;
         return getDelta(holdSecond, isMoveAdd);
     }
 
