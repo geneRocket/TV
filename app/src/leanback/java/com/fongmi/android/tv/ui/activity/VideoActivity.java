@@ -768,7 +768,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean sourceSwitching;
     private boolean manualSourceSearch;
     private boolean sourceSwitchSingleEpisode;
-    private String sourceSwitchFlag;
     private String sourceSwitchEpisode;
     private String sourceSwitchKeyword;
     private String sourceSwitchTargetFlag;
@@ -2599,7 +2598,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         sourceSwitching = true;
         mBroken.clear();
         sourceSwitchSingleEpisode = isCurrentSingleEpisode();
-        sourceSwitchFlag = getCurrentSwitchFlag();
         sourceSwitchEpisode = getCurrentSwitchEpisode();
         sourceSwitchKeyword = getCurrentSwitchKeyword();
         if (!isAutoMode() || TextUtils.isEmpty(sourceSearchActor)) setSourceSearchActor(getCurrentSwitchActor());
@@ -2613,7 +2611,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         sourceSwitching = false;
         manualSourceSearch = false;
         sourceSwitchSingleEpisode = false;
-        sourceSwitchFlag = null;
         sourceSwitchEpisode = null;
         sourceSwitchKeyword = null;
         setSourceSwitchTarget(null, null);
@@ -2926,17 +2923,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private Flag findTargetFlag(List<Flag> flags) {
-        Flag preferred = null;
-        for (Flag flag : flags) {
-            if (flag.getFlag().equals(sourceSwitchFlag)) {
-                preferred = flag;
-                break;
-            }
+        if (isPendingSiteSwitch()) {
+            for (Flag flag : flags) if (hasEpisode(flag)) return flag;
+            return flags.isEmpty() ? null : flags.get(0);
         }
-        if (!isPendingSiteSwitch()) return preferred != null ? preferred : flags.isEmpty() ? null : flags.get(0);
-        if (hasEpisode(preferred)) return preferred;
-        for (Flag flag : flags) if (hasEpisode(flag)) return flag;
-        return null;
+        String target = mHistory != null ? mHistory.getVodFlag() : null;
+        for (Flag flag : flags) {
+            if (flag.getFlag().equals(target)) return flag;
+        }
+        return flags.isEmpty() ? null : flags.get(0);
     }
 
     private boolean hasEpisode(Flag flag) {
