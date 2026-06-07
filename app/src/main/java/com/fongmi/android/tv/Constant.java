@@ -11,9 +11,9 @@ public class Constant {
     //網路偵測間隔
     public static final int INTERVAL_TRAFFIC = 1000;
     //點播爬蟲時間
-    public static final int TIMEOUT_VOD = 30 * 1000;
+    public static final int TIMEOUT_VOD = 45 * 1000;
     //直播爬蟲時間
-    public static final int TIMEOUT_LIVE = 30 * 1000;
+    public static final int TIMEOUT_LIVE = 45 * 1000;
     //節目爬蟲時間
     public static final int TIMEOUT_EPG = 5 * 1000;
     //節目爬蟲時間
@@ -21,11 +21,11 @@ public class Constant {
     //播放超時時間
     public static final int TIMEOUT_PLAY = 60 * 1000;
     //解析預設時間
-    public static final int TIMEOUT_PARSE_DEF = 15 * 1000;
+    public static final int TIMEOUT_PARSE_DEF = 20 * 1000;
     //嗅探超時時間
     public static final int TIMEOUT_PARSE_WEB = 60 * 1000;
     //直播解析時間
-    public static final int TIMEOUT_PARSE_LIVE = 10 * 1000;
+    public static final int TIMEOUT_PARSE_LIVE = 15 * 1000;
     //同步超時時間
     public static final int TIMEOUT_SYNC = 2 * 1000;
     //传送超時時間

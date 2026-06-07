@@ -134,7 +134,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private static final long SEEK_READY_STABLE_MS = 300;
     private static final long SEEK_BOUNCE_WINDOW_MS = 1500;
-    private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 2500;
+    private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 5000;
     private static final int REQUEST_DANMAKU_FILE = 9998;
     private static final Map<String, List<String>> PART_CACHE = new LinkedHashMap<String, List<String>>(24, 0.75f, true) {
         @Override
