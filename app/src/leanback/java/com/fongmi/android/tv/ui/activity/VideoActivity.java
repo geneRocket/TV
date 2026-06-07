@@ -753,10 +753,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String pendingPlaybackTimeoutToken;
     private String pendingSearchToken;
     private int mEpisodeNumColumns;
-    private int mEpisodeNumRows;
     private int mEpisodeColumnWidth;
-    private int mEpisodeViewHeight;
-    private int mEpisodeNameLength;
     private int mArraySize = -1;
     private int mDanmakuRequestId;
     private boolean mArrayRevSort;
@@ -1496,9 +1493,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.episodeVert.setWindowAlignmentOffsetPercent(10f);
         if (mEpisodePresenter.getNumColumns() != numColumns) mEpisodePresenter.setNumColumns(numColumns);
         if (mEpisodePresenter.getNumRows() != rowNum) mEpisodePresenter.setNumRows(rowNum);
-        mEpisodeNumRows = rowNum;
-        mEpisodeViewHeight = height;
-        mEpisodeNameLength = episodeNameLength;
     }
 
     private void seamless(Flag flag) {
