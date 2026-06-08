@@ -12,6 +12,7 @@ import com.fongmi.android.tv.bean.Depot;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -26,6 +27,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -35,6 +37,8 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+
+import okhttp3.HttpUrl;
 
 public class VodConfig {
 
@@ -537,13 +541,15 @@ public class VodConfig {
             return;
         }
         String spider = Json.safeString(object, "spider");
-        for (JsonElement element : Json.safeListElement(object, "sites")) {
+        List<JsonElement> elements = Json.safeListElement(object, "sites");
+        Map<String, Site> cache = new HashMap<>();
+        for (Site s : AppDatabase.get().getSiteDao().getAll()) cache.put(s.getKey(), s);
+        for (JsonElement element : elements) {
             Site site = Site.objectFrom(element, spider);
             if (!site.isEmpty() && !isScopedSiteKey(site.getKey())) site.setKey(siteKey(config.getId(), site.getKey()));
             if (siteMap.containsKey(site.getKey())) continue;
             site.setJar(parseJar(site, spider));
-            site = site.trans().sync();
-            sites.add(site);
+            sites.add(site.trans().sync(cache));
             siteMap.put(site.getKey(), site);
         }
         for (Site site : sites) {
@@ -815,6 +821,16 @@ public class VodConfig {
         this.home.setActivated(true);
         config.home(isScopedSiteKey(home.getKey()) && siteCid(home.getKey(), config.getId()) != config.getId() ? home.getKey() : rawSiteKey(home.getKey())).save();
         for (Site item : getSites()) item.setActivated(home);
+        App.execute(() -> {
+            try {
+                String api = home.getApi();
+                if (api.startsWith("http")) {
+                    HttpUrl url = HttpUrl.parse(api);
+                    if (url != null) InetAddress.getAllByName(url.host());
+                }
+            } catch (Throwable ignored) {
+            }
+        });
     }
 
     private void setWall(String wall) {

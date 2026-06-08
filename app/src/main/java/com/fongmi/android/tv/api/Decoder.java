@@ -85,7 +85,7 @@ public class Decoder {
     private static String getData(String url) {
         if (url.startsWith("file")) return Path.read(url);
         if (url.startsWith("assets")) return Asset.read(url);
-        if (url.startsWith("http")) return OkHttp.string(url);
+        if (url.startsWith("http")) return OkHttp.string(url, 15000);
         return "";
     }
 

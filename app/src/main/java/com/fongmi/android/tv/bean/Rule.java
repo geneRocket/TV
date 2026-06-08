@@ -10,8 +10,10 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class Rule {
 
@@ -25,6 +27,9 @@ public class Rule {
     private List<String> script;
     @SerializedName("exclude")
     private List<String> exclude;
+
+    private List<Pattern> regexPatterns;
+    private List<Pattern> excludePatterns;
 
     public static Rule create(String name) {
         return new Rule(name);
@@ -56,12 +61,28 @@ public class Rule {
         return regex == null ? Collections.emptyList() : regex;
     }
 
+    public List<Pattern> getRegexPatterns() {
+        if (regexPatterns == null) {
+            regexPatterns = new ArrayList<>();
+            for (String item : getRegex()) regexPatterns.add(Pattern.compile(item));
+        }
+        return regexPatterns;
+    }
+
     public List<String> getScript() {
         return script == null ? Collections.emptyList() : script;
     }
 
     public List<String> getExclude() {
         return exclude == null ? Collections.emptyList() : exclude;
+    }
+
+    public List<Pattern> getExcludePatterns() {
+        if (excludePatterns == null) {
+            excludePatterns = new ArrayList<>();
+            for (String item : getExclude()) excludePatterns.add(Pattern.compile(item));
+        }
+        return excludePatterns;
     }
 
     @Override

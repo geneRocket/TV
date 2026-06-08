@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterVodListBinding;
@@ -47,9 +48,20 @@ public class VodAdapter extends RecyclerView.Adapter<BaseVodHolder> {
 
     public void addAll(List<Vod> items) {
         if (items == null || items.isEmpty()) return;
-        int position = mItems.size();
-        mItems.addAll(items);
-        notifyItemRangeInserted(position, items.size());
+        if (mItems.isEmpty() && items.size() > 20) {
+            List<Vod> first = new ArrayList<>(items.subList(0, 20));
+            List<Vod> second = new ArrayList<>(items.subList(20, items.size()));
+            mItems.addAll(first);
+            notifyItemRangeInserted(0, first.size());
+            App.post(() -> {
+                mItems.addAll(second);
+                notifyItemRangeInserted(20, second.size());
+            }, 100);
+        } else {
+            int position = mItems.size();
+            mItems.addAll(items);
+            notifyItemRangeInserted(position, items.size());
+        }
     }
 
     public void clear() {

@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
+import okhttp3.ConnectionPool;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
@@ -114,9 +115,13 @@ public class OkHttp {
     }
 
     public static String string(String url) {
+        return string(url, TIMEOUT);
+    }
+
+    public static String string(String url, int timeout) {
         try {
             if (!url.startsWith("http")) return "";
-            try (Response response = newCall(url).execute()) {
+            try (Response response = newCall(client(timeout), url).execute()) {
                 return response.body() == null ? "" : response.body().string();
             }
         } catch (Exception e) {
@@ -185,6 +190,7 @@ public class OkHttp {
                 .connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .readTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
+                .connectionPool(new ConnectionPool(32, 5, TimeUnit.MINUTES))
                 .dns(dns())
                 .hostnameVerifier((hostname, session) -> true)
                 .followRedirects(true)

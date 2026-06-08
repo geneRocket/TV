@@ -6,8 +6,10 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterQuickBinding;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
@@ -39,16 +41,22 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
 
     public void addAll(List<Vod> items) {
         if (items == null || items.isEmpty()) return;
-        int position = mItems.size();
         List<Vod> added = filterNew(items);
         if (added.isEmpty()) return;
-        mItems.addAll(added);
-        notifyItemRangeInserted(position, added.size());
-    }
-
-    public void sort(Comparator<Vod> comparator) {
-        Collections.sort(mItems, comparator);
-        notifyDataSetChanged();
+        if (mItems.isEmpty() && added.size() > 20) {
+            List<Vod> first = new ArrayList<>(added.subList(0, 20));
+            List<Vod> second = new ArrayList<>(added.subList(20, added.size()));
+            mItems.addAll(first);
+            notifyItemRangeInserted(0, first.size());
+            App.post(() -> {
+                mItems.addAll(second);
+                notifyItemRangeInserted(20, second.size());
+            }, 100);
+        } else {
+            int position = mItems.size();
+            mItems.addAll(added);
+            notifyItemRangeInserted(position, added.size());
+        }
     }
 
     public void sort(Comparator<Vod> comparator) {

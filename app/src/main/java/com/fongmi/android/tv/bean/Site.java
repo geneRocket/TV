@@ -319,8 +319,9 @@ public class Site implements Parcelable {
         return this;
     }
 
-    public Site sync() {
-        Site item = find(getKey());
+    public Site sync(Map<String, Site> cache) {
+        String rawKey = com.fongmi.android.tv.api.config.VodConfig.rawSiteKey(getKey());
+        Site item = cache.get(rawKey);
         if (item == null) return this;
         if (getChangeable() != 0) setChangeable(Math.max(1, item.getChangeable()));
         if (getSearchable() != 0) setSearchable(Math.max(1, item.getSearchable()));

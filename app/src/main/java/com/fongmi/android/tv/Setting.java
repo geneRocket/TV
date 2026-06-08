@@ -138,12 +138,18 @@ public class Setting {
         Prefers.put("render", render);
     }
 
+    private static int quality = -1;
+    private static float thumbnail = -1;
+
     public static int getQuality() {
-        return Prefers.getInt("quality", 2);
+        if (quality == -1) quality = Prefers.getInt("quality", 2);
+        return quality;
     }
 
-    public static void putQuality(int quality) {
-        Prefers.put("quality", quality);
+    public static void putQuality(int value) {
+        Prefers.put("quality", value);
+        quality = value;
+        thumbnail = -1;
     }
 
     public static int getSize() {
@@ -395,7 +401,8 @@ public class Setting {
     }
 
     public static float getThumbnail() {
-        return 0.3f * getQuality() + 0.4f;
+        if (thumbnail == -1) thumbnail = 0.3f * getQuality() + 0.4f;
+        return thumbnail;
     }
 
     public static boolean isBackgroundOff() {

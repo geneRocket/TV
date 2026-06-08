@@ -72,8 +72,7 @@ public class ImgUtil {
 
     public static void load(String text, String url, Site site, ImageView view, ImageView.ScaleType scaleType, boolean rect) {
         view.setScaleType(scaleType);
-        Glide.with(view).clear(view);
-        if (!TextUtils.isEmpty(url)) Glide.with(view).asBitmap().load(getUrl(url, site)).placeholder(R.drawable.ic_img_loading).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view, scaleType)).into(view);
+        if (!TextUtils.isEmpty(url)) Glide.with(view).asBitmap().load(getUrl(url, site)).placeholder(text.length() > 0 ? getTextDrawable(text.substring(0, 1), rect) : null).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view, scaleType)).into(view);
         else if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), rect));
         else view.setImageResource(R.drawable.ic_img_error);
     }
