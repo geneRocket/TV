@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import master.flame.danmaku.danmaku.model.AlphaValue;
@@ -38,7 +37,6 @@ import okhttp3.Response;
 
 public class Parser extends BaseDanmakuParser {
 
-    private static final Pattern XML_NUMBER_ENTITY = Pattern.compile("&#(x?[0-9A-Fa-f]+);");
     private static final int MAX_DANMAKU_ITEMS = 6000;
     private static final int MAX_TEXT_LENGTH = 300;
     private static final int MAX_CONTENT_BYTES = 2 * 1024 * 1024;
@@ -243,25 +241,48 @@ public class Parser extends BaseDanmakuParser {
     private String decodeXmlString(String title) {
         if (TextUtils.isEmpty(title)) return "";
         if (title.length() > MAX_TEXT_LENGTH) title = title.substring(0, MAX_TEXT_LENGTH);
-        if (title.contains("&amp;")) title = title.replace("&amp;", "&");
-        if (title.contains("&quot;")) title = title.replace("&quot;", "\"");
-        if (title.contains("&gt;")) title = title.replace("&gt;", ">");
-        if (title.contains("&lt;")) title = title.replace("&lt;", "<");
-        if (title.contains("&apos;")) title = title.replace("&apos;", "'");
-        Matcher matcher = XML_NUMBER_ENTITY.matcher(title);
-        StringBuffer buffer = new StringBuffer();
-        while (matcher.find()) {
-            String value = matcher.group(1);
-            try {
-                int codePoint = value.startsWith("x") || value.startsWith("X")
-                        ? Integer.parseInt(value.substring(1), 16)
-                        : Integer.parseInt(value);
-                matcher.appendReplacement(buffer, Matcher.quoteReplacement(new String(Character.toChars(codePoint))));
-            } catch (Exception e) {
-                matcher.appendReplacement(buffer, Matcher.quoteReplacement(matcher.group()));
+        if (!title.contains("&")) return title;
+        StringBuilder sb = new StringBuilder(title.length());
+        for (int i = 0; i < title.length(); i++) {
+            char c = title.charAt(i);
+            if (c == '&') {
+                int next = title.indexOf(';', i);
+                if (next > i) {
+                    String entity = title.substring(i + 1, next);
+                    if (entity.equals("amp")) {
+                        sb.append('&');
+                        i = next;
+                        continue;
+                    } else if (entity.equals("quot")) {
+                        sb.append('"');
+                        i = next;
+                        continue;
+                    } else if (entity.equals("gt")) {
+                        sb.append('>');
+                        i = next;
+                        continue;
+                    } else if (entity.equals("lt")) {
+                        sb.append('<');
+                        i = next;
+                        continue;
+                    } else if (entity.equals("apos")) {
+                        sb.append('\'');
+                        i = next;
+                        continue;
+                    } else if (entity.startsWith("#")) {
+                        try {
+                            String value = entity.substring(1);
+                            int codePoint = value.startsWith("x") || value.startsWith("X") ? Integer.parseInt(value.substring(1), 16) : Integer.parseInt(value);
+                            sb.append(Character.toChars(codePoint));
+                            i = next;
+                            continue;
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
             }
+            sb.append(c);
         }
-        matcher.appendTail(buffer);
-        return buffer.toString();
+        return sb.toString();
     }
 }

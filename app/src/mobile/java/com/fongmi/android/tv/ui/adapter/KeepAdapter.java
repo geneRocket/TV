@@ -5,6 +5,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.bean.Keep;
@@ -50,9 +51,30 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     }
 
     public void addAll(List<Keep> items) {
+        DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return mItems.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return items.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return mItems.get(oldItemPosition).getKey().equals(items.get(newItemPosition).getKey());
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                return mItems.get(oldItemPosition).equals(items.get(newItemPosition));
+            }
+        });
         mItems.clear();
         mItems.addAll(items);
-        notifyDataSetChanged();
+        result.dispatchUpdatesTo(this);
     }
 
     public void clear() {
