@@ -1,8 +1,8 @@
 package com.fongmi.android.tv;
 
 public class Constant {
-    private static final int MIN_THREAD_POOL = 4;
-    private static final int MAX_THREAD_POOL = 10;
+    private static final int MIN_THREAD_POOL = 10;
+    private static final int MAX_THREAD_POOL = 30;
 
     //快進時間單位
     public static final int INTERVAL_SEEK = 10 * 1000;
@@ -35,6 +35,6 @@ public class Constant {
 
     private static int getThreadPool() {
         int cpu = Runtime.getRuntime().availableProcessors();
-        return Math.max(MIN_THREAD_POOL, Math.min(MAX_THREAD_POOL, cpu * 2));
+        return Math.max(10, Math.min(30, cpu * 4));
     }
 }
