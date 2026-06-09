@@ -4,6 +4,7 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.Setting;
@@ -64,14 +65,36 @@ public class SearchAdapter extends RecyclerView.Adapter<BaseVodHolder> {
     }
 
     public void addAll(List<Vod> items) {
+        for (Vod item : items) item.setScore(Util.similarity(item.getVodName(), keyword));
         mItems.addAll(items);
         sort();
     }
 
     private void sort() {
         if (keyword == null || keyword.isEmpty()) return;
-        Collections.sort(mItems, (o1, o2) -> Double.compare(Util.similarity(o2.getVodName(), keyword), Util.similarity(o1.getVodName(), keyword)));
-        notifyDataSetChanged();
+        List<Vod> oldItems = new ArrayList<>(mItems);
+        Collections.sort(mItems, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
+        DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return oldItems.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return mItems.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return oldItems.get(oldItemPosition).getVodId().equals(mItems.get(newItemPosition).getVodId());
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                return oldItems.get(oldItemPosition).equals(mItems.get(newItemPosition));
+            }
+        }).dispatchUpdatesTo(this);
     }
 
     public SearchAdapter clear() {

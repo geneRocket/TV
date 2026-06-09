@@ -2879,6 +2879,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private int findQuickItemInsertPosition(Vod item) {
         double score = Util.similarity(item.getVodName(), getSourceSwitchKeyword());
+        item.setScore(score);
         for (int i = 0; i < mQuickAdapter.size(); i++) {
             if (compareQuickItem(item, score, (Vod) mQuickAdapter.get(i)) < 0) return i;
         }
@@ -2886,7 +2887,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int compareQuickItem(Vod left, double scoreLeft, Vod right) {
-        double scoreRight = Util.similarity(right.getVodName(), getSourceSwitchKeyword());
+        double scoreRight = right.getScore();
         if (scoreLeft != scoreRight) return Double.compare(scoreRight, scoreLeft);
         int result = Integer.compare(getQuickActorRank(left), getQuickActorRank(right));
         if (result != 0) return result;

@@ -97,6 +97,16 @@ public class Vod implements Parcelable {
 
     private Site site;
 
+    private double score;
+
+    public double getScore() {
+        return score;
+    }
+
+    public void setScore(double score) {
+        this.score = score;
+    }
+
     public static List<Vod> arrayFrom(String str) {
         Type listType = new TypeToken<List<Vod>>() {}.getType();
         List<Vod> items = App.gson().fromJson(str, listType);

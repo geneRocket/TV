@@ -134,6 +134,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mBinding.collect.setItemAnimator(null);
         mBinding.collect.setAdapter(mCollectAdapter = new CollectAdapter(this));
         mBinding.recycler.setHasFixedSize(true);
+        mBinding.recycler.setItemViewCacheSize(20);
         mBinding.recycler.addOnScrollListener(mScroller);
         mBinding.recycler.setAdapter(mSearchAdapter = new SearchAdapter(this));
         mBinding.wordRecycler.setHasFixedSize(false);

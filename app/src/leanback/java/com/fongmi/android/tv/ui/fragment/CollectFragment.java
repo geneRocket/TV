@@ -140,9 +140,10 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
 
     public void appendRows(List<Vod> items) {
         if (!isViewReady() || mAdapter == null || items.isEmpty() || getCollect() == null) return;
+        for (Vod item : items) item.setScore(Util.similarity(item.getVodName(), getKeyword()));
         if ("all".equals(getSiteKey())) {
             List<Vod> all = getCollect().getList();
-            Collections.sort(all, (o1, o2) -> Double.compare(Util.similarity(o2.getVodName(), getKeyword()), Util.similarity(o1.getVodName(), getKeyword())));
+            Collections.sort(all, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
             mAdapter.clear();
             addRows(all);
         } else {
