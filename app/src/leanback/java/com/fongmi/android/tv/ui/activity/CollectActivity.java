@@ -202,23 +202,35 @@ public class CollectActivity extends BaseActivity {
         if (isFinishing() || isDestroyed() || mPendingResults.isEmpty()) return;
         List<List<Vod>> batches = new ArrayList<>(mPendingResults);
         mPendingResults.clear();
-        for (List<Vod> items : batches) updateCollects(items);
+        List<Vod> allAdded = new ArrayList<>();
+        Map<String, List<Vod>> siteAdded = new HashMap<>();
+        for (List<Vod> items : batches) {
+            if (items.isEmpty()) continue;
+            String siteKey = items.get(0).getSiteKey();
+            List<Vod> added = filterNewItems(siteKey, items);
+            if (added.isEmpty()) continue;
+            allAdded.addAll(added);
+            siteAdded.computeIfAbsent(siteKey, k -> new ArrayList<>()).addAll(added);
+        }
+        if (allAdded.isEmpty()) return;
+        appendCollect(Collect.all().getSite().getKey(), allAdded);
+        for (Map.Entry<String, List<Vod>> entry : siteAdded.entrySet()) {
+            String key = entry.getKey();
+            List<Vod> added = entry.getValue();
+            if (getCollect(key) == null) addCollect(added);
+            else appendCollect(key, added);
+        }
+        for (Fragment fragment : getSupportFragmentManager().getFragments()) {
+            if (!(fragment instanceof CollectFragment)) continue;
+            CollectFragment target = (CollectFragment) fragment;
+            String key = target.getSiteKey();
+            if ("all".equals(key)) target.appendRows(allAdded);
+            else if (siteAdded.containsKey(key)) target.appendRows(siteAdded.get(key));
+        }
         if (mPagerDirty) {
             mPagerDirty = false;
             syncPager();
         }
-    }
-
-    private void updateCollects(List<Vod> items) {
-        if (isFinishing() || isDestroyed()) return;
-        if (items.isEmpty()) return;
-        List<Vod> added = filterNewItems(items.get(0).getSiteKey(), items);
-        if (added.isEmpty()) return;
-        appendCollect(Collect.all().getSite().getKey(), added);
-        String key = added.get(0).getSiteKey();
-        if (getCollect(key) == null) addCollect(added);
-        else appendCollect(key, added);
-        syncFragments(added);
     }
 
     private void appendCollect(String key, List<Vod> items) {
@@ -228,16 +240,6 @@ public class CollectActivity extends BaseActivity {
 
     public Collect getCollect(String key) {
         return key == null ? null : mCollectMap.get(key);
-    }
-
-    private void syncFragments(List<Vod> items) {
-        if (items.isEmpty()) return;
-        String key = items.get(0).getSiteKey();
-        for (Fragment fragment : getSupportFragmentManager().getFragments()) {
-            if (!(fragment instanceof CollectFragment)) continue;
-            CollectFragment target = (CollectFragment) fragment;
-            if ("all".equals(target.getSiteKey()) || key.equals(target.getSiteKey())) target.appendRows(items);
-        }
     }
 
     public void appendAllCollect(List<Vod> items) {
