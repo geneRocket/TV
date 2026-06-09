@@ -214,6 +214,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         stopSearch();
         mExecutor = new PauseExecutor(Math.max(2, Math.min(6, Constant.THREAD_POOL)));
         String keyword = mBinding.keyword.getText().toString().trim();
+        mSearchAdapter.setKeyword(keyword);
         mSearchToken = "collect:" + System.currentTimeMillis();
         for (Site site : mSites) mExecutor.execute(() -> search(site, keyword));
         App.post(mAddRecord, 250);

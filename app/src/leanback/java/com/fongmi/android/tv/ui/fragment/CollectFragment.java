@@ -29,7 +29,10 @@ import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Util;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -136,8 +139,15 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     }
 
     public void appendRows(List<Vod> items) {
-        if (!isViewReady() || mAdapter == null || items.isEmpty()) return;
-        addRows(filterNewItems(items));
+        if (!isViewReady() || mAdapter == null || items.isEmpty() || getCollect() == null) return;
+        if ("all".equals(getSiteKey())) {
+            List<Vod> all = getCollect().getList();
+            Collections.sort(all, (o1, o2) -> Double.compare(Util.similarity(o2.getVodName(), getKeyword()), Util.similarity(o1.getVodName(), getKeyword())));
+            mAdapter.clear();
+            addRows(all);
+        } else {
+            addRows(items);
+        }
     }
 
     private void addRows(List<Vod> items) {

@@ -14,20 +14,27 @@ import com.fongmi.android.tv.ui.base.BaseVodHolder;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.holder.VodOneHolder;
 import com.fongmi.android.tv.ui.holder.VodRectHolder;
+import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class SearchAdapter extends RecyclerView.Adapter<BaseVodHolder> {
 
     private final VodAdapter.OnClickListener mListener;
     private final List<Vod> mItems;
+    private String keyword;
     private int viewType;
     private int[] size;
 
     public SearchAdapter(VodAdapter.OnClickListener listener) {
         this.mListener = listener;
         this.mItems = new ArrayList<>();
+    }
+
+    public void setKeyword(String keyword) {
+        this.keyword = keyword;
     }
 
     public void setViewType(int viewType, int count) {
@@ -57,9 +64,14 @@ public class SearchAdapter extends RecyclerView.Adapter<BaseVodHolder> {
     }
 
     public void addAll(List<Vod> items) {
-        int position = mItems.size();
         mItems.addAll(items);
-        notifyItemRangeInserted(position, items.size());
+        sort();
+    }
+
+    private void sort() {
+        if (keyword == null || keyword.isEmpty()) return;
+        Collections.sort(mItems, (o1, o2) -> Double.compare(Util.similarity(o2.getVodName(), keyword), Util.similarity(o1.getVodName(), keyword)));
+        notifyDataSetChanged();
     }
 
     public SearchAdapter clear() {
