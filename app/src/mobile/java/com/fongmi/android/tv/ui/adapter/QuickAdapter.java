@@ -23,6 +23,7 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
 
     private final OnClickListener mListener;
     private final List<Vod> mItems;
+    private Runnable mRunnable;
 
     public QuickAdapter(OnClickListener listener) {
         this.mListener = listener;
@@ -35,6 +36,7 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     }
 
     public void clear() {
+        App.removeCallbacks(mRunnable);
         mItems.clear();
         notifyDataSetChanged();
     }
@@ -48,9 +50,10 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
             List<Vod> second = new ArrayList<>(added.subList(20, added.size()));
             mItems.addAll(first);
             notifyItemRangeInserted(0, first.size());
-            App.post(() -> {
+            App.post(mRunnable = () -> {
+                int position = mItems.size();
                 mItems.addAll(second);
-                notifyItemRangeInserted(20, second.size());
+                notifyItemRangeInserted(position, second.size());
             }, 100);
         } else {
             int position = mItems.size();

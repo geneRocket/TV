@@ -27,6 +27,7 @@ public class VodAdapter extends RecyclerView.Adapter<BaseVodHolder> {
     private final List<Vod> mItems;
     private final Style style;
     private final int[] size;
+    private Runnable mRunnable;
 
     public VodAdapter(OnClickListener listener, Style style, int[] size) {
         this.mListener = listener;
@@ -53,9 +54,10 @@ public class VodAdapter extends RecyclerView.Adapter<BaseVodHolder> {
             List<Vod> second = new ArrayList<>(items.subList(20, items.size()));
             mItems.addAll(first);
             notifyItemRangeInserted(0, first.size());
-            App.post(() -> {
+            App.post(mRunnable = () -> {
+                int position = mItems.size();
                 mItems.addAll(second);
-                notifyItemRangeInserted(20, second.size());
+                notifyItemRangeInserted(position, second.size());
             }, 100);
         } else {
             int position = mItems.size();
@@ -65,6 +67,7 @@ public class VodAdapter extends RecyclerView.Adapter<BaseVodHolder> {
     }
 
     public void clear() {
+        App.removeCallbacks(mRunnable);
         mItems.clear();
         notifyDataSetChanged();
     }

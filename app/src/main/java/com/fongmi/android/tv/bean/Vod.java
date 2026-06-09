@@ -20,6 +20,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 @Root(strict = false)
 public class Vod implements Parcelable {
@@ -301,7 +302,7 @@ public class Vod implements Parcelable {
         if (this == obj) return true;
         if (!(obj instanceof Vod)) return false;
         Vod it = (Vod) obj;
-        return getVodId().equals(it.getVodId());
+        return Objects.equals(getSiteKey(), it.getSiteKey()) && Objects.equals(getVodId(), it.getVodId()) && Objects.equals(getVodName(), it.getVodName()) && Objects.equals(getVodPic(), it.getVodPic());
     }
 
     @Override

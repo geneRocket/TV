@@ -65,36 +65,37 @@ public class SearchAdapter extends RecyclerView.Adapter<BaseVodHolder> {
     }
 
     public void addAll(List<Vod> items) {
+        if (items == null || items.isEmpty()) return;
         for (Vod item : items) item.setScore(Util.similarity(item.getVodName(), keyword));
-        mItems.addAll(items);
-        sort();
-    }
-
-    private void sort() {
-        if (keyword == null || keyword.isEmpty()) return;
-        List<Vod> oldItems = new ArrayList<>(mItems);
-        Collections.sort(mItems, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
-        DiffUtil.calculateDiff(new DiffUtil.Callback() {
+        List<Vod> newItems = new ArrayList<>(mItems);
+        newItems.addAll(items);
+        if (keyword != null && !keyword.isEmpty()) Collections.sort(newItems, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
+        DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
-                return oldItems.size();
-            }
-
-            @Override
-            public int getNewListSize() {
                 return mItems.size();
             }
 
             @Override
+            public int getNewListSize() {
+                return newItems.size();
+            }
+
+            @Override
             public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                return oldItems.get(oldItemPosition).getVodId().equals(mItems.get(newItemPosition).getVodId());
+                Vod oldItem = mItems.get(oldItemPosition);
+                Vod newItem = newItems.get(newItemPosition);
+                return oldItem.getSiteKey().equals(newItem.getSiteKey()) && oldItem.getVodId().equals(newItem.getVodId()) && oldItem.getVodName().equals(newItem.getVodName());
             }
 
             @Override
             public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                return oldItems.get(oldItemPosition).equals(mItems.get(newItemPosition));
+                return mItems.get(oldItemPosition).equals(newItems.get(newItemPosition));
             }
-        }).dispatchUpdatesTo(this);
+        });
+        mItems.clear();
+        mItems.addAll(newItems);
+        result.dispatchUpdatesTo(this);
     }
 
     public SearchAdapter clear() {
