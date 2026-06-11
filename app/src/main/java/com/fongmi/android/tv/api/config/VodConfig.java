@@ -150,7 +150,7 @@ public class VodConfig {
         this.wall = null;
         this.home = null;
         this.parse = null;
-        this.config = Config.vod();
+        this.config = new Config();
         this.ads = new ArrayList<>();
         this.doh = new ArrayList<>();
         this.hosts = new ArrayList<>();
@@ -225,10 +225,11 @@ public class VodConfig {
 
     private void loadConfig(Callback callback) {
         try {
+            if (config.isEmpty()) config = Config.vod();
             setLoadUrls(Collections.singletonList(config.getUrl()));
             checkJson(Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject(), callback);
         } catch (Throwable e) {
-            if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
+            if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
             else loadCache(callback, e);
             e.printStackTrace();
         }
@@ -452,6 +453,7 @@ public class VodConfig {
     }
 
     private void loadConfigCache(Callback callback) {
+        if (config.isEmpty()) config = Config.vod();
         if (!TextUtils.isEmpty(config.getJson())) {
             checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
             if (!config.isCache()) App.execute(() -> { try { cacheConfig(config, loadObject(config.getUrl(), 0)); } catch (Throwable ignored) {} });

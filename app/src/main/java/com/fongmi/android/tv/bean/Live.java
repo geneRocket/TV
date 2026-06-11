@@ -339,7 +339,11 @@ public class Live {
     }
 
     public Live sync() {
-        Live item = find(getName());
+        return sync(null);
+    }
+
+    public Live sync(Map<String, Live> cache) {
+        Live item = cache != null ? cache.get(getName()) : find(getName());
         if (item == null) return this;
         setBoot(item.isBoot());
         setPass(item.isPass());

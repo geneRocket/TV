@@ -50,7 +50,7 @@ public class WallConfig {
     }
 
     public WallConfig init() {
-        return config(Config.wall());
+        return config(new Config());
     }
 
     public WallConfig config(Config config) {
@@ -75,6 +75,7 @@ public class WallConfig {
 
     private void loadConfig(Callback callback) {
         try {
+            if (config.isEmpty()) config(Config.wall());
             File file = write(FileUtil.getWall(0));
             if (file.exists() && file.length() > 0) refresh(0);
             else config(Config.find(VodConfig.get().getWall(), 2));

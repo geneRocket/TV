@@ -34,8 +34,10 @@ import com.google.gson.JsonObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -118,7 +120,7 @@ public class LiveConfig {
         this.ruleHosts = new ArrayList<>();
         this.lives = new ArrayList<>();
         this.persistCache = true;
-        return config(Config.live());
+        return config(new Config());
     }
 
     public LiveConfig config(Config config) {
@@ -167,9 +169,10 @@ public class LiveConfig {
 
     private void loadConfig(Callback callback) {
         try {
+            if (config.isEmpty()) config(Config.live());
             parseConfig(Decoder.getJson(config.getUrl()), callback);
         } catch (Throwable e) {
-            if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
+            if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
             else loadCache(callback, e);
             e.printStackTrace();
         }
@@ -204,6 +207,7 @@ public class LiveConfig {
     }
 
     private void loadConfigCache(Callback callback) {
+        if (config.isEmpty()) config(Config.live());
         if (!TextUtils.isEmpty(config.getJson())) {
             checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
             if (!config.isCache()) App.execute(() -> { try { cacheConfig(config, loadObject(Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject(), 0)); } catch (Throwable ignored) {} });
@@ -494,11 +498,13 @@ public class LiveConfig {
 
     private void initLive(JsonObject object) {
         String spider = Json.safeString(object, "spider");
+        Map<String, Live> cache = new HashMap<>();
+        for (Live live : AppDatabase.get().getLiveDao().getAll()) cache.put(live.getName(), live);
         for (JsonElement element : Json.safeListElement(object, "lives")) {
             Live live = Live.objectFrom(element, spider);
             if (lives.contains(live)) continue;
             live.setJar(parseJar(live, spider));
-            lives.add(live.sync());
+            lives.add(live.sync(cache));
         }
         for (Live live : lives) {
             if (live.getName().equals(config.getHome())) {

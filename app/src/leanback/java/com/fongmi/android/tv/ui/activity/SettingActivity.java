@@ -163,6 +163,7 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     }
 
     private void load(Config config) {
+        type = config.getType();
         switch (config.getType()) {
             case 0:
                 Notify.progress(this);
