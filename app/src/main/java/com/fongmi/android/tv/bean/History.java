@@ -21,7 +21,6 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -356,13 +355,11 @@ public class History {
         List<Integer> cids = getLoadedCids();
         if (cids.size() == 1) return get(cids.get(0));
         List<History> items = cache(AppDatabase.get().getHistoryDao().find(cids));
-        items.sort(Comparator.comparingLong(History::getCreateTime).reversed());
         return copy(unique(items, true));
     }
 
     public static List<History> get(int cid) {
         List<History> items = cache(AppDatabase.get().getHistoryDao().find(cid));
-        items.sort(Comparator.comparingLong(History::getCreateTime).reversed());
         return copy(unique(items, false));
     }
 

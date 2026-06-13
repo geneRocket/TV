@@ -458,7 +458,9 @@ public class VodConfig {
             parseConfig(config.getJson(), callback);
             if (!config.isCache()) App.execute(() -> {
                 try {
-                    cacheConfig(config, loadObject(config.getUrl(), 0));
+                    JsonObject object = loadObject(config.getUrl(), 0);
+                    cacheConfig(config, object);
+                    App.post(() -> parseConfig(object, null));
                 } catch (Throwable ignored) {
                 }
             });

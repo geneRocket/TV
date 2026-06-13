@@ -35,6 +35,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -228,8 +229,14 @@ public class LiveConfig {
             if (!config.isCache()) App.execute(() -> {
                 try {
                     String text = Decoder.getJson(config.getUrl());
-                    if (Json.invalid(text)) cacheConfig(config, text);
-                    else cacheConfig(config, loadObject(Json.parse(text).getAsJsonObject(), 0));
+                    if (Json.invalid(text)) {
+                        cacheConfig(config, text);
+                        App.post(() -> parseConfig(text, null));
+                    } else {
+                        JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
+                        cacheConfig(config, object);
+                        App.post(() -> parseConfig(object, null));
+                    }
                 } catch (Throwable ignored) {
                 }
             });
@@ -626,7 +633,7 @@ public class LiveConfig {
     }
 
     public void setKeep(List<Group> items) {
-        List<String> keys = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
         for (Keep keep : Keep.getLive()) keys.add(keep.getKey());
         for (Group group : items) {
             if (group.isKeep()) continue;

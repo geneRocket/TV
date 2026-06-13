@@ -114,12 +114,12 @@ public class App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        System.setProperty("org.fourthline.cling.network.useJNA", "false");
-        System.setProperty("org.fourthline.cling.network.useMultiCastLock", "true");
-        System.setProperty("org.fourthline.cling.transport.impl.FixedAndroidLogHandler", "true");
-        System.setProperty("cling.stream.client.impl", "org.fourthline.cling.transport.impl.jetty.StreamClientImpl");
-        System.setProperty("cling.stream.server.impl", "org.fourthline.cling.transport.impl.jetty.StreamServerImpl");
         execute(() -> {
+            System.setProperty("org.fourthline.cling.network.useJNA", "false");
+            System.setProperty("org.fourthline.cling.network.useMultiCastLock", "true");
+            System.setProperty("org.fourthline.cling.transport.impl.FixedAndroidLogHandler", "true");
+            System.setProperty("cling.stream.client.impl", "org.fourthline.cling.transport.impl.jetty.StreamClientImpl");
+            System.setProperty("cling.stream.server.impl", "org.fourthline.cling.transport.impl.jetty.StreamServerImpl");
             Server.get().start();
             DLNACastManager.INSTANCE.bindCastService(this);
         });

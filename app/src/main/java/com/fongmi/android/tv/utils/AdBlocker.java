@@ -87,8 +87,11 @@ public final class AdBlocker {
     private static boolean matchesConfiguredHost(String host) {
         if (TextUtils.isEmpty(host)) return false;
         if (vodHosts.contains(host) || liveHosts.contains(host)) return true;
-        for (String ad : vodHosts) if (host.endsWith("." + ad)) return true;
-        for (String ad : liveHosts) if (host.endsWith("." + ad)) return true;
+        String[] parts = host.split("\\.");
+        if (parts.length > 1) {
+            String domain = parts[parts.length - 2] + "." + parts[parts.length - 1];
+            if (vodHosts.contains(domain) || liveHosts.contains(domain)) return true;
+        }
         for (Pattern pattern : vodHostPatterns) if (pattern.matcher(host).find()) return true;
         for (Pattern pattern : liveHostPatterns) if (pattern.matcher(host).find()) return true;
         return false;

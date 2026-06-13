@@ -98,12 +98,27 @@ public abstract class BaseActivity extends AppCompatActivity {
         });
     }
 
+    private static Drawable WALL_CACHE;
+    private static int WALL_INDEX = -1;
+
     private void refreshWall() {
         try {
             if (!customWall()) return;
-            File file = FileUtil.getWall(Setting.getWall());
-            if (file.exists() && file.length() > 0) getWindow().setBackgroundDrawable(Drawable.createFromPath(file.getAbsolutePath()));
-            else getWindow().setBackgroundDrawableResource(ResUtil.getDrawable(file.getName()));
+            int index = Setting.getWall();
+            if (WALL_CACHE != null && WALL_INDEX == index) {
+                getWindow().setBackgroundDrawable(WALL_CACHE);
+                return;
+            }
+            File file = FileUtil.getWall(index);
+            if (file.exists() && file.length() > 0) {
+                WALL_CACHE = Drawable.createFromPath(file.getAbsolutePath());
+                WALL_INDEX = index;
+                getWindow().setBackgroundDrawable(WALL_CACHE);
+            } else {
+                WALL_CACHE = null;
+                WALL_INDEX = -1;
+                getWindow().setBackgroundDrawableResource(ResUtil.getDrawable(file.getName()));
+            }
         } catch (Exception e) {
             getWindow().setBackgroundDrawableResource(R.drawable.wallpaper_1);
         }
@@ -120,7 +135,11 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
-        if (event.getType() == RefreshEvent.Type.WALL) refreshWall();
+        if (event.getType() == RefreshEvent.Type.WALL) {
+            WALL_CACHE = null;
+            WALL_INDEX = -1;
+            refreshWall();
+        }
     }
 
     @Override

@@ -24,17 +24,17 @@ import java.util.regex.Pattern;
 
 public class LiveParser {
 
-    private static final Pattern CATCHUP_SOURCE = Pattern.compile(".*catchup-source=\"(.?|.+?)\".*");
-    private static final Pattern CATCHUP = Pattern.compile(".*catchup=\"(.?|.+?)\".*");
-    private static final Pattern TVG_NAME = Pattern.compile(".*tvg-name=\"(.?|.+?)\".*");
-    private static final Pattern TVG_LOGO = Pattern.compile(".*tvg-logo=\"(.?|.+?)\".*");
-    private static final Pattern TVG_URL = Pattern.compile(".*x-tvg-url=\"(.?|.+?)\".*");
-    private static final Pattern GROUP = Pattern.compile(".*group-title=\"(.?|.+?)\".*");
-    private static final Pattern NAME = Pattern.compile(".*,(.+?)$");
+    private static final Pattern CATCHUP_SOURCE = Pattern.compile("catchup-source=\"(.*?)\"");
+    private static final Pattern CATCHUP = Pattern.compile("catchup=\"(.*?)\"");
+    private static final Pattern TVG_NAME = Pattern.compile("tvg-name=\"(.*?)\"");
+    private static final Pattern TVG_LOGO = Pattern.compile("tvg-logo=\"(.*?)\"");
+    private static final Pattern TVG_URL = Pattern.compile("x-tvg-url=\"(.*?)\"");
+    private static final Pattern GROUP = Pattern.compile("group-title=\"(.*?)\"");
+    private static final Pattern NAME = Pattern.compile(",(.*?)$");
 
     private static String extract(String line, Pattern pattern) {
-        Matcher matcher = pattern.matcher(line.trim());
-        if (matcher.matches()) return matcher.group(1);
+        Matcher matcher = pattern.matcher(line);
+        if (matcher.find()) return matcher.group(1);
         return "";
     }
 
