@@ -212,8 +212,8 @@ public class LiveConfig {
     private void loadConfigCache(Callback callback) {
         if (config.isEmpty()) config(Config.live());
         if (!TextUtils.isEmpty(config.getJson())) {
-            checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
-            if (!config.isCache()) App.execute(() -> { try { cacheConfig(config, loadObject(Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject(), 0)); } catch (Throwable ignored) {} });
+            parseConfig(config.getJson(), callback);
+            if (!config.isCache()) App.execute(() -> { try { String text = Decoder.getJson(config.getUrl()); if (Json.invalid(text)) cacheConfig(config, text); else cacheConfig(config, loadObject(Json.parse(text).getAsJsonObject(), 0)); } catch (Throwable ignored) {} });
         } else {
             loadConfig(callback);
         }
@@ -278,7 +278,8 @@ public class LiveConfig {
     private ConfigResult loadConfigResult(Config item, boolean cache) {
         try {
             if (cache && !TextUtils.isEmpty(item.getJson())) {
-                if (!item.isCache()) App.execute(() -> { try { String text = Decoder.getJson(item.getUrl()); if (!Json.invalid(text)) cacheConfig(item, loadObject(Json.parse(text).getAsJsonObject(), 0)); } catch (Throwable ignored) {} });
+                if (!item.isCache()) App.execute(() -> { try { String text = Decoder.getJson(item.getUrl()); if (Json.invalid(text)) cacheConfig(item, text); else cacheConfig(item, loadObject(Json.parse(text).getAsJsonObject(), 0)); } catch (Throwable ignored) {} });
+                if (Json.invalid(item.getJson())) return ConfigResult.text(item, item.getJson());
                 return ConfigResult.json(item, Json.parse(item.getJson()).getAsJsonObject(), false);
             }
             String text = Decoder.getJson(item.getUrl());
@@ -313,8 +314,12 @@ public class LiveConfig {
     }
 
     private void cacheConfig(Config item, JsonObject object) {
-        if (item == null || object == null || TextUtils.isEmpty(item.getUrl())) return;
-        item.json(object.toString()).time(System.currentTimeMillis()).save();
+        cacheConfig(item, object.toString());
+    }
+
+    private void cacheConfig(Config item, String text) {
+        if (item == null || TextUtils.isEmpty(text) || TextUtils.isEmpty(item.getUrl())) return;
+        item.json(text).time(System.currentTimeMillis()).save();
     }
 
     private JsonObject loadObject(JsonObject object, int depth) throws Throwable {
@@ -386,7 +391,7 @@ public class LiveConfig {
         }
     }
 
-    private void parseText(String url, String text) {
+    private synchronized void parseText(String url, String text) {
         Live live = new Live(parseName(url), url).sync();
         LiveParser.text(live, text);
         if (liveMap.containsKey(live.getName())) return;
@@ -466,7 +471,7 @@ public class LiveConfig {
         }
     }
 
-    private void parseConfig(JsonObject object, Callback callback) {
+    private synchronized void parseConfig(JsonObject object, Callback callback) {
         try {
             parseConfigOrThrow(object);
             if (callback != null) App.post(callback::success);

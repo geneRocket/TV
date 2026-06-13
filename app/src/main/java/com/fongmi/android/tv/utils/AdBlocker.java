@@ -102,7 +102,7 @@ public final class AdBlocker {
         return false;
     }
 
-    private static void ensurePatterns() {
+    private static synchronized void ensurePatterns() {
         List<String> vodAds = VodConfig.get().getAds();
         List<String> liveAds = LiveConfig.get().getAds();
         int vodHash = vodAds.hashCode();

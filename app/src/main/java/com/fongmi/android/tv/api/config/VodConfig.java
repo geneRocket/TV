@@ -455,7 +455,7 @@ public class VodConfig {
     private void loadConfigCache(Callback callback) {
         if (config.isEmpty()) config = Config.vod();
         if (!TextUtils.isEmpty(config.getJson())) {
-            checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
+            parseConfig(config.getJson(), callback);
             if (!config.isCache()) App.execute(() -> { try { cacheConfig(config, loadObject(config.getUrl(), 0)); } catch (Throwable ignored) {} });
         } else {
             loadConfig(callback);
@@ -514,8 +514,21 @@ public class VodConfig {
         }
     }
 
-    private void parseConfig(JsonObject object, Callback callback) {
+    private void parseConfig(String text, Callback callback) {
         try {
+            parseConfig(Json.parse(text).getAsJsonObject(), callback);
+        } catch (Throwable e) {
+            e.printStackTrace();
+            App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
+        }
+    }
+
+    private synchronized void parseConfig(JsonObject object, Callback callback) {
+        try {
+            if (object.has("urls")) {
+                parseDepot(object, callback);
+                return;
+            }
             initSite(object);
             initParse(object);
             initOther(object);
