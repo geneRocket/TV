@@ -11,7 +11,7 @@ import com.github.catvod.utils.Path;
 
 public class CacheManager {
 
-    private static final long MAX_CACHE_BYTES = 128L * 1024 * 1024;
+    private static final long MAX_CACHE_BYTES = 512L * 1024 * 1024;
     private SimpleCache cache;
 
     private static class Loader {
