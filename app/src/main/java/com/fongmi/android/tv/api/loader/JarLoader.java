@@ -116,31 +116,44 @@ public class JarLoader {
     public void parseJar(String key, String jar) {
         if (loaders.containsKey(key) || jar.isEmpty()) return;
         if (jar.startsWith("assets")) jar = UrlUtil.convert(jar);
-        Object lock = locks.computeIfAbsent(key, k -> new Object());
-        synchronized (lock) {
-            if (loaders.containsKey(key)) return;
-            String[] texts = jar.split(";md5;");
-            String md5 = texts.length > 1 ? texts[1].trim() : "";
-            if (md5.startsWith("http")) md5 = OkHttp.string(md5, 5000).trim();
-            jar = texts[0];
-            File file = Path.jar(jar);
-            if (file.exists() && file.length() > 0) {
-                load(key, file);
-                if (jar.startsWith("http")) {
-                    String finalJar = jar;
-                    App.execute(() -> download(finalJar));
-                }
-            } else if (md5.length() > 0 && Util.equals(jar, md5)) {
-                load(key, Path.jar(jar));
-            } else if (jar.startsWith("img+")) {
-                load(key, Decoder.getSpider(jar));
-            } else if (jar.startsWith("http")) {
-                load(key, download(jar));
-            } else if (jar.startsWith("file")) {
-                load(key, Path.local(jar));
-            } else {
-                parseJar(key, UrlUtil.convert(jar));
+        String[] texts = jar.split(";md5;");
+        String md5Url = texts.length > 1 ? texts[1].trim() : "";
+        String jarUrl = texts[0];
+        
+        File file = Path.jar(jarUrl);
+        if (file.exists() && file.length() > 0) {
+            synchronized (locks.computeIfAbsent(key, k -> new Object())) {
+                if (!loaders.containsKey(key)) load(key, file);
             }
+            if (jarUrl.startsWith("http")) App.execute(() -> checkUpdate(key, jarUrl, md5Url));
+            return;
+        }
+
+        App.execute(() -> {
+            String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
+            synchronized (locks.computeIfAbsent(key, k -> new Object())) {
+                if (loaders.containsKey(key)) return;
+                if (md5.length() > 0 && Util.equals(jarUrl, md5)) {
+                    load(key, Path.jar(jarUrl));
+                } else if (jarUrl.startsWith("img+")) {
+                    load(key, Decoder.getSpider(jarUrl));
+                } else if (jarUrl.startsWith("http")) {
+                    load(key, download(jarUrl));
+                } else if (jarUrl.startsWith("file")) {
+                    load(key, Path.local(jarUrl));
+                } else {
+                    parseJar(key, UrlUtil.convert(jarUrl));
+                }
+            }
+        });
+    }
+
+    private void checkUpdate(String key, String jarUrl, String md5Url) {
+        try {
+            String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
+            if (md5.length() > 0 && Util.equals(jarUrl, md5)) return;
+            download(jarUrl);
+        } catch (Throwable ignored) {
         }
     }
 

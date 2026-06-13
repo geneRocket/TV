@@ -39,12 +39,12 @@ public class BaseLoader {
         this.jsLoader = new JsLoader();
     }
 
-    private String siteKey(String key, String api, String ext) {
-        return "site:" + key + ":" + Util.md5(api + '\n' + ext);
+    private String siteKey(String key, String api, String ext, String jar) {
+        return "site:" + key + ":" + Util.md5(api + '\n' + ext + '\n' + jar);
     }
 
-    private String liveKey(String key, String api, String ext) {
-        return "live:" + key + ":" + Util.md5(api + '\n' + ext);
+    private String liveKey(String key, String api, String ext, String jar) {
+        return "live:" + key + ":" + Util.md5(api + '\n' + ext + '\n' + jar);
     }
 
     public void clear() {
@@ -60,7 +60,7 @@ public class BaseLoader {
     }
 
     public void clearLive(String key, String api, String ext, String jar) {
-        clear(liveKey(key, api, ext));
+        clear(liveKey(key, api, ext, jar));
     }
 
     public Spider getSpider(String key, String api, String ext, String jar) {
@@ -74,11 +74,11 @@ public class BaseLoader {
     }
 
     public Spider getSiteSpider(String key, String api, String ext, String jar) {
-        return getSpider(siteKey(key, api, ext), api, ext, jar);
+        return getSpider(siteKey(key, api, ext, jar), api, ext, jar);
     }
 
     public Spider getLiveSpider(String key, String api, String ext, String jar) {
-        return getSpider(liveKey(key, api, ext), api, ext, jar);
+        return getSpider(liveKey(key, api, ext, jar), api, ext, jar);
     }
 
     public Spider getSpider(Map<String, String> params) {
@@ -114,11 +114,11 @@ public class BaseLoader {
     }
 
     public void setSiteRecent(String key, String api, String ext, String jar) {
-        setRecent(siteKey(key, api, ext), api, jar);
+        setRecent(siteKey(key, api, ext, jar), api, jar);
     }
 
     public void setLiveRecent(String key, String api, String ext, String jar) {
-        setRecent(liveKey(key, api, ext), api, jar);
+        setRecent(liveKey(key, api, ext, jar), api, jar);
     }
 
     public Object[] proxyLocal(Map<String, String> params) {

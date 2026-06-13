@@ -569,7 +569,15 @@ public class VodConfig {
         for (JsonElement element : elements) {
             Site site = Site.objectFrom(element, spider);
             if (!site.isEmpty() && !isScopedSiteKey(site.getKey())) site.setKey(siteKey(config.getId(), site.getKey()));
-            if (siteMap.containsKey(site.getKey())) continue;
+            if (siteMap.containsKey(site.getKey())) {
+                Site old = siteMap.get(site.getKey());
+                if (old != null) {
+                    old.setApi(site.getApi());
+                    old.setExt(site.getExt());
+                    old.setJar(site.getJar());
+                }
+                continue;
+            }
             site.setJar(parseJar(site, spider));
             sites.add(site.trans().sync(cache));
             siteMap.put(site.getKey(), site);

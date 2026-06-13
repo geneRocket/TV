@@ -35,7 +35,15 @@ public class PyLoader {
     }
 
     public Spider getSpider(String key, String api, String ext) {
-        return spiders.computeIfAbsent(key, k -> createSpider(k, api, ext));
+        Spider spider = spiders.get(key);
+        if (spider != null) return spider;
+        synchronized (this) {
+            spider = spiders.get(key);
+            if (spider != null) return spider;
+            spider = createSpider(key, api, ext);
+            spiders.put(key, spider);
+            return spider;
+        }
     }
 
     public Spider getCached(String key) {

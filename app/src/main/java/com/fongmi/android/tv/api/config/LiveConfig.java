@@ -556,7 +556,16 @@ public class LiveConfig {
         for (Live live : AppDatabase.get().getLiveDao().getAll()) cache.put(live.getName(), live);
         for (JsonElement element : Json.safeListElement(object, "lives")) {
             Live live = Live.objectFrom(element, spider);
-            if (liveMap.containsKey(live.getName())) continue;
+            if (liveMap.containsKey(live.getName())) {
+                Live old = liveMap.get(live.getName());
+                if (old != null) {
+                    old.setUrl(live.getUrl());
+                    old.setApi(live.getApi());
+                    old.setExt(live.getExt());
+                    old.setJar(live.getJar());
+                }
+                continue;
+            }
             live.setJar(parseJar(live, spider));
             lives.add(live.sync(cache));
             liveMap.put(live.getName(), live);
