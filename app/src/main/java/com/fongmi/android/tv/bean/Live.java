@@ -293,6 +293,10 @@ public class Live {
         this.activated = item.equals(this);
     }
 
+    public void setSpider(Spider spider) {
+        this.spider = spider;
+    }
+
     public int getWidth() {
         return width;
     }

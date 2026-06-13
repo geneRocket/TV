@@ -53,6 +53,7 @@ public class JarLoader {
         spiders.entrySet().removeIf(entry -> {
             Spider spider = entry.getValue();
             if (spider == null || !key.equals(spider.siteKey)) return false;
+            locks.remove(entry.getKey());
             if (entry.getKey().length() > 32) jars.put(entry.getKey().substring(0, 32), true);
             App.execute(spider::destroy);
             return true;
@@ -125,7 +126,7 @@ public class JarLoader {
             synchronized (locks.computeIfAbsent(key, k -> new Object())) {
                 if (!loaders.containsKey(key)) load(key, file);
             }
-            if (jarUrl.startsWith("http")) App.execute(() -> checkUpdate(key, jarUrl, md5Url));
+            if (jarUrl.startsWith("http")) App.execute(() -> checkUpdate(jarUrl, md5Url));
             return;
         }
 
@@ -148,7 +149,7 @@ public class JarLoader {
         });
     }
 
-    private void checkUpdate(String key, String jarUrl, String md5Url) {
+    private void checkUpdate(String jarUrl, String md5Url) {
         try {
             String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
             if (md5.length() > 0 && Util.equals(jarUrl, md5)) return;
@@ -171,22 +172,26 @@ public class JarLoader {
     public Spider getSpider(String key, String api, String ext, String jar) {
         String jaKey = Util.md5(jar);
         String spKey = jaKey + key;
-        Spider cached = spiders.get(spKey);
-        if (cached != null) return cached;
-        try {
-            parseJar(jaKey, jar);
-            DexClassLoader loader = loaders.get(jaKey);
-            if (loader == null) return new SpiderNull();
-            String spiderName = getSpiderName(api);
-            if (spiderName.isEmpty()) return new SpiderNull();
-            Spider spider = (Spider) loader.loadClass("com.github.catvod.spider." + spiderName).newInstance();
-            spider.siteKey = key;
-            spider.init(App.get(), ext);
-            spiders.put(spKey, spider);
-            return spider;
-        } catch (Throwable e) {
-            e.printStackTrace();
-            return new SpiderNull();
+        Spider spider = spiders.get(spKey);
+        if (spider != null) return spider;
+        synchronized (locks.computeIfAbsent(spKey, k -> new Object())) {
+            spider = spiders.get(spKey);
+            if (spider != null) return spider;
+            try {
+                parseJar(jaKey, jar);
+                DexClassLoader loader = loaders.get(jaKey);
+                if (loader == null) return new SpiderNull();
+                String spiderName = getSpiderName(api);
+                if (spiderName.isEmpty()) return new SpiderNull();
+                spider = (Spider) loader.loadClass("com.github.catvod.spider." + spiderName).newInstance();
+                spider.siteKey = key;
+                spider.init(App.get(), ext);
+                spiders.put(spKey, spider);
+                return spider;
+            } catch (Throwable e) {
+                e.printStackTrace();
+                return new SpiderNull();
+            }
         }
     }
 

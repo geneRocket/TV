@@ -11,21 +11,26 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JsLoader {
 
     private final ConcurrentHashMap<String, Spider> spiders;
+    private final ConcurrentHashMap<String, Object> locks;
     private final Loader loader;
     private String recent;
 
     public JsLoader() {
         spiders = new ConcurrentHashMap<>();
+        locks = new ConcurrentHashMap<>();
         loader = new Loader();
     }
 
     public void clear() {
         spiders.values().forEach(spider -> App.execute(spider::destroy));
         spiders.clear();
+        locks.clear();
+        recent = null;
     }
 
     public void clear(String key) {
         Spider spider = spiders.remove(key);
+        locks.remove(key);
         if (spider != null) App.execute(spider::destroy);
         if (key != null && key.equals(recent)) recent = null;
     }
@@ -37,7 +42,7 @@ public class JsLoader {
     public Spider getSpider(String key, String api, String ext) {
         Spider spider = spiders.get(key);
         if (spider != null) return spider;
-        synchronized (this) {
+        synchronized (locks.computeIfAbsent(key, k -> new Object())) {
             spider = spiders.get(key);
             if (spider != null) return spider;
             spider = createSpider(key, api, ext);

@@ -87,7 +87,7 @@ public class OkHttp {
         return get().responseInterceptor = new ResponseInterceptor();
     }
 
-    public static void clearConfig() {
+    public static synchronized void clearConfig() {
         dns().clear();
         selector().clear();
         authenticator().clear();
@@ -97,7 +97,7 @@ public class OkHttp {
         get().client = null;
     }
 
-    public static OkHttpClient client() {
+    public static synchronized OkHttpClient client() {
         if (get().client != null) return get().client;
         return get().client = getBuilder().build();
     }

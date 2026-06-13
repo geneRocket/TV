@@ -18,6 +18,7 @@ import com.github.catvod.utils.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -86,7 +87,9 @@ public class LiveParser {
         Channel channel = Channel.create("");
         Map<String, Group> groupMap = new HashMap<>();
         Map<Group, Map<String, Channel>> channelMap = new HashMap<>();
-        for (String line : text.split("\n")) {
+        Scanner scanner = new Scanner(text);
+        while (scanner.hasNextLine()) {
+            String line = scanner.nextLine();
             if (Thread.interrupted()) break;
             if (setting.find(line)) {
                 setting.check(line);
@@ -128,7 +131,9 @@ public class LiveParser {
     private static void txt(Live live, String text) {
         Setting setting = Setting.create();
         Map<Group, Map<String, Channel>> channelMap = new HashMap<>();
-        for (String line : text.split("\n")) {
+        Scanner scanner = new Scanner(text);
+        while (scanner.hasNextLine()) {
+            String line = scanner.nextLine();
             if (Thread.interrupted()) break;
             String[] split = line.split(",");
             int index = line.indexOf(",") + 1;

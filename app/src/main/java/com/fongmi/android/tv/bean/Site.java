@@ -267,6 +267,10 @@ public class Site implements Parcelable {
         this.activated = item.equals(this);
     }
 
+    public void setSpider(Spider spider) {
+        this.spider = spider;
+    }
+
     public boolean isHide() {
         return getHide() == 1;
     }

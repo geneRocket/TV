@@ -111,7 +111,7 @@ public class LiveConfig {
         get().init().clear().config(configs.get(0)).loadMulti(configs, callback, cache);
     }
 
-    public LiveConfig init() {
+    public synchronized LiveConfig init() {
         this.home = null;
         if (this.ads == null) this.ads = new ArrayList<>();
         if (this.hosts == null) this.hosts = new ArrayList<>();
@@ -125,14 +125,14 @@ public class LiveConfig {
         return config(new Config());
     }
 
-    public LiveConfig config(Config config) {
+    public synchronized LiveConfig config(Config config) {
         this.config = config;
         if (config.getUrl() == null) return this;
         this.sync = config.getUrl().equals(VodConfig.getUrl());
         return this;
     }
 
-    public LiveConfig clear() {
+    public synchronized LiveConfig clear() {
         for (Live live : getLives()) BaseLoader.get().clearLive(live.getName(), live.getApi(), live.getExt(), live.getJar());
         this.home = null;
         this.ads.clear();
@@ -228,14 +228,8 @@ public class LiveConfig {
             if (!config.isCache()) App.execute(() -> {
                 try {
                     String text = Decoder.getJson(config.getUrl());
-                    if (Json.invalid(text)) {
-                        cacheConfig(config, text);
-                        App.post(() -> parseConfig(text, null));
-                    } else {
-                        JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
-                        cacheConfig(config, object);
-                        App.post(() -> parseConfig(object, null));
-                    }
+                    if (Json.invalid(text)) cacheConfig(config, text);
+                    else cacheConfig(config, loadObject(Json.parse(text).getAsJsonObject(), 0));
                 } catch (Throwable ignored) {
                 }
             });
@@ -559,10 +553,12 @@ public class LiveConfig {
             if (liveMap.containsKey(live.getName())) {
                 Live old = liveMap.get(live.getName());
                 if (old != null) {
+                    if (!old.getUrl().equals(live.getUrl()) || !old.getApi().equals(live.getApi())) old.getGroups().clear();
                     old.setUrl(live.getUrl());
                     old.setApi(live.getApi());
                     old.setExt(live.getExt());
                     old.setJar(live.getJar());
+                    old.setSpider(null);
                 }
                 continue;
             }

@@ -146,7 +146,7 @@ public class VodConfig {
         get().init().clear().config(configs.get(0)).loadMulti(configs, callback, loadLive, cache);
     }
 
-    public VodConfig init() {
+    public synchronized VodConfig init() {
         this.wall = null;
         this.home = null;
         this.parse = null;
@@ -169,12 +169,12 @@ public class VodConfig {
         return this;
     }
 
-    public VodConfig config(Config config) {
+    public synchronized VodConfig config(Config config) {
         this.config = config;
         return this;
     }
 
-    public VodConfig clear() {
+    public synchronized VodConfig clear() {
         this.wall = null;
         this.home = null;
         this.parse = null;
@@ -458,9 +458,7 @@ public class VodConfig {
             parseConfig(config.getJson(), callback);
             if (!config.isCache()) App.execute(() -> {
                 try {
-                    JsonObject object = loadObject(config.getUrl(), 0);
-                    cacheConfig(config, object);
-                    App.post(() -> parseConfig(object, null));
+                    cacheConfig(config, loadObject(config.getUrl(), 0));
                 } catch (Throwable ignored) {
                 }
             });
@@ -575,6 +573,7 @@ public class VodConfig {
                     old.setApi(site.getApi());
                     old.setExt(site.getExt());
                     old.setJar(site.getJar());
+                    old.setSpider(null);
                 }
                 continue;
             }

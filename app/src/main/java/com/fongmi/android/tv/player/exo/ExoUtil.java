@@ -44,7 +44,7 @@ public class ExoUtil {
 
         int minBufferMs = Math.max(10000, userSettingMs * 2);
 
-        int maxBufferMs = Math.max(minBufferMs + 10000, userSettingMs * 16);
+        int maxBufferMs = Math.max(minBufferMs + 10000, userSettingMs * 8);
 
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
