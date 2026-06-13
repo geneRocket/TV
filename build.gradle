@@ -11,6 +11,6 @@ tasks.register('clean', Delete) {
 project.ext {
     gsonVersion = '2.14.0'
     jsoupVersion = '1.22.2'
-    media3Version = '1.9.4'
+    media3Version = '1.10.1'
     okhttpVersion = '5.3.2'
 }
