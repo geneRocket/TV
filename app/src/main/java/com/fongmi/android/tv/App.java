@@ -126,10 +126,8 @@ public class App extends Application {
         Notify.createChannel();
         LanguageUtil.init(this);
         Logger.addLogAdapter(getLogAdapter());
-        execute(() -> {
-            OkHttp.get().setProxy(Setting.getProxy());
-            OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
-        });
+        OkHttp.get().setProxy(Setting.getProxy());
+        OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
         CaocConfig.Builder.create().backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT).errorActivity(CrashActivity.class).apply();
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
