@@ -84,5 +84,7 @@
             </intent-filter>
         </receiver>
 
+        <service android:name="org.fourthline.cling.android.AndroidUpnpServiceImpl" />
+
     </application>
 </manifest>

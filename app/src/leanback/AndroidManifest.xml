@@ -163,11 +163,11 @@
 
         <service
             android:name=".service.StableDLNARendererService"
-            android:exported="false" />
-
-        <service
-            android:name="com.android.cast.dlna.dmr.DLNARendererService"
-            tools:node="remove" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.android.cast.dlna.dmr.ACTION_CAST" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".receiver.BootReceiver"

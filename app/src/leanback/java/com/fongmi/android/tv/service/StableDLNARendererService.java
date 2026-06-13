@@ -6,20 +6,25 @@ import android.content.Intent;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 
+import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 
 import com.android.cast.dlna.dmr.DLNARendererService;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.Util;
 
 public class StableDLNARendererService extends DLNARendererService {
 
     private static final String EXTRA_ICON = "icon";
     private static final int NOTIFICATION_ID = 9528;
     private WifiManager.MulticastLock lock;
+    private WifiManager.WifiLock wifiLock;
 
     public static void start(Context context, int icon) {
-        Intent intent = new Intent(context, StableDLNARendererService.class).putExtra(EXTRA_ICON, icon);
+        Intent intent = new Intent(context, StableDLNARendererService.class);
+        intent.setAction("com.android.cast.dlna.dmr.ACTION_CAST");
+        intent.putExtra(EXTRA_ICON, icon);
         Context app = context.getApplicationContext();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) app.startForegroundService(intent);
         else app.startService(intent);
@@ -27,9 +32,9 @@ public class StableDLNARendererService extends DLNARendererService {
 
     @Override
     public void onCreate() {
+        acquireLock();
         startForeground(NOTIFICATION_ID, buildNotification(R.drawable.ic_logo));
         super.onCreate();
-        acquireLock();
     }
 
     @Override
@@ -46,6 +51,8 @@ public class StableDLNARendererService extends DLNARendererService {
             lock = wm.createMulticastLock("TV");
             lock.setReferenceCounted(true);
             lock.acquire();
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "TV");
+            wifiLock.acquire();
         } catch (Exception ignored) {
         }
     }
@@ -53,6 +60,7 @@ public class StableDLNARendererService extends DLNARendererService {
     private void releaseLock() {
         try {
             if (lock != null && lock.isHeld()) lock.release();
+            if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
         } catch (Exception ignored) {
         }
     }

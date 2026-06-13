@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.os.HandlerCompat;
 
+import com.android.cast.dlna.dmc.DLNACastManager;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.activity.CrashActivity;
@@ -114,6 +115,7 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         Server.get().start();
+        DLNACastManager.INSTANCE.bindCastService(this);
         Notify.createChannel();
         LanguageUtil.init(this);
         Logger.addLogAdapter(getLogAdapter());

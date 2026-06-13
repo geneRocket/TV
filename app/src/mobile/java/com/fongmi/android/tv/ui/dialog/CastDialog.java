@@ -132,7 +132,6 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void initDLNA() {
-        DLNACastManager.INSTANCE.bindCastService(App.get());
         DLNACastManager.INSTANCE.registerDeviceListener(this);
         DLNACastManager.INSTANCE.search(null);
         acquireLock();
