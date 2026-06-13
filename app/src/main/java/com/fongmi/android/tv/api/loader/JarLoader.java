@@ -123,7 +123,14 @@ public class JarLoader {
             String md5 = texts.length > 1 ? texts[1].trim() : "";
             if (md5.startsWith("http")) md5 = OkHttp.string(md5, 5000).trim();
             jar = texts[0];
-            if (md5.length() > 0 && Util.equals(jar, md5)) {
+            File file = Path.jar(jar);
+            if (file.exists() && file.length() > 0) {
+                load(key, file);
+                if (jar.startsWith("http")) {
+                    String finalJar = jar;
+                    App.execute(() -> download(finalJar));
+                }
+            } else if (md5.length() > 0 && Util.equals(jar, md5)) {
                 load(key, Path.jar(jar));
             } else if (jar.startsWith("img+")) {
                 load(key, Decoder.getSpider(jar));
