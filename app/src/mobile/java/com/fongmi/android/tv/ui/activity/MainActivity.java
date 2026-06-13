@@ -30,7 +30,6 @@ import com.fongmi.android.tv.event.StateEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
-import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.FragmentStateManager;
 import com.fongmi.android.tv.ui.fragment.SettingCustomFragment;
@@ -69,7 +68,6 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     protected void initView(Bundle savedInstanceState) {
         Updater.get().release().start(this);
         initFragment(savedInstanceState);
-        Server.get().start();
         initConfig();
     }
 
@@ -249,6 +247,5 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         VodConfig.get().clear();
         AppDatabase.backup();
         Source.get().exit();
-        Server.get().stop();
     }
 }

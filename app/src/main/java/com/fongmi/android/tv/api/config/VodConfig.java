@@ -624,7 +624,7 @@ public class VodConfig {
         for (JsonElement element : Json.safeListElement(object, "parses")) {
             Parse parse = Parse.objectFrom(element);
             if (parse.getName().equals(config.getParse()) && parse.getType() > 1) setParse(parse);
-            if (!parses.contains(parse)) {
+            if (!parseMap.containsKey(parse.getName())) {
                 parses.add(parse);
                 parseMap.put(parse.getName(), parse);
             }

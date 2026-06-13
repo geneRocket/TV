@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.net.wifi.WifiManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -56,6 +57,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     private final OkHttpClient client;
 
     private DialogDeviceBinding binding;
+    private WifiManager.MulticastLock lock;
     private DeviceAdapter adapter;
     private DeviceControl control;
     private Listener listener;
@@ -132,6 +134,26 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     private void initDLNA() {
         DLNACastManager.INSTANCE.bindCastService(App.get());
         DLNACastManager.INSTANCE.registerDeviceListener(this);
+        DLNACastManager.INSTANCE.search(null);
+        acquireLock();
+    }
+
+    private void acquireLock() {
+        try {
+            WifiManager wm = (WifiManager) App.get().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return;
+            lock = wm.createMulticastLock("TV");
+            lock.setReferenceCounted(true);
+            lock.acquire();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void releaseLock() {
+        try {
+            if (lock != null && lock.isHeld()) lock.release();
+        } catch (Exception ignored) {
+        }
     }
 
     private void onScan() {
@@ -211,6 +233,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        releaseLock();
         DLNADevice.get().disconnect();
         EventBus.getDefault().unregister(this);
         DLNACastManager.INSTANCE.unregisterListener(this);

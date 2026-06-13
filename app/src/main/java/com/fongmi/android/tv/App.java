@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 import androidx.core.os.HandlerCompat;
 
 import com.fongmi.android.tv.api.config.LiveConfig;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.activity.CrashActivity;
 import com.fongmi.android.tv.utils.LanguageUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -112,6 +113,7 @@ public class App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        Server.get().start();
         Notify.createChannel();
         LanguageUtil.init(this);
         Logger.addLogAdapter(getLogAdapter());

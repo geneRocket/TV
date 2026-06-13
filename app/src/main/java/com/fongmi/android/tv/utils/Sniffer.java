@@ -9,8 +9,10 @@ import com.fongmi.android.tv.bean.Rule;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Util;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,6 +21,10 @@ public class Sniffer {
     public static final Pattern CLICKER = Pattern.compile("\\[a=cr:(\\{.*?\\})\\/](.*?)\\[\\/a]");
     public static final Pattern AI_PUSH = Pattern.compile("(http|https|rtmp|rtsp|smb|ftp|thunder|magnet|ed2k|mitv|tvbox-xg|jianpian|video):[^\\s]+", Pattern.MULTILINE);
     public static final Pattern SNIFFER = Pattern.compile("http((?!http).){12,}?\\.(m3u8|mp4|mkv|flv|mp3|m4a|aac|mpd)\\?.*|http((?!http).){12,}\\.(m3u8|mp4|mkv|flv|mp3|m4a|aac|mpd)|http((?!http).)*?video/tos*|http((?!http).)*?obj/tos*");
+
+    private static final Map<String, Rule> RULE_CACHE = new HashMap<>();
+    private static final List<Rule> REGEX_RULES = new ArrayList<>();
+    private static int rulesHash;
 
     public static String getUrl(String text) {
         if (Json.valid(text) || text.contains("$")) return text;
@@ -41,10 +47,42 @@ public class Sniffer {
 
     public static Rule getRule(Uri uri) {
         if (uri.getHost() == null) return Rule.empty();
-        String hosts = TextUtils.join(",", Arrays.asList(UrlUtil.host(uri), UrlUtil.host(uri.getQueryParameter("url"))));
-        for (Rule rule : VodConfig.get().getRules()) for (String host : rule.getHosts()) if (Util.containOrMatch(hosts, host)) return rule;
-        for (Rule rule : LiveConfig.get().getRules()) for (String host : rule.getHosts()) if (Util.containOrMatch(hosts, host)) return rule;
+        ensureRules();
+        String host = UrlUtil.host(uri);
+        String query = UrlUtil.host(uri.getQueryParameter("url"));
+        Rule rule = RULE_CACHE.get(host);
+        if (rule != null) return rule;
+        rule = RULE_CACHE.get(query);
+        if (rule != null) return rule;
+        for (Rule item : REGEX_RULES) {
+            for (String h : item.getHosts()) {
+                if (Util.containOrMatch(host, h) || Util.containOrMatch(query, h)) return item;
+            }
+        }
         return Rule.empty();
+    }
+
+    private static void ensureRules() {
+        List<Rule> vodRules = VodConfig.get().getRules();
+        List<Rule> liveRules = LiveConfig.get().getRules();
+        int hash = vodRules.hashCode() + liveRules.hashCode();
+        if (rulesHash == hash) return;
+        rulesHash = hash;
+        RULE_CACHE.clear();
+        REGEX_RULES.clear();
+        parseRules(vodRules);
+        parseRules(liveRules);
+    }
+
+    private static void parseRules(List<Rule> rules) {
+        for (Rule rule : rules) {
+            boolean regex = false;
+            for (String host : rule.getHosts()) {
+                if (host.contains("*")) regex = true;
+                else RULE_CACHE.put(host, rule);
+            }
+            if (regex) REGEX_RULES.add(rule);
+        }
     }
 
     public static List<String> getRegex(Uri uri) {

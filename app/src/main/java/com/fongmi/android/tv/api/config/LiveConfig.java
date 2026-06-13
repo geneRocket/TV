@@ -45,6 +45,7 @@ import java.util.concurrent.Future;
 public class LiveConfig {
 
     private List<Live> lives;
+    private Map<String, Live> liveMap;
     private List<Rule> rules;
     private List<String> ads;
     private List<Header> headers;
@@ -119,6 +120,7 @@ public class LiveConfig {
         this.headers = new ArrayList<>();
         this.ruleHosts = new ArrayList<>();
         this.lives = new ArrayList<>();
+        this.liveMap = new HashMap<>();
         this.persistCache = true;
         return config(new Config());
     }
@@ -140,6 +142,7 @@ public class LiveConfig {
         this.headers.clear();
         this.ruleHosts.clear();
         this.lives.clear();
+        this.liveMap.clear();
         return this;
     }
 
@@ -386,8 +389,9 @@ public class LiveConfig {
     private void parseText(String url, String text) {
         Live live = new Live(parseName(url), url).sync();
         LiveParser.text(live, text);
-        if (lives.contains(live)) return;
+        if (liveMap.containsKey(live.getName())) return;
         lives.add(live);
+        liveMap.put(live.getName(), live);
         if (home == null) setHome(live, true);
     }
 
@@ -486,6 +490,7 @@ public class LiveConfig {
         Live live = new Live(parseName(config.getUrl()), config.getUrl()).sync();
         LiveParser.text(live, text);
         lives.add(live);
+        liveMap.put(live.getName(), live);
         setHome(live, true);
     }
 
@@ -502,9 +507,10 @@ public class LiveConfig {
         for (Live live : AppDatabase.get().getLiveDao().getAll()) cache.put(live.getName(), live);
         for (JsonElement element : Json.safeListElement(object, "lives")) {
             Live live = Live.objectFrom(element, spider);
-            if (lives.contains(live)) continue;
+            if (liveMap.containsKey(live.getName())) continue;
             live.setJar(parseJar(live, spider));
             lives.add(live.sync(cache));
+            liveMap.put(live.getName(), live);
         }
         for (Live live : lives) {
             if (live.getName().equals(config.getHome())) {
@@ -660,8 +666,8 @@ public class LiveConfig {
     }
 
     public Live getLive(String key) {
-        int index = getLives().indexOf(Live.get(key));
-        return index == -1 ? new Live() : getLives().get(index);
+        Live live = liveMap.get(key);
+        return live == null ? new Live() : live;
     }
 
     public void setHome(Live home) {

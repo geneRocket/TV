@@ -120,6 +120,9 @@ public class Live {
     private boolean activated;
 
     @Ignore
+    private Spider spider;
+
+    @Ignore
     private int width;
 
     public static Live objectFrom(JsonElement element) {
@@ -357,7 +360,8 @@ public class Live {
     }
 
     public Spider spider() {
-        return BaseLoader.get().getLiveSpider(getName(), getApi(), getExt(), getJar());
+        if (spider == null) spider = BaseLoader.get().getLiveSpider(getName(), getApi(), getExt(), getJar());
+        return spider;
     }
 
     public Map<String, String> getHeaders() {

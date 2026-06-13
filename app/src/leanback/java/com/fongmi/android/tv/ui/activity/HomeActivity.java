@@ -49,7 +49,6 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.player.Source;
-import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.StableDLNARendererService;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
@@ -121,7 +120,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         StableDLNARendererService.start(this, R.drawable.ic_logo);
         mClock = Clock.create(mBinding.clock).format("MM/dd HH:mm:ss");
         Updater.get().release().start(this);
-        Server.get().start();
         Tbs.init();
         setTitleView();
         setRecyclerView();
@@ -806,7 +804,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         LiveConfig.get().clear();
         VodConfig.get().clear();
         AppDatabase.backup();
-        Server.get().stop();
         Source.get().exit();
     }
 

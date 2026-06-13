@@ -107,6 +107,9 @@ public class Site implements Parcelable {
     @Ignore
     private boolean activated;
 
+    @Ignore
+    private Spider spider;
+
     public static Site objectFrom(JsonElement element) {
         return objectFrom(element, "");
     }
@@ -334,7 +337,8 @@ public class Site implements Parcelable {
     }
 
     public Spider spider() {
-        return BaseLoader.get().getSiteSpider(getKey(), getApi(), getExt(), getJar());
+        if (spider == null) spider = BaseLoader.get().getSiteSpider(getKey(), getApi(), getExt(), getJar());
+        return spider;
     }
 
     public static Site find(String key) {

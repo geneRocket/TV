@@ -15,6 +15,7 @@ public class Traffic {
     private static long lastTotalRxBytes;
     private static long lastTimeStamp;
     private static String lastSpeed = "0" + UNIT_KB;
+    private static final long UPDATE_INTERVAL = 500;
 
     public static void setSpeed(TextView view) {
         String speed = getSpeed();
@@ -24,12 +25,12 @@ public class Traffic {
     }
 
     private static long currentRxBytes() {
-        long total = TrafficStats.getTotalRxBytes();
-        return total;
+        return TrafficStats.getTotalRxBytes();
     }
 
     private static synchronized String getSpeed() {
         long nowTimeStamp = System.currentTimeMillis();
+        if (nowTimeStamp - lastTimeStamp < UPDATE_INTERVAL) return lastSpeed;
         long currentRxBytes = currentRxBytes();
         if (currentRxBytes == TrafficStats.UNSUPPORTED) return null;
         long nowTotalRxBytes = currentRxBytes / 1024;
@@ -38,7 +39,7 @@ public class Traffic {
             lastTotalRxBytes = nowTotalRxBytes;
             return lastSpeed;
         }
-        long elapsed = Math.max(nowTimeStamp - lastTimeStamp, 1);
+        long elapsed = nowTimeStamp - lastTimeStamp;
         long delta = Math.max(0, nowTotalRxBytes - lastTotalRxBytes);
         long speed = delta * 1000 / elapsed;
         if (delta == 0 && elapsed >= STALE_ZERO_MS) speed = 0;

@@ -52,18 +52,21 @@ public class Server {
 
     public void start() {
         if (nano != null) return;
-        do {
+        int maxAttempts = 20;
+        int attempt = 0;
+        while (port < 9999 && attempt < maxAttempts) {
             try {
                 nano = new Nano(port);
-                Proxy.set(port);
                 nano.start();
+                Proxy.set(port);
                 break;
             } catch (Exception e) {
-                ++port;
-                nano.stop();
+                if (nano != null) nano.stop();
                 nano = null;
+                port++;
+                attempt++;
             }
-        } while (port < 9999);
+        }
     }
 
     public void stop() {

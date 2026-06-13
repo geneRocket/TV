@@ -957,11 +957,12 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private boolean isLikelyLive(String url, String format) {
-        String value = url == null ? "" : url.toLowerCase(Locale.US);
+        if (url == null) return false;
+        String value = url.toLowerCase(Locale.US);
         String type = format == null ? "" : format.toLowerCase(Locale.US);
         if (type.contains("m3u8") || type.contains("hls") || type.contains("mpd") || type.contains("dash")) return true;
         if (type.contains("mp4") || type.contains("mkv") || type.contains("mov") || type.contains("avi")) return false;
-        if (value.contains(".m3u8") || value.contains(".mpd")) return true;
+        if (value.contains(".m3u8") || value.contains(".mpd") || value.contains(".m3u")) return true;
         if (value.contains("/live/") || value.contains("playlist") || value.contains("manifest")) return true;
         return !value.matches(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
     }

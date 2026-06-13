@@ -591,24 +591,30 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void showDisplayInfo() {
-        boolean hasDialog = false;
-        for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) hasDialog = true;
+        showDisplayInfo(hasDialog());
+    }
+
+    private void showDisplayInfo(boolean hasDialog) {
         boolean controlVisible = isVisible(mBinding.control.getRoot());
         boolean visible = !controlVisible && !hasDialog;
         boolean showNetSpeed = Setting.isDisplaySpeed() && visible && !isVisible(mBinding.widget.progress);
-        mBinding.display.clock.setVisibility(Setting.isDisplayTime() && visible  ? View.VISIBLE : View.GONE);
+        mBinding.display.clock.setVisibility(Setting.isDisplayTime() && visible ? View.VISIBLE : View.GONE);
         mBinding.display.netspeed.setVisibility(showNetSpeed ? View.VISIBLE : View.GONE);
         mBinding.display.duration.setVisibility(View.GONE);
         mBinding.display.titleLayout.setVisibility(Setting.isDisplayVideoTitle() && visible ? View.VISIBLE : View.GONE);
     }
 
+    private boolean hasDialog() {
+        for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) return true;
+        return false;
+    }
+
     private void onTimeChangeDisplaySpeed() {
-        boolean hasDialog = false;
-        for (Fragment f : getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) hasDialog = true;
+        boolean hasDialog = hasDialog();
         boolean controlVisible = isVisible(mBinding.control.getRoot());
         boolean visible = !controlVisible && !hasDialog && !isVisible(mBinding.widget.progress);
         if (Setting.isDisplaySpeed() && visible) Traffic.setSpeed(mBinding.display.netspeed);
-        showDisplayInfo();
+        showDisplayInfo(hasDialog);
     }
 
     private void hideCenter() {

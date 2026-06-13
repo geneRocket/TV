@@ -139,6 +139,7 @@ public class Setting {
     }
 
     private static int quality = -1;
+    private static int configCache = -1;
     private static float thumbnail = -1;
 
     public static int getQuality() {
@@ -559,10 +560,12 @@ public class Setting {
 
     public static void putConfigCache(int key) {
         Prefers.put("config_cache", key);
+        configCache = key;
     }
 
     public static int getConfigCache() {
-        return Math.min(Prefers.getInt("config_cache", 0), 2);
+        if (configCache == -1) configCache = Math.min(Prefers.getInt("config_cache", 0), 2);
+        return configCache;
     }
 
     public static void putLanguage(int key) {

@@ -84,6 +84,8 @@ public class LiveParser {
         Setting setting = Setting.create();
         Catchup catchup = Catchup.create();
         Channel channel = Channel.create("");
+        Map<String, Group> groupMap = new HashMap<>();
+        Map<Group, Map<String, Channel>> channelMap = new HashMap<>();
         for (String line : text.split("\n")) {
             if (Thread.interrupted()) break;
             if (setting.find(line)) {
@@ -93,8 +95,21 @@ public class LiveParser {
                 catchup.setSource(extract(line, CATCHUP_SOURCE));
                 if (live.getEpg().isEmpty()) live.setEpg(extract(line, TVG_URL));
             } else if (line.startsWith("#EXTINF:")) {
-                Group group = live.find(Group.create(extract(line, GROUP), live.isPass()));
-                channel = group.find(Channel.create(extract(line, NAME)));
+                String groupName = extract(line, GROUP);
+                Group group = groupMap.get(groupName);
+                if (group == null) {
+                    group = Group.create(groupName, live.isPass());
+                    live.getGroups().add(group);
+                    groupMap.put(groupName, group);
+                }
+                String channelName = extract(line, NAME);
+                Map<String, Channel> channels = channelMap.computeIfAbsent(group, k -> new HashMap<>());
+                channel = channels.get(channelName);
+                if (channel == null) {
+                    channel = Channel.create(channelName);
+                    group.getChannel().add(channel);
+                    channels.put(channelName, channel);
+                }
                 channel.setTvgName(extract(line, TVG_NAME));
                 channel.setLogo(extract(line, TVG_LOGO));
                 Catchup unknown = Catchup.create();
@@ -112,6 +127,7 @@ public class LiveParser {
 
     private static void txt(Live live, String text) {
         Setting setting = Setting.create();
+        Map<Group, Map<String, Channel>> channelMap = new HashMap<>();
         for (String line : text.split("\n")) {
             if (Thread.interrupted()) break;
             String[] split = line.split(",");
@@ -122,7 +138,14 @@ public class LiveParser {
             if (split.length > 1 && live.getGroups().isEmpty()) live.getGroups().add(Group.create());
             if (split.length > 1 && split[1].contains("://")) {
                 Group group = live.getGroups().get(live.getGroups().size() - 1);
-                Channel channel = group.find(Channel.create(split[0]));
+                String channelName = split[0];
+                Map<String, Channel> channels = channelMap.computeIfAbsent(group, k -> new HashMap<>());
+                Channel channel = channels.get(channelName);
+                if (channel == null) {
+                    channel = Channel.create(channelName);
+                    group.getChannel().add(channel);
+                    channels.put(channelName, channel);
+                }
                 channel.addUrls(line.substring(index).split("#"));
                 setting.copy(channel);
             }
