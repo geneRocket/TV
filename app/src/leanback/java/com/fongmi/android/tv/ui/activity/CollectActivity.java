@@ -34,14 +34,17 @@ import com.fongmi.android.tv.ui.presenter.CollectPresenter;
 import com.fongmi.android.tv.utils.PauseExecutor;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
+import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.Future;
 
@@ -57,13 +60,13 @@ public class CollectActivity extends BaseActivity {
     private List<Site> mSites;
     private final Set<String> mCollectKeys = new HashSet<>();
     private final Map<String, Collect> mCollectMap = new LinkedHashMap<>();
-    private final Map<String, Set<String>> mVodKeys = new HashMap<>();
     private final List<List<Vod>> mPendingResults = new ArrayList<>();
     private final Set<Future<?>> mSearchTasks = new HashSet<>();
     private View mOldView;
     private String mSearchToken;
     private boolean mPagerDirty;
     private boolean mFlushScheduled;
+    private PriorityQueue<Vod> mAllQueue;
     private final Runnable mFlushResults = this::flushResults;
 
     public static void start(Activity activity, String keyword) {
@@ -160,17 +163,16 @@ public class CollectActivity extends BaseActivity {
         }
         mAdapter.clear();
         mCollectMap.clear();
-        mVodKeys.clear();
         mPendingResults.clear();
         App.removeCallbacks(mFlushResults);
         mSearchToken = "collect:" + System.currentTimeMillis();
         mPagerDirty = false;
         mFlushScheduled = false;
+        mAllQueue = new PriorityQueue<>(101, (o1, o2) -> Double.compare(o1.getScore(), o2.getScore()));
         Collect all = Collect.all();
         mCollectKeys.clear();
         mCollectKeys.add(all.getSite().getKey());
         mCollectMap.put(all.getSite().getKey(), all);
-        mVodKeys.put(all.getSite().getKey(), new HashSet<>());
         mAdapter.add(all);
         syncPager();
         mBinding.recycler.setSelectedPosition(0);
@@ -204,28 +206,30 @@ public class CollectActivity extends BaseActivity {
         mPendingResults.clear();
         List<Vod> allAdded = new ArrayList<>();
         Map<String, List<Vod>> siteAdded = new HashMap<>();
+        String allKey = Collect.all().getSite().getKey();
         for (List<Vod> items : batches) {
             if (items.isEmpty()) continue;
             String siteKey = items.get(0).getSiteKey();
-            List<Vod> added = filterNewItems(siteKey, items);
-            if (added.isEmpty()) continue;
-            allAdded.addAll(added);
-            siteAdded.computeIfAbsent(siteKey, k -> new ArrayList<>()).addAll(added);
+            allAdded.addAll(items);
+            siteAdded.computeIfAbsent(siteKey, k -> new ArrayList<>()).addAll(items);
         }
-        if (allAdded.isEmpty()) return;
-        appendCollect(Collect.all().getSite().getKey(), allAdded);
+        boolean allChanged = false;
+        if (!allAdded.isEmpty()) allChanged = appendCollect(allKey, allAdded);
         for (Map.Entry<String, List<Vod>> entry : siteAdded.entrySet()) {
             String key = entry.getKey();
-            List<Vod> added = entry.getValue();
-            if (getCollect(key) == null) addCollect(added);
-            else appendCollect(key, added);
+            List<Vod> items = entry.getValue();
+            if (getCollect(key) == null) addCollect(items);
+            else appendCollect(key, items);
         }
         for (Fragment fragment : getSupportFragmentManager().getFragments()) {
             if (!(fragment instanceof CollectFragment)) continue;
             CollectFragment target = (CollectFragment) fragment;
             String key = target.getSiteKey();
-            if ("all".equals(key)) target.appendRows(allAdded);
-            else if (siteAdded.containsKey(key)) target.appendRows(siteAdded.get(key));
+            if ("all".equals(key)) {
+                if (allChanged) target.appendRows(allAdded);
+            } else if (siteAdded.containsKey(key)) {
+                target.appendRows(siteAdded.get(key));
+            }
         }
         if (mPagerDirty) {
             mPagerDirty = false;
@@ -233,9 +237,34 @@ public class CollectActivity extends BaseActivity {
         }
     }
 
-    private void appendCollect(String key, List<Vod> items) {
+    private boolean appendCollect(String key, List<Vod> items) {
         Collect collect = getCollect(key);
-        if (collect != null && !items.isEmpty()) collect.getList().addAll(items);
+        if (collect == null || items.isEmpty()) return false;
+        if ("all".equals(key)) {
+            if (mAllQueue == null) return false;
+            boolean changed = false;
+            String keyword = getKeyword().trim();
+            for (Vod item : items) {
+                item.setScore(Util.similarity(item.getVodName(), keyword));
+                if (mAllQueue.size() < 100) {
+                    mAllQueue.offer(item);
+                    changed = true;
+                } else if (mAllQueue.peek() != null && item.getScore() > mAllQueue.peek().getScore()) {
+                    mAllQueue.poll();
+                    mAllQueue.offer(item);
+                    changed = true;
+                }
+            }
+            if (!changed) return false;
+            List<Vod> all = new ArrayList<>(mAllQueue);
+            Collections.sort(all, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
+            collect.getList().clear();
+            collect.getList().addAll(all);
+            return true;
+        } else {
+            collect.getList().addAll(items);
+            return true;
+        }
     }
 
     public Collect getCollect(String key) {
@@ -245,27 +274,12 @@ public class CollectActivity extends BaseActivity {
     public void appendAllCollect(List<Vod> items) {
         if (isFinishing() || isDestroyed()) return;
         if (items.isEmpty()) return;
-        List<Vod> added = filterNewItems(Collect.all().getSite().getKey(), items);
-        if (added.isEmpty()) return;
-        appendCollect(Collect.all().getSite().getKey(), added);
+        appendCollect(Collect.all().getSite().getKey(), items);
         for (Fragment fragment : getSupportFragmentManager().getFragments()) {
             if (!(fragment instanceof CollectFragment)) continue;
             CollectFragment target = (CollectFragment) fragment;
-            if ("all".equals(target.getSiteKey())) target.appendRows(added);
+            if ("all".equals(target.getSiteKey())) target.appendRows(items);
         }
-    }
-
-    private List<Vod> filterNewItems(String key, List<Vod> items) {
-        Set<String> values = mVodKeys.computeIfAbsent(key, k -> new HashSet<>());
-        List<Vod> results = new ArrayList<>();
-        for (Vod item : items) if (values.add(getVodKey(item))) results.add(item);
-        return results;
-    }
-
-    private String getVodKey(Vod item) {
-        String id = item.getVodId();
-        if (!id.isEmpty()) return item.getSiteKey() + "@" + id;
-        return item.getSiteKey() + "@" + item.getVodName() + "@" + item.getVodPic() + "@" + item.getVodRemarks();
     }
 
     private void syncPager() {
@@ -286,6 +300,7 @@ public class CollectActivity extends BaseActivity {
         App.removeCallbacks(mFlushResults);
         mPendingResults.clear();
         mFlushScheduled = false;
+        mAllQueue = null;
         if (mViewModel != null) mViewModel.cancelSearch(mSearchToken);
         for (Future<?> task : mSearchTasks) task.cancel(true);
         mSearchTasks.clear();

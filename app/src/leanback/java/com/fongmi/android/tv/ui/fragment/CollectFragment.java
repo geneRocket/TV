@@ -29,11 +29,9 @@ import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -47,7 +45,6 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     private SiteViewModel mViewModel;
     private String mKeyword;
     private String mSiteKey;
-    private final Set<String> mVodKeys = new HashSet<>();
 
     public static CollectFragment newInstance(String keyword, String siteKey) {
         Bundle args = new Bundle();
@@ -99,7 +96,9 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
         mViewModel.result.observe(getViewLifecycleOwner(), result -> {
             if (!isCurrentResult(result)) return;
             mScroller.endLoading(result);
-            List<Vod> items = appendCollectItems(result.getList());
+            List<Vod> items = result.getList();
+            if (items == null || items.isEmpty()) return;
+            appendCollectItems(items);
             addVideo(items);
             syncAllCollect(items);
         });
@@ -119,11 +118,12 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
 
     private boolean checkLastSize(List<Vod> items) {
         if (mLast == null || items.size() == 0) return false;
-        int size = Product.getColumn() - mLast.size();
+        int column = Product.getColumn();
+        int size = column - mLast.size();
         if (size == 0) return false;
-        size = Math.min(size, items.size());
-        mLast.addAll(mLast.size(), new ArrayList<>(items.subList(0, size)));
-        addVideo(new ArrayList<>(items.subList(size, items.size())));
+        int count = Math.min(size, items.size());
+        mLast.addAll(mLast.size(), new ArrayList<>(items.subList(0, count)));
+        addVideo(new ArrayList<>(items.subList(count, items.size())));
         return true;
     }
 
@@ -131,24 +131,21 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
         addRows(items);
     }
 
-    private List<Vod> appendCollectItems(List<Vod> items) {
-        List<Vod> added = filterNewItems(items);
-        if (added.isEmpty() || getCollect() == null) return added;
-        getCollect().getList().addAll(added);
-        return added;
+    private void appendCollectItems(List<Vod> items) {
+        if (getCollect() == null) return;
+        getCollect().getList().addAll(items);
     }
 
     public void appendRows(List<Vod> items) {
-        if (!isViewReady() || mAdapter == null || items.isEmpty() || getCollect() == null) return;
+        if (!isViewReady() || mAdapter == null || getCollect() == null) return;
         if ("all".equals(getSiteKey())) {
-            List<Vod> all = getCollect().getList();
-            for (Vod item : all) item.setScore(Util.similarity(item.getVodName(), getKeyword()));
-            Collections.sort(all, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
+            List<Vod> all = new ArrayList<>(getCollect().getList());
             mAdapter.clear();
             mLast = null;
             addRows(all);
         } else {
-            addRows(filterNewItems(items));
+            if (items.isEmpty()) return;
+            addRows(items);
         }
     }
 
@@ -156,10 +153,10 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
         if (!isViewReady() || checkLastSize(items) || getActivity() == null || getActivity().isFinishing() || getActivity().isDestroyed()) return;
         List<ListRow> rows = new ArrayList<>();
         int column = Product.getColumn();
-        for (int start = 0; start < items.size(); start += column) {
-            int end = Math.min(start + column, items.size());
+        for (int i = 0; i < items.size(); i += column) {
+            int end = Math.min(i + column, items.size());
             mLast = new ArrayObjectAdapter(new VodPresenter(this));
-            mLast.setItems(new ArrayList<>(items.subList(start, end)), null);
+            mLast.setItems(new ArrayList<>(items.subList(i, end)), null);
             rows.add(new ListRow(mLast));
         }
         mAdapter.addAll(mAdapter.size(), rows);
@@ -167,8 +164,11 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
 
     private void syncRows() {
         if (mAdapter == null || mAdapter.size() > 0 || getCollect() == null) return;
-        for (Vod item : getCollect().getList()) mVodKeys.add(getVodKey(item));
-        addRows(new ArrayList<>(getCollect().getList()));
+        if ("all".equals(getSiteKey())) {
+            appendRows(Collections.emptyList());
+        } else {
+            addRows(new ArrayList<>(getCollect().getList()));
+        }
     }
 
     private boolean isViewReady() {
@@ -205,17 +205,5 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     public void onResume() {
         super.onResume();
         syncRows();
-    }
-
-    private List<Vod> filterNewItems(List<Vod> items) {
-        List<Vod> results = new ArrayList<>();
-        for (Vod item : items) if (mVodKeys.add(getVodKey(item))) results.add(item);
-        return results;
-    }
-
-    private String getVodKey(Vod item) {
-        String id = item.getVodId();
-        if (!id.isEmpty()) return item.getSiteKey() + "@" + id;
-        return item.getSiteKey() + "@" + item.getVodName() + "@" + item.getVodPic() + "@" + item.getVodRemarks();
     }
 }
