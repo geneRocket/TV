@@ -113,14 +113,14 @@ public class LiveConfig {
 
     public LiveConfig init() {
         this.home = null;
-        this.ads = new ArrayList<>();
-        this.hosts = new ArrayList<>();
-        this.proxy = new ArrayList<>();
-        this.rules = new ArrayList<>();
-        this.headers = new ArrayList<>();
-        this.ruleHosts = new ArrayList<>();
-        this.lives = new ArrayList<>();
-        this.liveMap = new HashMap<>();
+        if (this.ads == null) this.ads = new ArrayList<>();
+        if (this.hosts == null) this.hosts = new ArrayList<>();
+        if (this.proxy == null) this.proxy = new ArrayList<>();
+        if (this.rules == null) this.rules = new ArrayList<>();
+        if (this.headers == null) this.headers = new ArrayList<>();
+        if (this.ruleHosts == null) this.ruleHosts = new ArrayList<>();
+        if (this.lives == null) this.lives = new ArrayList<>();
+        if (this.liveMap == null) this.liveMap = new HashMap<>();
         this.persistCache = true;
         return config(new Config());
     }
@@ -133,7 +133,7 @@ public class LiveConfig {
     }
 
     public LiveConfig clear() {
-        for (Live live : lives) BaseLoader.get().clearLive(live.getName(), live.getApi(), live.getExt(), live.getJar());
+        for (Live live : getLives()) BaseLoader.get().clearLive(live.getName(), live.getApi(), live.getExt(), live.getJar());
         this.home = null;
         this.ads.clear();
         this.hosts.clear();
@@ -213,7 +213,20 @@ public class LiveConfig {
         if (config.isEmpty()) config(Config.live());
         if (!TextUtils.isEmpty(config.getJson())) {
             parseConfig(config.getJson(), callback);
-            if (!config.isCache()) App.execute(() -> { try { String text = Decoder.getJson(config.getUrl()); if (Json.invalid(text)) cacheConfig(config, text); else cacheConfig(config, loadObject(Json.parse(text).getAsJsonObject(), 0)); } catch (Throwable ignored) {} });
+            if (!config.isCache()) App.execute(() -> {
+                try {
+                    String text = Decoder.getJson(config.getUrl());
+                    if (Json.invalid(text)) {
+                        cacheConfig(config, text);
+                        App.post(() -> parseConfig(text, null));
+                    } else {
+                        JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
+                        cacheConfig(config, object);
+                        App.post(() -> parseConfig(object, null));
+                    }
+                } catch (Throwable ignored) {
+                }
+            });
         } else {
             loadConfig(callback);
         }

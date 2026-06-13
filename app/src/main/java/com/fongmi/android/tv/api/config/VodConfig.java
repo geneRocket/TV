@@ -151,19 +151,19 @@ public class VodConfig {
         this.home = null;
         this.parse = null;
         this.config = new Config();
-        this.ads = new ArrayList<>();
-        this.doh = new ArrayList<>();
-        this.hosts = new ArrayList<>();
-        this.proxy = new ArrayList<>();
-        this.rules = new ArrayList<>();
-        this.headers = new ArrayList<>();
-        this.ruleHosts = new ArrayList<>();
-        this.loadUrls = new ArrayList<>();
-        this.siteMap = new HashMap<>();
-        this.parseMap = new HashMap<>();
-        this.sites = new ArrayList<>();
-        this.flags = new ArrayList<>();
-        this.parses = new ArrayList<>();
+        if (this.ads == null) this.ads = new ArrayList<>();
+        if (this.doh == null) this.doh = new ArrayList<>();
+        if (this.hosts == null) this.hosts = new ArrayList<>();
+        if (this.proxy == null) this.proxy = new ArrayList<>();
+        if (this.rules == null) this.rules = new ArrayList<>();
+        if (this.headers == null) this.headers = new ArrayList<>();
+        if (this.ruleHosts == null) this.ruleHosts = new ArrayList<>();
+        if (this.loadUrls == null) this.loadUrls = new ArrayList<>();
+        if (this.siteMap == null) this.siteMap = new HashMap<>();
+        if (this.parseMap == null) this.parseMap = new HashMap<>();
+        if (this.sites == null) this.sites = new ArrayList<>();
+        if (this.flags == null) this.flags = new ArrayList<>();
+        if (this.parses == null) this.parses = new ArrayList<>();
         this.loadLive = false;
         this.persistCache = true;
         return this;
@@ -456,7 +456,14 @@ public class VodConfig {
         if (config.isEmpty()) config = Config.vod();
         if (!TextUtils.isEmpty(config.getJson())) {
             parseConfig(config.getJson(), callback);
-            if (!config.isCache()) App.execute(() -> { try { cacheConfig(config, loadObject(config.getUrl(), 0)); } catch (Throwable ignored) {} });
+            if (!config.isCache()) App.execute(() -> {
+                try {
+                    JsonObject object = loadObject(config.getUrl(), 0);
+                    cacheConfig(config, object);
+                    App.post(() -> parseConfig(object, null));
+                } catch (Throwable ignored) {
+                }
+            });
         } else {
             loadConfig(callback);
         }
