@@ -119,13 +119,17 @@ public class App extends Application {
         System.setProperty("org.fourthline.cling.transport.impl.FixedAndroidLogHandler", "true");
         System.setProperty("cling.stream.client.impl", "org.fourthline.cling.transport.impl.jetty.StreamClientImpl");
         System.setProperty("cling.stream.server.impl", "org.fourthline.cling.transport.impl.jetty.StreamServerImpl");
-        Server.get().start();
-        DLNACastManager.INSTANCE.bindCastService(this);
+        execute(() -> {
+            Server.get().start();
+            DLNACastManager.INSTANCE.bindCastService(this);
+        });
         Notify.createChannel();
         LanguageUtil.init(this);
         Logger.addLogAdapter(getLogAdapter());
-        OkHttp.get().setProxy(Setting.getProxy());
-        OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
+        execute(() -> {
+            OkHttp.get().setProxy(Setting.getProxy());
+            OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
+        });
         CaocConfig.Builder.create().backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT).errorActivity(CrashActivity.class).apply();
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override

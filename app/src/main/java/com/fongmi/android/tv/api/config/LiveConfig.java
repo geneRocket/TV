@@ -188,6 +188,11 @@ public class LiveConfig {
         for (ConfigResult result : loadConfigResults(configs, false)) {
             try {
                 if (result.error != null) throw result.error;
+                if (result.live != null) {
+                    addLive(result.live);
+                    success++;
+                    continue;
+                }
                 if (result.text != null) {
                     parseText(result.config.getUrl(), result.text);
                     success++;
@@ -207,6 +212,13 @@ public class LiveConfig {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
             App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
         }
+    }
+
+    private synchronized void addLive(Live live) {
+        if (liveMap.containsKey(live.getName())) return;
+        lives.add(live);
+        liveMap.put(live.getName(), live);
+        if (home == null) setHome(live, true);
     }
 
     private void loadConfigCache(Callback callback) {
@@ -291,19 +303,38 @@ public class LiveConfig {
     private ConfigResult loadConfigResult(Config item, boolean cache) {
         try {
             if (cache && !TextUtils.isEmpty(item.getJson())) {
-                if (!item.isCache()) App.execute(() -> { try { String text = Decoder.getJson(item.getUrl()); if (Json.invalid(text)) cacheConfig(item, text); else cacheConfig(item, loadObject(Json.parse(text).getAsJsonObject(), 0)); } catch (Throwable ignored) {} });
-                if (Json.invalid(item.getJson())) return ConfigResult.text(item, item.getJson());
+                if (!item.isCache()) App.execute(() -> {
+                    try {
+                        String text = Decoder.getJson(item.getUrl());
+                        if (Json.invalid(text)) cacheConfig(item, text);
+                        else cacheConfig(item, loadObject(Json.parse(text).getAsJsonObject(), 0));
+                    } catch (Throwable ignored) {
+                    }
+                });
+                if (Json.invalid(item.getJson())) {
+                    Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
+                    LiveParser.text(live, item.getJson());
+                    return ConfigResult.live(item, live);
+                }
                 return ConfigResult.json(item, Json.parse(item.getJson()).getAsJsonObject(), false);
             }
             String text = Decoder.getJson(item.getUrl());
-            if (Json.invalid(text)) return ConfigResult.text(item, text);
+            if (Json.invalid(text)) {
+                Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
+                LiveParser.text(live, text);
+                return ConfigResult.live(item, live);
+            }
             return ConfigResult.json(item, loadObject(Json.parse(text).getAsJsonObject(), 0), true);
         } catch (Throwable e) {
             if (!TextUtils.isEmpty(item.getJson())) {
                 try {
+                    if (Json.invalid(item.getJson())) {
+                        Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
+                        LiveParser.text(live, item.getJson());
+                        return ConfigResult.live(item, live);
+                    }
                     return ConfigResult.json(item, Json.parse(item.getJson()).getAsJsonObject(), false);
                 } catch (Throwable ignored) {
-                    // Fall through to the original fetch error.
                 }
             }
             return ConfigResult.error(item, e);
@@ -705,28 +736,34 @@ public class LiveConfig {
 
         private final Config config;
         private final JsonObject object;
+        private final Live live;
         private final String text;
         private final Throwable error;
         private final boolean cacheable;
 
-        private ConfigResult(Config config, JsonObject object, String text, Throwable error, boolean cacheable) {
+        private ConfigResult(Config config, JsonObject object, Live live, String text, Throwable error, boolean cacheable) {
             this.config = config;
             this.object = object;
+            this.live = live;
             this.text = text;
             this.error = error;
             this.cacheable = cacheable;
         }
 
         private static ConfigResult json(Config config, JsonObject object, boolean cacheable) {
-            return new ConfigResult(config, object, null, null, cacheable);
+            return new ConfigResult(config, object, null, null, null, cacheable);
+        }
+
+        private static ConfigResult live(Config config, Live live) {
+            return new ConfigResult(config, null, live, null, null, false);
         }
 
         private static ConfigResult text(Config config, String text) {
-            return new ConfigResult(config, null, text, null, false);
+            return new ConfigResult(config, null, null, text, null, false);
         }
 
         private static ConfigResult error(Config config, Throwable error) {
-            return new ConfigResult(config, null, null, error, false);
+            return new ConfigResult(config, null, null, null, error, false);
         }
     }
 }
