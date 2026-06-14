@@ -52,6 +52,7 @@ import java.util.TreeMap;
 
 public class VodFragment extends BaseFragment implements CustomScroller.Callback, VodPresenter.OnClickListener {
 
+    private Map<String, VodPresenter> mPresenters;
     private HashMap<String, String> mExtends;
     private FragmentVodBinding mBinding;
     private ArrayObjectAdapter mAdapter;
@@ -142,6 +143,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     @Override
     protected void initView() {
+        mPresenters = new HashMap<>();
         mPages = new ArrayList<>();
         mVodKeys = new HashSet<>();
         mOpen = isOpen();
@@ -168,6 +170,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setHeader(getActivity().findViewById(R.id.recycler));
         mBinding.recycler.setHasFixedSize(true);
+        mBinding.recycler.setItemViewCacheSize(20);
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
         mBinding.recycler.setItemAnimator(null);
     }
@@ -305,13 +308,19 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         return true;
     }
 
+    private VodPresenter getPresenter(Style style) {
+        String key = style.getViewType() + "_" + style.getRatio();
+        if (!mPresenters.containsKey(key)) mPresenters.put(key, new VodPresenter(this, style));
+        return mPresenters.get(key);
+    }
+
     private void addGrid(List<Vod> items, Style style) {
         if (checkLastSize(items, style)) return;
         List<ListRow> rows = new ArrayList<>();
         int column = Product.getColumn(style);
         for (int start = 0; start < items.size(); start += column) {
             int end = Math.min(start + column, items.size());
-            mLast = new ArrayObjectAdapter(new VodPresenter(this, style));
+            mLast = new ArrayObjectAdapter(getPresenter(style));
             mLast.setItems(new ArrayList<>(items.subList(start, end)), null);
             rows.add(new ListRow(mLast));
         }
@@ -344,7 +353,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
                     if (i == rowCount - 1) mLast = adapter;
                 }
             } else {
-                mLast = new ArrayObjectAdapter(new VodPresenter(this, style));
+                mLast = new ArrayObjectAdapter(getPresenter(style));
                 mLast.setItems(subList, null);
                 mAdapter.add(new ListRow(mLast));
             }

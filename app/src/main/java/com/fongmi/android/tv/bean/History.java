@@ -31,10 +31,15 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import java.util.regex.Pattern;
+
 @Entity
 public class History {
 
     private static final Map<String, History> CACHE = new ConcurrentHashMap<>();
+    private static final Pattern PATTERN_END = Pattern.compile("(?i)[\\s\\p{P}\\p{S}]+$");
+    private static final Pattern PATTERN_VERSION = Pattern.compile("(?i)(?:粤语版|国语版|普通话版|粤语中字|国语中字|国粤双语|双语版|中英双字|中文字幕|中字|粤语|国语|普通话|高清版|hd中字|hd|bd|正片|全集)$");
+    private static final Pattern PATTERN_ALL = Pattern.compile("[\\s\\p{P}\\p{S}]+");
 
     public static void clearCache() {
         CACHE.clear();
@@ -386,10 +391,10 @@ public class History {
         String old;
         do {
             old = value;
-            value = value.replaceAll("(?i)[\\s\\p{P}\\p{S}]+$", "");
-            value = value.replaceAll("(?i)(?:粤语版|国语版|普通话版|粤语中字|国语中字|国粤双语|双语版|中英双字|中文字幕|中字|粤语|国语|普通话|高清版|hd中字|hd|bd|正片|全集)$", "");
+            value = PATTERN_END.matcher(value).replaceAll("");
+            value = PATTERN_VERSION.matcher(value).replaceAll("");
         } while (!old.equals(value));
-        return value.replaceAll("[\\s\\p{P}\\p{S}]+", "");
+        return PATTERN_ALL.matcher(value).replaceAll("");
     }
 
     private static List<Integer> getLoadedCids() {
