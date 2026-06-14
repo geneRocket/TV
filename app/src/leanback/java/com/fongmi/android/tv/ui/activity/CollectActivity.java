@@ -168,7 +168,7 @@ public class CollectActivity extends BaseActivity {
         mSearchToken = "collect:" + System.currentTimeMillis();
         mPagerDirty = false;
         mFlushScheduled = false;
-        mAllQueue = new PriorityQueue<>(101, (o1, o2) -> Double.compare(o1.getScore(), o2.getScore()));
+        mAllQueue = new PriorityQueue<>(51, (o1, o2) -> Double.compare(o1.getScore(), o2.getScore()));
         Collect all = Collect.all();
         mCollectKeys.clear();
         mCollectKeys.add(all.getSite().getKey());
@@ -246,7 +246,7 @@ public class CollectActivity extends BaseActivity {
             String keyword = getKeyword().trim();
             for (Vod item : items) {
                 item.setScore(Util.similarity(item.getVodName(), keyword));
-                if (mAllQueue.size() < 100) {
+                if (mAllQueue.size() < 50) {
                     mAllQueue.offer(item);
                     changed = true;
                 } else if (mAllQueue.peek() != null && item.getScore() > mAllQueue.peek().getScore()) {

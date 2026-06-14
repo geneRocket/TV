@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 public class CollectFragment extends BaseFragment implements CustomScroller.Callback, VodPresenter.OnClickListener {
 
@@ -139,13 +138,36 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     public void appendRows(List<Vod> items) {
         if (!isViewReady() || mAdapter == null || getCollect() == null) return;
         if ("all".equals(getSiteKey())) {
-            List<Vod> all = new ArrayList<>(getCollect().getList());
-            mAdapter.clear();
-            mLast = null;
-            addRows(all);
+            updateRows(new ArrayList<>(getCollect().getList()));
         } else {
             if (items.isEmpty()) return;
             addRows(items);
+        }
+    }
+
+    private void updateRows(List<Vod> items) {
+        if (!isViewReady() || getActivity() == null || getActivity().isFinishing() || getActivity().isDestroyed()) return;
+        int column = Product.getColumn();
+        int rowCount = (int) Math.ceil((double) items.size() / column);
+        if (rowCount == 0) mLast = null;
+        while (mAdapter.size() > rowCount) {
+            Object item = mAdapter.get(mAdapter.size() - 1);
+            if (item != null) mAdapter.remove(item);
+            else break;
+        }
+        for (int i = 0; i < rowCount; i++) {
+            int start = i * column;
+            int end = Math.min(start + column, items.size());
+            List<Vod> subList = new ArrayList<>(items.subList(start, end));
+            if (i < mAdapter.size()) {
+                ArrayObjectAdapter adapter = (ArrayObjectAdapter) ((ListRow) mAdapter.get(i)).getAdapter();
+                if (adapter != null) adapter.setItems(subList, null);
+                if (i == rowCount - 1) mLast = adapter;
+            } else {
+                mLast = new ArrayObjectAdapter(new VodPresenter(this));
+                mLast.setItems(subList, null);
+                mAdapter.add(new ListRow(mLast));
+            }
         }
     }
 
