@@ -61,7 +61,6 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private List<Filter> mFilters;
     private List<Page> mPages;
     private Set<String> mVodKeys;
-    private boolean mPendingFirstRefresh;
     private boolean mOpen;
     private Page mPage;
     private String mRequestTypeId;
@@ -179,8 +178,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
             if (!isCurrentRequest(result)) return;
             boolean first = mScroller.first();
             int size = result.getList().size();
-            if (first) applyFirstPageResult();
-            if (size > 0) addVideo(result);
+            if (first || size > 0) addVideo(result);
             mScroller.endLoading(result);
             checkPosition(first);
             checkMore(size);
@@ -235,16 +233,8 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mRequestExtend = getRequestExtend(mExtends);
         if (first) mLast = null;
         if (first) mVodKeys.clear();
-        if (first) mPendingFirstRefresh = true;
         if (first) showProgress();
         mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
-    }
-
-    private void applyFirstPageResult() {
-        if (!mPendingFirstRefresh) return;
-        int filterSize = mOpen ? mFilters.size() : 0;
-        if (mAdapter.size() > filterSize) mAdapter.removeItems(filterSize, mAdapter.size() - filterSize);
-        mPendingFirstRefresh = false;
     }
 
     private boolean isCurrentRequest(Result result) {
@@ -266,9 +256,15 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private void addVideo(Result result) {
         Style style = result.getStyle(getStyle());
         List<Vod> items = filterVodList(result.getList());
-        if (items.isEmpty()) return;
-        if (style.isList()) mAdapter.addAll(mAdapter.size(), items);
-        else addGrid(items, style);
+        if (result.getRequestPage().equals("1")) {
+            int start = mOpen ? mFilters.size() : 0;
+            if (style.isList()) setItems(start, items);
+            else updateRows(start, items, style);
+        } else {
+            if (items.isEmpty()) return;
+            if (style.isList()) mAdapter.addAll(mAdapter.size(), items);
+            else addGrid(items, style);
+        }
     }
 
     private List<Vod> filterVodList(List<Vod> items) {
@@ -300,7 +296,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private boolean checkLastSize(List<Vod> items, Style style) {
-        if (mLast == null || items.size() == 0) return false;
+        if (mLast == null || items.isEmpty()) return false;
         int size = Product.getColumn(style) - mLast.size();
         if (size == 0) return false;
         size = Math.min(size, items.size());
@@ -320,6 +316,39 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
             rows.add(new ListRow(mLast));
         }
         mAdapter.addAll(mAdapter.size(), rows);
+    }
+
+    private void setItems(int start, List<Vod> items) {
+        if (mAdapter.size() > start && !(mAdapter.get(start) instanceof Vod)) mAdapter.removeItems(start, mAdapter.size() - start);
+        if (mAdapter.size() > start) mAdapter.removeItems(start, mAdapter.size() - start);
+        mAdapter.addAll(start, items);
+    }
+
+    private void updateRows(int start, List<Vod> items, Style style) {
+        if (mBinding == null || getActivity() == null || getActivity().isFinishing() || getActivity().isDestroyed()) return;
+        int column = Product.getColumn(style);
+        int rowCount = (int) Math.ceil((double) items.size() / column);
+        if (rowCount == 0) mLast = null;
+        if (mAdapter.size() > start && !(mAdapter.get(start) instanceof ListRow)) mAdapter.removeItems(start, mAdapter.size() - start);
+        if (mAdapter.size() > start + rowCount) mAdapter.removeItems(start + rowCount, mAdapter.size() - (start + rowCount));
+        for (int i = 0; i < rowCount; i++) {
+            int index = start + i;
+            int startItem = i * column;
+            int endItem = Math.min(startItem + column, items.size());
+            List<Vod> subList = new ArrayList<>(items.subList(startItem, endItem));
+            if (index < mAdapter.size()) {
+                Object item = mAdapter.get(index);
+                if (item instanceof ListRow) {
+                    ArrayObjectAdapter adapter = (ArrayObjectAdapter) ((ListRow) item).getAdapter();
+                    if (adapter != null) adapter.setItems(subList, null);
+                    if (i == rowCount - 1) mLast = adapter;
+                }
+            } else {
+                mLast = new ArrayObjectAdapter(new VodPresenter(this, style));
+                mLast.setItems(subList, null);
+                mAdapter.add(new ListRow(mLast));
+            }
+        }
     }
 
     private ListRow getRow(Filter filter) {

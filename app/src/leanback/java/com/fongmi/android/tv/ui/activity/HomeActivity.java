@@ -443,13 +443,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 WallConfig.get().init();
                 List<Config> liveConfigs = getStartupConfigs(1);
                 List<Config> vodConfigs = getStartupConfigs(0);
-                App.post(() -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), getLiveCallback(), true);
-                    else LiveConfig.load(liveConfigs, getLiveCallback(), true);
-                    if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(""), true);
-                    else VodConfig.load(vodConfigs, getCallback(""), true, true);
-                });
+                if (isFinishing() || isDestroyed()) return;
+                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), getLiveCallback(), true);
+                else LiveConfig.load(liveConfigs, getLiveCallback(), true);
+                if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(""), true);
+                else VodConfig.load(vodConfigs, getCallback(""), true, true);
             } catch (Throwable e) {
                 App.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
