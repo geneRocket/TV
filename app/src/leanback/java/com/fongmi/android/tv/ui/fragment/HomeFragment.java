@@ -52,13 +52,15 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.collect.Lists;
 
+import java.util.HashMap;
 import java.util.List;
-
+import java.util.Map;
 
 public class HomeFragment extends BaseFragment implements VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, KeepPresenter.OnClickListener {
 
     public FragmentHomeBinding mBinding;
 
+    private Map<String, VodPresenter> mPresenters;
     private ArrayObjectAdapter mHistoryAdapter;
     private ArrayObjectAdapter mKeepAdapter;
     public HistoryPresenter mPresenter;
@@ -82,6 +84,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     @Override
     protected void initView() {
+        mPresenters = new HashMap<>();
         mBinding.progressLayout.showProgress();
         setRecyclerView();
         setAdapter();
@@ -118,6 +121,8 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         selector.addPresenter(ListRow.class, new CustomRowPresenter(22), FuncPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16), HistoryPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16), KeepPresenter.class);
+        mBinding.recycler.setHasFixedSize(true);
+        mBinding.recycler.setItemViewCacheSize(20);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
     }
@@ -135,12 +140,18 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         if (funcRow != null) setTitleNextFocus(funcRow);
     }
 
+    private VodPresenter getPresenter(Style style) {
+        String key = style.getViewType() + "_" + style.getRatio();
+        if (!mPresenters.containsKey(key)) mPresenters.put(key, new VodPresenter(this, style));
+        return mPresenters.get(key);
+    }
+
     public void addVideo(Result result) {
         int index = getRecommendIndex();
         if (mAdapter.size() > index) mAdapter.removeItems(index, mAdapter.size() - index);
         Style style = result.getStyle(getHome().getStyle());
         for (List<Vod> items : Lists.partition(result.getList(), Product.getColumn(style))) {
-            ArrayObjectAdapter adapter = new ArrayObjectAdapter(new VodPresenter(this, style));
+            ArrayObjectAdapter adapter = new ArrayObjectAdapter(getPresenter(style));
             adapter.setItems(items, null);
             mAdapter.add(new ListRow(adapter));
         }

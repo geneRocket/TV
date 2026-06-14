@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class AdBlocker {
@@ -63,6 +64,8 @@ public final class AdBlocker {
     private static List<Pattern> vodUrlPatterns = Collections.emptyList();
     private static List<Pattern> liveUrlPatterns = Collections.emptyList();
 
+    private static final Pattern PATTERN_TOKEN_SPLIT = Pattern.compile("[^a-z0-9]+");
+
     private AdBlocker() {
     }
 
@@ -71,9 +74,10 @@ public final class AdBlocker {
         ensurePatterns();
         String value = url.toLowerCase(Locale.US);
         Uri uri = UrlUtil.uri(value);
-        if (matchesConfiguredHost(uri.getHost()) || matchesConfiguredUrl(value)) return true;
+        String host = uri.getHost();
+        if (matchesConfiguredHost(host) || matchesConfiguredUrl(value)) return true;
         if (!Setting.isRemoveAd()) return false;
-        return hasDefaultAdHost(uri.getHost()) || hasDefaultAdSignal(uri);
+        return hasDefaultAdHost(host) || hasDefaultAdSignal(uri);
     }
 
     public static boolean isAdHost(String host) {
@@ -87,10 +91,13 @@ public final class AdBlocker {
     private static boolean matchesConfiguredHost(String host) {
         if (TextUtils.isEmpty(host)) return false;
         if (vodHosts.contains(host) || liveHosts.contains(host)) return true;
-        String[] parts = host.split("\\.");
-        if (parts.length > 1) {
-            String domain = parts[parts.length - 2] + "." + parts[parts.length - 1];
-            if (vodHosts.contains(domain) || liveHosts.contains(domain)) return true;
+        int index = host.lastIndexOf('.');
+        if (index > 0) {
+            int prev = host.lastIndexOf('.', index - 1);
+            if (prev != -1) {
+                String domain = host.substring(prev + 1);
+                if (vodHosts.contains(domain) || liveHosts.contains(domain)) return true;
+            }
         }
         for (Pattern pattern : vodHostPatterns) if (pattern.matcher(host).find()) return true;
         for (Pattern pattern : liveHostPatterns) if (pattern.matcher(host).find()) return true;
@@ -194,12 +201,20 @@ public final class AdBlocker {
 
     private static boolean hasToken(String value) {
         if (TextUtils.isEmpty(value)) return false;
-        for (String token : value.split("[^a-z0-9]+")) {
-            if (TextUtils.isEmpty(token)) continue;
-            if (DEFAULT_TOKENS.contains(token)) return true;
-            if (token.startsWith("advert")) return true;
-            if (token.startsWith("adbreak") || token.startsWith("adpod")) return true;
+        Matcher matcher = PATTERN_TOKEN_SPLIT.matcher(value);
+        int start = 0;
+        while (matcher.find()) {
+            String token = value.substring(start, matcher.start());
+            if (isAdToken(token)) return true;
+            start = matcher.end();
         }
-        return false;
+        return isAdToken(value.substring(start));
+    }
+
+    private static boolean isAdToken(String token) {
+        if (token.isEmpty()) return false;
+        if (DEFAULT_TOKENS.contains(token)) return true;
+        if (token.startsWith("advert")) return true;
+        return token.startsWith("adbreak") || token.startsWith("adpod");
     }
 }

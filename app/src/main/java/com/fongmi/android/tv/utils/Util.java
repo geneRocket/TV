@@ -30,8 +30,12 @@ import java.util.ArrayList;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 public class Util {
+
+    private static final Pattern PATTERN_DIGIT = Pattern.compile("\\D+");
+    private static final Pattern PATTERN_VERSION = Pattern.compile("(?i)(mp4|H264|H265|720p|1080p|2160p|4K)");
 
     public static void toggleFullscreen(Activity activity, boolean fullscreen) {
         if (fullscreen) hideSystemUI(activity);
@@ -87,8 +91,10 @@ public class Util {
 
     public static int getDigit(String text) {
         try {
-            if (text.startsWith("上") || text.startsWith("下")) return -1;
-            return Integer.parseInt(text.replaceAll("(?i)(mp4|H264|H265|720p|1080p|2160p|4K)", "").replaceAll("\\D+", ""));
+            if (TextUtils.isEmpty(text) || text.startsWith("上") || text.startsWith("下")) return -1;
+            String value = PATTERN_VERSION.matcher(text).replaceAll("");
+            String digit = PATTERN_DIGIT.matcher(value).replaceAll("");
+            return digit.isEmpty() ? -1 : Integer.parseInt(digit);
         } catch (Exception e) {
             return -1;
         }

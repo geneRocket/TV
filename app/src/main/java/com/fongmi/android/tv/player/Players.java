@@ -53,6 +53,7 @@ import com.orhanobut.logger.Logger;
 
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.regex.Pattern;
 
 import master.flame.danmaku.controller.DrawHandler;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -104,6 +105,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private int player;
     private int playerState;
     private int retry;
+
+    private static final Pattern PATTERN_VOD = Pattern.compile(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
 
     public static Players create(Activity activity) {
         Players player = new Players(activity);
@@ -963,7 +966,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (type.contains("mp4") || type.contains("mkv") || type.contains("mov") || type.contains("avi")) return false;
         if (value.contains(".m3u8") || value.contains(".mpd") || value.contains(".m3u")) return true;
         if (value.contains("/live/") || value.contains("playlist") || value.contains("manifest")) return true;
-        return !value.matches(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
+        return !PATTERN_VOD.matcher(value).matches();
     }
 
     private void updateLiveDecision() {

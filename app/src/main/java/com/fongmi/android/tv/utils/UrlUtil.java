@@ -10,6 +10,7 @@ import com.google.common.net.HttpHeaders;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 public class UrlUtil {
 
@@ -17,6 +18,8 @@ public class UrlUtil {
     private static final String TAG_COOKIE = "@Cookie=";
     private static final String TAG_REFERER = "@Referer=";
     private static final String TAG_USER_AGENT = "@User-Agent=";
+
+    private static final Pattern PATTERN_RELATIVE = Pattern.compile(".*\\.[A-Za-z0-9]{2,5}([?#].*)?$");
 
     public static Uri uri(String url) {
         return Uri.parse(TextUtils.isEmpty(url) ? "" : url.trim().replace("\\", ""));
@@ -50,7 +53,11 @@ public class UrlUtil {
     }
 
     public static String convert(String url) {
-        String scheme = scheme(url);
+        return convert(url, uri(url));
+    }
+
+    public static String convert(String url, Uri uri) {
+        String scheme = scheme(uri);
         if ("clan".equals(scheme)) return convert(fixUrl(url));
         if ("local".equals(scheme)) return url.replace("local://", Server.get().getAddress("/"));
         if ("assets".equals(scheme)) return url.replace("assets://", Server.get().getAddress("/"));
@@ -66,14 +73,15 @@ public class UrlUtil {
         String suffix = index < 0 ? "" : url.substring(index);
         String link = index < 0 ? url : url.substring(0, index);
         if (link.startsWith("//")) link = "https:" + link;
-        if (!TextUtils.isEmpty(baseUri) && scheme(link).isEmpty() && !link.startsWith("data:") && isRelativePath(link)) link = resolve(baseUri, link);
-        return convert(link + suffix);
+        Uri uri = uri(link);
+        if (!TextUtils.isEmpty(baseUri) && scheme(uri).isEmpty() && !link.startsWith("data:") && isRelativePath(link)) link = resolve(baseUri, link);
+        return convert(link + suffix, uri);
     }
 
     private static boolean isRelativePath(String url) {
         if (TextUtils.isEmpty(url)) return false;
         if (url.startsWith("/") || url.startsWith("./") || url.startsWith("../") || url.startsWith("?")) return true;
-        return url.contains("/") || url.matches(".*\\.[A-Za-z0-9]{2,5}([?#].*)?$");
+        return url.contains("/") || PATTERN_RELATIVE.matcher(url).matches();
     }
 
     public static String stripTag(String url) {

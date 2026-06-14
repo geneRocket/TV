@@ -537,15 +537,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             }
         }
 
-        public void checkHistory(Vod item) {
-            host.mHistory = History.find(host.getHistoryKey());
-            host.mHistory = host.mHistory == null ? createHistory(item) : host.mHistory;
-            if (!TextUtils.isEmpty(host.getMark())) host.mHistory.setVodRemarks(host.getMark());
-            host.mHistory.findEpisode(item.getVodFlags());
+        public void checkHistory() {
             if (Setting.isIncognito() && host.mHistory.getKey().equals(host.getHistoryKey())) host.mHistory.delete();
             host.setPlainTextIfChanged(host.mBinding.control.opening, host.mHistory.getOpening() == 0 ? host.getString(R.string.play_op) : host.mPlayers.stringToTime(host.mHistory.getOpening()));
             host.setPlainTextIfChanged(host.mBinding.control.ending, host.mHistory.getEnding() == 0 ? host.getString(R.string.play_ed) : host.mPlayers.stringToTime(host.mHistory.getEnding()));
-            host.mHistory.setVodPic(item.getVodPic());
             host.mPlayers.setPlayer(host.getPlayer());
             host.setScale(host.getScale());
             host.setPlayerView();
@@ -609,10 +604,20 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             App.removeCallbacks(host.mR4);
             host.mSelectedFlagPosition = 0;
             host.mSelectedEpisodePosition = 0;
-            checkHistory(item);
-            checkFlag(item);
-            host.checkKeep();
-            host.preloadDetailFlags(item);
+            App.execute(() -> {
+                host.mHistory = History.find(host.getHistoryKey());
+                host.mHistory = host.mHistory == null ? createHistory(item) : host.mHistory;
+                if (!TextUtils.isEmpty(host.getMark())) host.mHistory.setVodRemarks(host.getMark());
+                host.mHistory.findEpisode(item.getVodFlags());
+                host.mHistory.setVodPic(item.getVodPic());
+                App.post(() -> {
+                    if (host.isFinishing() || host.isDestroyed()) return;
+                    checkHistory();
+                    checkFlag(item);
+                    host.checkKeep();
+                    host.preloadDetailFlags(item);
+                });
+            });
         }
 
         private History createHistory(Vod item) {
@@ -1061,21 +1066,33 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setRecyclerView() {
+        mBinding.flag.setHasFixedSize(true);
+        mBinding.flag.setItemViewCacheSize(10);
         mBinding.flag.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.flag.setAdapter(new ItemBridgeAdapter(mFlagAdapter = new ArrayObjectAdapter(mFlagPresenter = new FlagPresenter(item -> mPlaybackNavigation.switchFlag(item, false)))));
+        mBinding.quality.setHasFixedSize(true);
+        mBinding.quality.setItemViewCacheSize(10);
         mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this::setQualityActivated));
+        mBinding.array.setHasFixedSize(true);
+        mBinding.array.setItemViewCacheSize(10);
         mBinding.array.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.array.setAdapter(new ItemBridgeAdapter(mArrayAdapter = new ArrayObjectAdapter(mArrayPresenter = new ArrayPresenter(this))));
+        mBinding.part.setHasFixedSize(true);
+        mBinding.part.setItemViewCacheSize(10);
         mBinding.part.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.part.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.part.setAdapter(new ItemBridgeAdapter(mPartAdapter = new ArrayObjectAdapter(mPartPresenter = new PartPresenter(item -> SearchActivity.start(this, item, true)))));
+        mBinding.quick.setHasFixedSize(true);
+        mBinding.quick.setItemViewCacheSize(10);
         mBinding.quick.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quick.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quick.setAdapter(new ItemBridgeAdapter(mQuickAdapter = new ArrayObjectAdapter(new QuickPresenter(item -> mContent.setSearch(item)))));
+        mBinding.control.parse.setHasFixedSize(true);
+        mBinding.control.parse.setItemViewCacheSize(10);
         mBinding.control.parse.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.control.parse.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.control.parse.setAdapter(new ItemBridgeAdapter(mParseAdapter = new ArrayObjectAdapter(new ParsePresenter(item -> mPlaybackNavigation.switchParse(item, false)))));
@@ -1084,6 +1101,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setEpisodeView() {
+        mBinding.episodeVert.setHasFixedSize(true);
+        mBinding.episodeHori.setHasFixedSize(true);
+        mBinding.episodeVert.setItemViewCacheSize(20);
+        mBinding.episodeHori.setItemViewCacheSize(20);
         mBinding.episodeVert.setVerticalSpacing(ResUtil.dp2px(8));
         mBinding.episodeHori.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.episodeVert.setHorizontalSpacing(ResUtil.dp2px(8));

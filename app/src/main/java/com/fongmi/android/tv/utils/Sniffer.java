@@ -34,14 +34,16 @@ public class Sniffer {
     }
 
     public static boolean isVideoFormat(String url) {
-        if (url.endsWith(".m3u8") || url.endsWith(".mp4") || url.endsWith(".mkv") || url.endsWith(".flv")) return true;
-        if (url.contains(".m3u8?") || url.contains(".mp4?") || url.contains(".mkv?") || url.contains(".flv?")) return true;
+        if (TextUtils.isEmpty(url)) return false;
+        String lowerUrl = url.toLowerCase();
+        if (lowerUrl.endsWith(".m3u8") || lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".mkv") || lowerUrl.endsWith(".flv")) return true;
+        if (lowerUrl.contains(".m3u8?") || lowerUrl.contains(".mp4?") || lowerUrl.contains(".mkv?") || lowerUrl.contains(".flv?")) return true;
         Rule rule = getRule(UrlUtil.uri(url));
-        for (String exclude : rule.getExclude()) if (url.contains(exclude)) return false;
+        for (String exclude : rule.getExclude()) if (lowerUrl.contains(exclude.toLowerCase())) return false;
         for (Pattern pattern : rule.getExcludePatterns()) if (pattern.matcher(url).find()) return false;
-        for (String regex : rule.getRegex()) if (url.contains(regex)) return true;
+        for (String regex : rule.getRegex()) if (lowerUrl.contains(regex.toLowerCase())) return true;
         for (Pattern pattern : rule.getRegexPatterns()) if (pattern.matcher(url).find()) return true;
-        if (url.contains("url=http") || url.contains("v=http") || url.contains(".html")) return false;
+        if (lowerUrl.contains("url=http") || lowerUrl.contains("v=http") || lowerUrl.contains(".html")) return false;
         return SNIFFER.matcher(url).find();
     }
 

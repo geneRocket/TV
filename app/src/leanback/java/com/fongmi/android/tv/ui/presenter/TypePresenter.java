@@ -38,7 +38,6 @@ public class TypePresenter extends Presenter {
         Class item = (Class) object;
         ViewHolder holder = (ViewHolder) viewHolder;
         holder.binding.text.setText(item.getTypeName());
-        holder.binding.text.setCompoundDrawablePadding(ResUtil.dp2px(4));
         holder.binding.text.setCompoundDrawablesWithIntrinsicBounds(0, 0, getIcon(item), 0);
         holder.binding.text.setListener(() -> mListener.onRefresh(item));
         setOnClickListener(holder, view -> mListener.onItemClick(item));
@@ -60,6 +59,7 @@ public class TypePresenter extends Presenter {
         public ViewHolder(@NonNull AdapterTypeBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            this.binding.text.setCompoundDrawablePadding(ResUtil.dp2px(4));
         }
     }
 }

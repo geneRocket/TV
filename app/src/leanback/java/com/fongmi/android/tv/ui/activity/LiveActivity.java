@@ -223,6 +223,9 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mBinding.group.setHasFixedSize(true);
         mBinding.channel.setHasFixedSize(true);
         mBinding.widget.epgData.setHasFixedSize(true);
+        mBinding.group.setItemViewCacheSize(10);
+        mBinding.channel.setItemViewCacheSize(10);
+        mBinding.widget.epgData.setItemViewCacheSize(10);
         mBinding.group.setAdapter(new ItemBridgeAdapter(mGroupAdapter = new ArrayObjectAdapter(new GroupPresenter(this))));
         mBinding.channel.setAdapter(new ItemBridgeAdapter(mChannelAdapter = new ArrayObjectAdapter(new ChannelPresenter(this))));
         mBinding.widget.epgData.setAdapter(new ItemBridgeAdapter(mEpgDataAdapter = new ArrayObjectAdapter(new EpgDataPresenter(this))));

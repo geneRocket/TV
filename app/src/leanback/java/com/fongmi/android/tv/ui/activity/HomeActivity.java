@@ -27,6 +27,7 @@ import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.Updater;
@@ -637,6 +638,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 getHomeFragment().getKeep();
                 break;
             case SIZE:
+                Product.clear();
                 homeContent();
                 break;
         }
