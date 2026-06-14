@@ -558,7 +558,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         removeTimeoutCheck();
         if (current) {
             Server.get().setPlayer(null);
-            App.execute(() -> Path.clear(Path.exo()));
             App.execute(() -> Source.get().stop());
         }
     }

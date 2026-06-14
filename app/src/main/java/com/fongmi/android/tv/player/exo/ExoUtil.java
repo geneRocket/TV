@@ -38,22 +38,17 @@ public class ExoUtil {
 
     public static LoadControl buildLoadControl() {
         int userSettingMs = Setting.getBuffer() * 1000;
-
-        int bufferForPlaybackMs = 1000;
-        int bufferForPlaybackAfterRebufferMs = 1500;
-
-        int minBufferMs = Math.max(10000, userSettingMs * 2);
-
-        int maxBufferMs = Math.max(minBufferMs + 10000, userSettingMs * 8);
+        int minBufferMs = Math.max(15000, userSettingMs * 2);
+        int maxBufferMs = Math.max(minBufferMs + 30000, userSettingMs * 4);
 
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
                         minBufferMs,
                         maxBufferMs,
-                        bufferForPlaybackMs,
-                        bufferForPlaybackAfterRebufferMs)
-                .setPrioritizeTimeOverSizeThresholds(true)
-                .setBackBuffer(30000, true)
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+                .setPrioritizeTimeOverSizeThresholds(false)
+                .setBackBuffer(0, false)
                 .build();
     }
 
