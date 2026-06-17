@@ -35,16 +35,16 @@ public class JianPian implements Source.Extractor {
         stop();
         start(url);
         if (path == null || path.isEmpty()) throw new IllegalArgumentException("Invalid jianpian url");
-        return "http://127.0.0.1:" + p2p.port + "/" + URLEncoder.encode(Uri.parse(path).getLastPathSegment(), "GBK");
+        if (p2p.port <= 0) throw new IllegalArgumentException("Invalid jianpian port");
+        String name = Uri.parse(path).getLastPathSegment();
+        if (name == null || name.isEmpty()) throw new IllegalArgumentException("Invalid jianpian path");
+        return "http://127.0.0.1:" + p2p.port + "/" + encodePathSegment(name);
     }
 
     private void start(String url) {
         try {
             String lastPath = path;
-            path = decodeUrl(url);
-            int optionIndex = path.indexOf('|');
-            if (optionIndex >= 0) path = path.substring(0, optionIndex);
-            path = path.replace("jianpian://pathtype=url&path=", "");
+            path = parsePath(url);
             path = path.replace("tvbox-xg://", "").replace("tvbox-xg:", "");
             path = path.replace("xg://", "ftp://").replace("xgplay://", "ftp://");
             if (path.isEmpty()) return;
@@ -59,12 +59,28 @@ public class JianPian implements Source.Extractor {
         }
     }
 
-    private String decodeUrl(String url) {
+    private String parsePath(String url) {
+        String value = stripOption(url);
+        String prefix = "jianpian://pathtype=url&path=";
+        if (value.startsWith(prefix)) return decodeQueryValue(value.substring(prefix.length()));
+        return Uri.decode(value);
+    }
+
+    private String stripOption(String url) {
+        int optionIndex = url.indexOf('|');
+        return optionIndex >= 0 ? url.substring(0, optionIndex) : url;
+    }
+
+    private String decodeQueryValue(String url) {
         try {
             return URLDecoder.decode(url, StandardCharsets.UTF_8.name());
         } catch (Exception e) {
             return url;
         }
+    }
+
+    private String encodePathSegment(String name) throws Exception {
+        return URLEncoder.encode(name, "GBK").replace("+", "%20");
     }
 
     @Override

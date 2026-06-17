@@ -21,6 +21,7 @@ import javax.crypto.spec.SecretKeySpec;
 public class Decoder {
 
     private static final Pattern JS_URI = Pattern.compile("\"(\\.|\\.\\.)/(.?|.+?)\\.js\\?(.?|.+?)\"");
+    private static final Pattern JSON_URI = Pattern.compile("(?:data-url|href)=\"([^\"]+?\\.json(?:[^\"]*)?)\"");
 
     public static String getJson(String url) throws Exception {
         String key = getKey(url);
@@ -28,6 +29,8 @@ public class Decoder {
         String data = getData(url);
         if (data.isEmpty()) throw new Exception();
         if (Json.valid(data)) return fix(url, data);
+        String json = getJsonFromHtml(data);
+        if (Json.valid(json)) return fix(url, json);
         if (data.contains("**")) data = base64(data);
         if (data.startsWith("2423")) data = cbc(data);
         if (key.length() > 0) data = ecb(data, key);
@@ -86,6 +89,15 @@ public class Decoder {
         if (url.startsWith("file")) return Path.read(url);
         if (url.startsWith("assets")) return Asset.read(url);
         if (url.startsWith("http")) return OkHttp.string(url, 15000);
+        return "";
+    }
+
+    private static String getJsonFromHtml(String data) {
+        Matcher matcher = JSON_URI.matcher(data);
+        while (matcher.find()) {
+            String text = getData(matcher.group(1));
+            if (Json.valid(text)) return text;
+        }
         return "";
     }
 

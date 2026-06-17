@@ -31,12 +31,15 @@ public class Thunder implements Source.Extractor {
     @Override
     public boolean match(Uri uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme();
-        return "magnet".equals(scheme) || "ed2k".equals(scheme);
+        return "magnet".equals(scheme) || "thunder".equals(scheme) || "ed2k".equals(scheme);
     }
 
     @Override
     public String fetch(String url) throws Exception {
-        return UrlUtil.scheme(url).equals("magnet") ? addTorrentTask(Uri.parse(url)) : addThunderTask(url);
+        if (isTorrentTask(url)) return addTorrentTask(Uri.parse(url));
+        String scheme = UrlUtil.scheme(url);
+        if ("magnet".equals(scheme) || "thunder".equals(scheme)) return addParsedTask(url);
+        return addThunderTask(url);
     }
 
     private String addTorrentTask(Uri uri) throws Exception {
@@ -64,6 +67,15 @@ public class Thunder implements Source.Extractor {
             if (taskInfo.mTaskStatus != 0) return XLTaskHelper.get().getLocalUrl(new File(torrent.getParent(), name));
             else SystemClock.sleep(300);
         }
+    }
+
+    private String addParsedTask(String url) throws Exception {
+        List<Episode> episodes = Parser.get(url).call();
+        if (episodes.isEmpty()) throw new ExtractException("Thunder task no media");
+        String parsedUrl = episodes.get(0).getUrl();
+        if (isTorrentTask(parsedUrl)) return addTorrentTask(Uri.parse(parsedUrl));
+        if ("ed2k".equals(UrlUtil.scheme(parsedUrl))) return addThunderTask(parsedUrl);
+        return parsedUrl;
     }
 
     private String addThunderTask(String url) {
@@ -126,5 +138,11 @@ public class Thunder implements Source.Extractor {
             XLTaskHelper.get().stopTask(taskId);
             return episodes;
         }
+    }
+
+    private static boolean isTorrentTask(String url) {
+        Uri uri = Uri.parse(url);
+        String scheme = UrlUtil.scheme(uri);
+        return "magnet".equals(scheme) && uri.getPath() != null && !uri.getPath().isEmpty() && uri.getQueryParameter("index") != null;
     }
 }
