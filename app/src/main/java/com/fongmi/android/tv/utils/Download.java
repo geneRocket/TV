@@ -72,7 +72,7 @@ public class Download {
 
     private void download(InputStream is, double length) throws Exception {
         try (BufferedInputStream input = new BufferedInputStream(is); FileOutputStream os = new FileOutputStream(file)) {
-            byte[] buffer = new byte[4096];
+            byte[] buffer = new byte[64 * 1024];
             int readBytes;
             long totalBytes = 0;
             while ((readBytes = input.read(buffer)) != -1) {

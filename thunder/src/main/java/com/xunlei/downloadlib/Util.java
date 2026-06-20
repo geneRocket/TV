@@ -6,13 +6,14 @@ import java.util.List;
 
 public class Util {
 
-    private static final List<String> VIDEO = Arrays.asList("avi", "flv", "mkv", "mov", "mp4", "mpeg", "mpe", "mpg", "wmv");
+    private static final List<String> VIDEO = Arrays.asList("avi", "flv", "mkv", "mov", "mp4", "mpeg", "mpe", "mpg", "wmv", "ts", "m4v", "webm", "3gp", "f4v", "vob", "ogv", "mts", "m2ts");
     private static final List<String> AUDIO = Arrays.asList("aac", "ape", "flac", "mp3", "m4a", "ogg");
     private static final String[] UNITS = new String[]{"bytes", "KB", "MB", "GB", "TB"};
-    private static final long MINIMAL = 30 * 1024 * 1024;
 
     public static boolean isMedia(String ext, long size) {
-        return (VIDEO.contains(ext) || AUDIO.contains(ext)) && size > MINIMAL;
+        if (VIDEO.contains(ext)) return size > 1024 * 1024 * 10;
+        if (AUDIO.contains(ext)) return size > 1024 * 1024;
+        return false;
     }
 
     public static String size(long size) {

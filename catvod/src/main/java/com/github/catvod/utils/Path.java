@@ -237,7 +237,6 @@ public class Path {
         try {
             if (!file.canWrite()) file.setWritable(true);
             if (!file.exists()) file.createNewFile();
-            Shell.exec("chmod 777 " + file);
             return file;
         } catch (Exception e) {
             e.printStackTrace();

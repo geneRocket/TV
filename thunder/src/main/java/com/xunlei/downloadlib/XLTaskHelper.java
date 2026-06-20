@@ -49,6 +49,7 @@ public class XLTaskHelper {
     public synchronized GetTaskId parse(String url, File savePath) {
         if (url.startsWith("file://")) return new GetTaskId(url, savePath);
         if (url.startsWith("thunder://")) url = getManager().parserThunderUrl(url);
+        if (url == null) return new GetTaskId(savePath);
         String fileName = getManager().getFileNameFromUrl(url);
         GetTaskId taskId = new GetTaskId(savePath, fileName, url);
         if (!url.startsWith("magnet:?")) return taskId;
@@ -64,7 +65,7 @@ public class XLTaskHelper {
     public synchronized GetTaskId addThunderTask(String url, File savePath) {
         String fileName = getManager().getFileNameFromUrl(url);
         GetTaskId taskId = new GetTaskId(savePath, fileName, url);
-        if (url.startsWith("ftp://")) {
+        if (url.startsWith("ftp://") || url.startsWith("http://") || url.startsWith("https://")) {
             P2spTaskParam param = new P2spTaskParam();
             param.setFilePath(savePath.getAbsolutePath());
             param.setSeqId(getSeq().incrementAndGet());
@@ -97,7 +98,7 @@ public class XLTaskHelper {
         TorrentFileInfo[] fileInfos = torrentInfo.mSubFileInfo;
         BtTaskParam taskParam = new BtTaskParam();
         taskParam.setCreateMode(1);
-        taskParam.setMaxConcurrent(3);
+        taskParam.setMaxConcurrent(10);
         taskParam.setSeqId(getSeq().incrementAndGet());
         taskParam.setFilePath(savePath.getAbsolutePath());
         taskParam.setTorrentPath(torrent.getAbsolutePath());
@@ -147,8 +148,7 @@ public class XLTaskHelper {
 
     public synchronized XLTaskInfo getTaskInfo(GetTaskId taskId) {
         XLTaskInfo taskInfo = new XLTaskInfo();
-        if (taskId.getSaveFile().exists()) taskInfo.setTaskStatus(2);
-        else getManager().getTaskInfo(taskId.getTaskId(), 1, taskInfo);
+        getManager().getTaskInfo(taskId.getTaskId(), 1, taskInfo);
         return taskInfo;
     }
 
