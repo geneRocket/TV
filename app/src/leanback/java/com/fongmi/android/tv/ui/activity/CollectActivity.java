@@ -168,7 +168,7 @@ public class CollectActivity extends BaseActivity {
         mSearchToken = "collect:" + System.currentTimeMillis();
         mPagerDirty = false;
         mFlushScheduled = false;
-        mAllQueue = new PriorityQueue<>(51, (o1, o2) -> Double.compare(o1.getScore(), o2.getScore()));
+        mAllQueue = new PriorityQueue<>(51, this::compareAllForQueue);
         Collect all = Collect.all();
         mCollectKeys.clear();
         mCollectKeys.add(all.getSite().getKey());
@@ -246,10 +246,11 @@ public class CollectActivity extends BaseActivity {
             String keyword = getKeyword().trim();
             for (Vod item : items) {
                 item.setScore(Util.similarity(item.getVodName(), keyword));
+                item.setInsertTimestamp(System.nanoTime());
                 if (mAllQueue.size() < 50) {
                     mAllQueue.offer(item);
                     changed = true;
-                } else if (mAllQueue.peek() != null && item.getScore() > mAllQueue.peek().getScore()) {
+                } else if (mAllQueue.peek() != null && isBetterAllResult(item, mAllQueue.peek())) {
                     mAllQueue.poll();
                     mAllQueue.offer(item);
                     changed = true;
@@ -257,7 +258,7 @@ public class CollectActivity extends BaseActivity {
             }
             if (!changed) return false;
             List<Vod> all = new ArrayList<>(mAllQueue);
-            Collections.sort(all, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
+            Collections.sort(all, this::compareAllForDisplay);
             collect.getList().clear();
             collect.getList().addAll(all);
             return true;
@@ -265,6 +266,20 @@ public class CollectActivity extends BaseActivity {
             collect.getList().addAll(items);
             return true;
         }
+    }
+
+    private int compareAllForDisplay(Vod o1, Vod o2) {
+        int byScore = Double.compare(o2.getScore(), o1.getScore());
+        if (byScore != 0) return byScore;
+        return Long.compare(o1.getInsertTimestamp(), o2.getInsertTimestamp());
+    }
+
+    private int compareAllForQueue(Vod o1, Vod o2) {
+        return compareAllForDisplay(o2, o1);
+    }
+
+    private boolean isBetterAllResult(Vod candidate, Vod current) {
+        return compareAllForDisplay(candidate, current) < 0;
     }
 
     public Collect getCollect(String key) {

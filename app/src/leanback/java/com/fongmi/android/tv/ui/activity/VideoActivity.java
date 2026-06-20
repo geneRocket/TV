@@ -1578,12 +1578,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (size > 200) setGroupSize(100);
         else if (size > 100) setGroupSize(40);
         else setGroupSize(20);
-        boolean revSort = mHistory.isRevSort();
-        boolean revPlay = mHistory.isRevPlay();
+        boolean revSort = mHistory != null && mHistory.isRevSort();
+        boolean revPlay = mHistory != null && mHistory.isRevPlay();
         if (mArraySize == size && mArrayRevSort == revSort && mArrayRevPlay == revPlay) return;
         List<String> items = new ArrayList<>();
         items.add(getString(R.string.play_reverse));
-        items.add(getString(mHistory.getRevPlayText()));
+        items.add(getString(mHistory != null ? mHistory.getRevPlayText() : R.string.play_next));
         setVisibilityIfChanged(mBinding.array, size > 1 ? View.VISIBLE : View.GONE);
         if (revSort) for (int i = size; i > 0; i -= getGroupSize()) items.add(i + "-" + Math.max(i - (getGroupSize() - 1), 1));
         else for (int i = 0; i < size; i += getGroupSize()) items.add((i + 1) + "-" + Math.min(i + getGroupSize(), size));

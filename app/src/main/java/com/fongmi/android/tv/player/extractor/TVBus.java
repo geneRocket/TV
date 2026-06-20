@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 public class TVBus implements Source.Extractor, Listener {
 
     private TVCore tvcore;
-    private String hls;
+    private volatile String hls;
     private Core core;
     private CountDownLatch latch;
 

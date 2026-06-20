@@ -100,12 +100,22 @@ public class Vod implements Parcelable {
 
     private double score;
 
+    private long insertTimestamp;
+
     public double getScore() {
         return score;
     }
 
     public void setScore(double score) {
         this.score = score;
+    }
+
+    public long getInsertTimestamp() {
+        return insertTimestamp;
+    }
+
+    public void setInsertTimestamp(long insertTimestamp) {
+        this.insertTimestamp = insertTimestamp;
     }
 
     public static List<Vod> arrayFrom(String str) {
@@ -333,6 +343,7 @@ public class Vod implements Parcelable {
         dest.writeParcelable(this.style, flags);
         dest.writeTypedList(this.vodFlags);
         dest.writeParcelable(this.site, flags);
+        dest.writeLong(this.insertTimestamp);
     }
 
     protected Vod(Parcel in) {
@@ -357,6 +368,7 @@ public class Vod implements Parcelable {
         this.style = in.readParcelable(Style.class.getClassLoader());
         this.vodFlags = in.createTypedArrayList(Flag.CREATOR);
         this.site = in.readParcelable(Site.class.getClassLoader());
+        this.insertTimestamp = in.readLong();
     }
 
     public static final Creator<Vod> CREATOR = new Creator<>() {
