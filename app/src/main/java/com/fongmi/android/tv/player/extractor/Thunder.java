@@ -3,8 +3,8 @@ package com.fongmi.android.tv.player.extractor;
 import android.net.Uri;
 import android.os.SystemClock;
 
-import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.Url;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.utils.Download;
@@ -29,53 +29,27 @@ public class Thunder implements Source.Extractor {
     private GetTaskId taskId;
 
     @Override
-    public boolean match(Uri uri) {
-        String scheme = uri.getScheme() == null ? "" : uri.getScheme();
-        return "magnet".equals(scheme) || "thunder".equals(scheme) || "ed2k".equals(scheme) || "ftp".equals(scheme);
+    public boolean match(Uri url) {
+        String scheme=url.getScheme();
+        return "magnet".equals(scheme) || "ed2k".equals(scheme);
     }
 
     @Override
     public String fetch(String url) throws Exception {
-        if (isTorrentTask(url)) return addTorrentTask(Uri.parse(url));
-        String scheme = UrlUtil.scheme(url);
-        if ("magnet".equals(scheme) || "thunder".equals(scheme)) return addParsedTask(url);
-        return addThunderTask(url);
+        return UrlUtil.scheme(url).equals("magnet") ? addTorrentTask(Uri.parse(url)) : addThunderTask(url);
     }
 
     private String addTorrentTask(Uri uri) throws Exception {
-        String path = uri.getPath();
+        File torrent = new File(uri.getPath());
         String name = uri.getQueryParameter("name");
-        String indexValue = uri.getQueryParameter("index");
-        if (path == null || path.isEmpty() || name == null || name.isEmpty() || indexValue == null || indexValue.isEmpty()) {
-            throw new ExtractException("Invalid thunder torrent task");
-        }
-        File torrent = new File(path);
-        File parent = torrent.getParentFile();
-        if (parent == null) throw new ExtractException("Missing thunder torrent parent");
-        int index;
-        try {
-            index = Integer.parseInt(indexValue);
-        } catch (NumberFormatException e) {
-            throw new ExtractException("Invalid thunder torrent index");
-        }
-        taskId = XLTaskHelper.get().addTorrentTask(torrent, parent, index);
-        long start = SystemClock.elapsedRealtime();
+        int index = Integer.parseInt(uri.getQueryParameter("index"));
+        taskId = XLTaskHelper.get().addTorrentTask(torrent, Objects.requireNonNull(torrent.getParentFile()), index);
         while (true) {
             XLTaskInfo taskInfo = XLTaskHelper.get().getBtSubTaskInfo(taskId, index).mTaskInfo;
             if (taskInfo.mTaskStatus == 3) throw new ExtractException(taskInfo.getErrorMsg());
-            if (SystemClock.elapsedRealtime() - start > 60000) throw new ExtractException("Thunder task timeout");
             if (taskInfo.mTaskStatus != 0) return XLTaskHelper.get().getLocalUrl(new File(torrent.getParent(), name));
             else SystemClock.sleep(300);
         }
-    }
-
-    private String addParsedTask(String url) throws Exception {
-        List<Episode> episodes = Parser.get(url).call();
-        if (episodes.isEmpty()) throw new ExtractException("Thunder task no media");
-        String parsedUrl = episodes.get(0).getUrl();
-        if (isTorrentTask(parsedUrl)) return addTorrentTask(Uri.parse(parsedUrl));
-        if ("ed2k".equals(UrlUtil.scheme(parsedUrl))) return addThunderTask(parsedUrl);
-        return parsedUrl;
     }
 
     private String addThunderTask(String url) {
@@ -93,6 +67,7 @@ public class Thunder implements Source.Extractor {
 
     @Override
     public void exit() {
+        XLTaskHelper.get().release();
     }
 
     public static class Parser implements Callable<List<Episode>> {
@@ -114,37 +89,26 @@ public class Thunder implements Source.Extractor {
         }
 
         private void sleep() {
-            SystemClock.sleep(100);
-            time += 100;
+            SystemClock.sleep(10);
+            time += 10;
         }
 
         private static boolean isTorrent(String url) {
-            int index = url.indexOf(';');
-            String value = index < 0 ? url : url.substring(0, index);
-            return !value.startsWith("magnet") && value.endsWith(".torrent");
+            return !url.startsWith("magnet") && url.split(";")[0].endsWith(".torrent");
         }
 
         @Override
-        public List<Episode> call() throws Exception {
+        public List<Episode> call() {
             boolean torrent = isTorrent(url);
             List<Episode> episodes = new ArrayList<>();
             GetTaskId taskId = XLTaskHelper.get().parse(url, Path.thunder(Util.md5(url)));
-            try {
-                if (!torrent && !taskId.getRealUrl().startsWith("magnet")) return Arrays.asList(Episode.create(taskId.getFileName(), taskId.getRealUrl()));
-                if (torrent) Download.create(url, taskId.getSaveFile()).sync();
-                else while (XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus() != 2 && time < 60000) sleep();
-                List<TorrentFileInfo> medias = XLTaskHelper.get().getTorrentInfo(taskId.getSaveFile()).getMedias();
-                for (TorrentFileInfo media : medias) episodes.add(Episode.create(media.getFileName(), media.getSize(), media.getPlayUrl()));
-            } finally {
-                XLTaskHelper.get().stopTask(taskId);
-            }
+            if (!torrent && !taskId.getRealUrl().startsWith("magnet")) return Arrays.asList(Episode.create(taskId.getFileName(), taskId.getRealUrl()));
+            if (torrent) Download.create(url, taskId.getSaveFile()).start();
+            else while (XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus() != 2 && time < 5000) sleep();
+            List<TorrentFileInfo> medias = XLTaskHelper.get().getTorrentInfo(taskId.getSaveFile()).getMedias();
+            for (TorrentFileInfo media : medias) episodes.add(Episode.create(media.getFileName(), media.getSize(), media.getPlayUrl()));
+            XLTaskHelper.get().stopTask(taskId);
             return episodes;
         }
-    }
-
-    private static boolean isTorrentTask(String url) {
-        Uri uri = Uri.parse(url);
-        String scheme = UrlUtil.scheme(uri);
-        return "magnet".equals(scheme) && uri.getQueryParameter("xt") == null && uri.getPath() != null && !uri.getPath().isEmpty() && uri.getQueryParameter("index") != null;
     }
 }

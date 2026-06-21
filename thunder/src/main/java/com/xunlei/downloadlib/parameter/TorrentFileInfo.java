@@ -1,6 +1,5 @@
 package com.xunlei.downloadlib.parameter;
 
-import android.net.Uri;
 import android.text.TextUtils;
 
 import com.xunlei.downloadlib.Util;
@@ -46,13 +45,7 @@ public class TorrentFileInfo {
     }
 
     public String getPlayUrl() {
-        return new Uri.Builder()
-                .scheme("magnet")
-                .path(getFile().getAbsolutePath())
-                .appendQueryParameter("name", getFileName())
-                .appendQueryParameter("index", String.valueOf(getFileIndex()))
-                .build()
-                .toString();
+        return "magnet://" + getFile().getAbsolutePath() + "?name=" + getFileName() + "&index=" + getFileIndex();
     }
 
     public String getExt() {
