@@ -533,11 +533,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 }
                 host.setPendingSiteSwitch(false);
                 host.mPlaybackNavigation.switchFlag(target, false);
-                if (host.mHistory.isRevSort()) host.reverseEpisode(true);
+                if (host.mHistory != null && host.mHistory.isRevSort()) host.reverseEpisode(true);
             }
         }
 
         public void checkHistory() {
+            if (host.mHistory == null) return;
             if (Setting.isIncognito() && host.mHistory.getKey().equals(host.getHistoryKey())) host.mHistory.delete();
             host.setPlainTextIfChanged(host.mBinding.control.opening, host.mHistory.getOpening() == 0 ? host.getString(R.string.play_op) : host.mPlayers.stringToTime(host.mHistory.getOpening()));
             host.setPlainTextIfChanged(host.mBinding.control.ending, host.mHistory.getEnding() == 0 ? host.getString(R.string.play_ed) : host.mPlayers.stringToTime(host.mHistory.getEnding()));
@@ -2274,10 +2275,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         replay = replay || !sameEpisode;
         pendingHistoryFlag = flag;
         pendingHistoryEpisode = item;
-        pendingHistoryPosition = hasProgressOverride ? pendingProgressPosition : replay ? 0 : mHistory.getPosition();
+        pendingHistoryPosition = hasProgressOverride ? pendingProgressPosition : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
         lastPlaybackAttemptPosition = pendingHistoryPosition;
         pendingHistorySkipOpening = replay;
-        mPlayers.setPosition(Math.max(mHistory.getOpening(), pendingHistoryPosition));
+        mPlayers.setPosition(Math.max(mHistory == null ? 0 : mHistory.getOpening(), pendingHistoryPosition));
     }
 
     private void commitPendingHistoryUpdate() {
@@ -2373,7 +2374,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onTimeChanged() {
         onTimeChangeDisplaySpeed();
-        if (hasPendingHistoryUpdate()) return;
+        if (hasPendingHistoryUpdate() || mHistory == null) return;
         long position, duration;
         mHistory.setPosition(position = mPlayers.getPosition());
         mHistory.setDuration(duration = mPlayers.getDuration());
@@ -3136,10 +3137,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onSpeedEnd() {
+        if (mHistory == null) return;
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.setSpeed(mHistory.getSpeed()));
         setDanmuViewSettings();
-        
-        
         setVisibilityIfChanged(mBinding.widget.speed, View.GONE);
         mBinding.widget.speed.clearAnimation();
     }
