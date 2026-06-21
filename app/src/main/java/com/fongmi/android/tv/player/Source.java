@@ -98,7 +98,7 @@ public class Source {
                 callables.add(task.callable);
             }
             if (callables.isEmpty()) continue;
-            List<Future<List<Episode>>> futures = executor.invokeAll(callables, 30, TimeUnit.SECONDS);
+            List<Future<List<Episode>>> futures = executor.invokeAll(callables, 60, TimeUnit.SECONDS);
             for (int i = 0; i < futures.size(); i++) {
                 try {
                     if (Thread.currentThread().isInterrupted()) throw new InterruptedException();

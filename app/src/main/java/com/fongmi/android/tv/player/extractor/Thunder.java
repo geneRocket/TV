@@ -19,6 +19,7 @@ import com.xunlei.downloadlib.parameter.XLTaskInfo;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
@@ -49,7 +50,7 @@ public class Thunder implements Source.Extractor {
             XLTaskInfo taskInfo = XLTaskHelper.get().getBtSubTaskInfo(taskId, index).mTaskInfo;
             if (taskInfo.mTaskStatus == 3) throw new ExtractException(taskInfo.getErrorMsg());
             if (taskInfo.mTaskStatus != 0) return XLTaskHelper.get().getLocalUrl(new File(torrent.getParent(), name));
-            else SystemClock.sleep(300);
+            else Thread.sleep(500);
         }
     }
 
@@ -73,12 +74,11 @@ public class Thunder implements Source.Extractor {
 
     public static class Parser implements Callable<List<Episode>> {
 
-        private static final Pattern THUNDER = Pattern.compile("(magnet|thunder|ed2k):.*");
         private final String url;
         private int time;
 
         public static boolean match(String url) {
-            return THUNDER.matcher(url).find() || isTorrent(url);
+            return url.startsWith("magnet:?") || url.startsWith("thunder://") || url.startsWith("ed2k://") || isTorrent(url);
         }
 
         public static Parser get(String url) {
@@ -89,9 +89,9 @@ public class Thunder implements Source.Extractor {
             this.url = url;
         }
 
-        private void sleep() {
-            SystemClock.sleep(10);
-            time += 10;
+        private void sleep() throws InterruptedException {
+            Thread.sleep(100);
+            time += 100;
         }
 
         private static boolean isTorrent(String url) {
@@ -100,16 +100,20 @@ public class Thunder implements Source.Extractor {
 
         @Override
         public List<Episode> call() {
-            boolean torrent = isTorrent(url);
-            List<Episode> episodes = new ArrayList<>();
-            GetTaskId taskId = XLTaskHelper.get().parse(url, Path.thunder(Util.md5(url)));
-            if (!torrent && !taskId.getRealUrl().startsWith("magnet")) return Arrays.asList(Episode.create(taskId.getFileName(), taskId.getRealUrl()));
-            if (torrent) Download.create(url, taskId.getSaveFile()).start();
-            else while (XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus() != 2 && time < 60000) sleep();
-            List<TorrentFileInfo> medias = XLTaskHelper.get().getTorrentInfo(taskId.getSaveFile()).getMedias();
-            for (TorrentFileInfo media : medias) episodes.add(Episode.create(media.getFileName(), media.getSize(), media.getPlayUrl()));
-            XLTaskHelper.get().stopTask(taskId);
-            return episodes;
+            try {
+                boolean torrent = isTorrent(url);
+                List<Episode> episodes = new ArrayList<>();
+                GetTaskId taskId = XLTaskHelper.get().parse(url, Path.thunder(Util.md5(url)));
+                if (!torrent && !taskId.getRealUrl().startsWith("magnet")) return Arrays.asList(Episode.create(taskId.getFileName(), taskId.getRealUrl()));
+                if (torrent) Download.create(url, taskId.getSaveFile()).start();
+                else while (XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus() != 2 && time < 60000) sleep();
+                List<TorrentFileInfo> medias = XLTaskHelper.get().getTorrentInfo(taskId.getSaveFile()).getMedias();
+                for (TorrentFileInfo media : medias) episodes.add(Episode.create(media.getFileName(), media.getSize(), media.getPlayUrl()));
+                XLTaskHelper.get().stopTask(taskId);
+                return episodes;
+            } catch (InterruptedException e) {
+                return Collections.emptyList();
+            }
         }
     }
 }
