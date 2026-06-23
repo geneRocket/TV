@@ -29,7 +29,7 @@ public class JSUtil {
     public static JSObject toObj(QuickJSContext ctx, Map<String, String> map) {
         JSObject obj = ctx.createNewJSObject();
         if (map == null || map.isEmpty()) return obj;
-        for (String s : map.keySet()) obj.setProperty(s, map.get(s));
+        for (Map.Entry<String, String> entry : map.entrySet()) obj.setProperty(entry.getKey(), entry.getValue());
         return obj;
     }
 

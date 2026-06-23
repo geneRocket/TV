@@ -56,8 +56,8 @@ public class Spider extends com.github.catvod.crawler.Spider {
     }
 
     private Object call(String func, Object... args) throws Exception {
-        //return executor.submit((Function.call(jsObject, func, args))).get();
-        return CompletableFuture.supplyAsync(() -> Async.run(jsObject, func, args), executor).join().get();
+        CompletableFuture<Object> future = submit(() -> Async.run(jsObject, func, args)).get();
+        return future.get();
     }
 
     @Override
@@ -141,16 +141,23 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void destroy() {
-        try {
-            call("destroy");
-        } catch (Throwable e) {
-            e.printStackTrace();
-        }
         submit(() -> {
-            executor.shutdownNow();
-            jsObject.release();
-            ctx.destroy();
+            try {
+                Async.run(jsObject, "destroy", new Object[0]);
+            } catch (Throwable e) {
+                e.printStackTrace();
+            } finally {
+                release();
+                executor.shutdownNow();
+            }
         });
+    }
+
+    private void release() {
+        if (jsObject != null) jsObject.release();
+        if (ctx != null) ctx.destroy();
+        jsObject = null;
+        ctx = null;
     }
 
     private void initializeJS() throws Exception {
