@@ -522,7 +522,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 showHomeProgress();
                 Setting.putVodConfigDesc(config.getDesc());
                 Setting.putVodConfigUrls(config.getUrl());
-                VodConfig.load(config, getCallback(success));
+                VodConfig.load(config, getCallback(success), true);
                 break;
         }
     }
@@ -534,7 +534,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 showHomeProgress();
                 Setting.putVodConfigDesc(getConfigsDesc(configs));
                 Setting.putVodConfigUrls(getConfigsUrls(configs));
-                VodConfig.load(configs, getCallback(success));
+                VodConfig.load(configs, getCallback(success), false, true);
                 break;
         }
     }

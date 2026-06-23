@@ -167,14 +167,14 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         switch (config.getType()) {
             case 0:
                 Notify.progress(this);
-                VodConfig.load(config, getCallback());
+                VodConfig.load(config, getCallback(), true);
                 Setting.putVodConfigDesc(config.getDesc());
                 Setting.putVodConfigUrls(config.getUrl());
                 mBinding.vodUrl.setText(config.getDesc());
                 break;
             case 1:
                 Notify.progress(this);
-                LiveConfig.load(config, getCallback());
+                LiveConfig.load(config, getCallback(), true);
                 Setting.putLiveConfigDesc(config.getDesc());
                 Setting.putLiveConfigUrls(config.getUrl());
                 mBinding.liveUrl.setText(config.getDesc());
@@ -193,14 +193,14 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         switch (first.getType()) {
             case 0:
                 Notify.progress(this);
-                VodConfig.load(configs, getCallback());
+                VodConfig.load(configs, getCallback(), false, true);
                 Setting.putVodConfigDesc(getConfigsDesc(configs));
                 Setting.putVodConfigUrls(getConfigsUrls(configs));
                 mBinding.vodUrl.setText(getVodConfigDesc());
                 break;
             case 1:
                 Notify.progress(this);
-                LiveConfig.load(configs, getCallback());
+                LiveConfig.load(configs, getCallback(), true);
                 Setting.putLiveConfigDesc(getConfigsDesc(configs));
                 Setting.putLiveConfigUrls(getConfigsUrls(configs));
                 mBinding.liveUrl.setText(getLiveConfigDesc());

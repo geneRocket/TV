@@ -54,6 +54,7 @@ public class LiveConfig {
     private List<String> hosts;
     private List<String> ruleHosts;
     private boolean persistCache;
+    private int loadToken;
     private Config config;
     private boolean sync;
     private Live home;
@@ -134,6 +135,7 @@ public class LiveConfig {
     }
 
     public synchronized LiveConfig clear() {
+        this.loadToken++;
         for (Live live : getLives()) BaseLoader.get().clearLive(live.getName(), live.getApi(), live.getExt(), live.getJar());
         this.home = null;
         this.ads.clear();
@@ -225,17 +227,19 @@ public class LiveConfig {
     private void loadConfigCache(Callback callback) {
         if (config.isEmpty()) config(Config.live());
         if (!TextUtils.isEmpty(config.getJson())) {
+            Config target = config;
+            int token = getLoadToken();
             parseConfig(config.getJson(), callback);
             if (!config.isCache()) App.execute(() -> {
                 try {
-                    String text = Decoder.getJson(config.getUrl());
+                    String text = Decoder.getJson(target.getUrl());
                     if (Json.invalid(text)) {
-                        cacheConfig(config, text);
-                        App.post(() -> parseConfig(text, null));
+                        cacheConfig(target, text);
+                        App.post(() -> { if (isCurrentLoad(token, target)) parseConfig(text, null); });
                     } else {
                         JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
-                        cacheConfig(config, object);
-                        App.post(() -> parseConfig(object, null));
+                        cacheConfig(target, object);
+                        App.post(() -> { if (isCurrentLoad(token, target)) parseConfig(object, null); });
                     }
                 } catch (Throwable ignored) {
                 }
@@ -243,6 +247,14 @@ public class LiveConfig {
         } else {
             loadConfig(callback);
         }
+    }
+
+    private synchronized int getLoadToken() {
+        return loadToken;
+    }
+
+    private synchronized boolean isCurrentLoad(int token, Config target) {
+        return token == loadToken && target != null && config != null && config.getType() == target.getType() && TextUtils.equals(config.getUrl(), target.getUrl());
     }
 
     private void loadCache(Callback callback, Throwable e) {

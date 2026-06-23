@@ -57,6 +57,7 @@ public class VodConfig {
     private Map<String, Parse> parseMap;
     private boolean loadLive;
     private boolean persistCache;
+    private int loadToken;
     private Config config;
     private Parse parse;
     private String wall;
@@ -175,6 +176,7 @@ public class VodConfig {
     }
 
     public synchronized VodConfig clear() {
+        this.loadToken++;
         this.wall = null;
         this.home = null;
         this.parse = null;
@@ -455,18 +457,28 @@ public class VodConfig {
     private void loadConfigCache(Callback callback) {
         if (config.isEmpty()) config = Config.vod();
         if (!TextUtils.isEmpty(config.getJson())) {
+            Config target = config;
+            int token = getLoadToken();
             parseConfig(config.getJson(), callback);
             if (!config.isCache()) App.execute(() -> {
                 try {
-                    JsonObject object = loadObject(config.getUrl(), 0);
-                    cacheConfig(config, object);
-                    App.post(() -> parseConfig(object, null));
+                    JsonObject object = loadObject(target.getUrl(), 0);
+                    cacheConfig(target, object);
+                    App.post(() -> { if (isCurrentLoad(token, target)) parseConfig(object, null); });
                 } catch (Throwable ignored) {
                 }
             });
         } else {
             loadConfig(callback);
         }
+    }
+
+    private synchronized int getLoadToken() {
+        return loadToken;
+    }
+
+    private synchronized boolean isCurrentLoad(int token, Config target) {
+        return token == loadToken && target != null && config != null && config.getType() == target.getType() && TextUtils.equals(config.getUrl(), target.getUrl());
     }
 
     private void checkJson(JsonObject object, Callback callback) {
