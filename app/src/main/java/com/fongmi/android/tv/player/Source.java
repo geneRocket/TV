@@ -74,45 +74,55 @@ public class Source {
     }
 
     private ParseTask getTask(Episode episode, int index) {
+        if (episode == null || TextUtils.isEmpty(episode.getUrl())) return null;
         String url = episode.getUrl();
-        List<Episode> cached = getCachedEpisodes(url);
-        if (cached != null) return new ParseTask(index, url, () -> cached);
         if (Thunder.Parser.match(url)) return new ParseTask(index, url, Thunder.Parser.get(url));
         if (Youtube.Parser.match(url)) return new ParseTask(index, url, Youtube.Parser.get(url));
         return null;
     }
 
     public void parse(List<Flag> flags) throws Exception {
+        if (flags == null || flags.isEmpty()) return;
         ExecutorService executor = ThreadPools.preloadParse();
         for (Flag flag : flags) {
             if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+            if (flag == null || flag.getEpisodes() == null || flag.getEpisodes().isEmpty()) continue;
             List<Episode> originals = new ArrayList<>(flag.getEpisodes());
             List<ParseTask> tasks = new ArrayList<>();
             List<Callable<List<Episode>>> callables = new ArrayList<>();
             Map<Integer, List<Episode>> replacements = new HashMap<>();
             for (int i = 0; i < originals.size(); i++) {
-                if (tasks.size() >= MAX_PRELOAD_TASKS_PER_FLAG) break;
-                ParseTask task = getTask(originals.get(i), i);
+                Episode episode = originals.get(i);
+                String url = episode == null ? "" : episode.getUrl();
+                List<Episode> cached = getCachedEpisodes(url);
+                if (cached != null) {
+                    replacements.put(i, cached);
+                    continue;
+                }
+                if (tasks.size() >= MAX_PRELOAD_TASKS_PER_FLAG) continue;
+                ParseTask task = getTask(episode, i);
                 if (task == null) continue;
                 tasks.add(task);
                 callables.add(task.callable);
             }
-            if (callables.isEmpty()) continue;
-            List<Future<List<Episode>>> futures = executor.invokeAll(callables, 60, TimeUnit.SECONDS);
-            for (int i = 0; i < futures.size(); i++) {
-                try {
-                    if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-                    List<Episode> episodes = futures.get(i).get();
-                    if (episodes != null && !episodes.isEmpty()) {
-                        String key = tasks.get(i).url;
-                        putCachedEpisodes(key, episodes);
-                        replacements.put(tasks.get(i).index, copyEpisodes(episodes));
+            if (!callables.isEmpty()) {
+                List<Future<List<Episode>>> futures = executor.invokeAll(callables, 60, TimeUnit.SECONDS);
+                for (int i = 0; i < futures.size(); i++) {
+                    try {
+                        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                        List<Episode> episodes = futures.get(i).get();
+                        if (episodes != null && !episodes.isEmpty()) {
+                            String key = tasks.get(i).url;
+                            putCachedEpisodes(key, episodes);
+                            replacements.put(tasks.get(i).index, copyEpisodes(episodes));
+                        }
+                    } catch (Exception e) {
+                        if (e instanceof InterruptedException) throw e;
+                        ThreadPools.log(e, "Episode preload parse failed.");
                     }
-                } catch (Exception e) {
-                    if (e instanceof InterruptedException) throw e;
-                    ThreadPools.log(e, "Episode preload parse failed.");
                 }
             }
+            if (replacements.isEmpty()) continue;
             flag.getEpisodes().clear();
             for (int i = 0; i < originals.size(); i++) {
                 List<Episode> episodes = replacements.get(i);

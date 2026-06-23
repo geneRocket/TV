@@ -63,6 +63,8 @@ public class XLTaskHelper {
     }
 
     public synchronized GetTaskId addThunderTask(String url, File savePath) {
+        if (url.startsWith("thunder://")) url = getManager().parserThunderUrl(url);
+        if (url == null) return new GetTaskId(savePath);
         String fileName = getManager().getFileNameFromUrl(url);
         GetTaskId taskId = new GetTaskId(savePath, fileName, url);
         if (url.startsWith("ftp://")) {

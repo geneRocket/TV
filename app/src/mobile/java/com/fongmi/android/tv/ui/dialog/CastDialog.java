@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.content.Context;
 import android.net.wifi.WifiManager;
 import android.view.LayoutInflater;
 import android.view.View;

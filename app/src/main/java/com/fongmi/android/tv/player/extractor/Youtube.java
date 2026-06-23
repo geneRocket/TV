@@ -102,7 +102,7 @@ public class Youtube implements Source.Extractor {
         private final String url;
 
         public static boolean match(String url) {
-            return PATTERN.matcher(url).find();
+            return url != null && PATTERN.matcher(url).find();
         }
 
         public static Parser get(String url) {

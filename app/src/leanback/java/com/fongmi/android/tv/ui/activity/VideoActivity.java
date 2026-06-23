@@ -90,6 +90,7 @@ import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.SearchSorter;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.Traffic;
@@ -120,6 +121,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -1414,7 +1416,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean revSort = mHistory != null && mHistory.isRevSort();
         List<Flag> snapshot = copyFlags(item.getVodFlags());
         if (snapshot.isEmpty()) return;
-        mDetailParseTask = mDetailExecutor.submit(() -> {
+        FutureTask<?>[] holder = new FutureTask<?>[1];
+        holder[0] = new FutureTask<>(() -> {
             try {
                 Source.get().parse(snapshot);
                 if (Thread.currentThread().isInterrupted()) return;
@@ -1424,9 +1427,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             } catch (Throwable e) {
                 ThreadPools.log(e, "Detail preload failed.");
             } finally {
-                mDetailParseTask = null;
+                if (mDetailParseTask == holder[0]) mDetailParseTask = null;
             }
-        });
+        }, null);
+        mDetailParseTask = holder[0];
+        mDetailExecutor.execute(holder[0]);
     }
 
     private List<Flag> copyFlags(List<Flag> flags) {
@@ -2885,6 +2890,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         App.post(() -> {
             if (!mSearchActive || !TextUtils.equals(token, pendingSearchToken)) return;
             for (Vod item : items) {
+                if (hasQuickItem(item)) continue;
                 int index = findQuickItemInsertPosition(item);
                 mQuickAdapter.add(index, item);
             }
@@ -2897,6 +2903,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 mPlaybackNavigation.nextSite();
             }
         }, 100);
+    }
+
+    private boolean hasQuickItem(Vod item) {
+        String key = SearchSorter.key(item);
+        if (key.isEmpty()) return true;
+        for (int i = 0; i < mQuickAdapter.size(); i++) if (key.equals(SearchSorter.key((Vod) mQuickAdapter.get(i)))) return true;
+        return false;
     }
 
     private int findQuickItemInsertPosition(Vod item) {

@@ -15,10 +15,9 @@ import com.fongmi.android.tv.ui.base.BaseVodHolder;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.holder.VodOneHolder;
 import com.fongmi.android.tv.ui.holder.VodRectHolder;
-import com.fongmi.android.tv.utils.Util;
+import com.fongmi.android.tv.utils.SearchSorter;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class SearchAdapter extends RecyclerView.Adapter<BaseVodHolder> {
@@ -66,10 +65,7 @@ public class SearchAdapter extends RecyclerView.Adapter<BaseVodHolder> {
 
     public void addAll(List<Vod> items) {
         if (items == null || items.isEmpty()) return;
-        for (Vod item : items) item.setScore(Util.similarity(item.getVodName(), keyword));
-        List<Vod> newItems = new ArrayList<>(mItems);
-        newItems.addAll(items);
-        if (keyword != null && !keyword.isEmpty()) Collections.sort(newItems, (o1, o2) -> Double.compare(o2.getScore(), o1.getScore()));
+        List<Vod> newItems = SearchSorter.merge(mItems, items, keyword);
         DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {

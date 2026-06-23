@@ -99,6 +99,7 @@ import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PiP;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.SearchSorter;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.Traffic;
@@ -1705,12 +1706,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         setPendingSearchToken(token);
         mExecutor = ThreadPools.newFixed("video-search", Math.max(2, Math.min(6, Constant.THREAD_POOL)));
         mSearchActive = true;
-        mSearchGeneration++;
-        mSearchPendingCount = 0;
         Set<String> keys = new HashSet<>();
         for (Site item : VodConfig.get().getSites()) if (isPass(item) && keys.add(item.getKey())) sites.add(item);
-        mSearchPendingCount = sites.size();
-        for (Site site : sites) mExecutor.execute(() -> search(site, keyword, token, mSearchGeneration));
+        int generation = beginSearchTaskState(sites.size());
+        for (Site site : sites) mExecutor.execute(() -> search(site, keyword, token, generation));
         if (sites.isEmpty()) showEmpty();
     }
 
@@ -1720,7 +1719,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mExecutor = null;
         mSearchActive = false;
         pendingSearchToken = null;
-        mSearchPendingCount = 0;
+        resetSearchTaskState();
     }
 
     private void search(Site site, String keyword, String token, int generation) {
@@ -1741,9 +1740,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         while (iterator.hasNext()) if (mismatch(iterator.next())) iterator.remove();
         mBinding.quick.setVisibility(View.VISIBLE);
         mQuickAdapter.addAll(items);
-        mQuickAdapter.sort((a, b) -> Integer.compare(searchRank(a), searchRank(b)));
+        mQuickAdapter.sort((a, b) -> SearchSorter.compare(a, b, mBinding.name.getText().toString(), getCurrentActor()));
         if (isInitAuto()) {
-            if (mSearchPendingCount == 0 || mQuickAdapter.getItemCount() >= 10) {
+            if (!hasPendingSearchTasks() || mQuickAdapter.getItemCount() >= 10) {
                 nextSite();
             }
         }
@@ -1763,6 +1762,21 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             if (isInitAuto() && !mQuickAdapter.isEmpty()) nextSite();
             else if (mQuickAdapter.isEmpty() && (isInitAuto() || isAutoMode())) showEmpty();
         });
+    }
+
+    private synchronized int beginSearchTaskState(int count) {
+        mSearchGeneration++;
+        mSearchPendingCount = Math.max(count, 0);
+        return mSearchGeneration;
+    }
+
+    private synchronized void resetSearchTaskState() {
+        mSearchGeneration++;
+        mSearchPendingCount = 0;
+    }
+
+    private synchronized boolean hasPendingSearchTasks() {
+        return mSearchPendingCount > 0;
     }
 
     private boolean mismatch(Vod item) {
@@ -1788,16 +1802,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         return getKey() + "@" + (getId().isEmpty() ? Util.normalize(mBinding.name.getText().toString()) : getId());
     }
 
-    private int searchRank(Vod item) {
-        String keyword = Util.normalize(mBinding.name.getText().toString());
-        String name = Util.normalize(item.getVodName());
-        String remark = Util.normalize(item.getVodRemarks());
-        if (name.equals(keyword)) return 0;
-        if (name.startsWith(keyword)) return 1;
-        if (remark.equals(keyword) || remark.startsWith(keyword)) return 2;
-        if (name.contains(keyword)) return 3;
-        if (remark.contains(keyword)) return 4;
-        return 5;
+    private String getCurrentActor() {
+        return mBinding.actor.getTag() == null ? "" : mBinding.actor.getTag().toString();
     }
 
     private void nextParse(int position) {
@@ -1815,7 +1821,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void nextSite() {
         Vod item = mQuickAdapter.poll(mBroken, getKey(), getId());
         if (item == null) {
-            if (!mSearchActive || mSearchPendingCount <= 0) showEmpty();
+            if (!mSearchActive || !hasPendingSearchTasks()) showEmpty();
             return;
         }
         Notify.show(getString(R.string.play_switch_site, item.getSiteName()));

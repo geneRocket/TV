@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player.extractor;
 import android.net.Uri;
 
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.utils.Path;
 import com.p2p.P2PClass;
 
@@ -19,7 +20,7 @@ public class JianPian implements Source.Extractor {
 
     @Override
     public boolean match(Uri uri) {
-        String scheme=uri.getScheme();
+        String scheme = UrlUtil.scheme(uri);
         return "tvbox-xg".equals(scheme) || "jianpian".equals(scheme) || "ftp".equals(scheme);
     }
 
@@ -33,32 +34,29 @@ public class JianPian implements Source.Extractor {
         init();
         stop();
         start(url);
-        return "http://127.0.0.1:" + p2p.port + "/" + URLEncoder.encode(Uri.parse(path).getLastPathSegment(), "GBK");
+        String name = Uri.parse(path).getLastPathSegment();
+        return "http://127.0.0.1:" + p2p.port + "/" + URLEncoder.encode(name == null ? "" : name, "GBK");
     }
 
-    private void start(String url) {
-        try {
-            String lastPath = path;
-            path = URLDecoder.decode(url).split("\\|")[0];
-            path = path.replace("jianpian://pathtype=url&path=", "");
-            path = path.replace("tvbox-xg://", "").replace("tvbox-xg:", "");
-            path = path.replace("xg://", "ftp://").replace("xgplay://", "ftp://");
-            boolean isDiff = lastPath != null && !lastPath.equals(path);
-            if (isDiff) p2p.P2Pdoxdel(lastPath.getBytes("GBK"));
-            p2p.P2Pdoxstart(path.getBytes("GBK"));
-            if (lastPath == null || isDiff) p2p.P2Pdoxadd(path.getBytes("GBK"));
-            if (isDiff && pathPaused.containsKey(lastPath)) pathPaused.remove(lastPath);
-            pathPaused.put(path, false);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    private void start(String url) throws Exception {
+        String lastPath = path;
+        path = URLDecoder.decode(url, "UTF-8").split("\\|")[0];
+        path = path.replace("jianpian://pathtype=url&path=", "");
+        path = path.replace("tvbox-xg://", "").replace("tvbox-xg:", "");
+        path = path.replace("xg://", "ftp://").replace("xgplay://", "ftp://");
+        boolean isDiff = lastPath != null && !lastPath.equals(path);
+        if (isDiff) p2p.P2Pdoxdel(lastPath.getBytes("GBK"));
+        p2p.P2Pdoxstart(path.getBytes("GBK"));
+        if (lastPath == null || isDiff) p2p.P2Pdoxadd(path.getBytes("GBK"));
+        if (isDiff && pathPaused.containsKey(lastPath)) pathPaused.remove(lastPath);
+        pathPaused.put(path, false);
     }
 
     @Override
     public void stop() {
         try {
             if (p2p == null || path == null) return;
-            if (pathPaused.containsKey(path) && pathPaused.get(path)) return;
+            if (Boolean.TRUE.equals(pathPaused.get(path))) return;
             p2p.P2Pdoxpause(path.getBytes("GBK"));
             pathPaused.put(path, true);
         } catch (Exception e) {
