@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.api.loader;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.chaquo.Loader;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderNull;
@@ -22,7 +23,7 @@ public class PyLoader {
     }
 
     public void clear() {
-        spiders.values().forEach(spider -> App.execute(spider::destroy));
+        spiders.values().forEach(spider -> ThreadPools.loader().execute(spider::destroy));
         spiders.clear();
         locks.clear();
     }
@@ -30,7 +31,7 @@ public class PyLoader {
     public void clear(String key) {
         Spider spider = spiders.remove(key);
         locks.remove(key);
-        if (spider != null) App.execute(spider::destroy);
+        if (spider != null) ThreadPools.loader().execute(spider::destroy);
         if (key != null && key.equals(recent)) recent = null;
     }
 
