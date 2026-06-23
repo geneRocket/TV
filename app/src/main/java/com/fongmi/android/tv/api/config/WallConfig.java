@@ -15,6 +15,7 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Path;
@@ -70,7 +71,7 @@ public class WallConfig {
     }
 
     public void load(Callback callback) {
-        App.execute(() -> loadConfig(callback));
+        ThreadPools.config().execute(() -> loadConfig(callback));
     }
 
     private void loadConfig(Callback callback) {

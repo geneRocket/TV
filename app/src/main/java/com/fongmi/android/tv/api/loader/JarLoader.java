@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.Decoder;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderNull;
@@ -40,7 +41,7 @@ public class JarLoader {
     }
 
     public void clear() {
-        for (Spider spider : spiders.values()) App.execute(spider::destroy);
+        for (Spider spider : spiders.values()) ThreadPools.loader().execute(spider::destroy);
         loaders.clear();
         methods.clear();
         spiders.clear();
@@ -55,7 +56,7 @@ public class JarLoader {
             if (spider == null || !key.equals(spider.siteKey)) return false;
             locks.remove(entry.getKey());
             if (entry.getKey().length() > 32) jars.put(entry.getKey().substring(0, 32), true);
-            App.execute(spider::destroy);
+            ThreadPools.loader().execute(spider::destroy);
             return true;
         });
         for (String jarKey : jars.keySet()) {
@@ -126,11 +127,11 @@ public class JarLoader {
             synchronized (locks.computeIfAbsent(key, k -> new Object())) {
                 if (!loaders.containsKey(key)) load(key, file);
             }
-            if (jarUrl.startsWith("http")) App.execute(() -> checkUpdate(jarUrl, md5Url));
+            if (jarUrl.startsWith("http")) ThreadPools.loader().execute(() -> checkUpdate(jarUrl, md5Url));
             return;
         }
 
-        App.execute(() -> {
+        ThreadPools.loader().execute(() -> {
             String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
             synchronized (locks.computeIfAbsent(key, k -> new Object())) {
                 if (loaders.containsKey(key)) return;

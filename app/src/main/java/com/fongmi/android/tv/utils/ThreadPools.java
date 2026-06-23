@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class ThreadPools {
 
     private static final String TAG = "ThreadPools";
+    private static final ExecutorService CONFIG = newFixed("config", Math.max(2, Constant.THREAD_POOL / 2));
+    private static final ExecutorService LOADER = newFixed("loader", Math.max(2, Constant.THREAD_POOL / 2));
     private static final ExecutorService SEARCH = newFixed("search", Constant.THREAD_POOL);
     private static final ExecutorService PARSE = newFixed("parse", Constant.THREAD_POOL);
     private static final ExecutorService PRELOAD_PARSE = newFixed("preload-parse", Math.max(2, Constant.THREAD_POOL / 4));
@@ -31,6 +33,14 @@ public final class ThreadPools {
 
     public static ThreadFactory newThreadFactory(String name) {
         return threadFactory(name);
+    }
+
+    public static ExecutorService config() {
+        return CONFIG;
+    }
+
+    public static ExecutorService loader() {
+        return LOADER;
     }
 
     public static ExecutorService search() {

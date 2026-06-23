@@ -2,11 +2,11 @@ package com.fongmi.android.tv.api.loader;
 
 import android.text.TextUtils;
 
-import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderNull;
 import com.github.catvod.utils.Util;
@@ -139,7 +139,7 @@ public class BaseLoader {
 
     public void parseJar(String jar, boolean recent) {
         if (TextUtils.isEmpty(jar)) return;
-        App.execute(() -> {
+        ThreadPools.loader().execute(() -> {
             jarLoader.parseJar(Util.md5(jar), jar);
             if (recent) jarLoader.setRecent(Util.md5(jar));
         });

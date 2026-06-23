@@ -203,26 +203,26 @@ public class VodConfig {
     }
 
     public void load(Callback callback, boolean cache) {
-        if (cache) App.execute(() -> loadConfigCache(callback));
-        else App.execute(() -> loadConfig(callback));
+        if (cache) ThreadPools.config().execute(() -> loadConfigCache(callback));
+        else ThreadPools.config().execute(() -> loadConfig(callback));
     }
 
     public void loadMulti(List<Config> configs, Callback callback) {
         this.persistCache = false;
-        App.execute(() -> loadConfigs(configs, callback));
+        ThreadPools.config().execute(() -> loadConfigs(configs, callback));
     }
 
     public void loadMulti(List<Config> configs, Callback callback, boolean loadLive) {
         this.loadLive = loadLive;
         this.persistCache = false;
-        App.execute(() -> loadConfigs(configs, callback));
+        ThreadPools.config().execute(() -> loadConfigs(configs, callback));
     }
 
     public void loadMulti(List<Config> configs, Callback callback, boolean loadLive, boolean cache) {
         this.loadLive = loadLive;
         this.persistCache = false;
-        if (cache) App.execute(() -> loadConfigsCache(configs, callback));
-        else App.execute(() -> loadConfigs(configs, callback));
+        if (cache) ThreadPools.config().execute(() -> loadConfigsCache(configs, callback));
+        else ThreadPools.config().execute(() -> loadConfigs(configs, callback));
     }
 
     private void loadConfig(Callback callback) {
@@ -320,7 +320,7 @@ public class VodConfig {
     private ConfigResult loadConfigResult(Config item, boolean cache) {
         try {
             if (cache && !TextUtils.isEmpty(item.getJson())) {
-                if (!item.isCache()) App.execute(() -> { try { cacheConfig(item, loadObject(item.getUrl(), 0)); } catch (Throwable ignored) {} });
+                if (!item.isCache()) ThreadPools.config().execute(() -> { try { cacheConfig(item, loadObject(item.getUrl(), 0)); } catch (Throwable ignored) {} });
                 return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
             }
             return ConfigResult.success(item, loadObject(item.getUrl(), 0), true);
@@ -460,7 +460,7 @@ public class VodConfig {
             Config target = config;
             int token = getLoadToken();
             parseConfig(config.getJson(), callback);
-            if (!config.isCache()) App.execute(() -> {
+            if (!config.isCache()) ThreadPools.config().execute(() -> {
                 try {
                     JsonObject object = loadObject(target.getUrl(), 0);
                     cacheConfig(target, object);
@@ -518,7 +518,7 @@ public class VodConfig {
 
     private JsonObject loadDepotObject(Config target) throws Throwable {
         if (!TextUtils.isEmpty(target.getJson())) {
-            if (!target.isCache()) App.execute(() -> refreshDepotCache(target));
+            if (!target.isCache()) ThreadPools.config().execute(() -> refreshDepotCache(target));
             return Json.parse(target.getJson()).getAsJsonObject();
         }
         JsonObject loaded = loadObject(target.getUrl(), 0);
@@ -864,7 +864,7 @@ public class VodConfig {
         this.home.setActivated(true);
         config.home(isScopedSiteKey(home.getKey()) && siteCid(home.getKey(), config.getId()) != config.getId() ? home.getKey() : rawSiteKey(home.getKey())).save();
         for (Site item : getSites()) item.setActivated(home);
-        App.execute(() -> {
+        ThreadPools.config().execute(() -> {
             try {
                 String api = home.getApi();
                 if (api.startsWith("http")) {

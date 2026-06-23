@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.api.loader;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.quickjs.crawler.Loader;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderNull;
@@ -22,7 +23,7 @@ public class JsLoader {
     }
 
     public void clear() {
-        spiders.values().forEach(spider -> App.execute(spider::destroy));
+        spiders.values().forEach(spider -> ThreadPools.loader().execute(spider::destroy));
         spiders.clear();
         locks.clear();
         recent = null;
@@ -31,7 +32,7 @@ public class JsLoader {
     public void clear(String key) {
         Spider spider = spiders.remove(key);
         locks.remove(key);
-        if (spider != null) App.execute(spider::destroy);
+        if (spider != null) ThreadPools.loader().execute(spider::destroy);
         if (key != null && key.equals(recent)) recent = null;
     }
 

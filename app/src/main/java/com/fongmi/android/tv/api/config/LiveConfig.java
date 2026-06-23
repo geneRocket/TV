@@ -154,23 +154,23 @@ public class LiveConfig {
     }
 
     public void load(Callback callback) {
-        App.execute(() -> loadConfig(callback));
+        ThreadPools.config().execute(() -> loadConfig(callback));
     }
 
     public void load(Callback callback, boolean cache) {
-        if (cache) App.execute(() -> loadConfigCache(callback));
-        else App.execute(() -> loadConfig(callback));
+        if (cache) ThreadPools.config().execute(() -> loadConfigCache(callback));
+        else ThreadPools.config().execute(() -> loadConfig(callback));
     }
 
     public void loadMulti(List<Config> configs, Callback callback) {
         this.persistCache = false;
-        App.execute(() -> loadConfigs(configs, callback));
+        ThreadPools.config().execute(() -> loadConfigs(configs, callback));
     }
 
     public void loadMulti(List<Config> configs, Callback callback, boolean cache) {
         this.persistCache = false;
-        if (cache) App.execute(() -> loadConfigsCache(configs, callback));
-        else App.execute(() -> loadConfigs(configs, callback));
+        if (cache) ThreadPools.config().execute(() -> loadConfigsCache(configs, callback));
+        else ThreadPools.config().execute(() -> loadConfigs(configs, callback));
     }
 
     private void loadConfig(Callback callback) {
@@ -230,7 +230,7 @@ public class LiveConfig {
             Config target = config;
             int token = getLoadToken();
             parseConfig(config.getJson(), callback);
-            if (!config.isCache()) App.execute(() -> {
+            if (!config.isCache()) ThreadPools.config().execute(() -> {
                 try {
                     String text = Decoder.getJson(target.getUrl());
                     if (Json.invalid(text)) {
@@ -316,7 +316,7 @@ public class LiveConfig {
     private ConfigResult loadConfigResult(Config item, boolean cache) {
         try {
             if (cache && !TextUtils.isEmpty(item.getJson())) {
-                if (!item.isCache()) App.execute(() -> {
+                if (!item.isCache()) ThreadPools.config().execute(() -> {
                     try {
                         String text = Decoder.getJson(item.getUrl());
                         if (Json.invalid(text)) cacheConfig(item, text);
@@ -510,7 +510,7 @@ public class LiveConfig {
 
     private String loadDepotConfig(Config target) throws Throwable {
         if (!TextUtils.isEmpty(target.getJson())) {
-            if (!target.isCache()) App.execute(() -> refreshDepotCache(target));
+            if (!target.isCache()) ThreadPools.config().execute(() -> refreshDepotCache(target));
             return target.getJson();
         }
         String text = Decoder.getJson(target.getUrl());
