@@ -244,9 +244,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         private void stopWithError(ErrorEvent event, boolean terminal) {
             Track.delete(host.getHistoryKey());
             host.showError(event.getMsg());
+            host.markCurrentSourceBroken(event);
             host.stopActivePlayback();
             if (terminal) state.resetError();
-            else host.advanceRecoveryFlow();
+            else host.continueRecoveryFlow();
         }
     }
 
@@ -2507,18 +2508,24 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         onRefresh();
     }
 
-    private void advanceRecoveryFlow() {
-        if (!Setting.isChange() || !getSite().isChangeable()) return;
-        if (isUseParse()) advanceParse();
-        else advanceFlag();
+    private void continueRecoveryFlow() {
+        if (advanceRecoveryFlow()) return;
+        if (isSourceSwitching()) continueSourceSwitch();
     }
 
-    private void advanceParse() {
+    private boolean advanceRecoveryFlow() {
+        if (!Setting.isChange() || !getSite().isChangeable()) return false;
+        if (isUseParse()) return advanceParse();
+        return advanceFlag();
+    }
+
+    private boolean advanceParse() {
         int position = getParsePosition();
         boolean last = position == mParseAdapter.size() - 1;
         if (last) initParse();
-        if (last) advanceFlag();
-        else mPlaybackNavigation.nextParse();
+        if (last) return advanceFlag();
+        mPlaybackNavigation.nextParse();
+        return true;
     }
 
     private void initParse() {
@@ -2527,10 +2534,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         notifyItemChanged(mBinding.control.parse, mParseAdapter);
     }
 
-    private void advanceFlag() {
+    private boolean advanceFlag() {
         int position = getFlagPosition();
-        if (position == mFlagAdapter.size() - 1) mContent.advanceSearch(false);
-        else mPlaybackNavigation.nextFlag();
+        if (position == mFlagAdapter.size() - 1) {
+            mContent.advanceSearch(false);
+            return mSearchActive || mQuickAdapter.size() > 0 || isSourceSwitching();
+        }
+        mPlaybackNavigation.nextFlag();
+        return true;
     }
 
     private void onPaused() {
@@ -2756,7 +2767,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean recoverable = isSourceSwitching() || isAutoMode();
         stopActivePlayback();
         showError(getString(R.string.error_play_timeout));
-        if (recoverable) advanceRecoveryFlow();
+        if (recoverable) {
+            markCurrentSourceBroken();
+            continueRecoveryFlow();
+        }
     }
 
     private void setPendingSearchToken(String token) {
@@ -2860,6 +2874,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void markCurrentSourceBroken() {
         String brokenKey = getCurrentBrokenKey();
         if (!brokenKey.isEmpty()) mBroken.add(brokenKey);
+    }
+
+    private void markCurrentSourceBroken(ErrorEvent event) {
+        if (event == null || (!event.isUrl() && !event.isExtract() && !event.isTimeout())) return;
+        markCurrentSourceBroken();
     }
 
     private String getCurrentBrokenKey() {
