@@ -857,14 +857,14 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             setEpisodeAdapter(new ArrayList<>());
             return;
         }
-        Episode episode = flag.find(mHistory.getVodRemarks(), getMark().isEmpty());
+        Episode episode = flag.find(mHistory == null ? "" : mHistory.getVodRemarks(), getMark().isEmpty());
         setQualityVisible(episode != null && episode.isActivated() && mQualityAdapter.getItemCount() > 1);
         if (episode == null || episode.isActivated()) return;
         if (Setting.getFlag() == 1) {
             episode.setSelected(true);
             mBinding.episode.scrollToPosition(mEpisodeAdapter.getPosition(episode));
         } else {
-            mHistory.setVodRemarks(episode.getName());
+            if (mHistory != null) mHistory.setVodRemarks(episode.getName());
             onItemClick(episode);
             hidePreview();
         }

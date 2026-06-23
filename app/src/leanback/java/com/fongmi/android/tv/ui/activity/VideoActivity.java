@@ -337,12 +337,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         public void playNext() {
             int target = Math.min(host.getEpisodePosition() + 1, host.mEpisodeAdapter.size() - 1);
-            switchEpisodeByIndex(target, host.mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
+            switchEpisodeByIndex(target, host.mHistory != null && host.mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
         }
 
         public void playPrev() {
             int target = Math.max(host.getEpisodePosition() - 1, 0);
-            switchEpisodeByIndex(target, host.mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
+            switchEpisodeByIndex(target, host.mHistory != null && host.mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
         }
 
         private void switchEpisodeByIndex(int index, int errorRes) {
@@ -1524,7 +1524,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void seamless(Flag flag) {
-        String episodeName = isSourceSwitching() ? sourceSwitchEpisode : mHistory.getVodRemarks();
+        String episodeName = isSourceSwitching() ? sourceSwitchEpisode : (mHistory == null ? "" : mHistory.getVodRemarks());
         Episode episode = isSourceSwitchSingleEpisode()
                 ? getDefaultSourceSwitchEpisode(flag)
                 : flag.find(episodeName, !TextUtils.isEmpty(episodeName));
@@ -1547,7 +1547,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             episode.setActivated(false);
         } else {
             applySwitchProgress(flag, episode);
-            mHistory.setVodRemarks(episode.getName());
+            if (mHistory != null) mHistory.setVodRemarks(episode.getName());
             mPlaybackNavigation.switchEpisode(episode);
             hidePreview();
             clearSourceSwitch();
@@ -1810,12 +1810,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void checkNext() {
-        if (mHistory.isRevPlay()) mPlaybackNavigation.playPrev();
+        if (mHistory != null && mHistory.isRevPlay()) mPlaybackNavigation.playPrev();
         else mPlaybackNavigation.playNext();
     }
 
     private void checkPrev() {
-        if (mHistory.isRevPlay()) mPlaybackNavigation.playNext();
+        if (mHistory != null && mHistory.isRevPlay()) mPlaybackNavigation.playNext();
         else mPlaybackNavigation.playPrev();
     }
 
