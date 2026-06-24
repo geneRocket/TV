@@ -125,6 +125,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -150,6 +151,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private ParseAdapter mParseAdapter;
     private CustomKeyDownVod mKeyDown;
     private ExecutorService mExecutor;
+    private ExecutorService mHistoryExecutor;
+    private Future<History> mHistoryTask;
     private SiteViewModel mViewModel;
     private FlagAdapter mFlagAdapter;
     private List<Dialog> mDialogs;
@@ -546,8 +549,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         String token = nextRequestToken("detail");
         setPendingDetailRequest(token);
         mViewModel.detailContentFast(getKey(), getId(), token);
-        String historyKey = getHistoryKey();
-        App.execute(() -> History.find(historyKey));
+        requestHistory(getHistoryKey());
     }
 
     private void getDetail(Vod item) {
@@ -609,8 +611,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         setArtwork(item.getVodPic());
         App.removeCallbacks(mR4);
         checkHistory(item);
-        checkFlag(item);
-        checkKeepImg();
     }
 
     private void setText(TextView view, int resId, String text) {
@@ -1347,15 +1347,59 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }
     }
 
+    private void requestHistory(String key) {
+        cancelHistoryTask();
+        if (mHistoryExecutor == null) mHistoryExecutor = ThreadPools.newSingle("video-history");
+        mHistoryTask = mHistoryExecutor.submit(() -> History.find(key));
+    }
+
+    private void cancelHistoryTask() {
+        if (mHistoryTask != null) {
+            mHistoryTask.cancel(true);
+            mHistoryTask = null;
+        }
+    }
+
     private void checkHistory(Vod item) {
-        mHistory = History.find(getHistoryKey());
-        mHistory = mHistory == null ? createHistory(item) : mHistory;
-        if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
-        mHistory.findEpisode(item.getVodFlags());
-        if (Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
+        String historyKey = getHistoryKey();
+        Future<History> task = mHistoryTask;
+        if (mHistoryExecutor == null) mHistoryExecutor = ThreadPools.newSingle("video-history");
+        mHistoryExecutor.execute(() -> {
+            History history = getPreparedHistory(task, historyKey);
+            history = history == null ? createHistory(item) : history;
+            if (!TextUtils.isEmpty(getMark())) history.setVodRemarks(getMark());
+            history.findEpisode(item.getVodFlags());
+            if (Setting.isIncognito() && history.getKey().equals(historyKey)) history.delete();
+            history.setVodPic(item.getVodPic());
+            History result = history;
+            App.post(() -> {
+                if (isFinishing() || isDestroyed() || !TextUtils.equals(historyKey, getHistoryKey())) return;
+                if (mHistoryTask == task) mHistoryTask = null;
+                applyHistory(result);
+                checkFlag(item);
+                checkKeepImg();
+            });
+        });
+    }
+
+    private History getPreparedHistory(Future<History> task, String historyKey) {
+        if (task != null && !task.isCancelled()) {
+            try {
+                return task.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            } catch (Exception e) {
+                ThreadPools.log(e, "Video history preload failed.");
+            }
+        }
+        return History.find(historyKey);
+    }
+
+    private void applyHistory(History history) {
+        mHistory = history;
         mBinding.control.action.opening.setText(mHistory.getOpening() == 0 ? getString(R.string.play_op) : mPlayers.stringToTime(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() == 0 ? getString(R.string.play_ed) : mPlayers.stringToTime(mHistory.getEnding()));
-        mHistory.setVodPic(item.getVodPic());
         mPlayers.setPlayer(getPlayer());
         setScale(getScale());
         setPlayerView();
@@ -2241,6 +2285,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         super.onDestroy();
         stopSearch();
         clearPlaybackTimeout();
+        cancelHistoryTask();
+        ThreadPools.shutdown(mHistoryExecutor);
         mClock.release();
         mPlayers.release();
         Timer.get().reset();

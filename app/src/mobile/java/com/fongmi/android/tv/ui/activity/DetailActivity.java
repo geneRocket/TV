@@ -12,7 +12,6 @@ import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.viewbinding.ViewBinding;
 
-import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Episode;
@@ -145,8 +144,6 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
 
     private void getDetail() {
         mViewModel.detailContentFast(getKey(), getId(), "");
-        String historyKey = getHistoryKey();
-        App.execute(() -> History.find(historyKey));
     }
 
     private void setDetail(Result result) {
