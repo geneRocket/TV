@@ -121,7 +121,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -440,7 +439,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void requestDetail() {
-            host.cancelDetailPreload();
             String token = host.nextRequestToken("detail");
             host.setPendingDetailRequest(token);
             host.scheduleSourceSwitchTimeout();
@@ -621,7 +619,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                     checkHistory();
                     checkFlag(item);
                     host.checkKeep();
-                    host.preloadDetailFlags(item);
                 });
             });
         }
@@ -709,7 +706,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private PartPresenter mPartPresenter;
     private CustomKeyDownVod mKeyDown;
     private ExecutorService mExecutor;
-    private final ExecutorService mDetailExecutor = ThreadPools.newSingle("video-detail");
     private final Set<Future<?>> mSearchTasks = Collections.synchronizedSet(new HashSet<>());
     private SiteViewModel mViewModel;
     private List<Danmaku> mDanmakus;
@@ -756,7 +752,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String mArtworkUrl;
     private long requestTokenSeed;
     private String pendingDetailToken;
-    private Future<?> mDetailParseTask;
     private String pendingPlaybackKey;
     private String pendingPlaybackFlag;
     private String pendingPlaybackId;
@@ -1408,77 +1403,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int findActivatedEpisodePosition(List<Episode> items) {
         for (int i = 0; i < items.size(); i++) if (items.get(i).isActivated()) return i;
         return 0;
-    }
-
-    private void preloadDetailFlags(Vod item) {
-        cancelDetailPreload();
-        if (item == null || item.getVodFlags().isEmpty()) return;
-        String key = getKey();
-        String id = getId();
-        String token = pendingDetailToken;
-        boolean revSort = mHistory != null && mHistory.isRevSort();
-        List<Flag> snapshot = copyFlags(item.getVodFlags());
-        if (snapshot.isEmpty()) return;
-        FutureTask<?>[] holder = new FutureTask<?>[1];
-        holder[0] = new FutureTask<>(() -> {
-            try {
-                Source.get().parse(snapshot);
-                if (Thread.currentThread().isInterrupted()) return;
-                App.post(() -> applyParsedDetailFlags(key, id, token, snapshot, revSort));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (Throwable e) {
-                ThreadPools.log(e, "Detail preload failed.");
-            } finally {
-                if (mDetailParseTask == holder[0]) mDetailParseTask = null;
-            }
-        }, null);
-        mDetailParseTask = holder[0];
-        mDetailExecutor.execute(holder[0]);
-    }
-
-    private List<Flag> copyFlags(List<Flag> flags) {
-        List<Flag> copies = new ArrayList<>();
-        for (Flag source : flags) {
-            Flag target = Flag.create(source.getFlag());
-            for (Episode episode : source.getEpisodes()) target.getEpisodes().add(Episode.create(episode.getName(), episode.getDesc(), episode.getUrl()));
-            copies.add(target);
-        }
-        return copies;
-    }
-
-    private void applyParsedDetailFlags(String key, String id, String token, List<Flag> flags, boolean revSortSnapshot) {
-        if (!TextUtils.equals(key, getKey())
-                || !TextUtils.equals(id, getId())
-                || !TextUtils.equals(token, pendingDetailToken)
-                || flags.isEmpty()) return;
-        if ((mHistory != null && mHistory.isRevSort()) != revSortSnapshot) {
-            for (Flag flag : flags) Collections.reverse(flag.getEpisodes());
-        }
-        String currentFlag = getCurrentSwitchFlag();
-        String currentEpisode = getCurrentSwitchEpisode();
-        Flag target = findFlag(flags, currentFlag);
-        if (target == null) target = findTargetFlag(flags);
-        if (target == null) return;
-        Episode episode = target.find(currentEpisode, !TextUtils.isEmpty(currentEpisode));
-        if (episode != null) target.toggle(true, episode);
-        for (Flag flag : flags) flag.setActivated(target);
-        mFlagAdapter.setItems(flags, null);
-        mSelectedFlagPosition = Math.max(0, flags.indexOf(target));
-        mBinding.flag.setSelectedPosition(mSelectedFlagPosition);
-        setEpisodeAdapter(target.getEpisodes());
-        if (!target.getEpisodes().isEmpty()) setEpisodeSelectedPosition(getEpisodePosition());
-    }
-
-    private Flag findFlag(List<Flag> flags, String name) {
-        for (Flag flag : flags) if (TextUtils.equals(flag.getFlag(), name)) return flag;
-        return null;
-    }
-
-    private void cancelDetailPreload() {
-        if (mDetailParseTask == null) return;
-        mDetailParseTask.cancel(true);
-        mDetailParseTask = null;
     }
 
     private void setEpisodeView(List<Episode> items) {
@@ -3301,8 +3225,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlaybackState.release();
         mKeyDown.release();
         mContent.stopSearch();
-        cancelDetailPreload();
-        ThreadPools.shutdown(mDetailExecutor);
         mClock.release();
         mPlayers.release();
         clearArtworkTarget();

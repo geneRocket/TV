@@ -173,31 +173,31 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void detailContent(String key, String id, String token) {
-        detailContent(key, id, token, true);
+        requestDetailContent(key, id, token);
     }
 
     public void detailContentFast(String key, String id, String token) {
-        detailContent(key, id, token, false);
+        requestDetailContent(key, id, token);
     }
 
-    private void detailContent(String key, String id, String token, boolean preloadFlags) {
-        executeRequest(result, () -> loadDetailResult(key, id, preloadFlags), key, id, null, token);
+    private void requestDetailContent(String key, String id, String token) {
+        executeRequest(result, () -> loadDetailResult(key, id), key, id, null, token);
     }
 
-    private Result loadDetailResult(String key, String id, boolean preloadFlags) throws Exception {
+    private Result loadDetailResult(String key, String id) throws Exception {
         Site site = VodConfig.get().getSite(key);
         if (site.getType() == 3) {
             Spider spider = site.recent().spider();
             String detailContent = spider.detailContent(Arrays.asList(id));
             SpiderDebug.log(detailContent);
-            return prepareDetailResult(Result.fromJson(detailContent), preloadFlags);
+            return prepareDetailResult(Result.fromJson(detailContent));
         } else if (site.isEmpty() && "push_agent".equals(key)) {
             Vod vod = new Vod();
             vod.setVodId(id);
             vod.setVodName(id);
             vod.setVodPic(ResUtil.getString(R.string.push_image));
             vod.setVodFlags(Flag.create(ResUtil.getString(R.string.push), ResUtil.getString(R.string.play), id));
-            return prepareDetailResult(Result.vod(vod), preloadFlags);
+            return prepareDetailResult(Result.vod(vod));
         } else if (site.isEmpty()) {
             return Result.empty();
         } else {
@@ -206,15 +206,14 @@ public class SiteViewModel extends ViewModel {
             params.put("ids", id);
             String detailContent = call(site, params, true);
             SpiderDebug.log(detailContent);
-            return prepareDetailResult(Result.fromType(site.getType(), detailContent), preloadFlags);
+            return prepareDetailResult(Result.fromType(site.getType(), detailContent));
         }
     }
 
-    private Result prepareDetailResult(Result result, boolean preloadFlags) throws Exception {
+    private Result prepareDetailResult(Result result) {
         if (result.getList().isEmpty()) return result;
         Vod vod = result.getList().get(0);
         vod.setVodFlags();
-        if (preloadFlags) Source.get().parse(vod.getVodFlags());
         return result;
     }
 
