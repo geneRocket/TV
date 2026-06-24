@@ -39,6 +39,7 @@ public class Source {
 
     private final List<Extractor> extractors;
     private final Map<String, List<Episode>> parseCache;
+    private volatile Extractor activeExtractor;
 
     private static class Loader {
         static volatile Source INSTANCE = new Source();
@@ -137,6 +138,7 @@ public class Source {
         if (TextUtils.isEmpty(url)) return "";
         Extractor extractor = getExtractor(UrlUtil.uri(url));
         if (extractor != null) result.setParse(0);
+        prepare(extractor);
         return extractor == null ? url : extractor.fetch(url);
     }
 
@@ -145,12 +147,20 @@ public class Source {
         if (TextUtils.isEmpty(url)) return "";
         Extractor extractor = getExtractor(UrlUtil.uri(url));
         if (extractor != null) channel.setParse(0);
+        prepare(extractor);
         return extractor == null ? url : extractor.fetch(url);
+    }
+
+    private void prepare(Extractor extractor) {
+        Extractor previous = activeExtractor;
+        if (previous != null) previous.stop();
+        activeExtractor = extractor;
     }
 
     public void stop() {
         if (extractors == null) return;
         extractors.forEach(Extractor::stop);
+        activeExtractor = null;
     }
 
     public void exit() {

@@ -223,7 +223,6 @@ public class SiteViewModel extends ViewModel {
 
     private void executePlayer(MutableLiveData<Result> data, String key, String flag, String id, String token) {
         executeRequest(data, () -> {
-            Source.get().stop();
             Site site = VodConfig.get().getSite(key);
             if (site.getType() == 3) {
                 Spider spider = site.recent().spider();
