@@ -144,6 +144,8 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
 
     private void getDetail() {
         mViewModel.detailContentFast(getKey(), getId(), "");
+        String historyKey = getHistoryKey();
+        App.execute(() -> History.find(historyKey));
     }
 
     private void setDetail(Result result) {

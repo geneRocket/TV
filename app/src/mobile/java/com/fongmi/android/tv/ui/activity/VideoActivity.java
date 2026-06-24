@@ -546,6 +546,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         String token = nextRequestToken("detail");
         setPendingDetailRequest(token);
         mViewModel.detailContentFast(getKey(), getId(), token);
+        String historyKey = getHistoryKey();
+        App.execute(() -> History.find(historyKey));
     }
 
     private void getDetail(Vod item) {

@@ -445,6 +445,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setPendingDetailRequest(token);
             host.scheduleSourceSwitchTimeout();
             host.mViewModel.detailContentFast(host.getKey(), host.getId(), token);
+            String historyKey = host.getHistoryKey();
+            App.execute(() -> History.find(historyKey));
         }
 
         public void handleMissingDetail() {
