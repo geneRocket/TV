@@ -59,6 +59,7 @@ public class JianPian implements Source.Extractor {
             if (Boolean.TRUE.equals(pathPaused.get(path))) return;
             p2p.P2Pdoxpause(path.getBytes("GBK"));
             pathPaused.put(path, true);
+            Path.clear(Path.jpa());
         } catch (Exception e) {
             e.printStackTrace();
         }
