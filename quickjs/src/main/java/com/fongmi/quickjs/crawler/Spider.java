@@ -78,6 +78,7 @@ public class Spider extends com.github.catvod.crawler.Spider {
             call("init", cfg);
             submit(cfg::release);
         } else {
+            if (Module.get().isScript(extend)) Module.get().fetch(extend);
             Object obj = submit(() -> Json.valid(extend) ? ctx.parse(extend) : extend).get();
             call("init", obj);
             if (obj instanceof JSObject) submit(((JSObject) obj)::release);
