@@ -31,11 +31,17 @@ public class Module {
     }
 
     public String fetch(String name) {
-        if (cache.contains(name)) return cache.get(name);
-        if (name.startsWith("http")) cache.put(name, request(name));
-        if (name.startsWith("assets")) cache.put(name, Asset.read(name));
-        if (name.startsWith("lib/")) cache.put(name, Asset.read("js/" + name));
-        return cache.get(name);
+        if (cache.containsKey(name)) return cache.get(name);
+        String content = load(name);
+        cache.put(name, content);
+        return content;
+    }
+
+    private String load(String name) {
+        if (name.startsWith("http")) return request(name);
+        if (name.startsWith("assets")) return Asset.read(name);
+        if (name.startsWith("lib/")) return Asset.read("js/" + name);
+        return "";
     }
 
     private String request(String url) {
@@ -43,9 +49,11 @@ public class Module {
             Uri uri = Uri.parse(url);
             File file = Path.js(uri.getLastPathSegment());
             boolean cache = !"127.0.0.1".equals(uri.getHost());
-            byte[] data = OkHttp.newCall(url, Headers.of(HttpHeaders.USER_AGENT, "Mozilla/5.0")).execute().body().bytes();
-            if (cache) new Thread(() -> Path.write(file, data)).start();
-            return new String(data, StandardCharsets.UTF_8);
+            try (okhttp3.Response response = OkHttp.newCall(url, Headers.of(HttpHeaders.USER_AGENT, "Mozilla/5.0")).execute()) {
+                byte[] data = response.body().bytes();
+                if (cache) new Thread(() -> Path.write(file, data)).start();
+                return new String(data, StandardCharsets.UTF_8);
+            }
         } catch (Exception e) {
             return cache(url);
         }

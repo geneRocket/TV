@@ -102,6 +102,7 @@ public class Global {
     public JSObject _http(String url, JSObject options) {
         JSFunction complete = options.getJSFunction("complete");
         if (complete == null) return req(url, options);
+        complete.hold();
         Req req = Req.objectFrom(options.stringify());
         Connect.to(url, req).enqueue(getCallback(complete, req));
         return null;
@@ -112,8 +113,9 @@ public class Global {
     public JSObject req(String url, JSObject options) {
         try {
             Req req = Req.objectFrom(options.stringify());
-            Response res = Connect.to(url, req).execute();
-            return Connect.success(ctx, req, res);
+            try (Response res = Connect.to(url, req).execute()) {
+                return Connect.success(ctx, req, res);
+            }
         } catch (Exception e) {
             return Connect.error(ctx);
         }
@@ -185,12 +187,21 @@ public class Global {
         return new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response res) {
-                submit(() -> complete.call(Connect.success(ctx, req, res)));
+                submit(() -> {
+                    try (Response response = res) {
+                        complete.call(Connect.success(ctx, req, response));
+                    } finally {
+                        complete.release();
+                    }
+                });
             }
 
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                submit(() -> complete.call(Connect.error(ctx)));
+                submit(() -> {
+                    complete.call(Connect.error(ctx));
+                    complete.release();
+                });
             }
         };
     }
@@ -199,7 +210,10 @@ public class Global {
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                submit(func::call);
+                submit(() -> {
+                    func.call();
+                    func.release();
+                });
             }
         }, delay);
     }

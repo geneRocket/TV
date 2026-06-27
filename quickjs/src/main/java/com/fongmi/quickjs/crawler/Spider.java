@@ -14,6 +14,7 @@ import com.github.catvod.utils.Json;
 import com.github.catvod.utils.UriUtil;
 import com.github.catvod.utils.Util;
 import com.whl.quickjs.wrapper.JSArray;
+import com.whl.quickjs.wrapper.JSFunction;
 import com.whl.quickjs.wrapper.JSObject;
 import com.whl.quickjs.wrapper.QuickJSContext;
 
@@ -62,8 +63,15 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void init(Context context, String extend) throws Exception {
-        if (cat) call("init", submit(() -> cfg(extend)).get());
-        else call("init", Json.valid(extend) ? ctx.parse(extend) : extend);
+        if (cat) {
+            JSObject cfg = submit(() -> cfg(extend)).get();
+            call("init", cfg);
+            submit(cfg::release);
+        } else {
+            Object obj = submit(() -> Json.valid(extend) ? ctx.parse(extend) : extend).get();
+            call("init", obj);
+            if (obj instanceof JSObject) submit(((JSObject) obj)::release);
+        }
     }
 
     @Override
@@ -79,7 +87,9 @@ public class Spider extends com.github.catvod.crawler.Spider {
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         JSObject obj = submit(() -> JSUtil.toObj(ctx, extend)).get();
-        return (String) call("category", tid, pg, filter, obj);
+        String result = (String) call("category", tid, pg, filter, obj);
+        submit(obj::release);
+        return result;
     }
 
     @Override
@@ -100,7 +110,9 @@ public class Spider extends com.github.catvod.crawler.Spider {
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         JSArray array = submit(() -> JSUtil.toArray(ctx, vipFlags)).get();
-        return (String) call("play", flag, id, array);
+        String result = (String) call("play", flag, id, array);
+        submit(array::release);
+        return result;
     }
 
     @Override
@@ -141,16 +153,23 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void destroy() {
-        try {
-            call("destroy");
-        } catch (Throwable e) {
-            e.printStackTrace();
-        }
         submit(() -> {
-            executor.shutdownNow();
-            jsObject.release();
-            ctx.destroy();
+            try {
+                Async.run(jsObject, "destroy", new Object[0]);
+            } catch (Throwable e) {
+                e.printStackTrace();
+            } finally {
+                release();
+                executor.shutdownNow();
+            }
         });
+    }
+
+    private void release() {
+        if (jsObject != null) jsObject.release();
+        if (ctx != null) ctx.destroy();
+        jsObject = null;
+        ctx = null;
     }
 
     private void initializeJS() throws Exception {
@@ -196,21 +215,31 @@ public class Spider extends com.github.catvod.crawler.Spider {
         JSObject cfg = ctx.createNewJSObject();
         cfg.setProperty("stype", 3);
         cfg.setProperty("skey", key);
-        if (Json.invalid(ext)) cfg.setProperty("ext", ext);
-        else cfg.setProperty("ext", (JSObject) ctx.parse(ext));
+        if (Json.invalid(ext)) {
+            cfg.setProperty("ext", ext);
+        } else {
+            JSObject obj = (JSObject) ctx.parse(ext);
+            cfg.setProperty("ext", obj);
+            obj.release();
+        }
         return cfg;
     }
 
     private Object[] proxy1(Map<String, String> params) throws Exception {
         JSObject object = JSUtil.toObj(ctx, params);
-        JSONArray array = new JSONArray(((JSArray) jsObject.getJSFunction("proxy").call(object)).stringify());
-        Map<String, String> headers = array.length() > 3 ? Json.toMap(array.optString(3)) : null;
-        boolean base64 = array.length() > 4 && array.optInt(4) == 1;
+        JSFunction proxy = jsObject.getJSFunction("proxy");
+        JSArray array = (JSArray) proxy.call(object);
+        JSONArray json = new JSONArray(array.stringify());
+        Map<String, String> headers = json.length() > 3 ? Json.toMap(json.optString(3)) : null;
+        boolean base64 = json.length() > 4 && json.optInt(4) == 1;
         Object[] result = new Object[4];
-        result[0] = array.optInt(0);
-        result[1] = array.optString(1);
-        result[2] = getStream(array.opt(2), base64);
+        result[0] = json.optInt(0);
+        result[1] = json.optString(1);
+        result[2] = getStream(json.opt(2), base64);
         result[3] = headers;
+        proxy.release();
+        object.release();
+        array.release();
         return result;
     }
 
@@ -218,13 +247,15 @@ public class Spider extends com.github.catvod.crawler.Spider {
         String url = params.get("url");
         String header = params.get("header");
         JSArray array = submit(() -> JSUtil.toArray(ctx, Arrays.asList(url.split("/")))).get();
-        Object object = submit(() -> ctx.parse(header)).get();
+        JSObject object = (JSObject) submit(() -> ctx.parse(header)).get();
         String json = (String) call("proxy", array, object);
         Res res = Res.objectFrom(json);
         Object[] result = new Object[3];
         result[0] = res.getCode();
         result[1] = res.getContentType();
         result[2] = res.getStream();
+        submit(array::release);
+        submit(object::release);
         return result;
     }
 

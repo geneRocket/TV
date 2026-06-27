@@ -36,9 +36,10 @@ public class Connect {
             setHeader(ctx, res, jsHeader);
             jsObject.setProperty("code", res.code());
             jsObject.setProperty("headers", jsHeader);
-            if (req.getBuffer() == 0) jsObject.setProperty("content", new String(res.body().bytes(), req.getCharset()));
-            if (req.getBuffer() == 1) jsObject.setProperty("content", JSUtil.toArray(ctx, res.body().bytes()));
-            if (req.getBuffer() == 2) jsObject.setProperty("content", Util.base64(res.body().bytes()));
+            byte[] bytes = res.body().bytes();
+            if (req.getBuffer() == 0) jsObject.setProperty("content", new String(bytes, req.getCharset()));
+            if (req.getBuffer() == 1) jsObject.setProperty("content", JSUtil.toArray(ctx, bytes));
+            if (req.getBuffer() == 2) jsObject.setProperty("content", Util.base64(bytes));
             return jsObject;
         } catch (Exception e) {
             return error(ctx);
