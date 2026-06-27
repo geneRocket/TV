@@ -35,7 +35,7 @@ public class JSUtil {
 
     public static String decodeTo(String charset, JSArray buffer) throws CharacterCodingException {
         byte[] bytes = new byte[buffer.length()];
-        for (int i = 0; i < buffer.length(); i++) bytes[i] = (byte) (int) buffer.get(i);
+        for (int i = 0; i < buffer.length(); i++) bytes[i] = ((Number) buffer.get(i)).byteValue();
         return Charset.forName(charset).newDecoder().decode(ByteBuffer.wrap(bytes)).toString();
     }
 }

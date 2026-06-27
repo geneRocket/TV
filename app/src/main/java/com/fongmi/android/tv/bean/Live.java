@@ -15,6 +15,7 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.gson.ExtAdapter;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.Spider;
+import com.github.catvod.crawler.SpiderNull;
 import com.github.catvod.utils.Json;
 import com.google.common.net.HttpHeaders;
 import com.google.gson.JsonElement;
@@ -364,8 +365,10 @@ public class Live {
     }
 
     public Spider spider() {
-        if (spider == null) spider = BaseLoader.get().getLiveSpider(getName(), getApi(), getExt(), getJar());
-        return spider;
+        if (spider != null && !(spider instanceof SpiderNull)) return spider;
+        Spider result = BaseLoader.get().getLiveSpider(getName(), getApi(), getExt(), getJar());
+        if (!(result instanceof SpiderNull)) spider = result;
+        return result;
     }
 
     public Map<String, String> getHeaders() {

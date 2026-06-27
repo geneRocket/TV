@@ -45,7 +45,17 @@ public class Spider extends com.github.catvod.crawler.Spider {
         this.executor = Executors.newSingleThreadExecutor();
         this.key = key;
         this.api = api;
-        initializeJS();
+        try {
+            initializeJS();
+        } catch (Exception e) {
+            releaseAfterInitializeFailure();
+            throw e;
+        }
+    }
+
+    private void releaseAfterInitializeFailure() {
+        executor.submit(this::release);
+        executor.shutdown();
     }
 
     private void submit(Runnable runnable) {
@@ -246,14 +256,15 @@ public class Spider extends com.github.catvod.crawler.Spider {
     private Object[] proxy2(Map<String, String> params) throws Exception {
         String url = params.get("url");
         String header = params.get("header");
+        if (url == null || header == null) return new Object[]{404, "text/plain", null};
         JSArray array = submit(() -> JSUtil.toArray(ctx, Arrays.asList(url.split("/")))).get();
         JSObject object = (JSObject) submit(() -> ctx.parse(header)).get();
         String json = (String) call("proxy", array, object);
         Res res = Res.objectFrom(json);
         Object[] result = new Object[3];
-        result[0] = res.getCode();
-        result[1] = res.getContentType();
-        result[2] = res.getStream();
+        result[0] = res == null ? 404 : res.getCode();
+        result[1] = res == null ? "text/plain" : res.getContentType();
+        result[2] = res == null ? null : res.getStream();
         submit(array::release);
         submit(object::release);
         return result;

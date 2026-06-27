@@ -18,6 +18,7 @@ import com.fongmi.android.tv.gson.ExtAdapter;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.crawler.Spider;
+import com.github.catvod.crawler.SpiderNull;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
 import com.google.gson.JsonElement;
@@ -341,8 +342,10 @@ public class Site implements Parcelable {
     }
 
     public Spider spider() {
-        if (spider == null) spider = BaseLoader.get().getSiteSpider(getKey(), getApi(), getExt(), getJar());
-        return spider;
+        if (spider != null && !(spider instanceof SpiderNull)) return spider;
+        Spider result = BaseLoader.get().getSiteSpider(getKey(), getApi(), getExt(), getJar());
+        if (!(result instanceof SpiderNull)) spider = result;
+        return result;
     }
 
     public static Site find(String key) {

@@ -6,6 +6,7 @@ import android.util.Base64;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Path;
+import com.github.catvod.utils.Util;
 import com.google.common.net.HttpHeaders;
 
 import java.io.File;
@@ -31,9 +32,10 @@ public class Module {
     }
 
     public String fetch(String name) {
-        if (cache.containsKey(name)) return cache.get(name);
+        String cached = cache.get(name);
+        if (cached != null) return cached;
         String content = load(name);
-        cache.put(name, content);
+        if (!content.isEmpty()) cache.putIfAbsent(name, content);
         return content;
     }
 
@@ -47,9 +49,10 @@ public class Module {
     private String request(String url) {
         try {
             Uri uri = Uri.parse(url);
-            File file = Path.js(uri.getLastPathSegment());
+            File file = file(url);
             boolean cache = !"127.0.0.1".equals(uri.getHost());
             try (okhttp3.Response response = OkHttp.newCall(url, Headers.of(HttpHeaders.USER_AGENT, "Mozilla/5.0")).execute()) {
+                if (!response.isSuccessful() || response.body() == null) return cache(url);
                 byte[] data = response.body().bytes();
                 if (cache) new Thread(() -> Path.write(file, data)).start();
                 return new String(data, StandardCharsets.UTF_8);
@@ -61,12 +64,15 @@ public class Module {
 
     private String cache(String url) {
         try {
-            Uri uri = Uri.parse(url);
-            File file = Path.js(uri.getLastPathSegment());
+            File file = file(url);
             return file.exists() ? Path.read(file) : "";
         } catch (Exception e) {
             return "";
         }
+    }
+
+    private File file(String url) {
+        return Path.js(Util.md5(url).concat(".js"));
     }
 
     public byte[] bb(String content) {

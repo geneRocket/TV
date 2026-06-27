@@ -47,6 +47,7 @@ public class JsLoader {
             spider = spiders.get(key);
             if (spider != null) return spider;
             spider = createSpider(key, api, ext);
+            if (spider == null) return new SpiderNull();
             spiders.put(key, spider);
             return spider;
         }
@@ -57,13 +58,15 @@ public class JsLoader {
     }
 
     private Spider createSpider(String key, String api, String ext) {
+        Spider spider = null;
         try {
-            Spider spider = loader.spider(key, api);
+            spider = loader.spider(key, api);
             spider.init(App.get(), ext);
             return spider;
         } catch (Throwable e) {
             e.printStackTrace();
-            return new SpiderNull();
+            if (spider != null) ThreadPools.loader().execute(spider::destroy);
+            return null;
         }
     }
 
