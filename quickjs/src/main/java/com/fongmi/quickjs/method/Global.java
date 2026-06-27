@@ -7,6 +7,7 @@ import com.fongmi.quickjs.bean.Req;
 import com.fongmi.quickjs.utils.Connect;
 import com.fongmi.quickjs.utils.Crypto;
 import com.fongmi.quickjs.utils.JSUtil;
+import com.fongmi.quickjs.utils.Module;
 import com.fongmi.quickjs.utils.Parser;
 import com.github.catvod.Proxy;
 import com.github.catvod.utils.Trans;
@@ -113,6 +114,8 @@ public class Global {
     public JSObject req(String url, JSObject options) {
         try {
             Req req = Req.objectFrom(options.stringify());
+            String cached = req.getBuffer() == 0 && req.getMethod().equalsIgnoreCase("get") ? Module.get().getCached(url) : null;
+            if (cached != null) return Connect.success(ctx, cached);
             try (Response res = Connect.to(url, req).execute()) {
                 return Connect.success(ctx, req, res);
             }

@@ -39,6 +39,16 @@ public class Module {
         return content;
     }
 
+    public String getCached(String name) {
+        return cache.get(name);
+    }
+
+    public boolean isScript(String name) {
+        if (name == null || !name.startsWith("http")) return false;
+        String path = Uri.parse(name).getPath();
+        return path != null && path.toLowerCase().endsWith(".js");
+    }
+
     private String load(String name) {
         if (name.startsWith("http")) return request(name);
         if (name.startsWith("assets")) return Asset.read(name);
