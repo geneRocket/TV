@@ -31,14 +31,11 @@ public class Module {
     }
 
     public String fetch(String name) {
-        return cache.computeIfAbsent(name, this::load);
-    }
-
-    private String load(String name) {
-        if (name.startsWith("http")) return request(name);
-        if (name.startsWith("assets")) return Asset.read(name);
-        if (name.startsWith("lib/")) return Asset.read("js/" + name);
-        return "";
+        if (cache.contains(name)) return cache.get(name);
+        if (name.startsWith("http")) cache.put(name, request(name));
+        if (name.startsWith("assets")) cache.put(name, Asset.read(name));
+        if (name.startsWith("lib/")) cache.put(name, Asset.read("js/" + name));
+        return cache.get(name);
     }
 
     private String request(String url) {
