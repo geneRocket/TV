@@ -1,6 +1,7 @@
 package com.fongmi.quickjs.utils;
 
 import android.net.Uri;
+import android.system.Os;
 import android.util.Base64;
 
 import com.github.catvod.net.OkHttp;
@@ -10,6 +11,7 @@ import com.github.catvod.utils.Util;
 import com.google.common.net.HttpHeaders;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,8 +23,10 @@ import okhttp3.Headers;
 public class Module {
 
     private static final long CACHE_TTL = 15 * 60 * 1000L;
+    private static final long RETRY_INTERVAL = 60 * 1000L;
 
     private final ConcurrentHashMap<String, String> cache;
+    private final ConcurrentHashMap<String, Long> attempts;
     private final Set<String> refreshing;
     private final ExecutorService executor;
 
@@ -36,6 +40,7 @@ public class Module {
 
     public Module() {
         this.cache = new ConcurrentHashMap<>();
+        this.attempts = new ConcurrentHashMap<>();
         this.refreshing = ConcurrentHashMap.newKeySet();
         this.executor = Executors.newFixedThreadPool(2);
     }
@@ -55,10 +60,8 @@ public class Module {
         return cache.get(name);
     }
 
-    public boolean isScript(String name) {
-        if (name == null || !name.startsWith("http")) return false;
-        String path = Uri.parse(name).getPath();
-        return path != null && path.toLowerCase().endsWith(".js");
+    public boolean isRemote(String name) {
+        return name != null && (name.startsWith("http://") || name.startsWith("https://"));
     }
 
     private String load(String name) {
@@ -85,8 +88,9 @@ public class Module {
             try (okhttp3.Response response = OkHttp.newCall(url, Headers.of(HttpHeaders.USER_AGENT, "Mozilla/5.0")).execute()) {
                 if (!response.isSuccessful() || response.body() == null) return cache(url);
                 byte[] data = response.body().bytes();
+                if (data.length == 0) return cache(url);
                 String content = new String(data, StandardCharsets.UTF_8);
-                if (cacheable) Path.write(file, data);
+                if (cacheable) write(file, data);
                 return content;
             }
         } catch (Exception e) {
@@ -96,8 +100,12 @@ public class Module {
 
     private void refresh(String url) {
         File file = file(url);
-        if (file.exists() && System.currentTimeMillis() - file.lastModified() < CACHE_TTL) return;
+        long now = System.currentTimeMillis();
+        if (file.exists() && now - file.lastModified() < CACHE_TTL) return;
+        Long attempt = attempts.get(url);
+        if (attempt != null && now - attempt < RETRY_INTERVAL) return;
         if (!refreshing.add(url)) return;
+        attempts.put(url, now);
         executor.execute(() -> {
             try {
                 String content = download(url);
@@ -106,6 +114,21 @@ public class Module {
                 refreshing.remove(url);
             }
         });
+    }
+
+    private void write(File file, byte[] data) {
+        File temp = new File(file.getParentFile(), file.getName() + "." + Thread.currentThread().getId() + ".tmp");
+        try {
+            try (FileOutputStream output = new FileOutputStream(temp)) {
+                output.write(data);
+                output.flush();
+                output.getFD().sync();
+            }
+            Os.rename(temp.getAbsolutePath(), file.getAbsolutePath());
+        } catch (Exception ignored) {
+        } finally {
+            if (temp.exists()) temp.delete();
+        }
     }
 
     private String cache(String url) {
