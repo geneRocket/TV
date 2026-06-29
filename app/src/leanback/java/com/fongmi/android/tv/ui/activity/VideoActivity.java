@@ -54,6 +54,7 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.bean.VodQueue;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ActionEvent;
@@ -339,6 +340,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             switchEpisodeByIndex(target, host.mHistory != null && host.mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
         }
 
+        public boolean playNextVod() {
+            if (!host.getIntent().getBooleanExtra("queue", false)) return false;
+            int step = host.mHistory != null && host.mHistory.isRevPlay() ? -1 : 1;
+            int target = host.getEpisodePosition() + step;
+            if (target >= 0 && target < host.mEpisodeAdapter.size()) return false;
+            VodQueue.Item item = VodQueue.next(host.getKey(), host.getId(), host.getName());
+            if (item == null) return false;
+            host.mContent.openDetail(item.getSiteKey(), item.getVod());
+            return true;
+        }
+
         public void playPrev() {
             int target = Math.max(host.getEpisodePosition() - 1, 0);
             switchEpisodeByIndex(target, host.mHistory != null && host.mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
@@ -454,6 +466,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             requestDetail();
         }
 
+        public void openDetail(String key, Vod item) {
+            prepareDetailRequest(key, item);
+            requestDetail();
+        }
+
         public void setDetail(Result result) {
             if (!host.isCurrentDetailResult(result)) return;
             host.clearSourceSwitchTimeout();
@@ -550,10 +567,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         private void prepareDetailRequest(Vod item) {
-            host.getIntent().putExtra("key", item.getSiteKey());
+            prepareDetailRequest(item.getSiteKey(), item);
+        }
+
+        private void prepareDetailRequest(String key, Vod item) {
+            host.getIntent().putExtra("key", key);
             host.getIntent().putExtra("pic", item.getVodPic());
             host.getIntent().putExtra("id", item.getVodId());
             host.getIntent().putExtra("name", item.getVodName());
+            if (host.getIntent().getBooleanExtra("queueMark", false)) host.getIntent().putExtra("mark", item.getVodName());
+            else host.getIntent().removeExtra("mark");
             host.mBinding.scroll.scrollTo(0, 0);
             host.clearPartRequest();
             host.setPartAdapter(Collections.emptyList());
@@ -841,6 +864,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (clear) intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         intent.putExtra("collect", collect);
         intent.putExtra("cast", cast);
+        intent.putExtra("mark", mark);
+        intent.putExtra("name", name);
+        intent.putExtra("pic", pic);
+        intent.putExtra("key", key);
+        intent.putExtra("id", id);
+        activity.startActivityForResult(intent, 1000);
+    }
+
+    public static void startQueued(Activity activity, String key, String id, String name, String pic, String mark) {
+        Intent intent = new Intent(activity, VideoActivity.class);
+        intent.putExtra("queue", true);
+        intent.putExtra("queueMark", !TextUtils.isEmpty(mark));
         intent.putExtra("mark", mark);
         intent.putExtra("name", name);
         intent.putExtra("pic", pic);
@@ -2390,7 +2425,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             onReset(true);
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            checkNext();
+            if (!mPlaybackNavigation.playNextVod()) checkNext();
         }
     }
 

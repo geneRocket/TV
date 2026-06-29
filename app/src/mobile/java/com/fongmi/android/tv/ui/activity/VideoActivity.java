@@ -55,6 +55,7 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.bean.VodQueue;
 import com.fongmi.android.tv.bean.CastVideo;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
@@ -237,6 +238,18 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Intent intent = new Intent(activity, VideoActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra("download", download);
         intent.putExtra("collect", collect);
+        intent.putExtra("mark", mark);
+        intent.putExtra("name", name);
+        intent.putExtra("pic", pic);
+        intent.putExtra("key", key);
+        intent.putExtra("id", id);
+        activity.startActivity(intent);
+    }
+
+    public static void startQueued(Activity activity, String key, String id, String name, String pic, String mark) {
+        Intent intent = new Intent(activity, VideoActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra("queue", true);
+        intent.putExtra("queueMark", !TextUtils.isEmpty(mark));
         intent.putExtra("mark", mark);
         intent.putExtra("name", name);
         intent.putExtra("pic", pic);
@@ -553,9 +566,16 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void getDetail(Vod item) {
-        getIntent().putExtra("key", item.getSiteKey());
+        getDetail(item.getSiteKey(), item);
+    }
+
+    private void getDetail(String key, Vod item) {
+        getIntent().putExtra("key", key);
         getIntent().putExtra("pic", item.getVodPic());
         getIntent().putExtra("id", item.getVodId());
+        getIntent().putExtra("name", item.getVodName());
+        if (getIntent().getBooleanExtra("queueMark", false)) getIntent().putExtra("mark", item.getVodName());
+        else getIntent().removeExtra("mark");
         mBinding.swipeLayout.setRefreshing(true);
         mBinding.swipeLayout.setEnabled(false);
         mBinding.scroll.scrollTo(0, 0);
@@ -1609,8 +1629,18 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             checkPlayImg(false);
-            checkNext();
+            if (!playNextVod()) checkNext();
         }
+    }
+
+    private boolean playNextVod() {
+        if (!getIntent().getBooleanExtra("queue", false)) return false;
+        Episode next = mEpisodeAdapter.getNext();
+        if (next != null && !next.isActivated()) return false;
+        VodQueue.Item item = VodQueue.next(getKey(), getId(), getName());
+        if (item == null) return false;
+        getDetail(item.getSiteKey(), item.getVod());
+        return true;
     }
 
     private void setTrackVisible(boolean visible) {
