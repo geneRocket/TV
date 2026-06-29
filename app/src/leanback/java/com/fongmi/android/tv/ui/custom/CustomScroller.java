@@ -9,6 +9,8 @@ import com.fongmi.android.tv.bean.Result;
 
 public class CustomScroller extends RecyclerView.OnScrollListener {
 
+    private static final int PREFETCH_DISTANCE = 2;
+
     private final Callback callback;
     private boolean loading;
     private boolean enable;
@@ -23,23 +25,25 @@ public class CustomScroller extends RecyclerView.OnScrollListener {
     @Override
     public void onScrollStateChanged(@NonNull RecyclerView view, int newState) {
         if (isDisable() || isLoading() || newState != RecyclerView.SCROLL_STATE_IDLE) return;
-        if (isBottom(view)) callback.onLoadMore(String.valueOf(++page));
+        if (isNearEnd(view)) callback.onLoadMore(String.valueOf(++page));
     }
 
-    private boolean isBottom(RecyclerView view) {
+    private boolean isNearEnd(RecyclerView view) {
         if (view == null || view.getLayoutManager() == null || view.getLayoutManager().getItemCount() == 0 || view.getLayoutManager().getChildCount() == 0) return false;
         View lastChild = view.getLayoutManager().getChildAt(view.getLayoutManager().getChildCount() - 1);
         if (lastChild == null) return false;
         int lastPosition = view.getLayoutManager().getPosition(lastChild);
-        return lastPosition == view.getLayoutManager().getItemCount() - 1;
+        return lastPosition >= view.getLayoutManager().getItemCount() - PREFETCH_DISTANCE;
     }
 
     public void reset() {
         enable = true;
+        loading = false;
         page = 1;
     }
 
     public int addPage() {
+        loading = true;
         return ++page;
     }
 

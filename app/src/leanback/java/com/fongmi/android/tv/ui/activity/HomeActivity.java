@@ -335,14 +335,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     public void hideToolBar() {
-        mBinding.toolbar.setVisibility(View.GONE);
-        if (mBinding.recycler.getVisibility() == View.VISIBLE) mBinding.blank.setVisibility(View.VISIBLE);
-        else mBinding.blank.setVisibility(View.GONE);
+        if (mBinding.toolbar.getVisibility() != View.GONE) mBinding.toolbar.setVisibility(View.GONE);
+        int blankVisibility = mBinding.recycler.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE;
+        if (mBinding.blank.getVisibility() != blankVisibility) mBinding.blank.setVisibility(blankVisibility);
     }
 
     public void showToolBar() {
-        mBinding.toolbar.setVisibility(View.VISIBLE);
-        mBinding.blank.setVisibility(View.GONE);
+        if (mBinding.toolbar.getVisibility() != View.VISIBLE) mBinding.toolbar.setVisibility(View.VISIBLE);
+        if (mBinding.blank.getVisibility() != View.GONE) mBinding.blank.setVisibility(View.GONE);
     }
 
     private HomeFragment getHomeFragment() {

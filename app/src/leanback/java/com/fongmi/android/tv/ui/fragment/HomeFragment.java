@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.leanback.widget.ArrayObjectAdapter;
+import androidx.leanback.widget.DiffCallback;
 import androidx.leanback.widget.ItemBridgeAdapter;
 import androidx.leanback.widget.ListRow;
 import androidx.leanback.widget.OnChildViewHolderSelectedListener;
@@ -58,6 +59,24 @@ import java.util.Map;
 
 public class HomeFragment extends BaseFragment implements VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, KeepPresenter.OnClickListener {
 
+    private static final DiffCallback<Vod> VOD_DIFF = new DiffCallback<Vod>() {
+        @Override
+        public boolean areItemsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
+            String oldId = oldItem.getVodId();
+            String newId = newItem.getVodId();
+            if (!oldId.isEmpty() || !newId.isEmpty()) return oldItem.getSiteKey().equals(newItem.getSiteKey()) && oldId.equals(newId);
+            return oldItem.getVodName().equals(newItem.getVodName()) && oldItem.getVodPic().equals(newItem.getVodPic());
+        }
+
+        @Override
+        public boolean areContentsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
+            return oldItem.equals(newItem)
+                    && oldItem.getVodRemarks().equals(newItem.getVodRemarks())
+                    && oldItem.getVodYear().equals(newItem.getVodYear())
+                    && oldItem.getSiteName().equals(newItem.getSiteName());
+        }
+    };
+
     public FragmentHomeBinding mBinding;
 
     private Map<String, VodPresenter> mPresenters;
@@ -72,6 +91,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private int mHistoryRequestId;
     private int mKeepRequestId;
     private int mOpenRequestId;
+    private String mRecommendStyleKey;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -123,6 +143,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         selector.addPresenter(ListRow.class, new CustomRowPresenter(16), KeepPresenter.class);
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setItemViewCacheSize(20);
+        mBinding.recycler.setItemAnimator(null);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
     }
@@ -141,20 +162,43 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     private VodPresenter getPresenter(Style style) {
-        String key = style.getViewType() + "_" + style.getRatio();
+        String key = getStyleKey(style);
         if (!mPresenters.containsKey(key)) mPresenters.put(key, new VodPresenter(this, style));
         return mPresenters.get(key);
     }
 
     public void addVideo(Result result) {
         int index = getRecommendIndex();
-        if (mAdapter.size() > index) mAdapter.removeItems(index, mAdapter.size() - index);
+        if (index < 0) return;
         Style style = result.getStyle(getHome().getStyle());
-        for (List<Vod> items : Lists.partition(result.getList(), Product.getColumn(style))) {
-            ArrayObjectAdapter adapter = new ArrayObjectAdapter(getPresenter(style));
-            adapter.setItems(items, null);
-            mAdapter.add(new ListRow(adapter));
+        List<List<Vod>> rows = Lists.partition(result.getList(), Product.getColumn(style));
+        String styleKey = getStyleKey(style);
+        if (!styleKey.equals(mRecommendStyleKey) || !hasRecommendRows(index)) {
+            if (mAdapter.size() > index) mAdapter.removeItems(index, mAdapter.size() - index);
+            mRecommendStyleKey = styleKey;
         }
+        for (int i = 0; i < rows.size(); i++) {
+            int position = index + i;
+            if (position < mAdapter.size()) {
+                ArrayObjectAdapter adapter = (ArrayObjectAdapter) ((ListRow) mAdapter.get(position)).getAdapter();
+                adapter.setItems(rows.get(i), VOD_DIFF);
+            } else {
+                ArrayObjectAdapter adapter = new ArrayObjectAdapter(getPresenter(style));
+                adapter.setItems(rows.get(i), VOD_DIFF);
+                mAdapter.add(new ListRow(adapter));
+            }
+        }
+        int end = index + rows.size();
+        if (mAdapter.size() > end) mAdapter.removeItems(end, mAdapter.size() - end);
+    }
+
+    private String getStyleKey(Style style) {
+        return style.getViewType() + "_" + style.getRatio();
+    }
+
+    private boolean hasRecommendRows(int index) {
+        for (int i = index; i < mAdapter.size(); i++) if (!(mAdapter.get(i) instanceof ListRow)) return false;
+        return true;
     }
 
     private ListRow getFuncRow() {
