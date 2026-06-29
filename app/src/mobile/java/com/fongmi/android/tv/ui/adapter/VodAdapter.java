@@ -72,10 +72,6 @@ public class VodAdapter extends RecyclerView.Adapter<BaseVodHolder> {
         notifyDataSetChanged();
     }
 
-    public List<Vod> getItems() {
-        return new ArrayList<>(mItems);
-    }
-
     @Override
     public int getItemCount() {
         return mItems.size();

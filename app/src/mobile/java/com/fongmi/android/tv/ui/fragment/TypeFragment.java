@@ -23,7 +23,6 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Value;
 import com.fongmi.android.tv.bean.Vod;
-import com.fongmi.android.tv.bean.VodQueue;
 import com.fongmi.android.tv.databinding.FragmentTypeBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
@@ -296,10 +295,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         } else {
             if (isIndexs()) CollectActivity.start(getActivity(), item.getVodName());
             else if (item.isManga()) DetailActivity.start(getActivity(), getKey(), item.getVodId(), item.getVodName(), item.getVodPic());
-            else {
-                VodQueue.set(getKey(), mAdapter.getItems());
-                VideoActivity.startQueued(getActivity(), getKey(), item.getVodId(), item.getVodName(), item.getVodPic(), isFolder() ? item.getVodName() : null);
-            }
+            else VideoActivity.start(getActivity(), getKey(), item.getVodId(), item.getVodName(), item.getVodPic(), isFolder() ? item.getVodName() : null, false);
         }
     }
 

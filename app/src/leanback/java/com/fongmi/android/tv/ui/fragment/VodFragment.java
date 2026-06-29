@@ -13,7 +13,6 @@ import androidx.leanback.widget.FocusHighlight;
 import androidx.leanback.widget.HorizontalGridView;
 import androidx.leanback.widget.ItemBridgeAdapter;
 import androidx.leanback.widget.ListRow;
-import androidx.leanback.widget.ObjectAdapter;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.viewbinding.ViewBinding;
 
@@ -28,7 +27,6 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Value;
 import com.fongmi.android.tv.bean.Vod;
-import com.fongmi.android.tv.bean.VodQueue;
 import com.fongmi.android.tv.databinding.FragmentVodBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
@@ -463,28 +461,10 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         if (isIndexs()) {
             CollectActivity.start(getActivity(), item.getVodName());
         } else if (!isFolder()) {
-            VodQueue.set(getKey(), getVodItems());
-            VideoActivity.startQueued(getActivity(), getKey(), item.getVodId(), item.getVodName(), item.getVodPic(), null);
+            VideoActivity.start(getActivity(), getKey(), item.getVodId(), item.getVodName(), item.getVodPic());
         } else {
-            VodQueue.set(getKey(), getVodItems());
-            VideoActivity.startQueued(getActivity(), getKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodName());
+            VideoActivity.start(getActivity(), getKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodName());
         }
-    }
-
-    private List<Vod> getVodItems() {
-        List<Vod> items = new ArrayList<>();
-        for (int i = 0; i < mAdapter.size(); i++) {
-            Object value = mAdapter.get(i);
-            if (value instanceof Vod) {
-                items.add((Vod) value);
-            } else if (value instanceof ListRow) {
-                ObjectAdapter adapter = ((ListRow) value).getAdapter();
-                for (int j = 0; adapter != null && j < adapter.size(); j++) {
-                    if (adapter.get(j) instanceof Vod) items.add((Vod) adapter.get(j));
-                }
-            }
-        }
-        return items;
     }
 
     @Override
