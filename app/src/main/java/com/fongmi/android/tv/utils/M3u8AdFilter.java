@@ -3,6 +3,9 @@ package com.fongmi.android.tv.utils;
 import android.net.Uri;
 import android.text.TextUtils;
 
+import com.fongmi.android.tv.api.config.LiveConfig;
+import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Rule;
 import com.github.catvod.utils.UriUtil;
 
 import java.nio.charset.StandardCharsets;
@@ -15,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class M3u8AdFilter {
 
@@ -209,6 +213,7 @@ public final class M3u8AdFilter {
 
         if (isSubtitleWhitelisted(baseUrl)) return toBytesOrOriginal(content, bytes);
 
+        content = filterConfiguredRules(content, baseUrl);
         registerSubtitlePlaylists(content, baseUrl);
         content = filterAdVariantPlaylists(content, baseUrl);
 
@@ -219,6 +224,7 @@ public final class M3u8AdFilter {
         List<Record> records = parseRecords(content, baseUrl);
         if (isSubtitlePlaylist(content, records)) return toBytesOrOriginal(content, bytes);
 
+        records = filterRepeatedDiscontinuityPods(records);
         records = filterAdTagSegments(records, baseUrl);
         records = filterShortAdClusters(records);
 
@@ -228,12 +234,78 @@ public final class M3u8AdFilter {
         return toBytesOrOriginal(filtered, bytes);
     }
 
+    private static String filterConfiguredRules(String content, String baseUrl) {
+        if (TextUtils.isEmpty(baseUrl)) return content;
+
+        try {
+            String host = UrlUtil.host(UrlUtil.uri(baseUrl));
+            if (TextUtils.isEmpty(host)) return content;
+
+            List<Rule> rules = new ArrayList<>();
+            rules.addAll(VodConfig.get().getRules());
+            rules.addAll(LiveConfig.get().getRules());
+
+            String filtered = content;
+            for (Rule rule : rules) {
+                if (matchesRuleHost(host, rule.getHosts())) filtered = filterByRegexRules(filtered, rule.getRegex());
+            }
+            return filtered;
+        } catch (Throwable ignored) {
+            return content;
+        }
+    }
+
+    private static boolean matchesRuleHost(String host, List<String> hosts) {
+        String value = host.toLowerCase(Locale.US);
+        for (String item : hosts) {
+            if (item == null || item.isEmpty()) continue;
+            String rule = item.toLowerCase(Locale.US).trim();
+            if (value.contains(rule)) return true;
+            if (!rule.contains("*")) continue;
+            String glob = Pattern.quote(rule).replace("*", "\\E.*\\Q");
+            if (Pattern.compile(glob).matcher(value).find()) return true;
+        }
+        return false;
+    }
+
+    static String filterByRegexRules(String content, List<String> regexes) {
+        if (content == null || content.isEmpty() || regexes == null || regexes.isEmpty()) return content;
+
+        String filtered = content;
+        int segmentCount = countSegmentsFromString(content);
+        if (segmentCount <= 0) return content;
+
+        for (String regex : regexes) {
+            if (!isM3u8AdRegex(regex)) continue;
+
+            try {
+                String candidate = Pattern.compile(regex).matcher(filtered).replaceAll("");
+                int candidateSegments = countSegmentsFromString(candidate);
+                if (candidateSegments <= 0 || candidateSegments >= segmentCount || !startsWithM3uHeader(candidate)) continue;
+                filtered = candidate;
+                segmentCount = candidateSegments;
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return filtered;
+    }
+
+    private static boolean isM3u8AdRegex(String regex) {
+        if (regex == null || regex.isEmpty()) return false;
+        String lower = regex.toLowerCase(Locale.US);
+        return lower.contains("#ext")
+                || lower.contains(".ts")
+                || lower.contains(".m4s")
+                || lower.contains(".mp4");
+    }
+
     private static boolean startsWithM3uHeader(String content) {
         return findM3uHeaderIndex(content) == 0;
     }
 
     private static int findM3uHeaderIndex(String content) {
-        if (TextUtils.isEmpty(content)) return -1;
+        if (content == null || content.isEmpty()) return -1;
         int i = 0;
         if (!content.isEmpty() && content.charAt(0) == '\uFEFF') i = 1;
         while (i < content.length()) {
@@ -511,7 +583,7 @@ public final class M3u8AdFilter {
     }
 
     private static int countSegmentsFromString(String content) {
-        if (TextUtils.isEmpty(content)) return 0;
+        if (content == null || content.isEmpty()) return 0;
         int count = 0;
         String[] lines = content.split("\n", -1);
         boolean waitUri = false;
@@ -652,6 +724,47 @@ public final class M3u8AdFilter {
 
         if (countSegments(kept) <= 0) return records;
         return kept;
+    }
+
+    private static List<Record> filterRepeatedDiscontinuityPods(List<Record> records) {
+        if (records == null || records.isEmpty()) return records;
+
+        List<Pod> pods = new ArrayList<>();
+        for (int i = 0; i < records.size(); i++) {
+            Record record = records.get(i);
+            if (!record.segment || !hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) continue;
+
+            int end = records.size();
+            for (int j = i + 1; j < records.size(); j++) {
+                Record next = records.get(j);
+                if (next.segment && hasTagPrefix(next.tags, "#EXT-X-DISCONTINUITY")) {
+                    end = j;
+                    break;
+                }
+            }
+
+            Pod pod = Pod.create(records, i, end);
+            if (pod != null) pods.add(pod);
+        }
+
+        Map<String, Integer> counts = new HashMap<>();
+        for (Pod pod : pods) counts.put(pod.fingerprint, counts.getOrDefault(pod.fingerprint, 0) + 1);
+
+        boolean[] remove = new boolean[records.size()];
+        int removedSegments = 0;
+        for (Pod pod : pods) {
+            if (counts.getOrDefault(pod.fingerprint, 0) < 2) continue;
+            for (int i = pod.start; i < pod.end; i++) {
+                if (records.get(i).segment) removedSegments++;
+                remove[i] = true;
+            }
+        }
+
+        if (removedSegments <= 0 || removedSegments >= countSegments(records)) return records;
+
+        List<Record> kept = new ArrayList<>(records.size());
+        for (int i = 0; i < records.size(); i++) if (!remove[i]) kept.add(records.get(i));
+        return countSegments(kept) > 0 ? kept : records;
     }
 
     private static List<Record> filterShortAdClusters(List<Record> records) {
@@ -1306,6 +1419,42 @@ public final class M3u8AdFilter {
 
         public static Record segment(List<String> tags, String line, String host, String resolvedUri, double duration) {
             return new Record(true, line, host, resolvedUri, tags, duration);
+        }
+    }
+
+    private static class Pod {
+
+        private static final int MIN_SEGMENTS = 3;
+        private static final int MAX_SEGMENTS = 6;
+        private static final double MAX_DURATION_SECONDS = 45;
+
+        private final int start;
+        private final int end;
+        private final String fingerprint;
+
+        private Pod(int start, int end, String fingerprint) {
+            this.start = start;
+            this.end = end;
+            this.fingerprint = fingerprint;
+        }
+
+        private static Pod create(List<Record> records, int start, int end) {
+            int segments = 0;
+            int lastSegment = -1;
+            double duration = 0;
+            StringBuilder fingerprint = new StringBuilder();
+
+            for (int i = start; i < end; i++) {
+                Record record = records.get(i);
+                if (!record.segment) continue;
+                segments++;
+                lastSegment = i;
+                duration += record.duration;
+                fingerprint.append(Math.round(record.duration * 10)).append(',');
+            }
+
+            if (segments < MIN_SEGMENTS || segments > MAX_SEGMENTS || duration <= 0 || duration > MAX_DURATION_SECONDS) return null;
+            return new Pod(start, lastSegment + 1, segments + ":" + fingerprint);
         }
     }
 }
