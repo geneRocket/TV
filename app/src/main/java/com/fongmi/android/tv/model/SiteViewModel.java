@@ -83,6 +83,7 @@ public class SiteViewModel extends ViewModel {
         private String key;
         private Future<?> future;
         private Runnable timeout;
+        private final AtomicBoolean completed = new AtomicBoolean(false);
     }
 
     private interface ResultPoster {
@@ -465,11 +466,10 @@ public class SiteViewModel extends ViewModel {
     }
 
     private void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, ResultPoster poster, ResultFallback fallback) {
-        AtomicBoolean completed = new AtomicBoolean(false);
         PendingRequest request = new PendingRequest();
         request.key = requestKey;
         request.timeout = () -> {
-            if (!completed.compareAndSet(false, true)) return;
+            if (!request.completed.compareAndSet(false, true)) return;
             if (request.future != null) request.future.cancel(true);
             if (isPlaybackRequest(requestKey)) Source.get().stop();
             finishRequest(request);
@@ -482,12 +482,12 @@ public class SiteViewModel extends ViewModel {
             request.future = executor.submit(() -> {
                 try {
                     Result data = callable.call();
-                    if (!completed.compareAndSet(false, true)) return;
+                    if (!request.completed.compareAndSet(false, true)) return;
                     finishRequest(request);
                     poster.post(data);
                 } catch (Throwable e) {
                     if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                    if (!completed.compareAndSet(false, true)) return;
+                    if (!request.completed.compareAndSet(false, true)) return;
                     finishRequest(request);
                     poster.post(fallback.create(e));
                     ThreadPools.log(e, "Site request failed.");
@@ -514,8 +514,10 @@ public class SiteViewModel extends ViewModel {
         if (TextUtils.isEmpty(requestKey)) return;
         PendingRequest previous = activeRequests.remove(requestKey);
         if (previous == null) return;
+        if (!previous.completed.compareAndSet(false, true)) return;
         if (previous.timeout != null) App.removeCallbacks(previous.timeout);
         if (previous.future != null) previous.future.cancel(true);
+        if (isPlaybackRequest(requestKey)) Source.get().stop();
         pendingRequests.remove(previous);
     }
 
@@ -562,6 +564,7 @@ public class SiteViewModel extends ViewModel {
     protected void onCleared() {
         super.onCleared();
         for (PendingRequest request : pendingRequests) {
+            request.completed.set(true);
             if (request.timeout != null) App.removeCallbacks(request.timeout);
             if (request.future != null) request.future.cancel(true);
         }
