@@ -49,9 +49,10 @@ public class ResponseInterceptor implements Interceptor {
         Request request = check(chain.request());
         Response response = chain.proceed(request);
         if ("deflate".equals(response.header(HttpHeaders.CONTENT_ENCODING))) return deflate(response);
-        if (response.code() == 406 && redirectMap.containsKey(request.url().toString())) {
+        String location = response.code() == 406 ? redirectMap.remove(request.url().toString()) : null;
+        if (location != null) {
             response.close();
-            return redirect(request, response);
+            return redirect(request, response, location);
         }
         if (response.code() == 302) rememberRedirect(request, response.header(HttpHeaders.LOCATION));
         return response;
@@ -64,8 +65,8 @@ public class ResponseInterceptor implements Interceptor {
         return builder.build();
     }
 
-    private Response redirect(Request request, Response response) {
-        return new Response.Builder().request(request).protocol(response.protocol()).code(302).message("Found").header(HttpHeaders.LOCATION, redirectMap.get(request.url().toString())).build();
+    private Response redirect(Request request, Response response, String location) {
+        return new Response.Builder().request(request).protocol(response.protocol()).code(302).message("Found").header(HttpHeaders.LOCATION, location).build();
     }
 
     private void rememberRedirect(Request request, String location) {
@@ -75,17 +76,19 @@ public class ResponseInterceptor implements Interceptor {
     }
 
     private Response deflate(Response response) {
-        InflaterInputStream is = new InflaterInputStream(response.body().byteStream(), new Inflater(true));
-        return response.newBuilder().headers(response.headers()).body(new ResponseBody() {
+        ResponseBody body = response.body();
+        if (body == null) return response;
+        InflaterInputStream is = new InflaterInputStream(body.byteStream(), new Inflater(true));
+        return response.newBuilder().removeHeader(HttpHeaders.CONTENT_ENCODING).removeHeader(HttpHeaders.CONTENT_LENGTH).body(new ResponseBody() {
             @Nullable
             @Override
             public MediaType contentType() {
-                return response.body().contentType();
+                return body.contentType();
             }
 
             @Override
             public long contentLength() {
-                return response.body().contentLength();
+                return -1;
             }
 
             @NonNull
