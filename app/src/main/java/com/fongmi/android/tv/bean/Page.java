@@ -7,19 +7,25 @@ public class Page<A, E> {
     private final String vodId;
     private final Style style;
     private final int position;
+    private final int childPosition;
     private final A adapter;
     private final E extra;
     private final boolean enable;
     private final int page;
 
     public static <A, E> Page<A, E> get(Vod vod, int position, A adapter, E extra, int page, boolean enable) {
-        return new Page<>(vod, position, adapter, extra, page, enable);
+        return new Page<>(vod, position, -1, adapter, extra, page, enable);
     }
 
-    private Page(Vod vod, int position, A adapter, E extra, int page, boolean enable) {
+    public static <A, E> Page<A, E> get(Vod vod, int position, int childPosition, A adapter, E extra, int page, boolean enable) {
+        return new Page<>(vod, position, childPosition, adapter, extra, page, enable);
+    }
+
+    private Page(Vod vod, int position, int childPosition, A adapter, E extra, int page, boolean enable) {
         this.vodId = vod.getVodId();
         this.style = vod.getCate() != null ? vod.getCate().getStyle() : null;
         this.position = position;
+        this.childPosition = childPosition;
         this.adapter = adapter;
         this.extra = extra;
         this.page = page;
@@ -36,6 +42,10 @@ public class Page<A, E> {
 
     public int getPosition() {
         return position;
+    }
+
+    public int getChildPosition() {
+        return childPosition;
     }
 
     public A getAdapter() {
@@ -59,6 +69,6 @@ public class Page<A, E> {
         if (this == obj) return true;
         if (!(obj instanceof Page<?, ?>)) return false;
         Page<?, ?> it = (Page<?, ?>) obj;
-        return getVodId().equals(it.getVodId()) && getPosition() == it.getPosition();
+        return getVodId().equals(it.getVodId()) && getPosition() == it.getPosition() && getChildPosition() == it.getChildPosition();
     }
 }

@@ -12,8 +12,10 @@ import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.FocusHighlight;
 import androidx.leanback.widget.HorizontalGridView;
 import androidx.leanback.widget.ItemBridgeAdapter;
+import androidx.leanback.widget.ListRowPresenter;
 import androidx.leanback.widget.ListRow;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -435,7 +437,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void openFolder(Vod item) {
-        Page<ArrayObjectAdapter, ArrayObjectAdapter> page = Page.get(item, mBinding.recycler.getSelectedPosition(), mAdapter, mLast, mScroller.getPage(), !mScroller.isDisable());
+        Page<ArrayObjectAdapter, ArrayObjectAdapter> page = Page.get(item, getFolderRowPosition(item), getFolderChildPosition(item), mAdapter, mLast, mScroller.getPage(), !mScroller.isDisable());
         mPages.add(page);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(mAdapter.getPresenterSelector())));
         mBinding.recycler.setMoveTop(false);
@@ -451,7 +453,46 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mLast = page.getExtra();
         mScroller.restore(page.getPage(), page.isEnable());
         checkPosition(false);
+        restoreChildPosition(page);
         hideProgress();
+    }
+
+    private int getFolderRowPosition(Vod item) {
+        for (int i = 0; i < mAdapter.size(); i++) {
+            Object row = mAdapter.get(i);
+            if (item.equals(row)) return i;
+            if (row instanceof ListRow && getChildPosition((ListRow) row, item) >= 0) return i;
+        }
+        return mBinding.recycler.getSelectedPosition();
+    }
+
+    private int getFolderChildPosition(Vod item) {
+        int row = getFolderRowPosition(item);
+        if (row < 0 || row >= mAdapter.size()) return -1;
+        Object object = mAdapter.get(row);
+        return object instanceof ListRow ? getChildPosition((ListRow) object, item) : -1;
+    }
+
+    private int getChildPosition(ListRow row, Vod item) {
+        if (!(row.getAdapter() instanceof ArrayObjectAdapter)) return -1;
+        ArrayObjectAdapter adapter = (ArrayObjectAdapter) row.getAdapter();
+        return adapter.indexOf(item);
+    }
+
+    private void restoreChildPosition(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
+        if (page.getChildPosition() < 0) return;
+        mBinding.recycler.post(() -> {
+            if (mBinding == null) return;
+            RecyclerView.ViewHolder holder = mBinding.recycler.findViewHolderForLayoutPosition(page.getPosition());
+            if (!(holder instanceof ItemBridgeAdapter.ViewHolder)) return;
+            if (!(((ItemBridgeAdapter.ViewHolder) holder).getViewHolder() instanceof ListRowPresenter.ViewHolder)) return;
+            HorizontalGridView row = ((ListRowPresenter.ViewHolder) ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder()).getGridView();
+            row.setSelectedPosition(page.getChildPosition());
+            row.post(() -> {
+                RecyclerView.ViewHolder child = row.findViewHolderForLayoutPosition(page.getChildPosition());
+                if (child != null) child.itemView.requestFocus();
+            });
+        });
     }
 
     private void openVod(Vod item) {
