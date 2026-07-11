@@ -1,7 +1,5 @@
 package com.github.catvod.net;
 
-import android.text.TextUtils;
-
 import androidx.collection.ArrayMap;
 
 import com.github.catvod.bean.Doh;
@@ -58,7 +56,8 @@ public class OkHttp {
 
     public void setProxy(String proxy) {
         ProxySelector.setDefault(selector());
-        if (!TextUtils.isEmpty(proxy)) selector().setProxy(proxy);
+        selector().setProxy(proxy);
+        authenticator().setProxy(proxy);
         client = null;
     }
 

@@ -26,7 +26,7 @@ public class ProxyRequestInterceptor implements Interceptor {
         if (!selector.hasProxy() || "127.0.0.1".equals(host) || selector.contains(host)) return chain.proceed(request);
         try {
             Response response = chain.proceed(request);
-            if (response.isSuccessful()) return response;
+            if (!shouldRetryWithProxy(response.code())) return response;
             response.close();
         } catch (IOException ignored) {
         }
@@ -37,5 +37,9 @@ public class ProxyRequestInterceptor implements Interceptor {
             selector.remove(host);
             throw e;
         }
+    }
+
+    private boolean shouldRetryWithProxy(int code) {
+        return code == 502 || code == 503 || code == 504;
     }
 }

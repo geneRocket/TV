@@ -21,6 +21,9 @@ import okhttp3.Route;
 public class OkAuthenticator implements Authenticator {
 
     private final List<Proxy> proxy;
+    private volatile String manualHost;
+    private volatile String manualUserInfo;
+    private volatile int manualPort;
 
     public OkAuthenticator() {
         proxy = new CopyOnWriteArrayList<>();
@@ -32,6 +35,21 @@ public class OkAuthenticator implements Authenticator {
 
     public void clear() {
         proxy.clear();
+        setProxy("");
+    }
+
+    public void setProxy(String url) {
+        Uri uri = Uri.parse(url == null ? "" : url);
+        String userInfo = uri.getUserInfo();
+        if (uri.getHost() == null || uri.getPort() <= 0 || userInfo == null || userInfo.isEmpty()) {
+            manualHost = null;
+            manualUserInfo = null;
+            manualPort = -1;
+            return;
+        }
+        manualHost = uri.getHost();
+        manualPort = uri.getPort();
+        manualUserInfo = userInfo;
     }
 
     @Nullable
@@ -43,6 +61,7 @@ public class OkAuthenticator implements Authenticator {
         String requestHost = response.request().url().host();
         String proxyHost = proxyAddress.getHostName();
         int proxyPort = proxyAddress.getPort();
+        if (matchesManualProxy(proxyHost, proxyPort)) return authorize(response, manualUserInfo);
         for (Proxy item : proxy) {
             for (String host : item.getHosts()) {
                 if (Util.containOrMatch(requestHost, host)) {
@@ -51,11 +70,19 @@ public class OkAuthenticator implements Authenticator {
                         if (!proxyHost.equalsIgnoreCase(uri.getHost())) continue;
                         if (proxyPort > 0 && uri.getPort() > 0 && proxyPort != uri.getPort()) continue;
                         String userInfo = uri.getUserInfo();
-                        if (userInfo != null) return response.request().newBuilder().header(HttpHeaders.PROXY_AUTHORIZATION, Util.basic(userInfo)).build();
+                        if (userInfo != null) return authorize(response, userInfo);
                     }
                 }
             }
         }
         return null;
+    }
+
+    private boolean matchesManualProxy(String host, int port) {
+        return manualHost != null && manualUserInfo != null && manualHost.equalsIgnoreCase(host) && manualPort == port;
+    }
+
+    private Request authorize(Response response, String userInfo) {
+        return response.request().newBuilder().header(HttpHeaders.PROXY_AUTHORIZATION, Util.basic(userInfo)).build();
     }
 }
