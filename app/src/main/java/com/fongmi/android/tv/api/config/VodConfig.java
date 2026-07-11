@@ -538,7 +538,7 @@ public class VodConfig {
             parseConfig(Json.parse(text).getAsJsonObject(), callback);
         } catch (Throwable e) {
             e.printStackTrace();
-            App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
+            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
 
@@ -559,7 +559,7 @@ public class VodConfig {
             postSuccess(callback, notice);
         } catch (Throwable e) {
             e.printStackTrace();
-            App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
+            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
 

@@ -2622,7 +2622,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
         History snapshot = mHistory.copy();
-        App.execute(snapshot::update);
+        App.execute(snapshot::save);
     }
 
     private boolean isCurrentSingleEpisode() {

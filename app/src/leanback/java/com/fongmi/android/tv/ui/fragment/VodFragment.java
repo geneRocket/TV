@@ -44,10 +44,8 @@ import com.fongmi.android.tv.utils.ResUtil;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 public class VodFragment extends BaseFragment implements CustomScroller.Callback, VodPresenter.OnClickListener {
@@ -61,7 +59,6 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private SiteViewModel mViewModel;
     private List<Filter> mFilters;
     private List<Page> mPages;
-    private Set<String> mVodKeys;
     private boolean mOpen;
     private Page mPage;
     private String mRequestTypeId;
@@ -145,7 +142,6 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     protected void initView() {
         mPresenters = new HashMap<>();
         mPages = new ArrayList<>();
-        mVodKeys = new HashSet<>();
         mOpen = isOpen();
         mExtends = getExtend();
         mFilters = getFilter();
@@ -235,7 +231,6 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mRequestPage = page;
         mRequestExtend = getRequestExtend(mExtends);
         if (first) mLast = null;
-        if (first) mVodKeys.clear();
         if (first) showProgress();
         mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
     }
@@ -258,7 +253,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     private void addVideo(Result result) {
         Style style = result.getStyle(getStyle());
-        List<Vod> items = filterVodList(result.getList());
+        List<Vod> items = result.getList();
         if (result.getRequestPage().equals("1")) {
             int start = mOpen ? mFilters.size() : 0;
             if (style.isList()) setItems(start, items);
@@ -268,21 +263,6 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
             if (style.isList()) mAdapter.addAll(mAdapter.size(), items);
             else addGrid(items, style);
         }
-    }
-
-    private List<Vod> filterVodList(List<Vod> items) {
-        List<Vod> filtered = new ArrayList<>();
-        for (Vod item : items) {
-            String key = getVodKey(item);
-            if (mVodKeys.add(key)) filtered.add(item);
-        }
-        return filtered;
-    }
-
-    private String getVodKey(Vod item) {
-        String id = item.getVodId();
-        if (!id.isEmpty()) return item.getSiteKey() + "@" + id;
-        return item.getSiteKey() + "@" + item.getVodName() + "@" + item.getVodPic() + "@" + item.getVodRemarks();
     }
 
     private void checkPosition(boolean first) {
