@@ -42,7 +42,7 @@ public class Module {
         this.cache = new ConcurrentHashMap<>();
         this.attempts = new ConcurrentHashMap<>();
         this.refreshing = ConcurrentHashMap.newKeySet();
-        this.executor = Executors.newFixedThreadPool(2);
+        this.executor = Executors.newFixedThreadPool(5);
     }
 
     public String fetch(String name) {

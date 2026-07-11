@@ -181,6 +181,9 @@ public class OkHttp {
     }
 
     private static OkHttpClient.Builder getBuilder() {
+        okhttp3.Dispatcher dispatcher = new okhttp3.Dispatcher();
+        dispatcher.setMaxRequests(1024);
+        dispatcher.setMaxRequestsPerHost(512);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .addInterceptor(requestInterceptor())
                 .addInterceptor(authInterceptor())
@@ -189,7 +192,8 @@ public class OkHttp {
                 .connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .readTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
-                .connectionPool(new ConnectionPool(32, 5, TimeUnit.MINUTES))
+                .connectionPool(new ConnectionPool(1024, 5, TimeUnit.MINUTES))
+                .dispatcher(dispatcher)
                 .dns(dns())
                 .hostnameVerifier((hostname, session) -> true)
                 .followRedirects(true)

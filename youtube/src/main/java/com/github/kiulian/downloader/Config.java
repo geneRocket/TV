@@ -28,7 +28,7 @@ public class Config {
     private static final String DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
     private static final String DEFAULT_ACCEPT_LANG = "en-US,en;";
     private static final int DEFAULT_RETRY_ON_FAILURE = 0;
-    private static final int DEFAULT_EXECUTOR_SIZE = Math.max(2, Math.min(6, Runtime.getRuntime().availableProcessors() * 2));
+    private static final int DEFAULT_EXECUTOR_SIZE = Math.max(2, Math.min(10, Runtime.getRuntime().availableProcessors() * 2));
 
     private final Map<String, String> headers;
     private ExecutorService executorService;

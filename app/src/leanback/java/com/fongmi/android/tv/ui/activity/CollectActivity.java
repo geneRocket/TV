@@ -177,7 +177,7 @@ public class CollectActivity extends BaseActivity {
         syncPager();
         mBinding.recycler.setSelectedPosition(0);
         mBinding.pager.setCurrentItem(0, false);
-        mExecutor = new PauseExecutor(Math.max(2, Math.min(6, Constant.THREAD_POOL)));
+        mExecutor = new PauseExecutor(Math.max(2, Math.min(10, Constant.THREAD_POOL)));
         mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
         for (Site site : mSites) mSearchTasks.add(mExecutor.submit(() -> search(site)));
     }
