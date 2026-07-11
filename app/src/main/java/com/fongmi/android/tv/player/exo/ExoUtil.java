@@ -47,6 +47,7 @@ public class ExoUtil {
                         maxBufferMs,
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+                .setTargetBufferBytes(Setting.getBuffer() > 10 ? 50 * 1024 * 1024 : DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .setBackBuffer(0, false)
                 .build();
