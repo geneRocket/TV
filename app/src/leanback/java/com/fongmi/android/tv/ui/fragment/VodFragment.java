@@ -480,18 +480,20 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void restoreChildPosition(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
-        if (page.getChildPosition() < 0) return;
         mBinding.recycler.post(() -> {
             if (mBinding == null) return;
             RecyclerView.ViewHolder holder = mBinding.recycler.findViewHolderForLayoutPosition(page.getPosition());
-            if (!(holder instanceof ItemBridgeAdapter.ViewHolder)) return;
-            if (!(((ItemBridgeAdapter.ViewHolder) holder).getViewHolder() instanceof ListRowPresenter.ViewHolder)) return;
-            HorizontalGridView row = ((ListRowPresenter.ViewHolder) ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder()).getGridView();
-            row.setSelectedPosition(page.getChildPosition());
-            row.post(() -> {
-                RecyclerView.ViewHolder child = row.findViewHolderForLayoutPosition(page.getChildPosition());
-                if (child != null) child.itemView.requestFocus();
-            });
+            if (holder == null) return;
+            if (page.getChildPosition() >= 0 && holder instanceof ItemBridgeAdapter.ViewHolder && ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder() instanceof ListRowPresenter.ViewHolder) {
+                HorizontalGridView row = ((ListRowPresenter.ViewHolder) ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder()).getGridView();
+                row.setSelectedPosition(page.getChildPosition());
+                row.post(() -> {
+                    RecyclerView.ViewHolder child = row.findViewHolderForLayoutPosition(page.getChildPosition());
+                    if (child != null) child.itemView.requestFocus();
+                });
+            } else {
+                holder.itemView.requestFocus();
+            }
         });
     }
 
