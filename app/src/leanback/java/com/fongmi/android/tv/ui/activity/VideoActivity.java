@@ -2293,12 +2293,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         App.post(() -> {
             if (isFinishing() || isDestroyed()) return;
             SubtitleDialog.create().view(subtitleView).listener(subtitle -> {
-                int oldPlayer = mPlayers.getPlayer();
-                mPlayers.setSub(Sub.from(subtitle.getUrl()));
-                if (oldPlayer != mPlayers.getPlayer()) {
-                    setPlayerView();
-                    setDecodeView();
-                }
+                setSubtitle(Sub.from(subtitle.getUrl()));
             }).name(finalVideoName).full(isFullscreen()).show(this);
         }, 200);
     }
@@ -2362,7 +2357,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (event.getType() == RefreshEvent.Type.DETAIL) mContent.requestDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
         else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.SUBTITLE) mPlayers.setSub(Sub.from(event.getPath()));
+        else if (event.getType() == RefreshEvent.Type.SUBTITLE) setSubtitle(Sub.from(event.getPath()));
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -2401,6 +2396,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setVisibilityIfChanged(mBinding.control.volume, visible && mPlayers.isExo() ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.control.audio, visible && mPlayers.haveTrack(C.TRACK_TYPE_AUDIO) ? View.VISIBLE : View.GONE);
         setVisibilityIfChanged(mBinding.control.video, visible && mPlayers.haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
+    }
+
+    private void setSubtitle(Sub subtitle) {
+        int player = mPlayers.getPlayer();
+        mPlayers.setSub(subtitle);
+        if (player != mPlayers.getPlayer()) {
+            setPlayerView();
+            setDecodeView();
+        }
     }
 
     private void setDefaultTrack() {

@@ -1500,7 +1500,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         } else {
             finalVideoName = videoName;
         }
-        App.post(() -> SubtitleDialog.create().view(subtitleView).listener(subtitle -> mPlayers.setSub(Sub.from(subtitle.getUrl()))).name(finalVideoName).full(isFullscreen()).show(this), 200);
+        App.post(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            SubtitleDialog.create().view(subtitleView).listener(subtitle -> setSubtitle(Sub.from(subtitle.getUrl()))).name(finalVideoName).full(isFullscreen()).show(this);
+        }, 200);
     }
 
     @Override
@@ -1556,7 +1559,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
         else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.SUBTITLE) mPlayers.setSub(Sub.from(event.getPath()));
+        else if (event.getType() == RefreshEvent.Type.SUBTITLE) setSubtitle(Sub.from(event.getPath()));
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -1620,6 +1623,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.action.audio.setVisibility(visible && mPlayers.haveTrack(C.TRACK_TYPE_AUDIO) ? View.VISIBLE : View.GONE);
         mBinding.control.action.video.setVisibility(visible && mPlayers.haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.setTrackVisible();
+    }
+
+    private void setSubtitle(Sub subtitle) {
+        int player = mPlayers.getPlayer();
+        mPlayers.setSub(subtitle);
+        if (player != mPlayers.getPlayer()) {
+            setPlayerView();
+            setDecodeView();
+        }
     }
 
     private void setDefaultTrack() {
