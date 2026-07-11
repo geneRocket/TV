@@ -13,7 +13,10 @@ import androidx.leanback.widget.FocusHighlight;
 import androidx.leanback.widget.HorizontalGridView;
 import androidx.leanback.widget.ItemBridgeAdapter;
 import androidx.leanback.widget.ListRow;
+import androidx.leanback.widget.ListRowPresenter;
+import androidx.leanback.widget.ViewHolderTask;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -478,13 +481,17 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void restoreChildPosition(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
-        // Let Leanback restore both coordinates as part of its next layout. A single
-        // post() can run before the target row has been attached, losing the focus.
-        if (page.getChildPosition() >= 0) {
-            mBinding.recycler.setSelectedPosition(page.getPosition(), page.getChildPosition());
-        } else {
-            mBinding.recycler.setSelectedPosition(page.getPosition());
-        }
+        mBinding.recycler.setSelectedPosition(page.getPosition(), new ViewHolderTask() {
+            @Override
+            public void run(RecyclerView.ViewHolder holder) {
+                if (page.getChildPosition() < 0 || !(holder instanceof ItemBridgeAdapter.ViewHolder) || !(((ItemBridgeAdapter.ViewHolder) holder).getViewHolder() instanceof ListRowPresenter.ViewHolder)) {
+                    holder.itemView.requestFocus();
+                    return;
+                }
+                HorizontalGridView row = ((ListRowPresenter.ViewHolder) ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder()).getGridView();
+                row.setSelectedPosition(page.getChildPosition(), child -> child.itemView.requestFocus());
+            }
+        });
     }
 
     private void openVod(Vod item) {
