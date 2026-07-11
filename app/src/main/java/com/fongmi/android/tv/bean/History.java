@@ -13,6 +13,7 @@ import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
@@ -30,6 +31,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 
 import java.util.regex.Pattern;
 
@@ -37,6 +39,9 @@ import java.util.regex.Pattern;
 public class History {
 
     private static final Map<String, History> CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, History> PENDING_WRITES = new ConcurrentHashMap<>();
+    private static final Set<String> ACTIVE_WRITES = ConcurrentHashMap.newKeySet();
+    private static final ExecutorService WRITE_EXECUTOR = ThreadPools.newSingle("history-write");
     private static final Pattern PATTERN_END = Pattern.compile("(?i)[\\s\\p{P}\\p{S}]+$");
     private static final Pattern PATTERN_VERSION = Pattern.compile("(?i)(?:粤语版|国语版|普通话版|粤语中字|国语中字|国粤双语|双语版|中英双字|中文字幕|中字|粤语|国语|普通话|高清版|hd中字|hd|bd|正片|全集|4k|2160p|1080p|720p|x264|x265|h264|h265|mp4|mkv|m3u8|mp3|avi|flv|wmv|ts|mov)$");
     private static final Pattern PATTERN_ALL = Pattern.compile("[\\s\\p{P}\\p{S}]+");
@@ -487,6 +492,29 @@ public class History {
         if (TextUtils.isEmpty(getKey())) return this;
         AppDatabase.get().getHistoryDao().insertOrUpdate(this);
         return cache(this);
+    }
+
+    public void saveAsync() {
+        if (TextUtils.isEmpty(getKey())) return;
+        History snapshot = copy(this);
+        String key = cacheKey(snapshot.getCid(), snapshot.getKey());
+        PENDING_WRITES.put(key, snapshot);
+        scheduleWrite(key);
+    }
+
+    private static void scheduleWrite(String key) {
+        if (!ACTIVE_WRITES.add(key)) return;
+        WRITE_EXECUTOR.execute(() -> drainWrite(key));
+    }
+
+    private static void drainWrite(String key) {
+        try {
+            History item;
+            while ((item = PENDING_WRITES.remove(key)) != null) item.save();
+        } finally {
+            ACTIVE_WRITES.remove(key);
+            if (PENDING_WRITES.containsKey(key)) scheduleWrite(key);
+        }
     }
 
     public History delete() {

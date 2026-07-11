@@ -2621,8 +2621,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mHistory == null || Setting.isIncognito()) return;
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
-        History snapshot = mHistory.copy();
-        App.execute(snapshot::save);
+        mHistory.saveAsync();
     }
 
     private boolean isCurrentSingleEpisode() {
