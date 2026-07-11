@@ -419,7 +419,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void setConfig(Config config, String success) {
         if (config.getUrl().startsWith("file") && !PermissionX.isGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(config, success));
+            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
+                if (allGranted) load(config, success);
+            });
         } else {
             load(config, success);
         }
@@ -430,7 +432,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         boolean needStorage = false;
         for (Config config : configs) if (config.getUrl().startsWith("file")) needStorage = true;
         if (needStorage && !PermissionX.isGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(configs, success));
+            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
+                if (allGranted) load(configs, success);
+            });
         } else {
             load(configs, success);
         }

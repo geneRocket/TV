@@ -308,7 +308,6 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void setItems(int start, List<Vod> items) {
-        if (mAdapter.size() > start && !(mAdapter.get(start) instanceof Vod)) mAdapter.removeItems(start, mAdapter.size() - start);
         if (mAdapter.size() > start) mAdapter.removeItems(start, mAdapter.size() - start);
         mAdapter.addAll(start, items);
     }

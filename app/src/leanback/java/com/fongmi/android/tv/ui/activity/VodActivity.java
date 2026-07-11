@@ -246,10 +246,5 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
         public int getCount() {
             return mAdapter.size();
         }
-
-        @Override
-        public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
-            super.destroyItem(container, position, object);
-        }
     }
 }
