@@ -319,6 +319,10 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         int rowCount = (int) Math.ceil((double) items.size() / column);
         if (rowCount == 0) mLast = null;
         if (mAdapter.size() > start && !(mAdapter.get(start) instanceof ListRow)) mAdapter.removeItems(start, mAdapter.size() - start);
+        if (mAdapter.size() > start && mAdapter.get(start) instanceof ListRow) {
+            Object adapter = ((ListRow) mAdapter.get(start)).getAdapter();
+            if (adapter instanceof ArrayObjectAdapter && ((ArrayObjectAdapter) adapter).getPresenterSelector().getPresenter(null) != getPresenter(style)) mAdapter.removeItems(start, mAdapter.size() - start);
+        }
         if (mAdapter.size() > start + rowCount) mAdapter.removeItems(start + rowCount, mAdapter.size() - (start + rowCount));
         for (int i = 0; i < rowCount; i++) {
             int index = start + i;
