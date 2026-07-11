@@ -797,7 +797,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public static void file(FragmentActivity activity, String path) {
         if (TextUtils.isEmpty(path)) return;
         String name = new File(path).getName();
-        PermissionX.init(activity).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> start(activity, "push_agent", "file://" + path, name, true));
+        PermissionX.init(activity).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
+            if (allGranted) start(activity, "push_agent", "file://" + path, name, true);
+        });
     }
 
     public static void cast(Activity activity, History history) {

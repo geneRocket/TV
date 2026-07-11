@@ -144,7 +144,9 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     @Override
     public void setConfig(Config config) {
         if (config.getUrl().startsWith("file") && !PermissionX.isGranted(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(config));
+            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
+                if (allGranted) load(config);
+            });
         } else {
             load(config);
         }
@@ -156,7 +158,9 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         boolean needStorage = false;
         for (Config config : configs) if (config.getUrl().startsWith("file")) needStorage = true;
         if (needStorage && !PermissionX.isGranted(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> load(configs));
+            PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
+                if (allGranted) load(configs);
+            });
         } else {
             load(configs);
         }
@@ -431,18 +435,18 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
 
     @Override
     public void restore(File file) {
-        PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> AppDatabase.restore(file, new Callback() {
-            @Override
-            public void success() {
-                if (allGranted) {
+        PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
+            if (allGranted) AppDatabase.restore(file, new Callback() {
+                @Override
+                public void success() {
                     Notify.progress(getActivity());
                     App.post(() -> {
                         AppDatabase.reset();
                         initConfig();
                     }, 3000);
                 }
-            }
-        }));
+            });
+        });
     }
 
     private void onRestore(View view) {
@@ -458,12 +462,14 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     }
 
     private void onBackup(View view) {
-        PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> AppDatabase.backup(new Callback() {
-            @Override
-            public void success(String path) {
-                Notify.show(R.string.backed);
-            }
-        }));
+        PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
+            if (allGranted) AppDatabase.backup(new Callback() {
+                @Override
+                public void success(String path) {
+                    Notify.show(R.string.backed);
+                }
+            });
+        });
     }
 
     private boolean onBackupMode(View view) {

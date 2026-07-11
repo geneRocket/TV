@@ -219,7 +219,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         updateHomeTitle();
         if (getHome().getKey().isEmpty()) {
             mPendingHomeToken = null;
-            showHomeContent();
+            setTypes(mResult);
             setLoading(false);
             return;
         }
@@ -234,9 +234,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private boolean isCurrentHomeResult(Result result) {
-        return result != null
+        boolean current = result != null
+                && !TextUtils.isEmpty(mPendingHomeToken)
                 && TextUtils.equals(result.getKey(), getKey())
                 && TextUtils.equals(result.getRequestToken(), mPendingHomeToken);
+        if (current) mPendingHomeToken = null;
+        return current;
     }
 
     private void updateHomeTitle() {
