@@ -12,10 +12,8 @@ import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.FocusHighlight;
 import androidx.leanback.widget.HorizontalGridView;
 import androidx.leanback.widget.ItemBridgeAdapter;
-import androidx.leanback.widget.ListRowPresenter;
 import androidx.leanback.widget.ListRow;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -480,21 +478,13 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void restoreChildPosition(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
-        mBinding.recycler.post(() -> {
-            if (mBinding == null) return;
-            RecyclerView.ViewHolder holder = mBinding.recycler.findViewHolderForLayoutPosition(page.getPosition());
-            if (holder == null) return;
-            if (page.getChildPosition() >= 0 && holder instanceof ItemBridgeAdapter.ViewHolder && ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder() instanceof ListRowPresenter.ViewHolder) {
-                HorizontalGridView row = ((ListRowPresenter.ViewHolder) ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder()).getGridView();
-                row.setSelectedPosition(page.getChildPosition());
-                row.post(() -> {
-                    RecyclerView.ViewHolder child = row.findViewHolderForLayoutPosition(page.getChildPosition());
-                    if (child != null) child.itemView.requestFocus();
-                });
-            } else {
-                holder.itemView.requestFocus();
-            }
-        });
+        // Let Leanback restore both coordinates as part of its next layout. A single
+        // post() can run before the target row has been attached, losing the focus.
+        if (page.getChildPosition() >= 0) {
+            mBinding.recycler.setSelectedPosition(page.getPosition(), page.getChildPosition());
+        } else {
+            mBinding.recycler.setSelectedPosition(page.getPosition());
+        }
     }
 
     private void openVod(Vod item) {
