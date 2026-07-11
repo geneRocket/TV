@@ -160,6 +160,10 @@ public class SiteViewModel extends ViewModel {
         }, data -> result.postValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::requestFallback);
     }
 
+    public void cancelCategoryContent() {
+        cancelRequest(REQUEST_RESULT);
+    }
+
     private Result withCategoryRequest(Result result, String key, String tid, String page, HashMap<String, String> extend) {
         Result value = result == null ? Result.empty() : result;
         value.setKey(key);

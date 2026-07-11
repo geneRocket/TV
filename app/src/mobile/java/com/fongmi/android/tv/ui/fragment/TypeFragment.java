@@ -48,12 +48,15 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private CustomScroller mScroller;
     private SiteViewModel mViewModel;
     private VodAdapter mAdapter;
-    private List<Page> mPages;
+    private List<Page<VodAdapter, Set<String>>> mPages;
     private Set<String> mVodKeys;
     private String mPendingTypeId;
     private String mPendingPage;
     private String mPendingExtend;
-    private Page mPage;
+    private Page<VodAdapter, Set<String>> mPage;
+    private Result mHomeResult;
+    private String mHomeToken;
+    private long mHomeTokenSeed;
 
     public static TypeFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
         Bundle args = new Bundle();
@@ -108,7 +111,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         return (VodFragment) getParentFragment();
     }
 
-    private Page getLastPage() {
+    private Page<VodAdapter, Set<String>> getLastPage() {
         return mPages.get(mPages.size() - 1);
     }
 
@@ -155,7 +158,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     private void getHome() {
-        mViewModel.homeContent();
+        mHomeResult = null;
+        mHomeToken = "home:" + (++mHomeTokenSeed);
+        mViewModel.homeContent(getKey(), mHomeToken);
         mVodKeys.clear();
         mAdapter.clear();
     }
@@ -175,8 +180,14 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         mPendingPage = page;
         mPendingExtend = getRequestExtend(mExtends);
         if ("1".equals(page) && !mBinding.swipeLayout.isRefreshing()) mBinding.progressLayout.showProgress();
-        if (isHome() && "1".equals(page)) setAdapter(getParent().getResult());
-        else mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
+        if (isHome() && "1".equals(page)) {
+            mHomeToken = null;
+            setAdapter(mHomeResult = getParent().getResult());
+        } else {
+            mHomeResult = null;
+            mHomeToken = null;
+            mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
+        }
     }
 
     private void setAdapter(Result result) {
@@ -217,7 +228,15 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     private boolean isCurrentResult(Result result) {
-        if (isHome()) return true;
+        if (isHome()) {
+            if (result == null) return false;
+            if (result == mHomeResult) return true;
+            boolean current = !TextUtils.isEmpty(mHomeToken)
+                    && TextUtils.equals(result.getKey(), getKey())
+                    && TextUtils.equals(result.getRequestToken(), mHomeToken);
+            if (current) mHomeToken = null;
+            return current;
+        }
         if (result == null) return false;
         return TextUtils.equals(result.getKey(), getKey())
                 && TextUtils.equals(result.getRequestTypeId(), mPendingTypeId)
@@ -290,7 +309,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         if (item.isAction()) {
             mViewModel.action(getKey(), item.getAction());
         } else if (item.isFolder()) {
-            mPages.add(Page.get(item, findPosition()));
+            Page<VodAdapter, Set<String>> page = Page.get(item, findPosition(), mAdapter, new HashSet<>(mVodKeys), mScroller.getPage(), !mScroller.isDisable());
+            mPages.add(page);
+            setStyle(getStyle());
             getVideo(item.getVodId(), "1");
         } else {
             if (isIndexs()) CollectActivity.start(getActivity(), item.getVodName());
@@ -310,7 +331,25 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     public boolean canBack() {
         if (mPages.isEmpty()) return true;
         mPages.remove(mPage = getLastPage());
-        onRefresh();
+        restorePage(mPage);
         return false;
+    }
+
+    private void restorePage(Page<VodAdapter, Set<String>> page) {
+        mViewModel.cancelCategoryContent();
+        mPendingTypeId = null;
+        mPendingPage = null;
+        mPendingExtend = null;
+        mAdapter = page.getAdapter();
+        mBinding.recycler.setAdapter(mAdapter);
+        mBinding.recycler.setLayoutManager(mAdapter.getStyle().isList() ? new LinearLayoutManager(getActivity()) : new GridLayoutManager(getContext(), Product.getColumn(getActivity(), mAdapter.getStyle())));
+        mVodKeys.clear();
+        mVodKeys.addAll(page.getExtra());
+        mHomeResult = null;
+        mHomeToken = null;
+        mScroller.restore(page.getPage(), page.isEnable());
+        mBinding.swipeLayout.setRefreshing(false);
+        mBinding.progressLayout.showContent(false, mAdapter.getItemCount());
+        checkPosition(false);
     }
 }

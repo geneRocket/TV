@@ -58,9 +58,9 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private CustomScroller mScroller;
     private SiteViewModel mViewModel;
     private List<Filter> mFilters;
-    private List<Page> mPages;
+    private List<Page<ArrayObjectAdapter, ArrayObjectAdapter>> mPages;
     private boolean mOpen;
-    private Page mPage;
+    private Page<ArrayObjectAdapter, ArrayObjectAdapter> mPage;
     private String mRequestTypeId;
     private String mRequestPage;
     private String mRequestExtend;
@@ -125,7 +125,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         return getSite().isIndexs();
     }
 
-    private Page getLastPage() {
+    private Page<ArrayObjectAdapter, ArrayObjectAdapter> getLastPage() {
         return mPages.get(mPages.size() - 1);
     }
 
@@ -175,7 +175,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.result.observe(getViewLifecycleOwner(), result -> {
             if (!isCurrentRequest(result)) return;
-            boolean first = mScroller.first();
+            boolean first = "1".equals(result.getRequestPage());
             int size = result.getList().size();
             if (first || size > 0) addVideo(result);
             mScroller.endLoading(result);
@@ -414,7 +414,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     public void goBack() {
         if (mPages.size() == 1) mBinding.recycler.setMoveTop(true);
         mPages.remove(mPage = getLastPage());
-        onRefresh();
+        restorePage(mPage);
     }
 
     public boolean goRoot() {
@@ -436,9 +436,23 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void openFolder(Vod item) {
-        mPages.add(Page.get(item, mBinding.recycler.getSelectedPosition()));
+        Page<ArrayObjectAdapter, ArrayObjectAdapter> page = Page.get(item, mBinding.recycler.getSelectedPosition(), mAdapter, mLast, mScroller.getPage(), !mScroller.isDisable());
+        mPages.add(page);
+        mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(mAdapter.getPresenterSelector())));
         mBinding.recycler.setMoveTop(false);
         requestVideo(item.getVodId(), "1");
+    }
+
+    private void restorePage(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
+        mViewModel.cancelCategoryContent();
+        mRequestTypeId = null;
+        mRequestPage = null;
+        mRequestExtend = null;
+        mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = page.getAdapter()));
+        mLast = page.getExtra();
+        mScroller.restore(page.getPage(), page.isEnable());
+        checkPosition(false);
+        hideProgress();
     }
 
     private void openVod(Vod item) {
