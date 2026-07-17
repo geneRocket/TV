@@ -40,8 +40,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
             Renderer renderer = new FfmpegAudioRenderer(eventHandler, eventListener, audioSink);
             out.add(renderer);
             Log.i(TAG, "Loaded FfmpegAudioRenderer.");
-        } catch (Exception e) {
-            // 这里可以改为 Log.e 避免直接崩溃，或者保持原本的 RuntimeException
+        } catch (Throwable e) {
             Log.e(TAG, "Error instantiating Ffmpeg extension", e);
         }
     }
@@ -56,7 +55,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
             Renderer renderer = new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY);
             out.add(renderer);
             Log.i(TAG, "Loaded FfmpegVideoRenderer.");
-        } catch (Exception e) {
+        } catch (Throwable e) {
             Log.e(TAG, "Error instantiating Ffmpeg extension", e);
         }
     }

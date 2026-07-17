@@ -144,9 +144,13 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     private void setRecyclerView() {
         mBinding.wordRecycler.setHasFixedSize(true);
+        mBinding.wordRecycler.setItemAnimator(null);
+        mBinding.wordRecycler.setItemViewCacheSize(12);
         mBinding.wordRecycler.addItemDecoration(new SpaceItemDecoration(1, 16));
         mBinding.wordRecycler.setAdapter(mWordAdapter = new WordAdapter(this));
         mBinding.recordRecycler.setHasFixedSize(true);
+        mBinding.recordRecycler.setItemAnimator(null);
+        mBinding.recordRecycler.setItemViewCacheSize(8);
         mBinding.recordRecycler.addItemDecoration(new SpaceItemDecoration(1, 16));
         mBinding.recordRecycler.setAdapter(mRecordAdapter = new RecordAdapter(this));
     }
@@ -285,7 +289,10 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (KeyUtil.isMenuKey(event)) showDialog();
+        if (KeyUtil.isMenuKey(event)) {
+            showDialog();
+            return true;
+        }
         return super.dispatchKeyEvent(event);
     }
 

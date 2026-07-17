@@ -81,7 +81,7 @@ public class CustomVerticalGridView extends VerticalGridView {
     public boolean moveToTop() {
         if (views == null || getSelectedPosition() == 0 || getAdapter() == null || getAdapter().getItemCount() == 0) return false;
         for (View view : views) if (view.getId() == R.id.recycler) view.requestFocus();
-        scrollToPosition(0);
+        setSelectedPosition(0);
         showHeader();
         return true;
     }

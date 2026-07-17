@@ -118,6 +118,9 @@ public class CollectActivity extends BaseActivity {
         mBinding.recycler.setSaveEnabled(false);
         mBinding.recycler.setHorizontalSpacing(ResUtil.dp2px(16));
         mBinding.recycler.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.recycler.setHasFixedSize(true);
+        mBinding.recycler.setItemAnimator(null);
+        mBinding.recycler.setItemViewCacheSize(12);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(new CollectPresenter())));
     }
 
@@ -177,8 +180,9 @@ public class CollectActivity extends BaseActivity {
         syncPager();
         mBinding.recycler.setSelectedPosition(0);
         mBinding.pager.setCurrentItem(0, false);
-        mExecutor = new PauseExecutor(Math.max(2, Math.min(10, Constant.THREAD_POOL)));
         mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
+        if (TextUtils.isEmpty(getKeyword().trim())) return;
+        mExecutor = new PauseExecutor(Math.max(2, Math.min(10, Constant.THREAD_POOL)));
         for (Site site : mSites) mSearchTasks.add(mExecutor.submit(() -> search(site)));
     }
 
@@ -330,7 +334,7 @@ public class CollectActivity extends BaseActivity {
         mOldView = child.itemView;
         mOldView.setActivated(true);
         App.removeCallbacks(mRunnable);
-        App.post(mRunnable, 200);
+        App.post(mRunnable, 100);
     }
 
     private final Runnable mRunnable = new Runnable() {

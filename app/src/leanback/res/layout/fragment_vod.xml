@@ -22,4 +22,8 @@
         layout="@layout/view_progress"
         android:visibility="gone" />
 
+    <include
+        android:id="@+id/empty"
+        layout="@layout/view_empty_retry" />
+
 </FrameLayout>

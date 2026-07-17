@@ -184,8 +184,14 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
             mScroller.endLoading(result);
             checkPosition(first);
             checkMore(size);
+            showEmpty(first, size);
             hideProgress();
         });
+    }
+
+    @Override
+    protected void initEvent() {
+        mBinding.empty.retry.setOnClickListener(view -> getVideo());
     }
 
     private void setFilters() {
@@ -355,11 +361,20 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void showProgress() {
+        mBinding.empty.getRoot().setVisibility(View.GONE);
         if (!mOpen) mBinding.progress.getRoot().setVisibility(View.VISIBLE);
     }
 
     private void hideProgress() {
         mBinding.progress.getRoot().setVisibility(View.GONE);
+    }
+
+    private void showEmpty(boolean first, int size) {
+        boolean empty = first && size == 0 && mAdapter.size() == 0;
+        mBinding.empty.getRoot().setVisibility(empty ? View.VISIBLE : View.GONE);
+        if (empty) App.post(() -> {
+            if (isAdded() && mBinding != null) mBinding.empty.retry.requestFocus();
+        });
     }
 
     private void showFilter() {

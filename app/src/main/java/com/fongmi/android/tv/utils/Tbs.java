@@ -21,6 +21,13 @@ import java.util.HashMap;
 
 public class Tbs {
     private static final String TAG = Tbs.class.getSimpleName();
+    private static boolean initScheduled;
+    private static final Runnable INIT = Tbs::initTbs;
+
+    private static synchronized void initTbs() {
+        initScheduled = false;
+        if (!QbSdk.isTbsCoreInited()) tbsInit();
+    }
 
     private static boolean isCpu64Bit() {
         for (String abi : Build.SUPPORTED_ABIS) {
@@ -55,10 +62,12 @@ public class Tbs {
         QbSdk.initX5Environment(App.get(), callback);
     }
 
-    public static void init() {
+    public static synchronized void init() {
         if (Setting.getParseWebView() == 0) return;
-        if (QbSdk.isTbsCoreInited()) return;
-        App.post(() -> tbsInit());
+        if (QbSdk.isTbsCoreInited() || initScheduled) return;
+        initScheduled = true;
+        // X5 setup can be expensive; let the TV home screen draw and accept focus first.
+        App.post(INIT, 1000);
     }
 
     public static String url() {

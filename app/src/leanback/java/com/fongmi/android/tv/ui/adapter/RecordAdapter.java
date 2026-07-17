@@ -13,6 +13,7 @@ import com.fongmi.android.tv.databinding.AdapterSearchRecordBinding;
 import com.google.gson.reflect.TypeToken;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public class RecordAdapter extends RecyclerView.Adapter<RecordAdapter.ViewHolder> {
@@ -37,7 +38,15 @@ public class RecordAdapter extends RecyclerView.Adapter<RecordAdapter.ViewHolder
         if (Setting.getKeyword().isEmpty()) return new ArrayList<>();
         try {
             List<String> items = App.gson().fromJson(Setting.getKeyword(), new TypeToken<List<String>>() {}.getType());
-            return items == null ? new ArrayList<>() : items;
+            if (items == null) return new ArrayList<>();
+            LinkedHashSet<String> unique = new LinkedHashSet<>();
+            for (String item : items) {
+                if (item == null) continue;
+                String text = item.trim();
+                if (!text.isEmpty()) unique.add(text);
+                if (unique.size() == 8) break;
+            }
+            return new ArrayList<>(unique);
         } catch (Exception ignored) {
             return new ArrayList<>();
         }

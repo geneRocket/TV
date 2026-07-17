@@ -108,6 +108,9 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
     private void setRecyclerView() {
         mBinding.recycler.setHorizontalSpacing(ResUtil.dp2px(16));
         mBinding.recycler.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.recycler.setHasFixedSize(true);
+        mBinding.recycler.setItemAnimator(null);
+        mBinding.recycler.setItemViewCacheSize(12);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(new TypePresenter(this))));
     }
 
@@ -210,7 +213,10 @@ public class VodActivity extends BaseActivity implements TypePresenter.OnClickLi
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (KeyUtil.isMenuKey(event)) updateFilter((Class) mAdapter.get(mBinding.pager.getCurrentItem()));
+        if (KeyUtil.isMenuKey(event)) {
+            updateFilter((Class) mAdapter.get(mBinding.pager.getCurrentItem()));
+            return true;
+        }
         if (KeyUtil.isBackKey(event) && event.isLongPress() && getFragment().goRoot()) setCoolDown();
         return super.dispatchKeyEvent(event);
     }

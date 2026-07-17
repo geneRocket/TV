@@ -229,7 +229,9 @@ public final class M3u8AdFilter {
         records = filterShortAdClusters(records);
 
         String filtered = filterMinorHostSegments(records, content);
-        if (!startsWithM3uHeader(filtered)) return toBytesOrOriginal(content, bytes);
+        // Never hand Exo a playlist that the filter has emptied. A false-positive ad rule
+        // should leave the original stream playable rather than turn into a playback error.
+        if (!startsWithM3uHeader(filtered) || countSegmentsFromString(filtered) == 0) return toBytesOrOriginal(content, bytes);
 
         return toBytesOrOriginal(filtered, bytes);
     }
@@ -361,6 +363,13 @@ public final class M3u8AdFilter {
         String full = normalizeForMatch(url);
         synchronized (SUBTITLE_PLAYLIST_WHITELIST) {
             return SUBTITLE_PLAYLIST_WHITELIST.contains(full);
+        }
+    }
+
+    /** Clears per-playback subtitle URLs after the player is released. */
+    public static void clearSubtitlePlaylistWhitelist() {
+        synchronized (SUBTITLE_PLAYLIST_WHITELIST) {
+            SUBTITLE_PLAYLIST_WHITELIST.clear();
         }
     }
 

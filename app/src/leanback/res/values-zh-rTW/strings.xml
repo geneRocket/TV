@@ -14,6 +14,8 @@
     <string name="empty_keep">暫無收藏</string>
     <string name="empty_history">暫無觀看紀錄</string>
     <string name="play_switch_empty">未找到可用換源</string>
+    <string name="vod_empty">沒有找到影片</string>
+    <string name="vod_retry">重試</string>
 
     <!-- Collect -->
     <string name="collect_result">「<xliff:g name="name">%s</xliff:g>」的搜尋結果</string>

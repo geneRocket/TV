@@ -30,9 +30,11 @@ public class CustomScroller extends RecyclerView.OnScrollListener {
 
     private boolean isNearEnd(RecyclerView view) {
         if (view == null || view.getLayoutManager() == null || view.getLayoutManager().getItemCount() == 0 || view.getLayoutManager().getChildCount() == 0) return false;
-        View lastChild = view.getLayoutManager().getChildAt(view.getLayoutManager().getChildCount() - 1);
-        if (lastChild == null) return false;
-        int lastPosition = view.getLayoutManager().getPosition(lastChild);
+        int lastPosition = RecyclerView.NO_POSITION;
+        for (int i = 0; i < view.getLayoutManager().getChildCount(); i++) {
+            View child = view.getLayoutManager().getChildAt(i);
+            if (child != null) lastPosition = Math.max(lastPosition, view.getLayoutManager().getPosition(child));
+        }
         return lastPosition >= view.getLayoutManager().getItemCount() - PREFETCH_DISTANCE;
     }
 
@@ -74,7 +76,7 @@ public class CustomScroller extends RecyclerView.OnScrollListener {
     }
 
     public void endLoading(Result result) {
-        if (result.getList().isEmpty()) page--;
+        if (result.getList().isEmpty()) page = Math.max(1, page - 1);
         setEnable(result.getPageCount());
         setLoading(false);
     }

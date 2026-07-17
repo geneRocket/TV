@@ -38,10 +38,12 @@ import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.event.PlayerEvent;
 import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.impl.SessionCallback;
+import com.fongmi.android.tv.player.exo.CacheManager;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.AdBlocker;
+import com.fongmi.android.tv.utils.M3u8AdFilter;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
@@ -169,22 +171,28 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     private void initExo(PlayerView view) {
-        view.setPlayer(null);
-        // 2. 建议：尝试让 View 不可见再可见，强制触发 Surface 的某些重绘机制（针对顽固的绿屏设备）
-        view.setVisibility(View.GONE);
-        view.setVisibility(View.VISIBLE);
-        exoPlayer = new ExoPlayer.Builder(App.get())
-                .setLoadControl(ExoUtil.buildLoadControl())
-                .setTrackSelector(ExoUtil.buildTrackSelector())
-                .setRenderersFactory(ExoUtil.buildRenderersFactory(decode))
-                .setMediaSourceFactory(ExoUtil.buildMediaSourceFactory())
-                .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS)
-                .build();
-        exoPlayer.setAudioAttributes(AudioAttributes.DEFAULT, !Setting.isPlayWithOthers());
-        exoPlayer.setHandleAudioBecomingNoisy(true);
-        exoPlayer.setPlayWhenReady(true);
-        exoPlayer.addListener(this);
-        view.setPlayer(exoPlayer);
+        try {
+            view.setPlayer(null);
+            view.setVisibility(View.GONE);
+            view.setVisibility(View.VISIBLE);
+            exoPlayer = new ExoPlayer.Builder(App.get())
+                    .setLoadControl(ExoUtil.buildLoadControl())
+                    .setTrackSelector(ExoUtil.buildTrackSelector())
+                    .setRenderersFactory(ExoUtil.buildRenderersFactory(decode))
+                    .setMediaSourceFactory(ExoUtil.buildMediaSourceFactory())
+                    .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS)
+                    .build();
+            exoPlayer.setAudioAttributes(AudioAttributes.DEFAULT, !Setting.isPlayWithOthers());
+            exoPlayer.setHandleAudioBecomingNoisy(true);
+            exoPlayer.setPlayWhenReady(true);
+            exoPlayer.addListener(this);
+            view.setPlayer(exoPlayer);
+        } catch (RuntimeException e) {
+            exoPlayer = null;
+            ThreadPools.log(e, "Exo initialization failed; falling back to IJK.");
+            player = IJK;
+            decode = getDecode(player);
+        }
     }
 
     private void initIjk(IjkVideoView view) {
@@ -566,6 +574,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (haveDanmu()) danmuView.release();
         removeTimeoutCheck();
         if (current) {
+            CacheManager.get().release();
+            M3u8AdFilter.clearSubtitlePlaylistWhitelist();
             Server.get().setPlayer(null);
             App.execute(() -> Source.get().stop());
         }
@@ -646,11 +656,16 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private void releaseExo() {
         if (exoPlayer == null) return;
-        exoPlayer.stop();
-        exoPlayer.clearVideoSurface();
-        exoPlayer.removeListener(this);
-        exoPlayer.release();
-        exoPlayer = null;
+        try {
+            exoPlayer.stop();
+            exoPlayer.clearVideoSurface();
+            exoPlayer.removeListener(this);
+            exoPlayer.release();
+        } catch (RuntimeException e) {
+            ThreadPools.log(e, "Exo release failed.");
+        } finally {
+            exoPlayer = null;
+        }
     }
 
     private void releaseIjk() {
@@ -719,9 +734,17 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         this.pendingReady = true;
         if (isIjk() && ijkPlayer != null) ijkPlayer.setMediaSource(IjkUtil.getSource(this.headers, this.url), position);
         if (isExo() && exoPlayer != null) {
-            MediaItem item = ExoUtil.getMediaItem(this.headers, UrlUtil.uri(this.url), this.format, this.drm, this.subs, decode, this.forceLive);
-            exoPlayer.setMediaItem(item, position);
-            exoPlayer.prepare();
+            try {
+                MediaItem item = ExoUtil.getMediaItem(this.headers, UrlUtil.uri(this.url), this.format, this.drm, this.subs, decode, this.forceLive);
+                exoPlayer.setMediaItem(item, position);
+                exoPlayer.prepare();
+            } catch (RuntimeException e) {
+                pendingReady = false;
+                removeTimeoutCheck();
+                ThreadPools.log(e, "Exo media source setup failed.");
+                ErrorEvent.url(ExoUtil.getRetry(PlaybackException.ERROR_CODE_UNSPECIFIED), PlaybackException.ERROR_CODE_UNSPECIFIED);
+                return;
+            }
         }
         removeTimeoutCheck();
         App.post(runnable, timeout);

@@ -496,7 +496,10 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (KeyUtil.isMenuKey(event)) onToggle();
+        if (KeyUtil.isMenuKey(event)) {
+            onToggle();
+            return true;
+        }
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
         if (isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event)) return mKeyDown.onKeyDown(event);
         return super.dispatchKeyEvent(event);

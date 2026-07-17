@@ -40,10 +40,14 @@ import com.google.common.io.ByteStreams;
 import com.google.common.net.HttpHeaders;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.io.SequenceInputStream;
 import java.util.Collections;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +71,8 @@ import okhttp3.ResponseBody;
  * construct the instance.
  */
 public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource {
+
+    private static final int MAX_M3U8_FILTER_BYTES = 2 * 1024 * 1024;
 
     static {
         MediaLibraryInfo.registerModule("media3.datasource.okhttp");
@@ -329,16 +335,20 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
         if (shouldFilterM3u8(dataSpec, contentType)) {
             byte[] bodyBytes;
             try {
-                bodyBytes = ByteStreams.toByteArray(castNonNull(responseByteStream));
+                bodyBytes = readM3u8ForFilter(castNonNull(responseByteStream));
             } catch (IOException e) {
                 closeConnectionQuietly();
                 throw HttpDataSourceException.createForIOException(
                         e, dataSpec, HttpDataSourceException.TYPE_OPEN);
             }
-            byte[] filtered = M3u8AdFilter.filterMinorHost(bodyBytes, dataSpec.uri.toString());
-            if (filtered == bodyBytes) {
-                // no-op: keep original response stream
-                responseByteStream = new java.io.ByteArrayInputStream(bodyBytes);
+            // Large or malformed responses can advertise an m3u8 MIME type. Keep playback
+            // available and skip filtering instead of allocating an unbounded byte array.
+            byte[] filtered = bodyBytes == null ? null : filterM3u8Safely(bodyBytes, dataSpec.uri.toString());
+            if (bodyBytes == null) {
+                // readM3u8ForFilter restores the original stream when the safety limit is hit.
+            } else if (filtered == bodyBytes) {
+                // Filtering consumed the response stream, so replay an unchanged playlist too.
+                responseByteStream = new ByteArrayInputStream(bodyBytes);
             } else {
                 responseBody.close();
                 responseBody = ResponseBody.create(mediaType, filtered);
@@ -379,6 +389,30 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
         if (dataSpec.position != 0) return false;
         if (dataSpec.length != C.LENGTH_UNSET) return false;
         return M3u8AdFilter.isLikelyM3u8(contentType, dataSpec.uri.toString());
+    }
+
+    @Nullable
+    private byte[] readM3u8ForFilter(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            if (output.size() + read > MAX_M3U8_FILTER_BYTES) {
+                InputStream replay = new SequenceInputStream(new ByteArrayInputStream(output.toByteArray()), new ByteArrayInputStream(Arrays.copyOf(buffer, read)));
+                responseByteStream = new SequenceInputStream(replay, input);
+                return null;
+            }
+            output.write(buffer, 0, read);
+        }
+        return output.toByteArray();
+    }
+
+    private byte[] filterM3u8Safely(byte[] body, String url) {
+        try {
+            return M3u8AdFilter.filterMinorHost(body, url);
+        } catch (Throwable ignored) {
+            return body;
+        }
     }
 
     @UnstableApi

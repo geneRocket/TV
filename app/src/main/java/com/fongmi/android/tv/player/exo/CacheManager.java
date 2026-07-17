@@ -31,4 +31,11 @@ public class CacheManager {
         if (cache != null) return;
         cache = new SimpleCache(Path.exo(), new LeastRecentlyUsedCacheEvictor(MAX_CACHE_BYTES), new StandaloneDatabaseProvider(App.get()));
     }
+
+    /** Releases cache file handles; cached media remains available for the next player instance. */
+    public synchronized void release() {
+        if (cache == null) return;
+        cache.release();
+        cache = null;
+    }
 }

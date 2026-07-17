@@ -92,6 +92,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private int mKeepRequestId;
     private int mOpenRequestId;
     private String mRecommendStyleKey;
+    private boolean mHasFuncRow;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -150,7 +151,8 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     private void setAdapter() {
         ListRow funcRow = getFuncRow();
-        if (funcRow != null) mAdapter.add(funcRow);
+        mHasFuncRow = funcRow != null;
+        if (mHasFuncRow) mAdapter.add(funcRow);
         if (Setting.isHomeHistory()) mAdapter.add(R.string.home_history);
         mAdapter.add(R.string.home_keep);
         mAdapter.add(R.string.home_recommend);
@@ -158,7 +160,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         mKeepAdapter = new ArrayObjectAdapter(mKeepPresenter = new KeepPresenter(this));
         homeUI = Setting.getHomeUI();
         button = Setting.getHomeButtons(Button.getDefaultButtons());
-        if (funcRow != null) setTitleNextFocus(funcRow);
+        setTitleNextFocus(funcRow);
     }
 
     private VodPresenter getPresenter(Style style) {
@@ -216,20 +218,23 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     private void setTitleNextFocus(ListRow funcRow) {
-        if (funcRow == null) return;
-        Func func = (Func) funcRow.getAdapter().get(0);
-        int downId = getHomeActicity().mBinding.recycler.getVisibility() == View.VISIBLE ? -1 : func.getId();
+        int downId = -1;
+        if (funcRow != null) {
+            Func func = (Func) funcRow.getAdapter().get(0);
+            downId = getHomeActicity().mBinding.recycler.getVisibility() == View.VISIBLE ? -1 : func.getId();
+        }
         getHomeActicity().mBinding.title.setNextFocusDownId(downId);
     }
 
     private void refreshFuncRow() {
         if (homeUI == Setting.getHomeUI() && Setting.getHomeButtons(Button.getDefaultButtons()).equals(button)) return;
-        if (!TextUtils.isEmpty(button)) mAdapter.removeItems(0, 1);
+        if (mHasFuncRow) mAdapter.removeItems(0, 1);
         homeUI = Setting.getHomeUI();
         button = Setting.getHomeButtons(Button.getDefaultButtons());
         ListRow funcRow = getFuncRow();
-        if (funcRow != null) mAdapter.add(0, funcRow);
-        if (funcRow != null) setTitleNextFocus(funcRow);
+        mHasFuncRow = funcRow != null;
+        if (mHasFuncRow) mAdapter.add(0, funcRow);
+        setTitleNextFocus(funcRow);
     }
 
     public void refreshRecommond() {

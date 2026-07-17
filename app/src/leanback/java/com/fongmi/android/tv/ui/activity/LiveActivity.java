@@ -1084,7 +1084,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
-        if (mKeyDown.hasEvent(event)) mKeyDown.onKeyDown(event);
+        if (mKeyDown.hasEvent(event) && dispatch(true)) {
+            mKeyDown.onKeyDown(event);
+            return true;
+        }
         return super.dispatchKeyEvent(event);
     }
 

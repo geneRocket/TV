@@ -22,7 +22,8 @@ public class CustomKeyboard implements KeyboardAdapter.OnClickListener {
 
     private void initView() {
         binding.keyboard.setItemAnimator(null);
-        binding.keyboard.setHasFixedSize(false);
+        binding.keyboard.setHasFixedSize(true);
+        binding.keyboard.setItemViewCacheSize(36);
         binding.keyboard.addItemDecoration(new SpaceItemDecoration(6, 8));
         binding.keyboard.setAdapter(adapter = new KeyboardAdapter(this));
     }
@@ -32,7 +33,7 @@ public class CustomKeyboard implements KeyboardAdapter.OnClickListener {
         StringBuilder sb = new StringBuilder(binding.keyword.getText() == null ? "" : binding.keyword.getText().toString());
         int cursor = binding.keyword.getSelectionStart();
         if (cursor < 0) cursor = sb.length();
-        if (binding.keyword.length() > 19) return;
+        if (sb.length() >= 255) return;
         sb.insert(cursor, text);
         binding.keyword.setText(sb.toString());
         binding.keyword.setSelection(cursor + 1);

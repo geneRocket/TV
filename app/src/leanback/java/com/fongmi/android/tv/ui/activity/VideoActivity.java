@@ -1068,31 +1068,37 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setRecyclerView() {
         mBinding.flag.setHasFixedSize(true);
+        mBinding.flag.setItemAnimator(null);
         mBinding.flag.setItemViewCacheSize(10);
         mBinding.flag.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.flag.setAdapter(new ItemBridgeAdapter(mFlagAdapter = new ArrayObjectAdapter(mFlagPresenter = new FlagPresenter(item -> mPlaybackNavigation.switchFlag(item, false)))));
         mBinding.quality.setHasFixedSize(true);
+        mBinding.quality.setItemAnimator(null);
         mBinding.quality.setItemViewCacheSize(10);
         mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this::setQualityActivated));
         mBinding.array.setHasFixedSize(true);
+        mBinding.array.setItemAnimator(null);
         mBinding.array.setItemViewCacheSize(10);
         mBinding.array.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.array.setAdapter(new ItemBridgeAdapter(mArrayAdapter = new ArrayObjectAdapter(mArrayPresenter = new ArrayPresenter(this))));
         mBinding.part.setHasFixedSize(true);
+        mBinding.part.setItemAnimator(null);
         mBinding.part.setItemViewCacheSize(10);
         mBinding.part.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.part.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.part.setAdapter(new ItemBridgeAdapter(mPartAdapter = new ArrayObjectAdapter(mPartPresenter = new PartPresenter(item -> SearchActivity.start(this, item, true)))));
         mBinding.quick.setHasFixedSize(true);
+        mBinding.quick.setItemAnimator(null);
         mBinding.quick.setItemViewCacheSize(10);
         mBinding.quick.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quick.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quick.setAdapter(new ItemBridgeAdapter(mQuickAdapter = new ArrayObjectAdapter(new QuickPresenter(item -> mContent.setSearch(item)))));
         mBinding.control.parse.setHasFixedSize(true);
+        mBinding.control.parse.setItemAnimator(null);
         mBinding.control.parse.setItemViewCacheSize(10);
         mBinding.control.parse.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.control.parse.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1104,6 +1110,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void setEpisodeView() {
         mBinding.episodeVert.setHasFixedSize(true);
         mBinding.episodeHori.setHasFixedSize(true);
+        mBinding.episodeVert.setItemAnimator(null);
+        mBinding.episodeHori.setItemAnimator(null);
         mBinding.episodeVert.setItemViewCacheSize(20);
         mBinding.episodeHori.setItemViewCacheSize(20);
         mBinding.episodeVert.setVerticalSpacing(ResUtil.dp2px(8));

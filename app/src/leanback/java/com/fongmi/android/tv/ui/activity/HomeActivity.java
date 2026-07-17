@@ -177,6 +177,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         setHomeUI();
         mBinding.recycler.setHorizontalSpacing(ResUtil.dp2px(16));
         mBinding.recycler.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.recycler.setHasFixedSize(true);
+        mBinding.recycler.setItemAnimator(null);
+        mBinding.recycler.setItemViewCacheSize(12);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(new TypePresenter(this))));
     }
 
@@ -699,7 +702,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setLogo() {
-        Glide.with(App.get()).load(UrlUtil.convert(VodConfig.get().getConfig().getLogo())).circleCrop().override(Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL).listener(getListener()).into(mBinding.logo);
+        String logo = VodConfig.get().getConfig().getLogo();
+        if (TextUtils.isEmpty(logo)) {
+            Glide.with(this).clear(mBinding.logo);
+            mBinding.logo.setVisibility(View.GONE);
+            return;
+        }
+        int size = ResUtil.dp2px(32);
+        Glide.with(this).load(UrlUtil.convert(logo)).circleCrop().override(size, size).listener(getListener()).into(mBinding.logo);
     }
 
     private RequestListener<Drawable> getListener() {
@@ -724,6 +734,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             App.removeCallbacks(mEnableTitleFocus);
             App.post(mEnableTitleFocus, 500);
         }
+        // A background refresh must not pull focus away from the item the user is operating.
+        if (mFocus != null && mFocus.isShown() && mFocus.isFocusable() && mFocus.requestFocus()) return;
         if (mFocus != mBinding.title) {
             if (Setting.getHomeUI() == 0) {
                 HomeFragment fragment = getHomeFragmentSafe();
@@ -746,8 +758,12 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             else if (Setting.getHomeMenuKey() == 6) PushActivity.start(this);
             else if (Setting.getHomeMenuKey() == 7) KeepActivity.start(this);
             else if (Setting.getHomeMenuKey() == 8) SettingActivity.start(this);
+            return true;
         }
-        if (!isHomeFragment && KeyUtil.isMenuKey(event)) updateFilter((Class) mAdapter.get(mBinding.pager.getCurrentItem()));
+        if (!isHomeFragment && KeyUtil.isMenuKey(event)) {
+            updateFilter((Class) mAdapter.get(mBinding.pager.getCurrentItem()));
+            return true;
+        }
         if (!isHomeFragment && KeyUtil.isBackKey(event) && event.isLongPress() && getFragment().goRoot()) setCoolDown();
         return super.dispatchKeyEvent(event);
     }
