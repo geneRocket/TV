@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="40dp"
+    android:minHeight="48dp"
     android:background="@drawable/selector_text"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:orientation="horizontal"
+    android:paddingHorizontal="16dp">
 
     <TextView
         android:id="@+id/text"
@@ -17,22 +19,22 @@
         android:layout_weight="1"
         android:layout_gravity="center_vertical"
         android:ellipsize="marquee"
-        android:gravity="center"
+        android:gravity="start|center_vertical"
         android:singleLine="true"
         android:textColor="@color/text"
-        android:textSize="18sp"
+        android:textSize="16sp"
         tools:text="泥巴" />
 
     <com.google.android.material.checkbox.MaterialCheckBox
         android:id="@+id/check"
         android:layout_width="24dp"
         android:layout_height="24dp"
-        android:layout_marginStart="12dp"
         android:layout_gravity="center_vertical"
-        android:buttonTint="@color/white"
+        android:buttonTint="@color/text"
         android:clickable="false"
         android:enabled="false"
         android:focusable="false"
-        android:focusableInTouchMode="false" />
+        android:focusableInTouchMode="false"
+        app:useMaterialThemeColors="false" />
 
 </LinearLayout>

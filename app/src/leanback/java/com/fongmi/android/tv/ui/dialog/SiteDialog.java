@@ -69,7 +69,7 @@ public class SiteDialog implements SiteAdapter.OnClickListener{
     }
 
     private float getWidth() {
-        return 0.4f + (getCount() - 1) * 0.2f;
+        return 0.45f + (getCount() - 1) * 0.2f;
     }
 
     private void initView() {

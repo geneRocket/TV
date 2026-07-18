@@ -4,12 +4,12 @@
 
     <solid android:color="@color/grey_600" />
 
-    <corners android:radius="4dp" />
+    <corners android:radius="8dp" />
 
     <padding
-        android:bottom="10dp"
-        android:left="16dp"
-        android:right="16dp"
-        android:top="10dp" />
+        android:bottom="8dp"
+        android:left="12dp"
+        android:right="12dp"
+        android:top="8dp" />
 
 </shape>

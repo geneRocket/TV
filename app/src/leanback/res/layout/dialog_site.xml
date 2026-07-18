@@ -63,7 +63,8 @@
             android:nextFocusUp="@id/change"
             android:nextFocusDown="@id/cancel"
             android:padding="8dp"
-            android:src="@drawable/ic_site_select"  />
+            android:src="@drawable/ic_site_select"
+            app:tint="@color/text" />
 
         <ImageView
             android:id="@+id/cancel"
@@ -76,7 +77,8 @@
             android:nextFocusUp="@id/select"
             android:nextFocusDown="@id/mode"
             android:padding="8dp"
-            android:src="@drawable/ic_site_cancel" />
+            android:src="@drawable/ic_site_cancel"
+            app:tint="@color/text" />
 
         <ImageView
             android:id="@+id/mode"

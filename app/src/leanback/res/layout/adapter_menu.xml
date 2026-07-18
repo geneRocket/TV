@@ -2,8 +2,11 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="40dp"
-    android:orientation="horizontal">
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="16dp">
 
     <TextView
         android:id="@+id/text"
@@ -16,7 +19,7 @@
         android:gravity="center"
         android:singleLine="true"
         android:textColor="@color/white"
-        android:textSize="18sp"
+        android:textSize="16sp"
         tools:text="泥巴" />
 
 </LinearLayout>
