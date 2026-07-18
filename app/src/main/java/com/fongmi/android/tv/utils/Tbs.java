@@ -26,7 +26,7 @@ public class Tbs {
 
     private static synchronized void initTbs() {
         initScheduled = false;
-        if (!QbSdk.isTbsCoreInited()) tbsInit();
+        if (Setting.getParseWebView() != 0 && !QbSdk.isTbsCoreInited()) tbsInit();
     }
 
     private static boolean isCpu64Bit() {

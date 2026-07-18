@@ -15,6 +15,8 @@
     <string name="empty_history">No watch history</string>
     <string name="play_switch_empty">No available source found</string>
     <string name="vod_empty">No videos found</string>
+    <string name="vod_load_failed">Couldn’t load videos</string>
+    <string name="config_load_failed">Couldn’t load configuration</string>
     <string name="vod_retry">Retry</string>
 
     <!-- Collect -->

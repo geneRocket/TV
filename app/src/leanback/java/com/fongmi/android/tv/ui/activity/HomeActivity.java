@@ -192,7 +192,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.result.observe(this, result -> {
             if (!isCurrentHomeResult(result)) return;
-            setTypes(mResult = result);
+            setTypes(result);
         });
     }
 
@@ -218,11 +218,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     public void homeContent() {
-        mResult = Result.empty();
         updateHomeTitle();
         if (getHome().getKey().isEmpty()) {
             mPendingHomeToken = null;
-            setTypes(mResult);
+            setTypes(Result.empty());
             setLoading(false);
             return;
         }
@@ -251,11 +250,28 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     public void setTypes(Result result) {
+        // A refresh can fail after a usable home page has already been rendered. Keep that
+        // content and focus on screen; the full-page retry state is only for an empty home.
+        if (result.isRequestFailed() && hasHomeContent()) {
+            HomeFragment fragment = getHomeFragmentSafe();
+            if (fragment != null) fragment.setHomeLoadFailed(false);
+            showHomeContent();
+            Notify.show(R.string.vod_load_failed);
+            App.post(() -> setFocus(), 200);
+            return;
+        }
+        mResult = result;
         result.setTypes(getTypes(result));
         updateTypeFilters(result);
         updateTypeAdapter(result);
         refreshHomePage(result);
         App.post(() -> setFocus(), 200);
+    }
+
+    private boolean hasHomeContent() {
+        return mResult != null
+                && TextUtils.equals(mResult.getKey(), getKey())
+                && (!mResult.getList().isEmpty() || !mResult.getTypes().isEmpty());
     }
 
     private void updateTypeFilters(Result result) {
@@ -270,7 +286,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void refreshHomePage(Result result) {
         setPager();
         HomeFragment fragment = getHomeFragmentSafe();
-        if (fragment != null) fragment.addVideo(result);
+        if (fragment != null) {
+            fragment.addVideo(result);
+            fragment.setHomeLoadFailed(result.isRequestFailed());
+        }
         showHomeContent();
     }
 
@@ -365,7 +384,16 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void showHomeProgress() {
         HomeFragment fragment = getHomeFragmentSafe();
         if (fragment == null || !fragment.inited || fragment.mBinding == null) return;
+        fragment.setHomeLoadFailed(false);
         fragment.mBinding.progressLayout.showProgress();
+    }
+
+    private void showHomeConfigLoadFailed() {
+        HomeFragment fragment = getHomeFragmentSafe();
+        if (fragment == null) return;
+        // HomeFragment stores this state until its view is ready, so a fast startup failure
+        // still exposes the retry action instead of leaving a blank page with only a toast.
+        fragment.setHomeLoadFailed(true, R.string.config_load_failed, this::initConfig);
     }
 
     private void showHomeContent() {
@@ -448,6 +476,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     public void initConfig() {
         if (isLoading()) return;
+        showHomeProgress();
         setLoading(true);
         App.execute(() -> {
             try {
@@ -466,6 +495,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                     App.post(() -> {
                         if (!isFinishing() && !isDestroyed()) showHomeContent();
                     }, 1000);
+                    showHomeConfigLoadFailed();
                     setLoading(false);
                     Notify.show(Notify.getError(R.string.error_config_parse, e));
                 });
@@ -500,12 +530,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         return new Callback() {
             @Override
             public void success(String result) {
+                if (isFinishing() || isDestroyed()) return;
                 Notify.show(result);
                 success();
             }
 
             @Override
             public void success() {
+                if (isFinishing() || isDestroyed()) return;
                 checkAction(getIntent());
                 RefreshEvent.video();
                 RefreshEvent.history();
@@ -515,11 +547,16 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
             @Override
             public void error(String msg) {
+                if (isFinishing() || isDestroyed()) {
+                    setLoading(false);
+                    return;
+                }
                 showHomeContent();
                 App.post(() -> {
                     if (!isFinishing() && !isDestroyed()) showHomeContent();
                 }, 1000);
                 mResult = Result.empty();
+                showHomeConfigLoadFailed();
                 Notify.show(msg);
                 setLoading(false);
             }
@@ -629,24 +666,27 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
         super.onRefreshEvent(event);
+        HomeFragment fragment = getHomeFragmentSafe();
         switch (event.getType()) {
             case CONFIG:
                 setLogo();
-                getHomeFragment().getHistory();
-                getHomeFragment().getKeep();
+                if (fragment != null && fragment.inited) {
+                    fragment.getHistory();
+                    fragment.getKeep();
+                }
                 break;
             case VIDEO:
-                getHomeFragment().getHistory();
+                if (fragment != null && fragment.inited) fragment.getHistory();
                 homeContent();
                 break;
             case IMAGE:
-                getHomeFragment().refreshRecommond();
+                if (fragment != null && fragment.inited) fragment.refreshRecommond();
                 break;
             case HISTORY:
-                getHomeFragment().getHistory();
+                if (fragment != null && fragment.inited) fragment.getHistory();
                 break;
             case KEEP:
-                getHomeFragment().getKeep();
+                if (fragment != null && fragment.inited) fragment.getKeep();
                 break;
             case SIZE:
                 Product.clear();
@@ -680,6 +720,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         return new Callback() {
             @Override
             public void success() {
+                if (isFinishing() || isDestroyed()) return;
                 RefreshEvent.history();
                 RefreshEvent.config();
                 RefreshEvent.video();
@@ -688,6 +729,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
             @Override
             public void error(String msg) {
+                if (isFinishing() || isDestroyed()) return;
                 Notify.show(msg);
             }
         };
@@ -730,6 +772,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void setFocus() {
         setLoading(false);
+        // The home request may complete after the user has moved to a category. In that case,
+        // restoring home focus would interrupt the remote-control interaction in progress.
+        if (!isHomePageSelected()) return;
         if (!mBinding.title.isFocusable()) {
             App.removeCallbacks(mEnableTitleFocus);
             App.post(mEnableTitleFocus, 500);
@@ -790,8 +835,22 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     protected void onBackPress() {
         HomeFragment homeFragment = getHomeFragmentSafe();
-        if (isVisible(mBinding.recycler) && mBinding.recycler.getSelectedPosition() > 0) {
-            mBinding.recycler.scrollToPosition(0);
+        int currentPage = mBinding.pager.getCurrentItem();
+        if (currentPage > 0) {
+            Class item = (Class) mAdapter.get(currentPage);
+            VodFragment fragment = getFragment(currentPage);
+            if (item.getFilter() != null && item.getFilter()) {
+                fragment.resetFilterOnBack();
+                return;
+            }
+            if (fragment.canBack()) {
+                fragment.goBack();
+                return;
+            }
+            // Returning from a category must switch the pager too. Scrolling the tab row alone
+            // leaves the category visible and looks like the home page has reloaded.
+            mBinding.pager.setCurrentItem(0, false);
+            mBinding.recycler.setSelectedPosition(0);
         } else if (mPageAdapter != null && homeFragment != null && homeFragment.inited && homeFragment.mBinding.progressLayout.isProgress()) {
             showHomeContent();
         } else if (mPageAdapter != null && homeFragment != null && homeFragment.inited && homeFragment.mPresenter != null && homeFragment.mPresenter.isDelete()) {

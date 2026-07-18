@@ -164,6 +164,7 @@
     <string name="error_play_timeout">Timed out</string>
     <string name="error_detail">No play data</string>
     <string name="error_empty">Not found</string>
+    <string name="error_load_retry">Couldn’t load content. Tap or pull down to retry</string>
 
     <!-- Update -->
     <string name="update_version">New version <xliff:g name="name">%s</xliff:g></string>

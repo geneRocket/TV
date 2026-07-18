@@ -107,7 +107,7 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void homeContent(String key, String token) {
-        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> loadHomeResult(key), data -> result.postValue(withHomeRequest(data, key, token)), this::requestFallback);
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> loadHomeResult(key), data -> result.postValue(withHomeRequest(data, key, token)), this::homeFallback);
     }
 
     private Result loadHomeResult(String key) throws Exception {
@@ -157,7 +157,7 @@ public class SiteViewModel extends ViewModel {
                 SpiderDebug.log(categoryContent);
                 return Result.fromType(site.getType(), categoryContent);
             }
-        }, data -> result.postValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::requestFallback);
+        }, data -> result.postValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::categoryFallback);
     }
 
     public void cancelCategoryContent() {
@@ -527,6 +527,18 @@ public class SiteViewModel extends ViewModel {
 
     private Result requestFallback(Throwable error) {
         return error instanceof ExtractException ? Result.error(error.getMessage()) : Result.empty();
+    }
+
+    private Result categoryFallback(Throwable error) {
+        Result result = requestFallback(error);
+        result.setRequestFailed(true);
+        return result;
+    }
+
+    private Result homeFallback(Throwable error) {
+        Result result = requestFallback(error);
+        result.setRequestFailed(true);
+        return result;
     }
 
     private Result requestRequestFallback(Throwable error) {

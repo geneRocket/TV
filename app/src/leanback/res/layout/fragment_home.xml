@@ -24,4 +24,8 @@
 
     </com.fongmi.android.tv.ui.custom.ProgressLayout>
 
+    <include
+        android:id="@+id/empty"
+        layout="@layout/view_empty_retry" />
+
 </FrameLayout>

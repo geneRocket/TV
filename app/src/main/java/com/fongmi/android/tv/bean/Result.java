@@ -84,6 +84,7 @@ public class Result implements Parcelable {
     private String requestTypeId;
     private String requestPage;
     private String requestExtend;
+    private transient boolean requestFailed;
     @SerializedName("page")
     private Integer page;
     @SerializedName("pagecount")
@@ -340,6 +341,14 @@ public class Result implements Parcelable {
 
     public void setRequestExtend(String requestExtend) {
         this.requestExtend = requestExtend;
+    }
+
+    public boolean isRequestFailed() {
+        return requestFailed;
+    }
+
+    public void setRequestFailed(boolean requestFailed) {
+        this.requestFailed = requestFailed;
     }
 
     public Integer getPageCount() {

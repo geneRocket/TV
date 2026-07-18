@@ -198,6 +198,7 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
     @Nullable private DataSpec dataSpec;
     @Nullable private Response response;
     @Nullable private InputStream responseByteStream;
+    @Nullable private volatile Call activeCall;
     private boolean connectionEstablished;
     private long bytesToRead;
     private long bytesRead;
@@ -275,6 +276,7 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
         Response response;
         ResponseBody responseBody;
         Call call = callFactory.newCall(request);
+        activeCall = call;
         try {
             this.response = executeCall(call);
             response = this.response;
@@ -291,6 +293,8 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
         } catch (IOException e) {
             throw HttpDataSourceException.createForIOException(
                     e, dataSpec, HttpDataSourceException.TYPE_OPEN);
+        } finally {
+            if (activeCall == call) activeCall = null;
         }
 
         int responseCode = response.code();
@@ -410,7 +414,7 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
     private byte[] filterM3u8Safely(byte[] body, String url) {
         try {
             return M3u8AdFilter.filterMinorHost(body, url);
-        } catch (Throwable ignored) {
+        } catch (RuntimeException ignored) {
             return body;
         }
     }
@@ -429,11 +433,13 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
     @UnstableApi
     @Override
     public void close() {
+        Call call = activeCall;
+        if (call != null) call.cancel();
         if (connectionEstablished) {
             connectionEstablished = false;
             transferEnded();
-            closeConnectionQuietly();
         }
+        closeConnectionQuietly();
         response = null;
         dataSpec = null;
     }
@@ -517,14 +523,23 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
 
                     @Override
                     public void onResponse(Call call, Response response) {
-                        future.set(response);
+                        if (!future.set(response)) response.close();
                     }
                 });
 
         try {
             return future.get();
         } catch (InterruptedException e) {
+            if (!future.cancel(true)) {
+                try {
+                    Response response = future.get();
+                    response.close();
+                } catch (ExecutionException | InterruptedException ignored) {
+                    // The failed call has no response body to release.
+                }
+            }
             call.cancel();
+            Thread.currentThread().interrupt();
             throw new InterruptedIOException();
         } catch (ExecutionException ee) {
             throw new IOException(ee);

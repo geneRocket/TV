@@ -14,6 +14,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.api.config.VodConfig;
@@ -31,6 +32,7 @@ import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.adapter.VodAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
+import com.fongmi.android.tv.utils.Notify;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -57,6 +59,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private Result mHomeResult;
     private String mHomeToken;
     private long mHomeTokenSeed;
+    private boolean mLastRequestFailed;
 
     public static TypeFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, boolean folder) {
         Bundle args = new Bundle();
@@ -133,6 +136,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     @Override
     protected void initEvent() {
         mBinding.swipeLayout.setOnRefreshListener(this);
+        mBinding.progressLayout.setOnClickListener(view -> {
+            if (mLastRequestFailed) onRefresh();
+        });
         mBinding.recycler.addOnScrollListener(mScroller = new CustomScroller(this));
     }
 
@@ -161,8 +167,6 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         mHomeResult = null;
         mHomeToken = "home:" + (++mHomeTokenSeed);
         mViewModel.homeContent(getKey(), mHomeToken);
-        mVodKeys.clear();
-        mAdapter.clear();
     }
 
 
@@ -172,14 +176,14 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     private void getVideo(String typeId, String page) {
-        if ("1".equals(page)) {
-            mVodKeys.clear();
-            mAdapter.clear();
-        }
         mPendingTypeId = typeId;
         mPendingPage = page;
         mPendingExtend = getRequestExtend(mExtends);
-        if ("1".equals(page) && !mBinding.swipeLayout.isRefreshing()) mBinding.progressLayout.showProgress();
+        if ("1".equals(page)) {
+            mLastRequestFailed = false;
+            mBinding.progressLayout.setEmptyText(R.string.error_empty);
+            if (!mBinding.swipeLayout.isRefreshing()) mBinding.progressLayout.showProgress();
+        }
         if (isHome() && "1".equals(page)) {
             mHomeToken = null;
             setAdapter(mHomeResult = getParent().getResult());
@@ -193,11 +197,22 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private void setAdapter(Result result) {
         if (!isCurrentResult(result)) return;
         boolean first = mScroller.first();
+        boolean failed = first && result != null && result.isRequestFailed();
+        // Do not discard the current list until a replacement request has succeeded. This keeps
+        // a pull-to-refresh failure from turning a previously usable page into an empty screen.
+        if (first && !failed) {
+            mVodKeys.clear();
+            mAdapter.clear();
+        }
         List<Vod> items = filterVodList(result == null ? null : result.getList());
         int size = items.size();
-        mBinding.progressLayout.showContent(first, size);
+        mLastRequestFailed = failed;
+        mBinding.progressLayout.setEmptyText(mLastRequestFailed ? R.string.error_load_retry : R.string.error_empty);
+        int visibleCount = mAdapter.getItemCount();
+        mBinding.progressLayout.showContent(failed && visibleCount > 0 ? false : first, failed && visibleCount > 0 ? visibleCount : size);
         mBinding.swipeLayout.setRefreshing(false);
         if (size > 0) addVideo(result, items);
+        if (failed && visibleCount > 0) Notify.show(R.string.error_load_retry);
         mScroller.endLoading(result);
         checkPosition(first);
         checkMore(size);

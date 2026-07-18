@@ -15,6 +15,7 @@
         android:src="@drawable/ic_empty" />
 
     <TextView
+        android:id="@+id/message"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
@@ -29,6 +30,10 @@
         android:layout_marginTop="16dp"
         android:background="?attr/selectableItemBackground"
         android:focusable="true"
+        android:nextFocusDown="@id/retry"
+        android:nextFocusLeft="@id/retry"
+        android:nextFocusRight="@id/retry"
+        android:nextFocusUp="@id/retry"
         android:paddingStart="20dp"
         android:paddingTop="8dp"
         android:paddingEnd="20dp"

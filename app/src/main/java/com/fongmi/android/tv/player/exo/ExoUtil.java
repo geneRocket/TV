@@ -48,7 +48,8 @@ public class ExoUtil {
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
                 .setTargetBufferBytes(Setting.getBuffer() > 10 ? 50 * 1024 * 1024 : DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
-                .setPrioritizeTimeOverSizeThresholds(true)
+                // High-bitrate streams can otherwise keep allocating until the time target is met.
+                .setPrioritizeTimeOverSizeThresholds(false)
                 .setBackBuffer(0, false)
                 .build();
     }

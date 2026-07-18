@@ -45,6 +45,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.HistoryActivity;
 import com.fongmi.android.tv.ui.activity.KeepActivity;
+import com.fongmi.android.tv.ui.activity.MainActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
@@ -85,6 +86,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     private final Random mRandom = new Random();
     private String mSelectedTypeId;
     private Result mResult;
+    private boolean mConfigLoadFailed;
 
     public static VodFragment newInstance() {
         return new VodFragment();
@@ -262,7 +264,8 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     }
 
     private void onRetry(View view) {
-        homeContent();
+        if (mConfigLoadFailed) ((MainActivity) requireActivity()).initConfig();
+        else homeContent();
     }
 
     private void onFilter(View view) {
@@ -308,7 +311,8 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     }
 
     private void setLogo() {
-        Glide.with(this).load(UrlUtil.convert(VodConfig.get().getConfig().getLogo())).circleCrop().override(Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL).error(R.drawable.ic_logo).listener(getListener()).into(mBinding.logo);
+        int size = ResUtil.dp2px(32);
+        Glide.with(this).load(UrlUtil.convert(VodConfig.get().getConfig().getLogo())).circleCrop().override(size, size).error(R.drawable.ic_logo).listener(getListener()).into(mBinding.logo);
     }
 
     private RequestListener<Drawable> getListener() {
@@ -445,9 +449,12 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     public void onStateEvent(StateEvent event) {
         switch (event.getType()) {
             case EMPTY:
+                mConfigLoadFailed = true;
                 hideProgress();
+                mBinding.retry.setVisibility(View.VISIBLE);
                 break;
             case PROGRESS:
+                mConfigLoadFailed = false;
                 showProgress();
                 break;
         }

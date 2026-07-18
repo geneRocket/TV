@@ -52,6 +52,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     private ActivityMainBinding mBinding;
     private FragmentStateManager mManager;
     private boolean confirm;
+    private boolean loading;
 
     @Override
     protected ViewBinding getBinding() {
@@ -103,14 +104,28 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         if (savedInstanceState == null) mManager.change(0);
     }
 
-    private void initConfig() {
-        WallConfig.get().init();
-        List<Config> liveConfigs = getStartupConfigs(1);
-        if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback(), true);
-        else LiveConfig.load(liveConfigs, new Callback(), true);
-        List<Config> vodConfigs = getStartupConfigs(0);
-        if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
-        else VodConfig.load(vodConfigs, getCallback(), true, true);
+    public void initConfig() {
+        if (loading) return;
+        loading = true;
+        StateEvent.progress();
+        App.execute(() -> {
+            try {
+                WallConfig.get().init();
+                List<Config> liveConfigs = getStartupConfigs(1);
+                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback(), true);
+                else LiveConfig.load(liveConfigs, new Callback(), true);
+                List<Config> vodConfigs = getStartupConfigs(0);
+                if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
+                else VodConfig.load(vodConfigs, getCallback(), true, true);
+            } catch (RuntimeException e) {
+                App.post(() -> {
+                    loading = false;
+                    if (isFinishing() || isDestroyed()) return;
+                    StateEvent.empty();
+                    Notify.show(Notify.getError(R.string.error_config_parse, e));
+                });
+            }
+        });
     }
 
     private List<Config> getStartupConfigs(int type) {
@@ -135,6 +150,8 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
             @Override
             public void success() {
+                loading = false;
+                if (isFinishing() || isDestroyed()) return;
                 checkAction(getIntent());
                 RefreshEvent.config();
                 RefreshEvent.video();
@@ -142,6 +159,8 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
             @Override
             public void error(String msg) {
+                loading = false;
+                if (isFinishing() || isDestroyed()) return;
                 RefreshEvent.config();
                 StateEvent.empty();
                 Notify.show(msg);

@@ -93,6 +93,9 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private int mOpenRequestId;
     private String mRecommendStyleKey;
     private boolean mHasFuncRow;
+    private Runnable mRetryAction;
+    private boolean mHomeLoadFailed;
+    private int mHomeLoadMessage = R.string.vod_load_failed;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -110,6 +113,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         setRecyclerView();
         setAdapter();
         inited = true;
+        applyHomeLoadState();
     }
 
     @Override
@@ -119,6 +123,10 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     protected void initEvent() {
+        mBinding.empty.retry.setOnClickListener(view -> {
+            if (mRetryAction != null) mRetryAction.run();
+            else getHomeActicity().homeContent();
+        });
         mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -194,6 +202,28 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         if (mAdapter.size() > end) mAdapter.removeItems(end, mAdapter.size() - end);
     }
 
+    public void setHomeLoadFailed(boolean failed) {
+        setHomeLoadFailed(failed, R.string.vod_load_failed, null);
+    }
+
+    public void setHomeLoadFailed(boolean failed, int message, Runnable retryAction) {
+        mHomeLoadFailed = failed;
+        mHomeLoadMessage = message;
+        mRetryAction = failed ? retryAction : null;
+        applyHomeLoadState();
+    }
+
+    private void applyHomeLoadState() {
+        if (!inited || !isViewReady()) return;
+        mBinding.empty.getRoot().setVisibility(mHomeLoadFailed ? View.VISIBLE : View.GONE);
+        if (mHomeLoadFailed) {
+            mBinding.empty.message.setText(mHomeLoadMessage);
+            App.post(() -> {
+                if (isViewReady() && mBinding.getRoot().isShown()) mBinding.empty.retry.requestFocus();
+            });
+        }
+    }
+
     private String getStyleKey(Style style) {
         return style.getViewType() + "_" + style.getRatio();
     }
@@ -239,6 +269,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     public void refreshRecommond() {
         int index = getRecommendIndex();
+        if (index < 0 || index >= mAdapter.size()) return;
         mAdapter.notifyArrayItemRangeChanged(index, mAdapter.size() - index);
     }
 

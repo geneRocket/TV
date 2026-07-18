@@ -15,6 +15,8 @@
     <string name="empty_history">暫無觀看紀錄</string>
     <string name="play_switch_empty">未找到可用換源</string>
     <string name="vod_empty">沒有找到影片</string>
+    <string name="vod_load_failed">影片載入失敗</string>
+    <string name="config_load_failed">設定載入失敗</string>
     <string name="vod_retry">重試</string>
 
     <!-- Collect -->
