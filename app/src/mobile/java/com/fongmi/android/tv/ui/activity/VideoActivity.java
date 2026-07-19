@@ -1842,14 +1842,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private boolean mismatch(Vod item) {
         if (item == null) return true;
         if (getKey().equals(item.getSiteKey()) && getId().equals(item.getVodId())) return true;
-        if (mBroken.contains(getBrokenKey(item))) return true;
-        String keyword = Util.normalize(mBinding.name.getText().toString());
-        String name = Util.normalize(item.getVodName());
-        String remark = Util.normalize(item.getVodRemarks());
-        if (isAutoMode()) return !name.equals(keyword);
-        if (name.contains(keyword) || remark.contains(keyword)) return false;
-        for (String token : keyword.split("\\s+")) if (!TextUtils.isEmpty(token) && (name.contains(token) || remark.contains(token))) return false;
-        return true;
+        return mBroken.contains(getBrokenKey(item));
     }
 
     private String getBrokenKey(Vod item) {

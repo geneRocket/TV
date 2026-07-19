@@ -674,8 +674,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         private boolean mismatch(Vod item) {
             String brokenKey = host.getBrokenKey(item);
             if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
-            if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
-            return !host.matchSourceTitle(item.getVodName(), host.getSourceSwitchKeyword());
+            return !brokenKey.isEmpty() && host.mBroken.contains(brokenKey);
         }
 
         private boolean isPass(Site item) {
@@ -2795,13 +2794,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             mContent.stopSearch();
             Notify.show(R.string.play_switch_empty);
         }
-    }
-
-    private boolean matchSourceTitle(String title, String keyword) {
-        String source = Util.normalize(title);
-        String target = Util.normalize(keyword);
-        if (source.isEmpty() || target.isEmpty()) return false;
-        return source.equals(target) || source.contains(target) || target.contains(source) || Util.similarity(source, target) >= 0.7;
     }
 
     private void setSourceSearchActor(String actor) {
