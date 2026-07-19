@@ -456,7 +456,7 @@ public class SiteViewModel extends ViewModel {
         result.setKeyword(keyword);
         result.setRequestToken(token);
         for (Vod vod : result.getList()) vod.setSite(site);
-        this.search.postValue(result);
+        App.post(() -> this.search.setValue(result));
     }
 
     private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
