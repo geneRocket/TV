@@ -2843,22 +2843,20 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void mergeQuickItems(List<Vod> items, String token) {
-        App.post(() -> {
-            if (!mSearchActive || !TextUtils.equals(token, pendingSearchToken)) return;
-            for (Vod item : items) {
-                if (hasQuickItem(item)) continue;
-                int index = findQuickItemInsertPosition(item);
-                mQuickAdapter.add(index, item);
-            }
-            if (isInitAuto()) {
-                if (!hasPendingSearchTasks() || mQuickAdapter.size() >= 10) {
-                    setInitAuto(false);
-                    mPlaybackNavigation.nextSite();
-                }
-            } else if (canAdvancePendingSourceSwitch()) {
+        if (!mSearchActive || !TextUtils.equals(token, pendingSearchToken)) return;
+        for (Vod item : items) {
+            if (hasQuickItem(item)) continue;
+            int index = findQuickItemInsertPosition(item);
+            mQuickAdapter.add(index, item);
+        }
+        if (isInitAuto()) {
+            if (!hasPendingSearchTasks() || mQuickAdapter.size() >= 10) {
+                setInitAuto(false);
                 mPlaybackNavigation.nextSite();
             }
-        }, 100);
+        } else if (canAdvancePendingSourceSwitch()) {
+            mPlaybackNavigation.nextSite();
+        }
     }
 
     private boolean hasQuickItem(Vod item) {
@@ -2869,43 +2867,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int findQuickItemInsertPosition(Vod item) {
-        double score = Util.similarity(item.getVodName(), getSourceSwitchKeyword());
-        item.setScore(score);
+        String keyword = getSourceSwitchKeyword();
+        SearchSorter.prepare(item, keyword);
         for (int i = 0; i < mQuickAdapter.size(); i++) {
-            if (compareQuickItem(item, score, (Vod) mQuickAdapter.get(i)) < 0) return i;
+            Vod current = (Vod) mQuickAdapter.get(i);
+            SearchSorter.prepare(current, keyword);
+            if (SearchSorter.compare(item, current, keyword, sourceSearchActor) < 0) return i;
         }
         return mQuickAdapter.size();
-    }
-
-    private int compareQuickItem(Vod left, double scoreLeft, Vod right) {
-        double scoreRight = right.getScore();
-        if (scoreLeft != scoreRight) return Double.compare(scoreRight, scoreLeft);
-        int result = Integer.compare(getQuickActorRank(left), getQuickActorRank(right));
-        if (result != 0) return result;
-        return left.getVodActor().compareToIgnoreCase(right.getVodActor());
-    }
-
-    private int getQuickActorRank(Vod item) {
-        String target = Objects.toString(sourceSearchActor, "");
-        String source = item.getVodActor();
-        if (TextUtils.isEmpty(target) || TextUtils.isEmpty(source)) return 2;
-        if (Util.similarity(source, target) >= 0.8) return 0;
-        return hasActorOverlap(source, target) ? 1 : 3;
-    }
-
-    private boolean hasActorOverlap(String source, String target) {
-        for (String sourceActor : splitActors(source)) {
-            if (sourceActor.isEmpty()) continue;
-            for (String targetActor : splitActors(target)) {
-                if (targetActor.isEmpty()) continue;
-                if (sourceActor.equals(targetActor)) return true;
-            }
-        }
-        return false;
-    }
-
-    private String[] splitActors(String text) {
-        return Objects.toString(text, "").trim().toLowerCase().split("[\\s,，、/／;；|｜]+");
     }
 
     private Flag findTargetFlag(List<Flag> flags) {

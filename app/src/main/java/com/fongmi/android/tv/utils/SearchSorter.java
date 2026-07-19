@@ -9,11 +9,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class SearchSorter {
-
-    private static final AtomicLong ORDER = new AtomicLong();
 
     private SearchSorter() {
     }
@@ -48,9 +45,7 @@ public final class SearchSorter {
     }
 
     public static int compare(Vod left, Vod right, String keyword, String actor) {
-        int result = Integer.compare(rank(left, keyword), rank(right, keyword));
-        if (result != 0) return result;
-        result = Double.compare(right.getScore(), left.getScore());
+        int result = Double.compare(right.getScore(), left.getScore());
         if (result != 0) return result;
         result = Integer.compare(actorRank(left, actor), actorRank(right, actor));
         if (result != 0) return result;
@@ -72,24 +67,8 @@ public final class SearchSorter {
         if (item == null) return;
         String target = Util.normalize(keyword);
         String name = Util.normalize(item.getVodName());
-        String remark = Util.normalize(item.getVodRemarks());
-        double score = Math.max(Util.similarity(name, target), Util.similarity(remark, target) * 0.9);
-        item.setScore(score);
-        if (item.getInsertTimestamp() == 0) item.setInsertTimestamp(ORDER.incrementAndGet());
-    }
-
-    private static int rank(Vod item, String keyword) {
-        String target = Util.normalize(keyword);
-        String name = Util.normalize(item == null ? "" : item.getVodName());
-        String remark = Util.normalize(item == null ? "" : item.getVodRemarks());
-        if (target.isEmpty()) return 9;
-        if (name.equals(target)) return 0;
-        if (name.startsWith(target)) return 1;
-        if (remark.equals(target) || remark.startsWith(target)) return 2;
-        if (name.contains(target)) return 3;
-        if (remark.contains(target)) return 4;
-        for (String token : target.split("\\s+")) if (!TextUtils.isEmpty(token) && (name.contains(token) || remark.contains(token))) return 5;
-        return 6;
+        item.setScore(Util.similarity(name, target));
+        if (item.getInsertTimestamp() == 0) item.setInsertTimestamp(System.currentTimeMillis());
     }
 
     private static int actorRank(Vod item, String actor) {
