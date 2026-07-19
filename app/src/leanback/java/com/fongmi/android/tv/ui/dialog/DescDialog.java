@@ -27,7 +27,7 @@ public class DescDialog {
 
     private void initView(TextView view, CharSequence desc) {
         view.setText(desc, TextView.BufferType.SPANNABLE);
-        view.setLinkTextColor(MDColor.BLUE_500);
+        view.setLinkTextColor(MDColor.YELLOW_500);
         CustomMovement.bind(view);
     }
 }
