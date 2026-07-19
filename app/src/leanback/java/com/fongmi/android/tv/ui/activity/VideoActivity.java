@@ -118,6 +118,7 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -136,6 +137,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private static final long SEEK_READY_STABLE_MS = 300;
     private static final long SEEK_BOUNCE_WINDOW_MS = 1500;
     private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 5000;
+    private static final int QUICK_RESULT_LIMIT = 50;
+    private static final int QUICK_FLUSH_DELAY_MS = 100;
     private static final int REQUEST_DANMAKU_FILE = 9998;
     private static final Map<String, List<String>> PART_CACHE = new LinkedHashMap<String, List<String>>(24, 0.75f, true) {
         @Override
@@ -328,6 +331,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.beginSourceSwitch();
             Vod item = (Vod) host.mQuickAdapter.get(0);
             host.mQuickAdapter.removeItems(0, 1);
+            host.mQuickQueue.remove(item);
             host.markCurrentSourceBroken();
             host.setPendingSiteSwitch(true);
             host.setInitAuto(false);
@@ -475,13 +479,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             }
             if (items.isEmpty()) return;
             host.mergeQuickItems(items, result.getRequestToken());
-            host.setVisibilityIfChanged(host.mBinding.quick, View.VISIBLE);
             App.removeCallbacks(host.mR4);
         }
 
         public void setSearch(Vod item) {
             int index = host.mQuickAdapter.indexOf(item);
             if (index >= 0) host.mQuickAdapter.removeItems(index, 1);
+            host.mQuickQueue.remove(item);
             host.beginSourceSwitch();
             host.markCurrentSourceBroken();
             host.setAutoMode(false);
@@ -501,6 +505,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mViewModel.cancelSearch(token);
             host.setPendingSearchToken(null);
             host.resetSearchTaskState();
+            host.resetQuickResults();
             host.mQuickKeys.clear();
             host.cancelSearchTasks();
             if (host.mExecutor == null) return;
@@ -644,6 +649,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         private void startSearch(String keyword, String token) {
             host.mQuickAdapter.clear();
+            host.resetQuickResults();
             host.mQuickKeys.clear();
             List<Site> sites = new ArrayList<>();
             Set<String> keys = new HashSet<>();
@@ -720,6 +726,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int mSearchGeneration;
     private int mSearchPendingCount;
     private final Set<String> mQuickKeys = new HashSet<>();
+    private final PriorityQueue<Vod> mQuickQueue = new PriorityQueue<>(QUICK_RESULT_LIMIT + 1, this::compareQuickForQueue);
+    private final Runnable mQuickFlush = this::flushQuickItems;
+    private boolean mQuickFlushScheduled;
     private final ContentController mContent = new ContentController(this);
     private final ErrorRecoveryController mErrorRecovery = new ErrorRecoveryController(this);
     private final PlaybackNavigationController mPlaybackNavigation = new PlaybackNavigationController(this);
@@ -2784,15 +2793,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void onSearchTasksSettled(int generation) {
         if (generation != mSearchGeneration || isPendingSiteSwitch() || hasPendingSearchTasks()) return;
+        flushQuickItems();
         if (isInitAuto() && mQuickAdapter.size() > 0) {
             setInitAuto(false);
             mPlaybackNavigation.nextSite();
         } else if (isSourceSwitching() && mQuickAdapter.size() == 0) {
             clearSourceSwitch();
         } else if (isManualSourceSearch()) {
+            boolean empty = mQuickAdapter.size() == 0;
             setManualSourceSearch(false);
             mContent.stopSearch();
-            Notify.show(R.string.play_switch_empty);
+            if (empty) Notify.show(R.string.play_switch_empty);
         }
     }
 
@@ -2836,37 +2847,56 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void mergeQuickItems(List<Vod> items, String token) {
         if (!mSearchActive || !TextUtils.equals(token, pendingSearchToken)) return;
+        String keyword = getSourceSwitchKeyword();
+        boolean changed = false;
         for (Vod item : items) {
-            if (hasQuickItem(item)) continue;
-            int index = findQuickItemInsertPosition(item);
-            mQuickAdapter.add(index, item);
+            SearchSorter.prepare(item, keyword);
+            if (mQuickQueue.size() < QUICK_RESULT_LIMIT) {
+                mQuickQueue.offer(item);
+                changed = true;
+            } else if (mQuickQueue.peek() != null && SearchSorter.compare(item, mQuickQueue.peek(), keyword, sourceSearchActor) < 0) {
+                mQuickQueue.poll();
+                mQuickQueue.offer(item);
+                changed = true;
+            }
         }
+        if (changed) scheduleQuickFlush();
         if (isInitAuto()) {
-            if (!hasPendingSearchTasks() || mQuickAdapter.size() >= 10) {
+            if (!hasPendingSearchTasks() || mQuickQueue.size() >= 10) {
+                flushQuickItems();
                 setInitAuto(false);
                 mPlaybackNavigation.nextSite();
             }
-        } else if (canAdvancePendingSourceSwitch()) {
-            mPlaybackNavigation.nextSite();
+        } else if (isSourceSwitching() && !isPendingSiteSwitch() && !mQuickQueue.isEmpty()) {
+            flushQuickItems();
+            if (canAdvancePendingSourceSwitch()) mPlaybackNavigation.nextSite();
         }
     }
 
-    private boolean hasQuickItem(Vod item) {
-        String key = SearchSorter.key(item);
-        if (key.isEmpty()) return true;
-        for (int i = 0; i < mQuickAdapter.size(); i++) if (key.equals(SearchSorter.key((Vod) mQuickAdapter.get(i)))) return true;
-        return false;
+    private int compareQuickForQueue(Vod left, Vod right) {
+        return SearchSorter.compare(right, left, getSourceSwitchKeyword(), sourceSearchActor);
     }
 
-    private int findQuickItemInsertPosition(Vod item) {
-        String keyword = getSourceSwitchKeyword();
-        SearchSorter.prepare(item, keyword);
-        for (int i = 0; i < mQuickAdapter.size(); i++) {
-            Vod current = (Vod) mQuickAdapter.get(i);
-            SearchSorter.prepare(current, keyword);
-            if (SearchSorter.compare(item, current, keyword, sourceSearchActor) < 0) return i;
-        }
-        return mQuickAdapter.size();
+    private void scheduleQuickFlush() {
+        if (mQuickFlushScheduled) return;
+        mQuickFlushScheduled = true;
+        App.post(mQuickFlush, QUICK_FLUSH_DELAY_MS);
+    }
+
+    private void flushQuickItems() {
+        App.removeCallbacks(mQuickFlush);
+        mQuickFlushScheduled = false;
+        if (!mSearchActive) return;
+        List<Vod> items = new ArrayList<>(mQuickQueue);
+        items.sort((left, right) -> SearchSorter.compare(left, right, getSourceSwitchKeyword(), sourceSearchActor));
+        mQuickAdapter.setItems(items, null);
+        setVisibilityIfChanged(mBinding.quick, items.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private void resetQuickResults() {
+        App.removeCallbacks(mQuickFlush);
+        mQuickFlushScheduled = false;
+        mQuickQueue.clear();
     }
 
     private Flag findTargetFlag(List<Flag> flags) {
