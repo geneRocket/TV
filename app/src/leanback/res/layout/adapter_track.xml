@@ -10,5 +10,5 @@
     android:focusableInTouchMode="true"
     android:singleLine="true"
     android:textColor="@color/text"
-    android:textSize="14sp"
+    android:textSize="@dimen/tv_button_text_size"
     tools:text="中文、哥斯拉.srt" />

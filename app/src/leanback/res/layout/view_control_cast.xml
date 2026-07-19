@@ -35,7 +35,7 @@
                 android:nextFocusLeft="@id/video"
                 android:nextFocusDown="@id/timeBar"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 tools:text="刷新" />
 
             <TextView
@@ -48,7 +48,7 @@
                 android:focusableInTouchMode="true"
                 android:nextFocusDown="@id/timeBar"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 tools:text="EXO" />
 
             <TextView
@@ -61,7 +61,7 @@
                 android:focusableInTouchMode="true"
                 android:nextFocusDown="@id/timeBar"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 tools:text="硬解" />
 
             <com.fongmi.android.tv.ui.custom.CustomUpDownView
@@ -74,7 +74,7 @@
                 android:focusableInTouchMode="true"
                 android:nextFocusDown="@id/timeBar"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 tools:text="1.00" />
 
             <TextView
@@ -87,7 +87,7 @@
                 android:focusableInTouchMode="true"
                 android:nextFocusDown="@id/timeBar"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 tools:text="預設" />
 
             <TextView
@@ -101,7 +101,7 @@
                 android:nextFocusDown="@id/timeBar"
                 android:text="@string/play_volume"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 android:visibility="gone"
                 tools:visibility="visible" />
 
@@ -117,7 +117,7 @@
                 android:tag="3"
                 android:text="@string/play_track_text"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 android:visibility="gone"
                 tools:visibility="visible" />
 
@@ -133,7 +133,7 @@
                 android:tag="1"
                 android:text="@string/play_track_audio"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 android:visibility="gone"
                 tools:visibility="visible" />
 
@@ -150,7 +150,7 @@
                 android:tag="2"
                 android:text="@string/play_track_video"
                 android:textColor="@color/white"
-                android:textSize="14sp"
+                android:textSize="@dimen/tv_button_text_size"
                 android:visibility="gone"
                 tools:visibility="visible" />
 

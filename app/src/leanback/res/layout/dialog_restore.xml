@@ -11,7 +11,7 @@
         android:layout_marginBottom="16dp"
         android:text="@string/dialog_restore_msg"
         android:textColor="@color/white"
-        android:textSize="18sp" />
+        android:textSize="@dimen/tv_setting_text_size" />
 
     <LinearLayout
         android:layout_width="match_parent"

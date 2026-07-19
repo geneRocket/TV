@@ -60,7 +60,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
         mBinding.player.requestFocus();
         mBinding.uaText.setText(Setting.getUa());
         mBinding.tunnelText.setText(getSwitch(Setting.isTunnel()));
-        mBinding.bufferText.setText(String.valueOf(Setting.getBuffer()));
+        mBinding.bufferText.setText(Setting.getBufferText());
         mBinding.rtspText.setText((rtsp = ResUtil.getStringArray(R.array.select_rtsp))[safeIndex(Setting.getRtsp(), rtsp)]);
         mBinding.flagText.setText((flag = ResUtil.getStringArray(R.array.select_flag))[safeIndex(Setting.getFlag(), flag)]);
         mBinding.httpText.setText((http = ResUtil.getStringArray(R.array.select_exo_http))[safeIndex(Setting.getHttp(), http)]);
@@ -133,9 +133,9 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
     }
 
     @Override
-    public void setBuffer(int times) {
-        mBinding.bufferText.setText(String.valueOf(times));
-        Setting.putBuffer(times);
+    public void setBuffer(int buffer) {
+        mBinding.bufferText.setText(Setting.getBufferText(buffer));
+        Setting.putBuffer(buffer);
     }
 
     private void setPlayer(View view) {

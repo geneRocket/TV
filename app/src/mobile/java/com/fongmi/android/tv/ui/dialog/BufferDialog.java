@@ -40,6 +40,7 @@ public class BufferDialog {
 
     private void initView() {
         binding.slider.setValue(value = Setting.getBuffer());
+        binding.slider.setLabelFormatter(value -> Setting.getBufferText((int) value));
     }
 
     private void onPositive(DialogInterface dialog, int which) {

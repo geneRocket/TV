@@ -29,7 +29,7 @@
         android:shadowDy="2"
         android:shadowRadius="1"
         android:textColor="@color/white"
-        android:textSize="18sp" />
+        android:textSize="@dimen/tv_setting_text_size" />
 
     <TextView
         android:id="@+id/clip"
@@ -42,6 +42,6 @@
         android:nextFocusUp="@id/code"
         android:text="@string/push_clip"
         android:textColor="@color/white"
-        android:textSize="18sp" />
+        android:textSize="@dimen/tv_setting_text_size" />
 
 </LinearLayout>

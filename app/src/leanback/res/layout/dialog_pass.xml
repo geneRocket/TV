@@ -31,6 +31,6 @@
         android:singleLine="true"
         android:text="@string/dialog_positive"
         android:textColor="@color/white"
-        android:textSize="14sp" />
+        android:textSize="@dimen/tv_button_text_size" />
 
 </LinearLayout>

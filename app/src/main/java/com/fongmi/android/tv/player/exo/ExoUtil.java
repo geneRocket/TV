@@ -37,18 +37,15 @@ public class ExoUtil {
     private static final String EXTRA_FORCE_LIVE = "__force_live";
 
     public static LoadControl buildLoadControl() {
-        int userSettingMs = Setting.getBuffer() * 1000;
-        int minBufferMs = Math.max(15000, userSettingMs * 2);
-        int maxBufferMs = Math.max(minBufferMs + 30000, userSettingMs * 4);
-
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                        minBufferMs,
-                        maxBufferMs,
+                        DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                        DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
-                .setTargetBufferBytes(Setting.getBuffer() > 10 ? 50 * 1024 * 1024 : DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
-                // High-bitrate streams can otherwise keep allocating until the time target is met.
+                .setTargetBufferBytes(Setting.getBufferBytes())
+                // Stop loading when the configured byte cap is reached; high-bitrate streams
+                // can otherwise keep allocating until the time target is met.
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .setBackBuffer(0, false)
                 .build();

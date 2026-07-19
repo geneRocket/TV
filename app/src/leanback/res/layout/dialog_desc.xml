@@ -12,6 +12,6 @@
         android:lineSpacingExtra="8dp"
         android:padding="16dp"
         android:textColor="@color/white"
-        android:textSize="18sp" />
+        android:textSize="@dimen/tv_setting_text_size" />
 
 </androidx.core.widget.NestedScrollView>

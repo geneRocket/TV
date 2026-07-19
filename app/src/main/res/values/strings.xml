@@ -127,7 +127,7 @@
     <string name="player_episode">Episode style</string>
     <string name="player_exo_tunnel">Tunnel mode</string>
     <string name="player_exo_http">HTTP method</string>
-    <string name="player_exo_buffer">Buffer time</string>
+    <string name="player_exo_buffer">Buffer size</string>
     <string name="player_rtsp">RTSP channel</string>
     <string name="player_ua">User-Agent</string>
 

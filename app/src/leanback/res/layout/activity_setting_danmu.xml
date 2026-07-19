@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="@dimen/tv_page_padding">
 
         <LinearLayout
             android:id="@+id/danmuLoad"
@@ -25,10 +25,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:text="@string/play_danmu"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
             <TextView
                 android:id="@+id/danmuLoadText"
@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:gravity="end"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/tv_setting_text_size"
                 tools:text="開" />
 
         </LinearLayout>
@@ -45,7 +45,7 @@
             android:id="@+id/danmuSpeed"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:background="@drawable/selector_item"
             android:focusable="true"
             android:focusableInTouchMode="true"
@@ -54,10 +54,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:text="@string/player_danmu_speed"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
             <TextView
                 android:id="@+id/danmuSpeedText"
@@ -65,7 +65,7 @@
                 android:layout_height="wrap_content"
                 android:gravity="end"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/tv_setting_text_size"
                 tools:text="慢" />
 
         </LinearLayout>
@@ -74,7 +74,7 @@
             android:id="@+id/danmuSize"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:background="@drawable/selector_item"
             android:focusable="true"
             android:focusableInTouchMode="true"
@@ -83,10 +83,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:text="@string/player_danmu_size"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
             <TextView
                 android:id="@+id/danmuSizeText"
@@ -95,7 +95,7 @@
                 android:layout_weight="1"
                 android:gravity="end"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/tv_setting_text_size"
                 tools:text="1" />
 
             <TextView
@@ -104,7 +104,7 @@
                 android:layout_marginStart="4dp"
                 android:text="@string/times"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
         </LinearLayout>
 
@@ -112,7 +112,7 @@
             android:id="@+id/danmuLine"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:background="@drawable/selector_item"
             android:focusable="true"
             android:focusableInTouchMode="true"
@@ -121,10 +121,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:text="@string/player_danmu_line"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
             <TextView
                 android:id="@+id/danmuLineText"
@@ -133,7 +133,7 @@
                 android:layout_weight="1"
                 android:gravity="end"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/tv_setting_text_size"
                 tools:text="1" />
 
             <TextView
@@ -142,7 +142,7 @@
                 android:layout_marginStart="4dp"
                 android:text="@string/lines"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
         </LinearLayout>
 
@@ -150,7 +150,7 @@
             android:id="@+id/danmuAlpha"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:background="@drawable/selector_item"
             android:focusable="true"
             android:focusableInTouchMode="true"
@@ -159,10 +159,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:text="@string/player_danmu_alpha"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
             <TextView
                 android:id="@+id/danmuAlphaText"
@@ -171,7 +171,7 @@
                 android:layout_weight="1"
                 android:gravity="end"
                 android:textColor="@color/white"
-                android:textSize="18sp"
+                android:textSize="@dimen/tv_setting_text_size"
                 tools:text="80" />
 
             <TextView
@@ -180,7 +180,7 @@
                 android:layout_marginStart="4dp"
                 android:text="%"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="@dimen/tv_setting_text_size" />
 
         </LinearLayout>
     </LinearLayout>

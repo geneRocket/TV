@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="@dimen/tv_page_padding">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -23,7 +23,7 @@
                 android:id="@+id/vod"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -33,11 +33,11 @@
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:layout_weight="0.3"
                     android:text="@string/setting_vod"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/vodUrl"
@@ -48,7 +48,7 @@
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:ignore="NestedWeights"
                     tools:text="https://" />
 
@@ -58,7 +58,7 @@
                 android:id="@+id/vodHome"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -82,7 +82,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -90,7 +90,7 @@
                 android:id="@+id/live"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -100,11 +100,11 @@
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:layout_weight="0.3"
                     android:text="@string/setting_live"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/liveUrl"
@@ -115,7 +115,7 @@
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:ignore="NestedWeights"
                     tools:text="https://" />
 
@@ -125,7 +125,7 @@
                 android:id="@+id/liveHome"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -149,7 +149,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -157,7 +157,7 @@
                 android:id="@+id/wall"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -168,11 +168,11 @@
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:layout_weight="0.3"
                     android:text="@string/setting_wall"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/wallUrl"
@@ -183,7 +183,7 @@
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:ignore="NestedWeights"
                     tools:text="https://" />
 
@@ -193,7 +193,7 @@
                 android:id="@+id/wallDefault"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -219,14 +219,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:id="@+id/player"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -236,10 +236,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_player"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
             </LinearLayout>
 
@@ -256,10 +256,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_danmu"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
             </LinearLayout>
         </LinearLayout>
@@ -267,14 +267,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:id="@+id/custom"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -284,10 +284,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_custom"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
             </LinearLayout>
 
@@ -304,10 +304,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_proxy"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/proxyText"
@@ -315,7 +315,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:text="http" />
 
             </LinearLayout>
@@ -325,14 +325,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:id="@+id/backup"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -342,10 +342,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_backup"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/backupText"
@@ -353,7 +353,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:text="Auto" />
 
             </LinearLayout>
@@ -371,10 +371,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_restore"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
             </LinearLayout>
         </LinearLayout>
@@ -382,14 +382,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:id="@+id/cache"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -399,10 +399,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_cache"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/cacheText"
@@ -410,7 +410,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:text="1.0 MB" />
 
             </LinearLayout>
@@ -428,10 +428,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_doh"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/dohText"
@@ -439,7 +439,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:text="Google" />
 
             </LinearLayout>
@@ -448,14 +448,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/tv_row_gap"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:id="@+id/version"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
+                android:layout_marginEnd="@dimen/tv_page_gap"
                 android:layout_weight="1"
                 android:background="@drawable/selector_item"
                 android:focusable="true"
@@ -465,10 +465,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_version"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/versionText"
@@ -476,7 +476,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:text="1.2.1" />
 
             </LinearLayout>
@@ -494,10 +494,10 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginEnd="@dimen/tv_page_gap"
                     android:text="@string/setting_about"
                     android:textColor="@color/white"
-                    android:textSize="18sp" />
+                    android:textSize="@dimen/tv_setting_text_size" />
 
                 <TextView
                     android:id="@+id/aboutText"
@@ -505,7 +505,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="@dimen/tv_setting_text_size"
                     tools:text="about" />
 
             </LinearLayout>

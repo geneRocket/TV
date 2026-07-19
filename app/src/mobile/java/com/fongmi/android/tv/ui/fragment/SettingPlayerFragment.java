@@ -54,7 +54,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaCallback, B
         mBinding.uaText.setText(Setting.getUa());
         mBinding.tunnelText.setText(getSwitch(Setting.isTunnel()));
         mBinding.captionText.setText(getSwitch(Setting.isCaption()));
-        mBinding.bufferText.setText(String.valueOf(Setting.getBuffer()));
+        mBinding.bufferText.setText(Setting.getBufferText());
         mBinding.playWithOthersText.setText(getSwitch(Setting.isPlayWithOthers()));
         mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmuLoad()));
         mBinding.rtspText.setText((rtsp = ResUtil.getStringArray(R.array.select_rtsp))[Setting.getRtsp()]);
@@ -136,9 +136,9 @@ public class SettingPlayerFragment extends BaseFragment implements UaCallback, B
     }
 
     @Override
-    public void setBuffer(int times) {
-        mBinding.bufferText.setText(String.valueOf(times));
-        Setting.putBuffer(times);
+    public void setBuffer(int buffer) {
+        mBinding.bufferText.setText(Setting.getBufferText(buffer));
+        Setting.putBuffer(buffer);
     }
 
     private void setPlayer(View view) {

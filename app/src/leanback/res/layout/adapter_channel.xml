@@ -8,8 +8,8 @@
     android:focusableInTouchMode="true"
     android:gravity="center"
     android:orientation="horizontal"
-    android:paddingStart="20dp"
-    android:paddingEnd="20dp">
+    android:paddingStart="@dimen/tv_page_padding"
+    android:paddingEnd="@dimen/tv_page_padding">
 
     <TextView
         android:id="@+id/number"

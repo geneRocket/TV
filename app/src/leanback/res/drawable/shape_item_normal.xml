@@ -4,12 +4,12 @@
 
     <solid android:color="@color/black_20" />
 
-    <corners android:radius="8dp" />
+    <corners android:radius="@dimen/tv_card_radius" />
 
     <padding
-        android:bottom="8dp"
-        android:left="12dp"
-        android:right="12dp"
-        android:top="8dp" />
+        android:bottom="@dimen/tv_setting_item_padding_vertical"
+        android:left="@dimen/tv_setting_item_padding_horizontal"
+        android:right="@dimen/tv_setting_item_padding_horizontal"
+        android:top="@dimen/tv_setting_item_padding_vertical" />
 
 </shape>

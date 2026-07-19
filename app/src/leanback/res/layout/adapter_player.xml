@@ -11,5 +11,5 @@
     android:singleLine="true"
     android:gravity="center"
     android:textColor="@color/text"
-    android:textSize="14sp"
+    android:textSize="@dimen/tv_button_text_size"
     tools:text="EXO" />

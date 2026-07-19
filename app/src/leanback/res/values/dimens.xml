@@ -1,0 +1,22 @@
+<resources>
+
+    <dimen name="tv_page_padding">20dp</dimen>
+    <dimen name="tv_page_gap">16dp</dimen>
+    <dimen name="tv_row_gap">16dp</dimen>
+    <dimen name="tv_card_radius">8dp</dimen>
+    <dimen name="tv_round_radius">20dp</dimen>
+    <dimen name="tv_setting_item_padding_horizontal">16dp</dimen>
+    <dimen name="tv_setting_item_padding_vertical">10dp</dimen>
+    <dimen name="tv_chip_padding_horizontal">14dp</dimen>
+    <dimen name="tv_chip_padding_vertical">8dp</dimen>
+    <dimen name="tv_button_text_size">16sp</dimen>
+    <dimen name="tv_body_text_size">16sp</dimen>
+    <dimen name="tv_setting_text_size">18sp</dimen>
+    <dimen name="tv_title_text_size">24sp</dimen>
+    <dimen name="tv_detail_preview_width">384dp</dimen>
+    <dimen name="tv_detail_preview_height">216dp</dimen>
+    <dimen name="tv_search_history_width">160dp</dimen>
+    <dimen name="tv_keyboard_key_size">44dp</dimen>
+    <dimen name="tv_list_thumb_size">72dp</dimen>
+
+</resources>

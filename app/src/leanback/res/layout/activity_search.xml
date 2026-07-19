@@ -7,13 +7,13 @@
     android:animateLayoutChanges="true"
     android:keepScreenOn="true"
     android:orientation="horizontal"
-    android:paddingStart="24dp"
-    android:paddingTop="24dp"
-    android:paddingEnd="24dp">
+    android:paddingStart="@dimen/tv_page_padding"
+    android:paddingTop="12dp"
+    android:paddingEnd="@dimen/tv_page_padding">
 
     <LinearLayout
         android:id="@+id/recordLayout"
-        android:layout_width="128dp"
+        android:layout_width="@dimen/tv_search_history_width"
         android:layout_height="match_parent"
         android:layout_marginEnd="36dp"
         android:orientation="vertical">
@@ -24,7 +24,7 @@
             android:layout_marginBottom="16dp"
             android:text="@string/search_record"
             android:textColor="@color/white"
-            android:textSize="24sp" />
+            android:textSize="@dimen/tv_title_text_size" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recordRecycler"
@@ -47,8 +47,8 @@
 
         <com.fongmi.android.tv.ui.custom.CustomMic
             android:id="@+id/mic"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/tv_keyboard_key_size"
+            android:layout_height="@dimen/tv_keyboard_key_size"
             android:layout_marginEnd="12dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
@@ -78,7 +78,7 @@
             android:textColor="@color/white"
             android:textColorHint="@color/white"
             android:textCursorDrawable="@drawable/shape_cursor"
-            android:textSize="24sp" />
+            android:textSize="@dimen/tv_title_text_size" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/keyboard"
@@ -108,7 +108,7 @@
             android:layout_marginBottom="16dp"
             android:text="@string/search_hot"
             android:textColor="@color/white"
-            android:textSize="24sp" />
+            android:textSize="@dimen/tv_title_text_size" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/wordRecycler"

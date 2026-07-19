@@ -33,7 +33,7 @@
             android:focusableInTouchMode="true"
             android:nextFocusLeft="@id/change"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             tools:text="EXO" />
 
         <TextView
@@ -45,7 +45,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             tools:text="硬解" />
 
         <com.fongmi.android.tv.ui.custom.CustomUpDownView
@@ -57,7 +57,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             android:visibility="gone"
             tools:text="1.00"
             tools:visibility="visible" />
@@ -71,7 +71,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             tools:text="預設" />
 
         <TextView
@@ -84,7 +84,7 @@
             android:focusableInTouchMode="true"
             android:text="@string/play_volume"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             android:visibility="gone"
             tools:visibility="visible" />
 
@@ -97,7 +97,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             tools:text="首頁" />
 
         <TextView
@@ -109,7 +109,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             android:visibility="gone"
             tools:text="來源 1"
             tools:visibility="visible" />
@@ -125,7 +125,7 @@
             android:tag="3"
             android:text="@string/play_track_text"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             android:visibility="gone"
             tools:visibility="visible" />
 
@@ -140,7 +140,7 @@
             android:tag="1"
             android:text="@string/play_track_audio"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             android:visibility="gone"
             tools:visibility="visible" />
 
@@ -155,7 +155,7 @@
             android:tag="2"
             android:text="@string/play_track_video"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/tv_button_text_size"
             android:visibility="gone"
             tools:visibility="visible" />
 
@@ -169,7 +169,7 @@
             android:focusableInTouchMode="true"
             android:text="@string/play_invert"
             android:textColor="@color/text"
-            android:textSize="14sp" />
+            android:textSize="@dimen/tv_button_text_size" />
 
         <TextView
             android:id="@+id/across"
@@ -181,7 +181,7 @@
             android:focusableInTouchMode="true"
             android:text="@string/play_across"
             android:textColor="@color/text"
-            android:textSize="14sp" />
+            android:textSize="@dimen/tv_button_text_size" />
 
         <TextView
             android:id="@+id/change"
@@ -193,7 +193,7 @@
             android:nextFocusRight="@id/player"
             android:text="@string/play_change"
             android:textColor="@color/text"
-            android:textSize="14sp" />
+            android:textSize="@dimen/tv_button_text_size" />
 
         </LinearLayout>
 

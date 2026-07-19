@@ -8,9 +8,6 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.HttpDataSource;
-import androidx.media3.datasource.cache.CacheDataSink;
-import androidx.media3.datasource.cache.CacheDataSource;
-import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider;
 import androidx.media3.exoplayer.source.ConcatenatingMediaSource2;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -35,7 +32,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     private LoadErrorHandlingPolicy loadErrorHandlingPolicy;
 
     public MediaSourceFactory() {
-        defaultMediaSourceFactory = new DefaultMediaSourceFactory(buildCacheDataSource(new DefaultDataSource.Factory(App.get(), new MyOkhttpDataSource.Factory(OkHttp.client()))), getExtractorsFactory());
+        defaultMediaSourceFactory = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(App.get(), new MyOkhttpDataSource.Factory(OkHttp.client())), getExtractorsFactory());
     }
 
     @NonNull
@@ -61,8 +58,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @NonNull
     @Override
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
-        boolean forceLive = ExoUtil.isForceLive(mediaItem);
-        MediaSource.Factory factory = buildMediaSourceFactory(getHeaders(mediaItem), forceLive);
+        MediaSource.Factory factory = buildMediaSourceFactory(getHeaders(mediaItem));
         if (drmSessionManagerProvider != null) factory.setDrmSessionManagerProvider(drmSessionManagerProvider);
         if (loadErrorHandlingPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
         if (mediaItem.mediaId.contains("***") && mediaItem.mediaId.contains("|||")) {
@@ -102,19 +98,10 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return extractorsFactory;
     }
 
-    private MediaSource.Factory buildMediaSourceFactory(Map<String, String> headers, boolean forceLive) {
+    private MediaSource.Factory buildMediaSourceFactory(Map<String, String> headers) {
         HttpDataSource.Factory httpFactory = new MyOkhttpDataSource.Factory(OkHttp.client());
         if (headers != null && !headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
         DataSource.Factory upstreamFactory = new DefaultDataSource.Factory(App.get(), httpFactory);
-        if (forceLive) return new DefaultMediaSourceFactory(upstreamFactory, getExtractorsFactory());
-        return new DefaultMediaSourceFactory(buildCacheDataSource(upstreamFactory), getExtractorsFactory());
-    }
-
-    private CacheDataSource.Factory buildCacheDataSource(DataSource.Factory upstreamFactory) {
-        return new CacheDataSource.Factory()
-                .setCache(CacheManager.get().getCache())
-                .setUpstreamDataSourceFactory(upstreamFactory)
-                .setCacheWriteDataSinkFactory(new CacheDataSink.Factory().setCache(CacheManager.get().getCache()))
-                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
+        return new DefaultMediaSourceFactory(upstreamFactory, getExtractorsFactory());
     }
 }

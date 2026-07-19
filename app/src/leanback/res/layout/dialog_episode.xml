@@ -12,8 +12,8 @@
         android:clipChildren="false"
         android:clipToPadding="false"
         android:layout_marginTop="12dp"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp"
+        android:paddingStart="@dimen/tv_page_padding"
+        android:paddingEnd="@dimen/tv_page_padding"
         android:visibility="gone" />
 
     <androidx.leanback.widget.VerticalGridView
@@ -24,8 +24,8 @@
         android:clipToPadding="false"
         android:layout_marginTop="12dp"
         android:layout_marginBottom="12dp"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp"
+        android:paddingStart="@dimen/tv_page_padding"
+        android:paddingEnd="@dimen/tv_page_padding"
         android:focusable="false"
         app:focusOutEnd="true"
         app:focusOutFront="true"

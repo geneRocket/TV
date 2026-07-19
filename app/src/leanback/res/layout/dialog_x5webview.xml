@@ -11,7 +11,7 @@
         android:layout_height="wrap_content"
         android:letterSpacing="0.02"
         android:textColor="@color/white"
-        android:textSize="18sp"
+        android:textSize="@dimen/tv_setting_text_size"
         android:text="@string/x5webview_title" />
 
     <View
@@ -27,7 +27,7 @@
         android:layout_height="wrap_content"
         android:letterSpacing="0.02"
         android:textColor="@color/white"
-        android:textSize="18sp"
+        android:textSize="@dimen/tv_setting_text_size"
         android:layout_marginBottom="16dp"
         android:text="@string/x5webview_download_enable" />
 

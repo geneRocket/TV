@@ -197,6 +197,27 @@ public class Setting {
         return Math.min(Math.max(Prefers.getInt("exo_buffer"), 1), 15);
     }
 
+    public static int getBufferMB() {
+        return getBufferMB(getBuffer());
+    }
+
+    public static int getBufferMB(int buffer) {
+        int level = Math.min(Math.max(buffer, 1), 15);
+        return 32 + (level - 1) * 8;
+    }
+
+    public static int getBufferBytes() {
+        return getBufferMB() * 1024 * 1024;
+    }
+
+    public static String getBufferText() {
+        return getBufferText(getBuffer());
+    }
+
+    public static String getBufferText(int buffer) {
+        return getBufferMB(buffer) + " MB";
+    }
+
     public static void putBuffer(int buffer) {
         Prefers.put("exo_buffer", buffer);
     }

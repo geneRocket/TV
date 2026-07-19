@@ -38,7 +38,6 @@ import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.event.PlayerEvent;
 import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.impl.SessionCallback;
-import com.fongmi.android.tv.player.exo.CacheManager;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.FileUtil;
@@ -574,7 +573,6 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         if (haveDanmu()) danmuView.release();
         removeTimeoutCheck();
         if (current) {
-            CacheManager.get().release();
             M3u8AdFilter.clearSubtitlePlaylistWhitelist();
             Server.get().setPlayer(null);
             App.execute(() -> Source.get().stop());

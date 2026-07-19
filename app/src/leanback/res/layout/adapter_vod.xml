@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@color/black_20"
-        android:scaleType="center"
+        android:scaleType="centerCrop"
         app:shapeAppearanceOverlay="@style/Vod.Grid"
         tools:src="@drawable/ic_img_loading" />
 
@@ -37,7 +37,7 @@
         android:padding="4dp"
         android:singleLine="true"
         android:textColor="@color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/tv_button_text_size"
         android:visibility="gone"
         tools:text="2022"
         tools:visibility="visible" />
@@ -52,7 +52,7 @@
         android:padding="4dp"
         android:singleLine="true"
         android:textColor="@color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/tv_button_text_size"
         android:visibility="gone"
         tools:text="泥巴"
         tools:visibility="visible" />
@@ -67,7 +67,7 @@
         android:padding="4dp"
         android:singleLine="true"
         android:textColor="@color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/tv_button_text_size"
         tools:text="1080p" />
 
     <TextView
@@ -81,7 +81,7 @@
         android:padding="6dp"
         android:singleLine="true"
         android:textColor="@color/white"
-        android:textSize="16sp"
+        android:textSize="@dimen/tv_body_text_size"
         tools:text="蜘蛛人" />
 
     <View
