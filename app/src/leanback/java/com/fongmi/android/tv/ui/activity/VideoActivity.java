@@ -23,6 +23,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.BaseGridView;
+import androidx.leanback.widget.DiffCallback;
 import androidx.leanback.widget.ItemBridgeAdapter;
 import androidx.leanback.widget.OnChildViewHolderSelectedListener;
 import androidx.lifecycle.ViewModelProvider;
@@ -139,6 +140,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 5000;
     private static final int QUICK_RESULT_LIMIT = 50;
     private static final int QUICK_FLUSH_DELAY_MS = 100;
+    private static final DiffCallback<Vod> QUICK_DIFF = new DiffCallback<Vod>() {
+        @Override
+        public boolean areItemsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
+            return SearchSorter.key(oldItem).equals(SearchSorter.key(newItem));
+        }
+
+        @Override
+        public boolean areContentsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
+            return oldItem.getVodName().equals(newItem.getVodName())
+                    && oldItem.getSiteName().equals(newItem.getSiteName());
+        }
+    };
     private static final int REQUEST_DANMAKU_FILE = 9998;
     private static final Map<String, List<String>> PART_CACHE = new LinkedHashMap<String, List<String>>(24, 0.75f, true) {
         @Override
@@ -2889,7 +2902,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (!mSearchActive) return;
         List<Vod> items = new ArrayList<>(mQuickQueue);
         items.sort((left, right) -> SearchSorter.compare(left, right, getSourceSwitchKeyword(), sourceSearchActor));
-        mQuickAdapter.setItems(items, null);
+        mQuickAdapter.setItems(items, QUICK_DIFF);
         setVisibilityIfChanged(mBinding.quick, items.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
