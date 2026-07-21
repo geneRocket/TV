@@ -131,23 +131,21 @@ public class JarLoader {
             return;
         }
 
-        ThreadPools.loader().execute(() -> {
+        synchronized (locks.computeIfAbsent(key, k -> new Object())) {
+            if (loaders.containsKey(key)) return;
             String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
-            synchronized (locks.computeIfAbsent(key, k -> new Object())) {
-                if (loaders.containsKey(key)) return;
-                if (md5.length() > 0 && Util.equals(jarUrl, md5)) {
-                    load(key, Path.jar(jarUrl));
-                } else if (jarUrl.startsWith("img+")) {
-                    load(key, Decoder.getSpider(jarUrl));
-                } else if (jarUrl.startsWith("http")) {
-                    load(key, download(jarUrl));
-                } else if (jarUrl.startsWith("file")) {
-                    load(key, Path.local(jarUrl));
-                } else {
-                    parseJar(key, UrlUtil.convert(jarUrl));
-                }
+            if (md5.length() > 0 && Util.equals(jarUrl, md5)) {
+                load(key, Path.jar(jarUrl));
+            } else if (jarUrl.startsWith("img+")) {
+                load(key, Decoder.getSpider(jarUrl));
+            } else if (jarUrl.startsWith("http")) {
+                load(key, download(jarUrl));
+            } else if (jarUrl.startsWith("file")) {
+                load(key, Path.local(jarUrl));
+            } else {
+                parseJar(key, UrlUtil.convert(jarUrl));
             }
-        });
+        }
     }
 
     private void checkUpdate(String jarUrl, String md5Url) {
