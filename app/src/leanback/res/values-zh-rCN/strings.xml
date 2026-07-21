@@ -11,6 +11,8 @@
     <string name="home_history_short">历史</string>
     <string name="home_history">最近观看</string>
     <string name="home_recommend">更新推荐</string>
+    <string name="action_move_down">下移</string>
+    <string name="action_move_up">上移</string>
     <string name="empty_keep">暂无收藏</string>
     <string name="empty_history">暂无观看记录</string>
     <string name="play_switch_empty">未找到可用换源</string>

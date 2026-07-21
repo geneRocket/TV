@@ -44,7 +44,10 @@ public class CustomHorizontalGridView extends HorizontalGridView {
         if (focused != null) {
             View found = FocusFinder.getInstance().findNextFocus(this, focused, direction);
             if (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT) {
-                if ((found == null || found.getId() != R.id.text) && getScrollState() == SCROLL_STATE_IDLE) {
+                // Item roots are not required to use a specific id. The old R.id.text check
+                // rejected valid card/root focus targets and made some horizontal rows appear
+                // stuck depending on which presenter layout they used.
+                if (found == null && getScrollState() == SCROLL_STATE_IDLE) {
                     shake(focused);
                     return null;
                 }

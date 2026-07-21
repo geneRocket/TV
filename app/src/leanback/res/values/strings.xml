@@ -11,6 +11,8 @@
     <string name="home_history_short">History</string>
     <string name="home_history">History</string>
     <string name="home_recommend">Recommend</string>
+    <string name="action_move_down">Move down</string>
+    <string name="action_move_up">Move up</string>
     <string name="empty_keep">No keep records</string>
     <string name="empty_history">No watch history</string>
     <string name="play_switch_empty">No available source found</string>

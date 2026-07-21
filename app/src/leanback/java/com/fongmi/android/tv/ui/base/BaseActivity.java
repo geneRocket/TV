@@ -117,7 +117,8 @@ public abstract class BaseActivity extends AppCompatActivity {
             } else {
                 WALL_CACHE = null;
                 WALL_INDEX = -1;
-                getWindow().setBackgroundDrawableResource(ResUtil.getDrawable(file.getName()));
+                int resId = ResUtil.getDrawable(file.getName());
+                getWindow().setBackgroundDrawableResource(resId == 0 ? R.drawable.wallpaper_1 : resId);
             }
         } catch (Exception e) {
             getWindow().setBackgroundDrawableResource(R.drawable.wallpaper_1);

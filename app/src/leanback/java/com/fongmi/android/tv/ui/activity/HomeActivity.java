@@ -184,8 +184,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setHomeUI() {
-        if (Setting.getHomeUI() == 0) mBinding.recycler.setVisibility(View.GONE);
-        else mBinding.recycler.setVisibility(View.VISIBLE);
+        boolean visible = Setting.getHomeUI() != 0;
+        if (!visible && mBinding.recycler.hasFocus()) mBinding.title.requestFocus();
+        mBinding.recycler.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private void setViewModel() {
