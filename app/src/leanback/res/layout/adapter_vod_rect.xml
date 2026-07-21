@@ -13,6 +13,7 @@
         android:layout_height="match_parent"
         android:background="@color/black_20"
         android:scaleType="centerCrop"
+        android:contentDescription="@null"
         app:shapeAppearanceOverlay="@style/Vod.Grid"
         tools:src="@drawable/ic_img_loading" />
 
@@ -35,6 +36,7 @@
         android:id="@+id/site"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
         android:layout_marginTop="8dp"
         android:background="@drawable/shape_vod_site"
         android:ellipsize="end"

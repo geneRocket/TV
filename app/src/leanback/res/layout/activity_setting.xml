@@ -28,6 +28,7 @@
                 android:background="@drawable/selector_item"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
+                android:nextFocusLeft="@id/vodHistory"
                 android:orientation="horizontal">
 
                 <TextView
@@ -64,7 +65,8 @@
                 android:focusableInTouchMode="true"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_setting_home" />
+                android:src="@drawable/ic_setting_home"
+                android:contentDescription="@null" />
 
             <ImageView
                 android:id="@+id/vodHistory"
@@ -75,7 +77,9 @@
                 android:focusableInTouchMode="true"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_setting_history" />
+                android:src="@drawable/ic_setting_history"
+                android:contentDescription="@null"
+                android:nextFocusRight="@id/vod" />
 
         </LinearLayout>
 
@@ -95,6 +99,7 @@
                 android:background="@drawable/selector_item"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
+                android:nextFocusLeft="@id/liveHistory"
                 android:orientation="horizontal">
 
                 <TextView
@@ -142,7 +147,8 @@
                 android:focusableInTouchMode="true"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_setting_history" />
+                android:src="@drawable/ic_setting_history"
+                android:nextFocusRight="@id/live" />
 
         </LinearLayout>
 
@@ -162,6 +168,7 @@
                 android:background="@drawable/selector_item"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
+                android:nextFocusLeft="@id/wallRefresh"
                 android:nextFocusDown="@id/player"
                 android:orientation="horizontal">
 
@@ -210,6 +217,7 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:nextFocusDown="@id/player"
+                android:nextFocusRight="@id/wall"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_setting_refresh" />
@@ -220,6 +228,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/tv_row_gap"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -268,6 +277,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/tv_row_gap"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -326,6 +336,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/tv_row_gap"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -383,6 +394,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/tv_row_gap"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -449,6 +461,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/tv_row_gap"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <LinearLayout

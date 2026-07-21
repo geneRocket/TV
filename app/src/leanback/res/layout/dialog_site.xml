@@ -88,9 +88,10 @@
             android:background="@drawable/selector_text"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:nextFocusUp="@id/none"
+            android:nextFocusUp="@id/cancel"
             android:nextFocusDown="@id/mode"
             android:padding="8dp"
+            android:contentDescription="@null"
             tools:src="@drawable/ic_site_list" />
 
     </LinearLayout>

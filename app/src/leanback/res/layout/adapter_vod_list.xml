@@ -21,12 +21,14 @@
             android:layout_height="@dimen/tv_list_thumb_size"
             android:layout_margin="16dp"
             android:scaleType="fitCenter"
+            android:contentDescription="@null"
             app:shapeAppearanceOverlay="@style/Vod.Grid"
             tools:src="@drawable/ic_img_error" />
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:layout_marginEnd="16dp"
             android:gravity="center_vertical"
             android:orientation="vertical">

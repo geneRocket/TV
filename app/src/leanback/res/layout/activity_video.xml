@@ -75,139 +75,133 @@
         android:layout_alignTop="@+id/video"
         android:layout_alignParentEnd="true"
         android:layout_toEndOf="@+id/video"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:baselineAligned="false">
+
+        <!-- 优化 1：剧名和备注横向合并。备注小字自动吃满右侧剩余空间，省去一整行高度 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="bottom"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/white"
+                android:textSize="@dimen/tv_title_text_size"
+                android:textStyle="bold"
+                tools:text="慶餘年第二季" />
+
+            <TextView
+                android:id="@+id/remark"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/white"
+                android:textSize="@dimen/tv_body_text_size"
+                tools:text="更新到第二季" />
+        </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/detailText"
+            android:id="@+id/row1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/site"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/white"
+                android:textSize="@dimen/tv_body_text_size"
+                tools:text="站源：泥巴" />
+
+            <TextView
+                android:id="@+id/year"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/white"
+                android:textSize="@dimen/tv_body_text_size"
+                tools:text="年份：2022" />
+
+            <TextView
+                android:id="@+id/area"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/white"
+                android:textSize="@dimen/tv_body_text_size"
+                tools:text="地區：台灣" />
+
+            <TextView
+                android:id="@+id/type"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/white"
+                android:textSize="@dimen/tv_body_text_size"
+                tools:text="類型：科幻" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/director"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:nextFocusDown="@id/actor"
+            android:textColor="@color/white"
+            android:textSize="@dimen/tv_body_text_size"
+            tools:text="導演：FongMi" />
+
+        <!-- 优化 2：演员列表通常很长，最大行数提升至 2 行，避免只看到两三个人名 -->
+        <TextView
+            android:id="@+id/actor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:nextFocusDown="@id/content"
+            android:textColor="@color/white"
+            android:textSize="@dimen/tv_body_text_size"
+            tools:text="演員：张若昀 / 李沁 / 陈道明 / 吴刚 / 郭麒麟 / 田雨 / 辛脂蕾 / 宋轶" />
+
+        <!-- 优化 3：利用上面省下的空间，将简介提升到最大 3 行，利用 layout_weight 动态撑满右侧余白 -->
+        <TextView
+            android:id="@+id/content"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:orientation="vertical">
-
-            <!-- 优化 1：剧名和备注横向合并。备注小字自动吃满右侧剩余空间，省去一整行高度 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="bottom"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/name"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/white"
-                    android:textSize="@dimen/tv_title_text_size"
-                    android:textStyle="bold"
-                    tools:text="慶餘年第二季" />
-
-                <TextView
-                    android:id="@+id/remark"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/white"
-                    android:textSize="@dimen/tv_body_text_size"
-                    tools:text="更新到第二季" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row1"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/site"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="12dp"
-                    android:ellipsize="end"
-                    android:singleLine="true"
-                    android:textColor="@color/white"
-                    android:textSize="@dimen/tv_body_text_size"
-                    tools:text="站源：泥巴" />
-
-                <TextView
-                    android:id="@+id/year"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="12dp"
-                    android:ellipsize="end"
-                    android:singleLine="true"
-                    android:textColor="@color/white"
-                    android:textSize="@dimen/tv_body_text_size"
-                    tools:text="年份：2022" />
-
-                <TextView
-                    android:id="@+id/area"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="12dp"
-                    android:ellipsize="end"
-                    android:singleLine="true"
-                    android:textColor="@color/white"
-                    android:textSize="@dimen/tv_body_text_size"
-                    tools:text="地區：台灣" />
-
-                <TextView
-                    android:id="@+id/type"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:ellipsize="end"
-                    android:singleLine="true"
-                    android:textColor="@color/white"
-                    android:textSize="@dimen/tv_body_text_size"
-                    tools:text="類型：科幻" />
-
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/director"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:nextFocusDown="@id/actor"
-                android:textColor="@color/white"
-                android:textSize="@dimen/tv_body_text_size"
-                tools:text="導演：FongMi" />
-
-            <!-- 优化 2：演员列表通常很长，最大行数提升至 2 行，避免只看到两三个人名 -->
-            <TextView
-                android:id="@+id/actor"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:ellipsize="end"
-                android:maxLines="2"
-                android:nextFocusDown="@id/content"
-                android:textColor="@color/white"
-                android:textSize="@dimen/tv_body_text_size"
-                tools:text="演員：张若昀 / 李沁 / 陈道明 / 吴刚 / 郭麒麟 / 田雨 / 辛脂蕾 / 宋轶" />
-
-            <!-- 优化 3：利用上面省下的空间，将简介提升到最大 3 行，利用 layout_weight 动态撑满右侧余白 -->
-            <TextView
-                android:id="@+id/content"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
-                android:maxLines="3"
-                android:nextFocusDown="@id/desc"
-                android:textColor="@color/white"
-                android:textSize="@dimen/tv_body_text_size"
-                tools:text="簡介：该剧改编自猫腻同名小说，讲述了一个身世神秘的少年范闲，历经家族、江湖、庙堂的种种考验与锤炼，书写出一段不同寻常的人生传奇的故事。" />
-
-        </LinearLayout>
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="3"
+            android:nextFocusDown="@id/desc"
+            android:textColor="@color/white"
+            android:textSize="@dimen/tv_body_text_size"
+            tools:text="簡介：该剧改编自猫腻同名小说，讲述了一个身世神秘的少年范闲，历经家族、江湖、庙堂的种种考验与锤炼，书写出一段不同寻常的人生传奇的故事。" />
 
         <LinearLayout
             android:id="@+id/row2"
@@ -277,7 +271,7 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:gravity="center"
-                android:nextFocusRight="@id/search1"
+                android:nextFocusRight="@id/desc"
                 android:nextFocusDown="@id/flag"
                 android:singleLine="true"
                 android:text="@string/home_search"
