@@ -8,6 +8,7 @@
         android:id="@+id/text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@drawable/selector_focus_outline"
         android:letterSpacing="0.05"
         android:lineSpacingExtra="8dp"
         android:padding="16dp"
