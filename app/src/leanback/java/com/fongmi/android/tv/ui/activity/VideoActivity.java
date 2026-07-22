@@ -961,7 +961,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setEpisodeSelectedPosition(int position) {
-        getEpisodeView().setSelectedPosition(position);
+        BaseGridView view = getEpisodeView();
+        if (view.getChildCount() > 0) {
+            view.setSelectedPosition(position);
+            return;
+        }
+        view.addOnLayoutCompletedListener(new BaseGridView.OnLayoutCompletedListener() {
+            @Override
+            public void onLayoutCompleted(@NonNull RecyclerView.State state) {
+                view.removeOnLayoutCompletedListener(this);
+                view.setSelectedPosition(position);
+            }
+        });
     }
 
     private boolean isReplay() {
