@@ -111,12 +111,12 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         App.execute(() -> {
             try {
                 WallConfig.get().init();
-                List<Config> liveConfigs = getStartupConfigs(1);
-                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback(), true);
-                else LiveConfig.load(liveConfigs, new Callback(), true);
                 List<Config> vodConfigs = getStartupConfigs(0);
                 if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
                 else VodConfig.load(vodConfigs, getCallback(), true, true);
+                List<Config> liveConfigs = getStartupConfigs(1);
+                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback(), true);
+                else LiveConfig.load(liveConfigs, new Callback(), true);
             } catch (RuntimeException e) {
                 App.post(() -> {
                     loading = false;

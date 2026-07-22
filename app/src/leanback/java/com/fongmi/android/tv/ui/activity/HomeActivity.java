@@ -485,10 +485,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 List<Config> liveConfigs = getStartupConfigs(1);
                 List<Config> vodConfigs = getStartupConfigs(0);
                 if (isFinishing() || isDestroyed()) return;
-                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), getLiveCallback(), true);
-                else LiveConfig.load(liveConfigs, getLiveCallback(), true);
                 if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(""), true);
                 else VodConfig.load(vodConfigs, getCallback(""), true, true);
+                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), getLiveCallback(), true);
+                else LiveConfig.load(liveConfigs, getLiveCallback(), true);
             } catch (Throwable e) {
                 App.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
