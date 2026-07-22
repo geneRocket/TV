@@ -203,7 +203,7 @@ public class Setting {
 
     public static int getBufferMB(int buffer) {
         int level = Math.min(Math.max(buffer, 1), 15);
-        return 32 + (level - 1) * 8;
+        return level * 64;
     }
 
     public static int getBufferBytes() {
