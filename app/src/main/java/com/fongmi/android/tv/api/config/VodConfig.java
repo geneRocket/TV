@@ -539,7 +539,7 @@ public class VodConfig {
             initSite(object);
             initParse(object);
             initOther(object);
-            BaseLoader.get().parseJar(Json.safeString(object, "spider"));
+            preloadJars(object);
             if (loadLive && object.has("lives")) initLive(object);
             String notice = Json.safeString(object, "notice");
             config.logo(Json.safeString(object, "logo"));
@@ -588,6 +588,13 @@ public class VodConfig {
                 setHome(site);
             }
         }
+    }
+
+    private void preloadJars(JsonObject object) {
+        Set<String> jars = new LinkedHashSet<>();
+        jars.add(Json.safeString(object, "spider"));
+        for (Site site : sites) jars.add(site.getJar());
+        for (String jar : jars) BaseLoader.get().parseJar(jar);
     }
 
     private void initLive(JsonObject object) {

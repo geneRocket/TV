@@ -546,7 +546,7 @@ public class LiveConfig {
     private void parseConfigOrThrow(JsonObject object) throws Throwable {
         initLive(object);
         initOther(object);
-        BaseLoader.get().parseJar(Json.safeString(object, "spider"));
+        preloadJars(object);
         if (persistCache) config.json(object.toString()).update();
     }
 
@@ -577,6 +577,13 @@ public class LiveConfig {
                 setHome(live, true);
             }
         }
+    }
+
+    private void preloadJars(JsonObject object) {
+        Set<String> jars = new LinkedHashSet<>();
+        jars.add(Json.safeString(object, "spider"));
+        for (Live live : lives) jars.add(live.getJar());
+        for (String jar : jars) BaseLoader.get().parseJar(jar);
     }
 
     private void initOther(JsonObject object) {
