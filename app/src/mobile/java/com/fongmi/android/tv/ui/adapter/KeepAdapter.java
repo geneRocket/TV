@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.databinding.AdapterVodBinding;
 import com.fongmi.android.tv.utils.ImgUtil;
 
@@ -81,7 +82,7 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         mItems.clear();
         setDelete(false);
         notifyDataSetChanged();
-        Keep.deleteAll();
+        KeepRepository.get().deleteAll();
     }
 
     public void remove(Keep item) {

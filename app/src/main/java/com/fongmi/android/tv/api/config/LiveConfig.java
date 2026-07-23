@@ -14,6 +14,7 @@ import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Depot;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.db.AppDatabase;
@@ -640,7 +641,7 @@ public class LiveConfig {
 
     public void setKeep(List<Group> items) {
         Set<String> keys = new HashSet<>();
-        for (Keep keep : Keep.getLive()) keys.add(keep.getKey());
+        for (Keep keep : KeepRepository.get().live()) keys.add(keep.getKey());
         for (Group group : items) {
             if (group.isKeep()) continue;
             for (Channel channel : group.getChannel()) {

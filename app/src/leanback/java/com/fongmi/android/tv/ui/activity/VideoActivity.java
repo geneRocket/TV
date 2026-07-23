@@ -47,7 +47,9 @@ import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.bean.Part;
 import com.fongmi.android.tv.bean.Result;
@@ -625,11 +627,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mSelectedFlagPosition = 0;
             host.mSelectedEpisodePosition = 0;
             App.execute(() -> {
-                host.mHistory = History.find(host.getHistoryKey());
-                host.mHistory = host.mHistory == null ? createHistory(item) : host.mHistory;
-                if (!TextUtils.isEmpty(host.getMark())) host.mHistory.setVodRemarks(host.getMark());
-                host.mHistory.findEpisode(item.getVodFlags());
-                host.mHistory.setVodPic(item.getVodPic());
+                host.mHistory = HistoryRepository.get().prepare(HistoryRepository.get().find(host.getHistoryKey()), host.getHistoryKey(), host.getSiteCid(), item, Setting.getPlaySpeed(), host.getMark());
                 App.post(() -> {
                     if (host.isFinishing() || host.isDestroyed()) return;
                     checkHistory();
@@ -637,16 +635,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                     host.checkKeep();
                 });
             });
-        }
-
-        private History createHistory(Vod item) {
-            History history = new History();
-            history.setKey(host.getHistoryKey());
-            history.setCid(host.getSiteCid());
-            history.setVodName(item.getVodName());
-            history.findEpisode(item.getVodFlags());
-            history.setSpeed(Setting.getPlaySpeed());
-            return history;
         }
 
         private void initSearch(String keyword, boolean auto, boolean advance) {
@@ -1199,9 +1187,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result.observe(this, mContent::setDetail);
-        mViewModel.player.observe(this, this::applyPlayerResult);
-        mViewModel.search.observe(this, mContent::setSearch);
+        mViewModel.result().observe(this, mContent::setDetail);
+        mViewModel.player().observe(this, this::applyPlayerResult);
+        mViewModel.search().observe(this, mContent::setSearch);
     }
 
     private void checkCast() {
@@ -1701,7 +1689,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onKeep() {
-        Keep keep = Keep.find(getHistoryKey());
+        Keep keep = KeepRepository.get().find(getHistoryKey());
         Notify.show(keep != null ? R.string.keep_del : R.string.keep_add);
         if (keep != null) keep.delete();
         else createKeep();
@@ -2292,7 +2280,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void checkKeep() {
-        mBinding.keep.setCompoundDrawablesWithIntrinsicBounds(Keep.find(getHistoryKey()) == null ? R.drawable.ic_detail_keep_off : R.drawable.ic_detail_keep_on, 0, 0, 0);
+        mBinding.keep.setCompoundDrawablesWithIntrinsicBounds(KeepRepository.get().find(getHistoryKey()) == null ? R.drawable.ic_detail_keep_off : R.drawable.ic_detail_keep_on, 0, 0, 0);
     }
 
     private void createKeep() {

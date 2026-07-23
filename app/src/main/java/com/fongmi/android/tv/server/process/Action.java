@@ -10,8 +10,11 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.CastEvent;
@@ -20,6 +23,7 @@ import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.Notify;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
@@ -103,8 +107,8 @@ public class Action implements Process {
     private void onCast(Map<String, String> params) {
         Config config = Config.objectFrom(params.get("config"));
         Device device = Device.objectFrom(params.get("device"));
-        History history = History.objectFrom(params.get("history"));
-        CastEvent.post(Config.find(config), device, history);
+        History history = HistoryRepository.get().fromJson(params.get("history"));
+        CastEvent.post(ConfigRepository.get().find(config), device, history);
     }
 
     private void onSync(Map<String, String> params) {
@@ -134,10 +138,10 @@ public class Action implements Process {
 
     private void sendHistory(Device device, Map<String, String> params) {
         try {
-            Config config = Config.find(Config.objectFrom(params.get("config")));
+            Config config = ConfigRepository.get().find(Config.objectFrom(params.get("config")));
             FormBody.Builder body = new FormBody.Builder();
             body.add("config", config.toString());
-            body.add("targets", App.gson().toJson(History.get(config.getId())));
+            body.add("targets", App.gson().toJson(HistoryRepository.get().all(config.getId())));
             try (Response response = OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=history"), body.build()).execute()) {
                 if (response.body() != null) response.body().close();
             }
@@ -149,8 +153,8 @@ public class Action implements Process {
     private void sendKeep(Device device) {
         try {
             FormBody.Builder body = new FormBody.Builder();
-            body.add("targets", App.gson().toJson(Keep.getVod()));
-            body.add("configs", App.gson().toJson(Config.findUrls()));
+            body.add("targets", App.gson().toJson(KeepRepository.get().vod()));
+            body.add("configs", App.gson().toJson(ConfigRepository.get().urls()));
             try (Response response = OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC), device.getIp().concat("/action?do=sync&mode=0&type=keep"), body.build()).execute()) {
                 if (response.body() != null) response.body().close();
             }
@@ -160,11 +164,11 @@ public class Action implements Process {
     }
 
     public void syncHistory(Map<String, String> params, boolean force) {
-        Config config = Config.find(Config.objectFrom(params.get("config")));
-        List<History> targets = History.arrayFrom(params.get("targets"));
+        Config config = ConfigRepository.get().find(Config.objectFrom(params.get("config")));
+        List<History> targets = HistoryRepository.get().listFromJson(params.get("targets"));
         if (VodConfig.get().getConfig().equals(config)) {
-            if (force) History.delete(config.getId());
-            History.sync(targets);
+            if (force) HistoryRepository.get().delete(config.getId());
+            HistoryRepository.get().sync(targets);
         } else {
             VodConfig.load(config, getCallback(targets, force));
         }
@@ -174,10 +178,10 @@ public class Action implements Process {
         return new Callback() {
             @Override
             public void success() {
-                if (force) History.delete(VodConfig.getCid());
+                if (force) HistoryRepository.get().delete(VodConfig.getCid());
                 RefreshEvent.config();
                 RefreshEvent.video();
-                History.sync(targets);
+                HistoryRepository.get().sync(targets);
             }
 
             @Override
@@ -188,13 +192,13 @@ public class Action implements Process {
     }
 
     private void syncKeep(Map<String, String> params, boolean force) {
-        List<Keep> targets = Keep.arrayFrom(params.get("targets"));
+        List<Keep> targets = KeepRepository.get().listFromJson(params.get("targets"));
         List<Config> configs = Config.arrayFrom(params.get("configs"));
         if (TextUtils.isEmpty(VodConfig.getUrl()) && configs.size() > 0) {
-            VodConfig.load(Config.find(configs.get(0)), getCallback(configs, targets, force));
+            VodConfig.load(ConfigRepository.get().find(configs.get(0)), getCallback(configs, targets, force));
         } else {
-            if (force) Keep.deleteAll();
-            Keep.sync(configs, targets);
+            if (force) KeepRepository.get().deleteAll();
+            KeepRepository.get().sync(configs, targets);
         }
     }
 
@@ -202,11 +206,11 @@ public class Action implements Process {
         return new Callback() {
             @Override
             public void success() {
-                if (force) Keep.deleteAll();
+                if (force) KeepRepository.get().deleteAll();
                 RefreshEvent.history();
                 RefreshEvent.config();
                 RefreshEvent.video();
-                Keep.sync(configs, targets);
+                KeepRepository.get().sync(configs, targets);
             }
 
             @Override
@@ -235,7 +239,7 @@ public class Action implements Process {
         String url = params.get("url");
         if (TextUtils.isEmpty(url)) return;
         App.post(() -> Notify.progress(App.activity()));
-        VodConfig.load(Config.find(url, 0), getCallback());
+        VodConfig.load(ConfigRepository.get().find(url, 0), getCallback());
     }
 
     private void wallConfig(Map<String, String> params, Map<String, String> files) {
@@ -246,7 +250,7 @@ public class Action implements Process {
             File wall = new File(Path.download(), fn);
             Path.copy(temp, wall);
             App.post(() -> Notify.progress(App.activity()));
-            WallConfig.load(Config.find("file://" + Environment.DIRECTORY_DOWNLOADS + "/" + fn, 2), new Callback() {
+            WallConfig.load(ConfigRepository.get().find("file://" + Environment.DIRECTORY_DOWNLOADS + "/" + fn, 2), new Callback() {
                 @Override
                 public void success() {
                     Notify.dismiss();
@@ -339,12 +343,7 @@ public class Action implements Process {
     private List<Config> getStartupConfigs(int type) {
         String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
         List<Config> configs = new ArrayList<>();
-        Set<String> urls = new LinkedHashSet<>();
-        for (String url : value.split("[\\n\\r,，;；|]+")) {
-            String itemUrl = url.trim();
-            if (itemUrl.isEmpty() || !urls.add(itemUrl)) continue;
-            configs.add(Config.find(itemUrl, type));
-        }
+        for (String url : ConfigUrlParser.parse(value)) configs.add(ConfigRepository.get().find(url, type));
         if (!configs.isEmpty()) return configs;
         configs.add(type == 0 ? Config.vod() : Config.live());
         return configs;

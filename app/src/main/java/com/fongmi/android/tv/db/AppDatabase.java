@@ -12,10 +12,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.Download;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Track;
@@ -55,9 +58,9 @@ public abstract class AppDatabase extends RoomDatabase {
         AppDatabase database = instance;
         if (database != null && database.isOpen()) database.close();
         instance = null;
-        Config.clearCache();
-        History.clearCache();
-        Keep.clearCache();
+        ConfigRepository.get().clearMemoryCache();
+        HistoryRepository.get().clearMemoryCache();
+        KeepRepository.get().clearMemoryCache();
     }
 
     public static void backup() {

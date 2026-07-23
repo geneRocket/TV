@@ -126,7 +126,7 @@ public class CollectActivity extends BaseActivity {
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.search.observe(this, result -> {
+        mViewModel.search().observe(this, result -> {
             if (isFinishing() || isDestroyed()) return;
             if (!isCurrentSearchResult(result)) return;
             enqueueResult(result.getList());

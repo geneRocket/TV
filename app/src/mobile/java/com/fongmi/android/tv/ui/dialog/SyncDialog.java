@@ -17,9 +17,12 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
 import com.fongmi.android.tv.event.ScanEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -66,14 +69,14 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     public SyncDialog history() {
         body.add("device", Device.get().toString());
         body.add("config", Config.vod().toString());
-        body.add("targets", App.gson().toJson(History.get()));
+        body.add("targets", App.gson().toJson(HistoryRepository.get().all()));
         return type("history");
     }
 
     public SyncDialog keep() {
         body.add("device", Device.get().toString());
-        body.add("targets", App.gson().toJson(Keep.getVod()));
-        body.add("configs", App.gson().toJson(Config.findUrls()));
+        body.add("targets", App.gson().toJson(KeepRepository.get().vod()));
+        body.add("configs", App.gson().toJson(ConfigRepository.get().urls()));
         return type("keep");
     }
 
@@ -163,8 +166,8 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     public boolean onLongClick(Device item) {
         String mode = binding.mode.getTag().toString();
         if (mode.equals("0")) return false;
-        if (mode.equals("2") && type.equals("keep")) Keep.deleteAll();
-        if (mode.equals("2") && type.equals("history")) History.deleteLoaded();
+        if (mode.equals("2") && type.equals("keep")) KeepRepository.get().deleteAll();
+        if (mode.equals("2") && type.equals("history")) HistoryRepository.get().deleteLoaded();
         OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s&force=true", item.getIp(), binding.mode.getTag().toString(), type), body.build()).enqueue(getCallback());
         return true;
     }

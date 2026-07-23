@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.presenter;
 
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -38,23 +39,26 @@ public class FuncPresenter extends Presenter {
     private void bindView(ViewHolder viewHolder, Object object) {
         Func item = (Func) object;
         ViewHolder holder = viewHolder;
-        if (item.getId() > 0) holder.binding.getRoot().setId(item.getId());
+        bindRoot(holder.binding.getRoot(), item);
         holder.binding.text.setText(item.getText());
         holder.binding.icon.setImageResource(item.getDrawable());
-        if (item.getNextFocusLeft() > 0) holder.binding.getRoot().setNextFocusLeftId(item.getNextFocusLeft());
-        if (item.getNextFocusRight() > 0) holder.binding.getRoot().setNextFocusRightId(item.getNextFocusRight());
         setOnClickListener(holder, view -> mListener.onItemClick(item));
     }
 
     private void bindView(HoriViewHolder viewHolder, Object object) {
         Func item = (Func) object;
         HoriViewHolder holder = viewHolder;
-        if (item.getId() > 0) holder.binding.getRoot().setId(item.getId());
+        bindRoot(holder.binding.getRoot(), item);
         holder.binding.text.setText(item.getText());
         holder.binding.icon.setImageResource(item.getDrawable());
-        if (item.getNextFocusLeft() > 0) holder.binding.getRoot().setNextFocusLeftId(item.getNextFocusLeft());
-        if (item.getNextFocusRight() > 0) holder.binding.getRoot().setNextFocusRightId(item.getNextFocusRight());
         setOnClickListener(holder, view -> mListener.onItemClick(item));
+    }
+
+    private void bindRoot(View view, Func item) {
+        view.setId(item.getId() > 0 ? item.getId() : View.NO_ID);
+        view.setNextFocusLeftId(item.getNextFocusLeft() > 0 ? item.getNextFocusLeft() : View.NO_ID);
+        view.setNextFocusRightId(item.getNextFocusRight() > 0 ? item.getNextFocusRight() : View.NO_ID);
+        view.setContentDescription(item.getText());
     }
 
     @Override

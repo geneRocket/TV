@@ -13,7 +13,9 @@ import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.databinding.ActivityKeepBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -62,7 +64,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     }
 
     private void getKeep() {
-        mAdapter.addAll(Keep.getVod());
+        mAdapter.addAll(KeepRepository.get().vod());
         mBinding.delete.setVisibility(mAdapter.getItemCount() > 0 ? View.VISIBLE : View.GONE);
     }
 
@@ -112,7 +114,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         }
         final int requestId = mOpenRequestId;
         App.execute(() -> {
-            Config config = Config.find(item.getCid());
+            Config config = ConfigRepository.get().find(item.getCid());
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
                 if (config == null) CollectActivity.start(this, item.getVodName());

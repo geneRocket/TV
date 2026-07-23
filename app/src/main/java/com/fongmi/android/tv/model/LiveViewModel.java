@@ -3,6 +3,7 @@ package com.fongmi.android.tv.model;
 import android.net.Uri;
 import android.text.TextUtils;
 
+import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
@@ -33,12 +34,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicBoolean;
+import com.fongmi.android.tv.utils.LatestTask;
+import com.fongmi.android.tv.utils.TaskScheduler;
 
 import okhttp3.Headers;
 import okhttp3.Request;
@@ -55,23 +52,15 @@ public class LiveViewModel extends ViewModel {
     private final TimeZone defaultTimeZone;
     private volatile TimeZone currentTimeZone;
 
-    public MutableLiveData<Channel> url;
-    public MutableLiveData<Boolean> xml;
-    public MutableLiveData<Live> live;
-    public MutableLiveData<Epg> epg;
+    private final MutableLiveData<Channel> url;
+    private final MutableLiveData<Boolean> xml;
+    private final MutableLiveData<Live> live;
+    private final MutableLiveData<Epg> epg;
 
-    private ExecutorService executor1;
-    private ExecutorService executor2;
-    private ExecutorService executor3;
-    private ExecutorService executor4;
-    private RunningTask liveTask;
-    private RunningTask epgTask;
-    private RunningTask urlTask;
-    private RunningTask xmlTask;
-    private final AtomicInteger liveSeq;
-    private final AtomicInteger epgSeq;
-    private final AtomicInteger urlSeq;
-    private final AtomicInteger xmlSeq;
+    private final LatestTask<Live> liveTask;
+    private final LatestTask<Epg> epgTask;
+    private final LatestTask<Channel> urlTask;
+    private final LatestTask<Boolean> xmlTask;
 
     public LiveViewModel() {
         this.defaultTimeZone = TimeZone.getDefault();
@@ -80,27 +69,14 @@ public class LiveViewModel extends ViewModel {
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
-        this.executor1 = ThreadPools.newSingle("live-load");
-        this.executor2 = ThreadPools.newSingle("live-epg");
-        this.executor3 = ThreadPools.newSingle("live-url");
-        this.executor4 = ThreadPools.newSingle("live-xml");
-        this.liveSeq = new AtomicInteger();
-        this.epgSeq = new AtomicInteger();
-        this.urlSeq = new AtomicInteger();
-        this.xmlSeq = new AtomicInteger();
-    }
-
-    private static final class RunningTask {
-        private Future<?> future;
-        private Runnable timeout;
-    }
-
-    private interface ValuePoster<T> {
-        void post(T value, int seq);
-    }
-
-    private interface ValueFallback<T> {
-        T create(Throwable error);
+        TaskScheduler scheduler = new TaskScheduler() {
+            @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
+            @Override public void remove(Runnable task) { App.removeCallbacks(task); }
+        };
+        this.liveTask = new LatestTask<>(ThreadPools.newSingle("live-load"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
+        this.epgTask = new LatestTask<>(ThreadPools.newSingle("live-epg"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
+        this.urlTask = new LatestTask<>(ThreadPools.newSingle("live-url"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
+        this.xmlTask = new LatestTask<>(ThreadPools.newSingle("live-xml"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
     }
 
     public void getLive(Live item) {
@@ -110,6 +86,22 @@ public class LiveViewModel extends ViewModel {
             verify(item);
             return item;
         });
+    }
+
+    public LiveData<Channel> url() {
+        return url;
+    }
+
+    public LiveData<Boolean> xml() {
+        return xml;
+    }
+
+    public LiveData<Live> live() {
+        return live;
+    }
+
+    public LiveData<Epg> epg() {
+        return epg;
     }
 
     public void getXml(Live item) {
@@ -214,82 +206,22 @@ public class LiveViewModel extends ViewModel {
         execute(type, callable, null);
     }
 
-    private void execute(int type, Callable<?> callable, ValueFallback<?> fallbackOverride) {
+    private void execute(int type, Callable<?> callable, java.util.function.Function<Throwable, ?> fallbackOverride) {
         switch (type) {
-            case LIVE: {
-                int seq = liveSeq.incrementAndGet();
-                cancelTask(liveTask);
-                liveTask = submit(executor1, callable, Constant.TIMEOUT_LIVE, seq, this::postLive, error -> new Live());
+            case LIVE:
+                liveTask.submit(() -> (Live) callable.call(), Constant.TIMEOUT_LIVE, live::postValue, error -> new Live(), null);
                 break;
-            }
-            case EPG: {
-                int seq = epgSeq.incrementAndGet();
-                cancelTask(epgTask);
-                epgTask = submit(executor2, callable, Constant.TIMEOUT_EPG, seq, this::postEpg, error -> new Epg());
+            case EPG:
+                epgTask.submit(() -> (Epg) callable.call(), Constant.TIMEOUT_EPG, epg::postValue, error -> new Epg(), null);
                 break;
-            }
-            case URL: {
-                int seq = urlSeq.incrementAndGet();
-                cancelTask(urlTask);
-                @SuppressWarnings("unchecked")
-                ValueFallback<Channel> fallback = fallbackOverride == null ? this::urlFallback : (ValueFallback<Channel>) fallbackOverride;
-                urlTask = submit(executor3, callable, Constant.TIMEOUT_PARSE_LIVE, seq, this::postUrl, fallback);
+            case URL:
+                @SuppressWarnings("unchecked") java.util.function.Function<Throwable, Channel> fallback = fallbackOverride == null ? this::urlFallback : (java.util.function.Function<Throwable, Channel>) fallbackOverride;
+                urlTask.submit(() -> (Channel) callable.call(), Constant.TIMEOUT_PARSE_LIVE, url::postValue, fallback, Source.get()::stop);
                 break;
-            }
-            case XML: {
-                int seq = xmlSeq.incrementAndGet();
-                cancelTask(xmlTask);
-                xmlTask = submit(executor4, callable, Constant.TIMEOUT_XML, seq, this::postXml, error -> false);
+            case XML:
+                xmlTask.submit(() -> (Boolean) callable.call(), Constant.TIMEOUT_XML, xml::postValue, error -> false, null);
                 break;
-            }
         }
-    }
-
-    private <T> RunningTask submit(ExecutorService executor, Callable<?> callable, long timeout, int seq, ValuePoster<T> poster, ValueFallback<T> fallback) {
-        AtomicBoolean completed = new AtomicBoolean(false);
-        RunningTask task = new RunningTask();
-        task.timeout = () -> {
-            if (!completed.compareAndSet(false, true)) return;
-            if (task.future != null) task.future.cancel(true);
-            if (timeout == Constant.TIMEOUT_PARSE_LIVE) Source.get().stop();
-            clearTask(task);
-            poster.post(fallback.create(new TimeoutException()), seq);
-        };
-        try {
-            task.future = executor.submit(() -> {
-                try {
-                    @SuppressWarnings("unchecked")
-                    T value = (T) callable.call();
-                    if (!completed.compareAndSet(false, true)) return;
-                    clearTask(task);
-                    poster.post(value, seq);
-                } catch (Throwable e) {
-                    if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                    if (!completed.compareAndSet(false, true)) return;
-                    clearTask(task);
-                    poster.post(fallback.create(e), seq);
-                    ThreadPools.log(e, "Live request failed.");
-                }
-            });
-            App.post(task.timeout, timeout);
-        } catch (RejectedExecutionException e) {
-            clearTask(task);
-            poster.post(fallback.create(e), seq);
-        }
-        return task;
-    }
-
-    private void clearTask(RunningTask task) {
-        if (task != null && task.timeout != null) App.removeCallbacks(task.timeout);
-    }
-
-    private void cancelTask(RunningTask task) {
-        clearTask(task);
-        if (task != null && task.future != null) task.future.cancel(true);
-    }
-
-    private void shutdownExecutor(ExecutorService executor) {
-        ThreadPools.shutdown(executor);
     }
 
     private Channel urlFallback(Throwable error) {
@@ -303,32 +235,12 @@ public class LiveViewModel extends ViewModel {
         return request;
     }
 
-    private void postLive(Live value, int seq) {
-        if (seq == liveSeq.get()) live.postValue(value);
-    }
-
-    private void postEpg(Epg value, int seq) {
-        if (seq == epgSeq.get()) epg.postValue(value);
-    }
-
-    private void postUrl(Channel value, int seq) {
-        if (seq == urlSeq.get()) url.postValue(value);
-    }
-
-    private void postXml(Boolean value, int seq) {
-        if (seq == xmlSeq.get()) xml.postValue(value);
-    }
-
     @Override
     protected void onCleared() {
         super.onCleared();
-        cancelTask(liveTask);
-        cancelTask(epgTask);
-        cancelTask(urlTask);
-        cancelTask(xmlTask);
-        shutdownExecutor(executor1);
-        shutdownExecutor(executor2);
-        shutdownExecutor(executor3);
-        shutdownExecutor(executor4);
+        liveTask.close();
+        epgTask.close();
+        urlTask.close();
+        xmlTask.close();
     }
 }

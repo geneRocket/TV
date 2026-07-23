@@ -162,7 +162,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result.observe(getViewLifecycleOwner(), result -> setAdapter(mResult = result));
+        mViewModel.result().observe(getViewLifecycleOwner(), result -> setAdapter(mResult = result));
     }
 
     private void initHot() {

@@ -58,4 +58,10 @@ public abstract class BaseFragment extends Fragment {
         super.onResume();
         if (getUserVisibleHint()) onVisible();
     }
+
+    @Override
+    public void onDestroyView() {
+        init = false;
+        super.onDestroyView();
+    }
 }

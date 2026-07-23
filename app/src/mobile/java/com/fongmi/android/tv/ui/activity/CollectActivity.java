@@ -159,11 +159,11 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.search.observe(this, result -> {
+        mViewModel.search().observe(this, result -> {
             if (!isCurrentSearchResult(result)) return;
             enqueueResult(result);
         });
-        mViewModel.result.observe(this, result -> {
+        mViewModel.result().observe(this, result -> {
             boolean same = result.getList().size() > 0
                     && TextUtils.equals(result.getKeyword(), mBinding.keyword.getText().toString().trim())
                     && mCollectAdapter.getActivated().getSite().equals(result.getList().get(0).getSite());

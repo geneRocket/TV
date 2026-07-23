@@ -165,6 +165,8 @@ public class Source {
 
     public void exit() {
         if (extractors == null) return;
+        parseCache.clear();
+        activeExtractor = null;
         App.execute(() -> extractors.forEach(Extractor::exit));
     }
 

@@ -13,7 +13,9 @@ import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.databinding.ActivityHistoryBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -62,7 +64,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     }
 
     private void getHistory() {
-        mAdapter.addAll(History.getLoaded());
+        mAdapter.addAll(HistoryRepository.get().loaded());
         mBinding.delete.setVisibility(mAdapter.getItemCount() > 0 ? View.VISIBLE : View.GONE);
     }
 
@@ -94,7 +96,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         }
         final int requestId = mOpenRequestId;
         App.execute(() -> {
-            Config config = Config.find(item.getCid());
+            Config config = ConfigRepository.get().find(item.getCid());
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
                 if (config == null) {

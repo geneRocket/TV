@@ -37,6 +37,7 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Button;
 import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Filter;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
@@ -60,6 +61,7 @@ import com.fongmi.android.tv.ui.fragment.HomeFragment;
 import com.fongmi.android.tv.ui.fragment.VodFragment;
 import com.fongmi.android.tv.ui.presenter.TypePresenter;
 import com.fongmi.android.tv.utils.Clock;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
@@ -74,10 +76,8 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, TypePresenter.OnClickListener, ConfigCallback {
 
@@ -191,7 +191,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result.observe(this, result -> {
+        mViewModel.result().observe(this, result -> {
             if (!isCurrentHomeResult(result)) return;
             setTypes(result);
         });
@@ -516,12 +516,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private List<Config> getStartupConfigs(int type) {
         String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
         List<Config> configs = new ArrayList<>();
-        Set<String> urls = new LinkedHashSet<>();
-        for (String url : value.split("[\\n\\r,，;；|]+")) {
-            String itemUrl = url.trim();
-            if (itemUrl.isEmpty() || !urls.add(itemUrl)) continue;
-            configs.add(Config.find(itemUrl, type));
-        }
+        for (String url : ConfigUrlParser.parse(value)) configs.add(ConfigRepository.get().find(url, type));
         if (!configs.isEmpty()) return configs;
         configs.add(type == 0 ? Config.vod() : Config.live());
         return configs;
@@ -604,7 +599,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void loadLive(String url) {
         App.execute(() -> {
-            Config config = Config.find(url, 1);
+            Config config = ConfigRepository.get().find(url, 1);
             App.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 LiveConfig.load(config, new Callback() {

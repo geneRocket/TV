@@ -34,6 +34,7 @@ import com.fongmi.android.tv.bean.Epg;
 import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
@@ -264,10 +265,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(LiveViewModel.class);
-        mViewModel.url.observeForever(mObserveUrl);
-        mViewModel.xml.observe(this, this::setEpg);
-        mViewModel.epg.observeForever(mObserveEpg);
-        mViewModel.live.observe(this, live -> {
+        mViewModel.url().observeForever(mObserveUrl);
+        mViewModel.xml().observe(this, this::setEpg);
+        mViewModel.epg().observeForever(mObserveEpg);
+        mViewModel.live().observe(this, live -> {
             mViewModel.getXml(live);
             hideProgress();
             setGroup(live);
@@ -678,7 +679,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private void delKeep(Channel item) {
         if (mGroup.isKeep()) mChannelAdapter.remove(item);
         getKeep().getChannel().remove(item);
-        Keep.delete(item.getName());
+        KeepRepository.get().delete(item.getName());
     }
 
     private void setInfo() {
@@ -1282,8 +1283,8 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mPlayers.release();
         App.post(mR0, 1000);
         App.removeCallbacks(mR1, mR2, mR3);
-        mViewModel.url.removeObserver(mObserveUrl);
-        mViewModel.epg.removeObserver(mObserveEpg);
+        mViewModel.url().removeObserver(mObserveUrl);
+        mViewModel.epg().removeObserver(mObserveEpg);
     }
 
 }

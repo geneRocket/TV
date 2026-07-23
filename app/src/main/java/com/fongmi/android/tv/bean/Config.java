@@ -1,5 +1,8 @@
 package com.fongmi.android.tv.bean;
 
+import com.fongmi.android.tv.repository.HistoryRepository;
+import com.fongmi.android.tv.repository.KeepRepository;
+
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -449,8 +452,8 @@ public class Config {
             AppDatabase.get().getConfigDao().delete(getUrl(), getType());
             removeCache(getUrl(), getType());
             // Assuming History and Keep also have their own DB accessors
-            History.delete(getId());
-            Keep.delete(getId());
+            HistoryRepository.get().delete(getId());
+            KeepRepository.get().delete(getId());
         });
     }
 

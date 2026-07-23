@@ -14,6 +14,7 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.utils.ThreadPools;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
@@ -39,6 +40,7 @@ import java.util.regex.Pattern;
 public class History {
 
     private static final Map<String, History> CACHE = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_SIZE = 512;
     private static final Map<String, History> PENDING_WRITES = new ConcurrentHashMap<>();
     private static final Set<String> ACTIVE_WRITES = ConcurrentHashMap.newKeySet();
     private static final ExecutorService WRITE_EXECUTOR = ThreadPools.newSingle("history-write");
@@ -101,6 +103,24 @@ public class History {
         this.speed = 1;
         this.scale = -1;
         this.player = -1;
+    }
+
+    public static History create(String key, int cid, Vod vod, float speed) {
+        History history = new History();
+        history.setKey(key);
+        history.setCid(cid);
+        history.setVodName(vod.getVodName());
+        history.findEpisode(vod.getVodFlags());
+        history.setSpeed(speed);
+        return history;
+    }
+
+    public static History prepare(History history, String key, int cid, Vod vod, float speed, String mark) {
+        History prepared = history == null ? create(key, cid, vod, speed) : history;
+        if (!TextUtils.isEmpty(mark)) prepared.setVodRemarks(mark);
+        prepared.findEpisode(vod.getVodFlags());
+        prepared.setVodPic(vod.getVodPic());
+        return prepared;
     }
 
     @NonNull
@@ -273,6 +293,7 @@ public class History {
     private static History cache(History item) {
         if (item == null) return null;
         CACHE.put(cacheKey(item.getCid(), item.getKey()), item);
+        trimCache();
         return item;
     }
 
@@ -312,6 +333,14 @@ public class History {
 
     private static void removeCache(int cid, String key) {
         CACHE.remove(cacheKey(cid, key));
+    }
+
+    private static void trimCache() {
+        while (CACHE.size() > MAX_CACHE_SIZE) {
+            String eldest = CACHE.keySet().stream().findFirst().orElse(null);
+            if (eldest == null) return;
+            CACHE.remove(eldest);
+        }
     }
 
     private static int keyCid(String key) {
@@ -408,10 +437,7 @@ public class History {
         for (Config item : Config.findUrls()) idMap.put(item.getUrl(), item.getId());
         List<String> urls = VodConfig.get().getLoadUrls();
         if (urls.isEmpty()) {
-            for (String value : Setting.getVodConfigUrls().split("[\\n\\r,，;；|]+")) {
-                String url = value.trim();
-                if (!url.isEmpty()) urls.add(url);
-            }
+            urls.addAll(ConfigUrlParser.parse(Setting.getVodConfigUrls()));
         }
         for (String url : urls) {
             if (url == null || url.trim().isEmpty()) continue;

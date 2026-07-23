@@ -48,7 +48,9 @@ import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
@@ -96,11 +98,13 @@ import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.IDMUtil;
 import com.fongmi.android.tv.utils.ImgUtil;
+import com.fongmi.android.tv.utils.LatestTask;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PiP;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SearchSorter;
 import com.fongmi.android.tv.utils.Sniffer;
+import com.fongmi.android.tv.utils.TaskScheduler;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.Traffic;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -125,7 +129,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -151,8 +154,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private ParseAdapter mParseAdapter;
     private CustomKeyDownVod mKeyDown;
     private ExecutorService mExecutor;
-    private ExecutorService mHistoryExecutor;
-    private Future<History> mHistoryTask;
+    private LatestTask<History> mHistoryRequests;
     private SiteViewModel mViewModel;
     private FlagAdapter mFlagAdapter;
     private List<Dialog> mDialogs;
@@ -185,6 +187,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private String pendingPlaybackToken;
     private String pendingPlaybackTimeoutToken;
     private String pendingSearchToken;
+    private final Object mHistoryLock = new Object();
+    private History mPreloadedHistory;
+    private String mPreloadedHistoryKey;
     private Runnable mR0;
     private Runnable mR1;
     private Runnable mR2;
@@ -366,6 +371,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mObserveDownload = this::setDownload;
         mObserveSearch = this::setSearch;
         mPlayers = Players.create(this);
+        TaskScheduler scheduler = new TaskScheduler() {
+            @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
+            @Override public void remove(Runnable task) { App.removeCallbacks(task); }
+        };
+        mHistoryRequests = new LatestTask<>(ThreadPools.newSingle("video-history"), scheduler, error -> ThreadPools.log(error, "Video history request failed."));
         mDialogs = new ArrayList<>();
         mBroken = new HashSet<>();
         mClock = Clock.create(Arrays.asList(mBinding.display.clock, mBinding.control.time));
@@ -524,15 +534,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result.observe(this, mObserveDetail);
-        mViewModel.player.observe(this, mObservePlayer);
-        mViewModel.search.observe(this, mObserveSearch);
-        mViewModel.download.observe(this, mObserveDownload);
-        mViewModel.episode.observe(this, episode -> {
+        mViewModel.result().observe(this, mObserveDetail);
+        mViewModel.player().observe(this, mObservePlayer);
+        mViewModel.search().observe(this, mObserveSearch);
+        mViewModel.downloadResult().observe(this, mObserveDownload);
+        mViewModel.episode().observe(this, episode -> {
             onItemClick(episode);
             hideSheet();
         });
-        mViewModel.ep.observe(this, episode -> {
+        mViewModel.ep().observe(this, episode -> {
             Notify.progress(this);
             Downloader.get().title(mBinding.name.getText() + "-" + episode.getName());
             mViewModel.download(getKey(), getFlag().getFlag(), episode.getUrl());
@@ -936,7 +946,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onKeep() {
-        Keep keep = Keep.find(getHistoryKey());
+        Keep keep = KeepRepository.get().find(getHistoryKey());
         Notify.show(keep != null ? R.string.keep_del : R.string.keep_add);
         if (keep != null) keep.delete();
         else createKeep();
@@ -1350,52 +1360,43 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void requestHistory(String key) {
-        cancelHistoryTask();
-        if (mHistoryExecutor == null) mHistoryExecutor = ThreadPools.newSingle("video-history");
-        mHistoryTask = mHistoryExecutor.submit(() -> History.find(key));
+        synchronized (mHistoryLock) {
+            mPreloadedHistory = null;
+            mPreloadedHistoryKey = null;
+        }
+        mHistoryRequests.submit(() -> HistoryRepository.get().find(key), Constant.TIMEOUT_VOD, history -> {
+            synchronized (mHistoryLock) {
+                mPreloadedHistory = history;
+                mPreloadedHistoryKey = key;
+            }
+        }, error -> null, null);
     }
 
-    private void cancelHistoryTask() {
-        if (mHistoryTask != null) {
-            mHistoryTask.cancel(true);
-            mHistoryTask = null;
+    private History takePreloadedHistory(String key) {
+        synchronized (mHistoryLock) {
+            if (!TextUtils.equals(key, mPreloadedHistoryKey)) return null;
+            History history = mPreloadedHistory;
+            mPreloadedHistory = null;
+            mPreloadedHistoryKey = null;
+            return history;
         }
     }
 
     private void checkHistory(Vod item) {
         String historyKey = getHistoryKey();
-        Future<History> task = mHistoryTask;
-        if (mHistoryExecutor == null) mHistoryExecutor = ThreadPools.newSingle("video-history");
-        mHistoryExecutor.execute(() -> {
-            History history = getPreparedHistory(task, historyKey);
-            history = history == null ? createHistory(item) : history;
-            if (!TextUtils.isEmpty(getMark())) history.setVodRemarks(getMark());
-            history.findEpisode(item.getVodFlags());
+        History preloaded = takePreloadedHistory(historyKey);
+        mHistoryRequests.submit(() -> {
+            History history = HistoryRepository.get().prepare(preloaded == null ? HistoryRepository.get().find(historyKey) : preloaded, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark());
             if (Setting.isIncognito() && history.getKey().equals(historyKey)) history.delete();
-            history.setVodPic(item.getVodPic());
-            History result = history;
+            return history;
+        }, Constant.TIMEOUT_VOD, result -> {
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || !TextUtils.equals(historyKey, getHistoryKey())) return;
-                if (mHistoryTask == task) mHistoryTask = null;
                 applyHistory(result);
                 checkFlag(item);
                 checkKeepImg();
             });
-        });
-    }
-
-    private History getPreparedHistory(Future<History> task, String historyKey) {
-        if (task != null && !task.isCancelled()) {
-            try {
-                return task.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return null;
-            } catch (Exception e) {
-                ThreadPools.log(e, "Video history preload failed.");
-            }
-        }
-        return History.find(historyKey);
+        }, error -> HistoryRepository.get().prepare(null, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark()), null);
     }
 
     private void applyHistory(History history) {
@@ -1406,16 +1407,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         setScale(getScale());
         setPlayerView();
         setDecodeView();
-    }
-
-    private History createHistory(Vod item) {
-        History history = new History();
-        history.setKey(getHistoryKey());
-        history.setCid(getSiteCid());
-        history.setVodName(item.getVodName());
-        history.findEpisode(item.getVodFlags());
-        history.setSpeed(Setting.getPlaySpeed());
-        return history;
     }
 
     private void updateHistory(Episode item, boolean replay) {
@@ -1449,7 +1440,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void checkKeepImg() {
-        mBinding.control.keep.setImageResource(Keep.find(getHistoryKey()) == null ? R.drawable.ic_control_keep_off : R.drawable.ic_control_keep_on);
+        mBinding.control.keep.setImageResource(KeepRepository.get().find(getHistoryKey()) == null ? R.drawable.ic_control_keep_off : R.drawable.ic_control_keep_on);
     }
 
     private void checkLockImg() {
@@ -2292,8 +2283,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         super.onDestroy();
         stopSearch();
         clearPlaybackTimeout();
-        cancelHistoryTask();
-        ThreadPools.shutdown(mHistoryExecutor);
+        mHistoryRequests.close();
         mClock.release();
         mPlayers.release();
         Timer.get().reset();

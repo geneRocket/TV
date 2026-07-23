@@ -4,6 +4,7 @@ import android.net.Uri;
 import android.text.TextUtils;
 
 import androidx.collection.ArrayMap;
+import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
@@ -21,6 +22,8 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.KeyedLatestTask;
+import com.fongmi.android.tv.utils.TaskScheduler;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -37,12 +40,8 @@ import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import okhttp3.Call;
 import okhttp3.Response;
@@ -50,17 +49,15 @@ import okhttp3.ResponseBody;
 
 public class SiteViewModel extends ViewModel {
 
-    public MutableLiveData<Episode> ep;
-    public MutableLiveData<Episode> episode;
-    public MutableLiveData<Result> result;
-    public MutableLiveData<Result> player;
-    public MutableLiveData<Result> search;
-    public MutableLiveData<Result> action;
-    public MutableLiveData<Danmu> danmaku;
-    public MutableLiveData<Result> download;
-    private final ExecutorService executor = ThreadPools.newFixed("site-vm", Math.max(2, Constant.THREAD_POOL / 2));
-    private final CopyOnWriteArrayList<PendingRequest> pendingRequests = new CopyOnWriteArrayList<>();
-    private final ConcurrentHashMap<String, PendingRequest> activeRequests = new ConcurrentHashMap<>();
+    private final MutableLiveData<Episode> ep;
+    private final MutableLiveData<Episode> episode;
+    private final MutableLiveData<Result> result;
+    private final MutableLiveData<Result> player;
+    private final MutableLiveData<Result> search;
+    private final MutableLiveData<Result> action;
+    private final MutableLiveData<Danmu> danmaku;
+    private final MutableLiveData<Result> download;
+    private final KeyedLatestTask<Result> requests;
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<Call>> activeSearchCalls = new ConcurrentHashMap<>();
 
     private static final String REQUEST_RESULT = "result";
@@ -77,26 +74,32 @@ public class SiteViewModel extends ViewModel {
         this.action = new MutableLiveData<>();
         this.danmaku = new MutableLiveData<>();
         this.download = new MutableLiveData<>();
-    }
-
-    private static final class PendingRequest {
-        private String key;
-        private Future<?> future;
-        private Runnable timeout;
-        private final AtomicBoolean completed = new AtomicBoolean(false);
-    }
-
-    private interface ResultPoster {
-        void post(Result result);
-    }
-
-    private interface ResultFallback {
-        Result create(Throwable error);
+        TaskScheduler scheduler = new TaskScheduler() {
+            @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
+            @Override public void remove(Runnable task) { App.removeCallbacks(task); }
+        };
+        this.requests = new KeyedLatestTask<>(ThreadPools.newFixed("site-vm", Math.max(2, Constant.THREAD_POOL / 2)), scheduler, error -> ThreadPools.log(error, "Site request failed."));
     }
 
     public void setEpisode(Episode value) {
         episode.setValue(value);
     }
+
+    public LiveData<Episode> ep() { return ep; }
+
+    public LiveData<Episode> episode() { return episode; }
+
+    public LiveData<Result> result() { return result; }
+
+    public LiveData<Result> player() { return player; }
+
+    public LiveData<Result> search() { return search; }
+
+    public LiveData<Result> actionResult() { return action; }
+
+    public LiveData<Danmu> danmaku() { return danmaku; }
+
+    public LiveData<Result> downloadResult() { return download; }
 
     public void setDownload(Episode value) {
         ep.setValue(value);
@@ -469,60 +472,18 @@ public class SiteViewModel extends ViewModel {
         executeAsync(requestKey, timeout, callable, data -> result.postValue(withRequest(data, key, id, flag, token)), this::requestRequestFallback);
     }
 
-    private void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, ResultPoster poster, ResultFallback fallback) {
-        PendingRequest request = new PendingRequest();
-        request.key = requestKey;
-        request.timeout = () -> {
-            if (!request.completed.compareAndSet(false, true)) return;
-            if (request.future != null) request.future.cancel(true);
-            if (isPlaybackRequest(requestKey)) Source.get().stop();
-            finishRequest(request);
-            poster.post(fallback.create(new TimeoutException()));
-        };
-        try {
-            cancelRequest(requestKey);
-            pendingRequests.add(request);
-            if (!TextUtils.isEmpty(requestKey)) activeRequests.put(requestKey, request);
-            request.future = executor.submit(() -> {
-                try {
-                    Result data = callable.call();
-                    if (!request.completed.compareAndSet(false, true)) return;
-                    finishRequest(request);
-                    poster.post(data);
-                } catch (Throwable e) {
-                    if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                    if (!request.completed.compareAndSet(false, true)) return;
-                    finishRequest(request);
-                    poster.post(fallback.create(e));
-                    ThreadPools.log(e, "Site request failed.");
-                }
-            });
-            App.post(request.timeout, timeoutMs);
-        } catch (RejectedExecutionException e) {
-            finishRequest(request);
-            poster.post(fallback.create(e));
-        }
+    private void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, java.util.function.Consumer<Result> poster, java.util.function.Function<Throwable, Result> fallback) {
+        Runnable stopPlayback = isPlaybackRequest(requestKey) ? Source.get()::stop : null;
+        requests.submit(requestKey, callable, timeoutMs, poster, fallback, stopPlayback, stopPlayback);
     }
 
     private boolean isPlaybackRequest(String requestKey) {
         return REQUEST_PLAYER.equals(requestKey) || REQUEST_DOWNLOAD.equals(requestKey);
     }
 
-    private void finishRequest(PendingRequest request) {
-        if (request.timeout != null) App.removeCallbacks(request.timeout);
-        pendingRequests.remove(request);
-        if (!TextUtils.isEmpty(request.key)) activeRequests.remove(request.key, request);
-    }
-
     private void cancelRequest(String requestKey) {
         if (TextUtils.isEmpty(requestKey)) return;
-        PendingRequest previous = activeRequests.remove(requestKey);
-        if (previous == null) return;
-        if (!previous.completed.compareAndSet(false, true)) return;
-        if (previous.timeout != null) App.removeCallbacks(previous.timeout);
-        if (previous.future != null) previous.future.cancel(true);
-        if (isPlaybackRequest(requestKey)) Source.get().stop();
-        pendingRequests.remove(previous);
+        requests.cancel(requestKey, isPlaybackRequest(requestKey) ? Source.get()::stop : null);
     }
 
     private Result requestFallback(Throwable error) {
@@ -579,15 +540,8 @@ public class SiteViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-        for (PendingRequest request : pendingRequests) {
-            request.completed.set(true);
-            if (request.timeout != null) App.removeCallbacks(request.timeout);
-            if (request.future != null) request.future.cancel(true);
-        }
-        pendingRequests.clear();
-        activeRequests.clear();
+        requests.close();
         for (String token : activeSearchCalls.keySet()) cancelSearch(token);
         activeSearchCalls.clear();
-        ThreadPools.shutdown(executor);
     }
 }

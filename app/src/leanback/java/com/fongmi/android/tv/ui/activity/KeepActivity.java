@@ -12,6 +12,7 @@ import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.databinding.ActivityKeepBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.ui.adapter.KeepAdapter;
@@ -65,7 +66,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         final int requestId = ++mKeepRequestId;
         mOpenRequestId++;
         App.execute(() -> {
-            List<Keep> items = Keep.getVod();
+            List<Keep> items = KeepRepository.get().vod();
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mKeepRequestId) return;
                 mAdapter.addAll(items);
@@ -94,7 +95,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
             new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_keep).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                 mKeepRequestId++;
                 mOpenRequestId++;
-                Keep.deleteAll();
+                KeepRepository.get().deleteAll();
                 mAdapter.clear();
                 updateEmptyView();
                 RefreshEvent.keep();

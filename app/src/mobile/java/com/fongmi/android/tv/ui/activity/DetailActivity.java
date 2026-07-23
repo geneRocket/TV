@@ -17,6 +17,7 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
@@ -133,8 +134,8 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result.observe(this, this::setDetail);
-        mViewModel.player.observe(this, new Observer<Result>() {
+        mViewModel.result().observe(this, this::setDetail);
+        mViewModel.player().observe(this, new Observer<Result>() {
             @Override
             public void onChanged(Result result) {
 
@@ -184,7 +185,7 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     }
 
     private void checkHistory(Vod item) {
-        mHistory = History.find(getHistoryKey());
+        mHistory = HistoryRepository.get().find(getHistoryKey());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
         mHistory.findEpisode(item.getVodFlags());

@@ -15,6 +15,7 @@ import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.ui.adapter.ConfigAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
@@ -103,8 +104,7 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
 
     private List<String> getEnabledUrls() {
         String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
-        List<String> urls = new ArrayList<>();
-        for (String url : value.split("[\\n\\r,，;；|]+")) if (!url.trim().isEmpty()) urls.add(url.trim());
+        List<String> urls = new ArrayList<>(ConfigUrlParser.parse(value));
         if (!urls.isEmpty()) return urls;
         if (type == 0 && !VodConfig.getUrl().isEmpty()) urls.add(VodConfig.getUrl());
         if (type == 1 && !LiveConfig.getUrl().isEmpty()) urls.add(LiveConfig.getUrl());

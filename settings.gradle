@@ -29,6 +29,7 @@ dependencyResolutionManagement {
     }
 }
 include ':app'
+include ':core'
 include ':hook'
 include ':tvbus'
 include ':zlive'

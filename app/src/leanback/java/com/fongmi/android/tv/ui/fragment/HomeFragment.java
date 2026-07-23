@@ -23,7 +23,9 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Button;
 import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
+import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Style;
@@ -286,7 +288,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         }
         final int requestId = ++mHistoryRequestId;
         App.execute(() -> {
-            List<History> items = History.getLoaded();
+            List<History> items = HistoryRepository.get().loaded();
             App.post(() -> {
                 if (!isViewReady() || requestId != mHistoryRequestId) return;
                 boolean currentEnabled = Setting.isHomeHistory();
@@ -307,7 +309,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     public void getKeep(boolean renew) {
         final int requestId = ++mKeepRequestId;
         App.execute(() -> {
-            List<Keep> items = Keep.getVod();
+            List<Keep> items = KeepRepository.get().vod();
             App.post(() -> {
                 if (!isViewReady() || requestId != mKeepRequestId) return;
                 applyKeepItems(renew, items);
@@ -390,7 +392,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private void clearHistory() {
         mHistoryRequestId++;
         removeHistorySection();
-        History.deleteLoaded();
+        HistoryRepository.get().deleteLoaded();
         mPresenter.setDelete(false);
         mHistoryAdapter.clear();
     }
@@ -398,7 +400,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private void clearKeep() {
         mKeepRequestId++;
         removeKeepSection();
-        Keep.deleteAll();
+        KeepRepository.get().deleteAll();
         mKeepPresenter.setDelete(false);
         mKeepAdapter.clear();
     }

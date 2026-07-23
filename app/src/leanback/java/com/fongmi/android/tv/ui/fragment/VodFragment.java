@@ -176,7 +176,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result.observe(getViewLifecycleOwner(), result -> {
+        mViewModel.result().observe(getViewLifecycleOwner(), result -> {
             if (!isCurrentRequest(result)) return;
             boolean first = "1".equals(result.getRequestPage());
             int size = result.getList().size();

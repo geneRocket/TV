@@ -22,6 +22,7 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.databinding.ActivityMainBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -37,6 +38,7 @@ import com.fongmi.android.tv.ui.fragment.SettingFragment;
 import com.fongmi.android.tv.ui.fragment.SettingPlayerFragment;
 import com.fongmi.android.tv.ui.fragment.VodFragment;
 import com.fongmi.android.tv.utils.FileChooser;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.google.android.material.navigation.NavigationBarView;
@@ -131,11 +133,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     private List<Config> getStartupConfigs(int type) {
         String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
         List<Config> configs = new ArrayList<>();
-        for (String url : value.split("[\\n\\r,，;；|]+")) {
-            if (url.trim().isEmpty()) continue;
-            Config item = Config.find(url.trim(), type);
-            if (!configs.contains(item)) configs.add(item);
-        }
+        for (String url : ConfigUrlParser.parse(value)) configs.add(ConfigRepository.get().find(url, type));
         if (!configs.isEmpty()) return configs;
         configs.add(type == 0 ? Config.vod() : Config.live());
         return configs;
@@ -169,7 +167,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     }
 
     private void loadLive(String url) {
-        LiveConfig.load(Config.find(url, 1), new Callback() {
+        LiveConfig.load(ConfigRepository.get().find(url, 1), new Callback() {
             @Override
             public void success() {
                 openLive();

@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.databinding.AdapterConfigBinding;
 
 import java.util.ArrayList;
@@ -39,7 +40,7 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     }
 
     public ConfigAdapter addAll(int type) {
-        mItems = Config.getAll(type);
+        mItems = ConfigRepository.get().all(type);
         if (!mIncludeCurrent) mItems.remove(type == 0 ? VodConfig.get().getConfig() : LiveConfig.get().getConfig());
         mSelected.clear();
         return this;

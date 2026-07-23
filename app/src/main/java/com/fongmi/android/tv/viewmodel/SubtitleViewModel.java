@@ -3,6 +3,7 @@ package com.fongmi.android.tv.viewmodel;
 import android.net.Uri;
 import android.text.TextUtils;
 
+import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
@@ -42,7 +43,7 @@ public class SubtitleViewModel extends ViewModel {
     private static final String ASSRT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.54 Safari/537.36";
     private static final Pattern REGEX_SHOOTER_FILE_ONCLICK = Pattern.compile("onthefly\\(\"(\\d+)\",\"(\\d+)\",\"([\\s\\S]*)\"\\)");
 
-    public MutableLiveData<SubtitleData> searchResult;
+    private final MutableLiveData<SubtitleData> searchResult;
     private final AtomicInteger requestSeq;
     private final AtomicInteger resolveSeq;
     private final OkHttpClient subtitleClient;
@@ -61,6 +62,10 @@ public class SubtitleViewModel extends ViewModel {
                 .followSslRedirects(false)
                 .retryOnConnectionFailure(true)
                 .build();
+    }
+
+    public LiveData<SubtitleData> searchResults() {
+        return searchResult;
     }
 
     public void searchResult(String title, int page) {

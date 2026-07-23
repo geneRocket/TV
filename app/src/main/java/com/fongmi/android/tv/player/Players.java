@@ -222,7 +222,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public String getUrl() {
-        return url;
+        return url == null ? "" : url;
     }
 
     public Map<String, String> getHeaders() {
@@ -571,6 +571,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         releaseExo();
         releaseIjk();
         if (haveDanmu()) danmuView.release();
+        danmuView = null;
+        clear();
         removeTimeoutCheck();
         if (current) {
             M3u8AdFilter.clearSubtitlePlaylistWhitelist();

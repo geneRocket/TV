@@ -78,7 +78,7 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
     @Override
     protected void initEvent() {
         viewModel = new ViewModelProvider(this).get(SubtitleViewModel.class);
-        viewModel.searchResult.observe(this, result -> {
+        viewModel.searchResults().observe(this, result -> {
             if (result == null) {
                 binding.loading.setVisibility(View.GONE);
                 binding.empty.setVisibility(View.VISIBLE);

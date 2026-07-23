@@ -11,6 +11,7 @@ import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.databinding.ActivityHistoryBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.ui.adapter.HistoryAdapter;
@@ -64,7 +65,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     private void getHistory() {
         final int requestId = ++mHistoryRequestId;
         App.execute(() -> {
-            List<History> items = History.getLoaded();
+            List<History> items = HistoryRepository.get().loaded();
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mHistoryRequestId) return;
                 mAdapter.addAll(items);
@@ -92,7 +93,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         if (mAdapter.isDelete()) {
             new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_history).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                 mHistoryRequestId++;
-                History.deleteLoaded();
+                HistoryRepository.get().deleteLoaded();
                 mAdapter.clear();
                 updateViews();
             }).show();

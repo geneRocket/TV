@@ -15,10 +15,12 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.databinding.DialogConfigBinding;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.utils.FileChooser;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -138,9 +140,9 @@ public class ConfigDialog {
             Notify.show(R.string.error_empty);
             return;
         }
-        if (edit) Config.find(ori, type).url(url).name(name).update();
-        if (url.isEmpty()) Config.delete(ori, type);
-        Config config = name.isEmpty() ? Config.find(url, type) : Config.find(url, name, type);
+        if (edit) ConfigRepository.get().find(ori, type).url(url).name(name).update();
+        if (url.isEmpty()) ConfigRepository.get().delete(ori, type);
+        Config config = name.isEmpty() ? ConfigRepository.get().find(url, type) : ConfigRepository.get().find(url, name, type);
         if (!edit && (type == 0 || type == 1) && !config.isEmpty()) callback.setConfigs(mergeConfigs(config));
         else callback.setConfig(config);
         dialog.dismiss();
@@ -151,7 +153,7 @@ public class ConfigDialog {
         Set<String> urls = new LinkedHashSet<>();
         for (String url : getEnabledUrls()) {
             if (!urls.add(url)) continue;
-            items.add(Config.find(url, type));
+            items.add(ConfigRepository.get().find(url, type));
         }
         if (urls.add(config.getUrl())) items.add(config);
         else items.set(findConfigIndex(items, config.getUrl()), config);
@@ -167,11 +169,7 @@ public class ConfigDialog {
 
     private List<String> getEnabledUrls() {
         String value = type == 0 ? Setting.getVodConfigUrls() : Setting.getLiveConfigUrls();
-        List<String> urls = new ArrayList<>();
-        for (String item : value.split("[\\n\\r,，;；|]+")) {
-            String url = item.trim();
-            if (!url.isEmpty()) urls.add(url);
-        }
+        List<String> urls = new ArrayList<>(ConfigUrlParser.parse(value));
         if (!urls.isEmpty()) return urls;
         String current = type == 0 ? VodConfig.getUrl() : LiveConfig.getUrl();
         if (!current.isEmpty()) urls.add(current);

@@ -20,6 +20,7 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.FragmentSettingBinding;
@@ -506,7 +507,7 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
         String path = FileChooser.getPathFromUri(getContext(), data.getData());
         if (FileChooser.type() == FileChooser.TYPE_APK) TransmitDialog.create().apk(path).show(getActivity());
         else if (FileChooser.type() == FileChooser.TYPE_PUSH_WALLPAPER) TransmitDialog.create().wallConfig(path).show(getActivity());
-        else setConfig(Config.find("file:/" + path.replace(Path.rootPath(), ""), type));
+        else setConfig(ConfigRepository.get().find("file:/" + path.replace(Path.rootPath(), ""), type));
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

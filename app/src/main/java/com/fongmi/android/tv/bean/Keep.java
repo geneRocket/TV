@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.bean;
 
+import com.fongmi.android.tv.utils.ConfigUrlParser;
+
 import com.fongmi.android.tv.Setting;
 import androidx.annotation.NonNull;
 import androidx.room.Entity;
@@ -28,6 +30,7 @@ public class Keep {
 
     private static final Map<String, Keep> VOD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, Keep> LIVE_CACHE = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_SIZE = 256;
 
     public static void clearCache() {
         VOD_CACHE.clear();
@@ -154,9 +157,22 @@ public class Keep {
 
     private static Keep cache(Keep item) {
         if (item == null) return null;
-        if (item.getType() == 1) LIVE_CACHE.put(item.getKey(), item);
-        else VOD_CACHE.put(vodCacheKey(item.getCid(), item.getKey()), item);
+        if (item.getType() == 1) {
+            LIVE_CACHE.put(item.getKey(), item);
+            trimCache(LIVE_CACHE);
+        } else {
+            VOD_CACHE.put(vodCacheKey(item.getCid(), item.getKey()), item);
+            trimCache(VOD_CACHE);
+        }
         return item;
+    }
+
+    private static void trimCache(Map<String, Keep> cache) {
+        while (cache.size() > MAX_CACHE_SIZE) {
+            String eldest = cache.keySet().stream().findFirst().orElse(null);
+            if (eldest == null) return;
+            cache.remove(eldest);
+        }
     }
 
     private static Keep copy(Keep item) {
@@ -211,10 +227,7 @@ public class Keep {
         for (Config item : Config.findUrls()) idMap.put(item.getUrl(), item.getId());
         List<String> urls = VodConfig.get().getLoadUrls();
         if (urls.isEmpty()) {
-            for (String value : Setting.getVodConfigUrls().split("[\\n\\r,，;；|]+")) {
-                String url = value.trim();
-                if (!url.isEmpty()) urls.add(url);
-            }
+            urls.addAll(ConfigUrlParser.parse(Setting.getVodConfigUrls()));
         }
         for (String url : urls) {
             if (url == null || url.trim().isEmpty()) continue;
