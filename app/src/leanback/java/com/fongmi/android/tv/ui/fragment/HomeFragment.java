@@ -488,7 +488,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     @Override
     public void onItemDelete(History item) {
         mHistoryRequestId++;
-        mHistoryAdapter.remove(item.delete());
+        mHistoryAdapter.remove(HistoryRepository.get().delete(item));
         if (mHistoryAdapter.size() > 0) return;
         removeHistorySection();
         mPresenter.setDelete(false);
@@ -542,7 +542,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     @Override
     public void onItemDelete(Keep item) {
         mKeepRequestId++;
-        mKeepAdapter.remove(item.delete());
+        mKeepAdapter.remove(KeepRepository.get().delete(item));
         if (mKeepAdapter.size() > 0) return;
         removeKeepSection();
         mKeepPresenter.setDelete(false);

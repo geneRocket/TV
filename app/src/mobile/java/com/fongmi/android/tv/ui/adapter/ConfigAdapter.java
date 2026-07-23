@@ -86,7 +86,7 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
 
     public int remove(Config item) {
         int index = mItems == null ? -1 : mItems.indexOf(item);
-        item.delete();
+        ConfigRepository.get().delete(item);
         mSelected.remove(item);
         mItems.remove(item);
         if (index >= 0) notifyItemRemoved(index);

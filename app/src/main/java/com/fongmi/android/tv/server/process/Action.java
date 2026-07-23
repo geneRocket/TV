@@ -12,6 +12,7 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Device;
+import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.repository.KeepRepository;
@@ -106,7 +107,7 @@ public class Action implements Process {
 
     private void onCast(Map<String, String> params) {
         Config config = Config.objectFrom(params.get("config"));
-        Device device = Device.objectFrom(params.get("device"));
+        Device device = DeviceRepository.get().fromJson(params.get("device"));
         History history = HistoryRepository.get().fromJson(params.get("history"));
         CastEvent.post(ConfigRepository.get().find(config), device, history);
     }
@@ -117,7 +118,7 @@ public class Action implements Process {
         boolean history = Objects.equals(params.get("type"), "history");
         String mode = Objects.requireNonNullElse(params.get("mode"), "0");
         if (params.get("device") != null && (mode.equals("0") || mode.equals("2"))) {
-            Device device = Device.objectFrom(params.get("device"));
+            Device device = DeviceRepository.get().fromJson(params.get("device"));
             if (history) sendHistory(device, params);
             else if (keep) sendKeep(device);
         }
@@ -331,7 +332,6 @@ public class Action implements Process {
     }
 
     private void initConfig() {
-        WallConfig.get().init();
         List<Config> vodConfigs = getStartupConfigs(0);
         if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
         else VodConfig.load(vodConfigs, getCallback(), true, true);

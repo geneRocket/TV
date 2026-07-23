@@ -17,6 +17,7 @@ public class Clock {
     private SimpleDateFormat format;
     private Callback callback;
     private final Date date;
+    private final Runnable ticker;
     private List<TextView> views;
     private Timer timer;
 
@@ -34,6 +35,7 @@ public class Clock {
 
     public Clock() {
         this.date = new Date();
+        this.ticker = this::doJob;
         this.views = new ArrayList<>();
         this.format = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
     }
@@ -44,7 +46,7 @@ public class Clock {
     }
 
     public Clock view(List<TextView> views) {
-        this.views = views;
+        this.views = new ArrayList<>(views);
         return this;
     }
 
@@ -63,7 +65,7 @@ public class Clock {
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                App.post(() -> doJob());
+                App.post(ticker);
             }
         }, 0, 1000);
     }
@@ -82,12 +84,14 @@ public class Clock {
     public Clock stop() {
         if (timer != null) timer.cancel();
         timer = null;
+        App.removeCallbacks(ticker);
         return this;
     }
 
     public void release() {
         stop();
-        if (callback != null) callback = null;
+        callback = null;
+        views.clear();
     }
 
     public interface Callback {

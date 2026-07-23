@@ -224,7 +224,6 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     }
 
     private void checkKeepImg() {
-        //mBinding.keep.setImageResource(Keep.find(getHistoryKey()) == null ? R.drawable.ic_control_keep_off : R.drawable.ic_control_keep_on);
     }
 
     @Override

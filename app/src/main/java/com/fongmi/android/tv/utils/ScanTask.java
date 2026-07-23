@@ -3,12 +3,12 @@ package com.fongmi.android.tv.utils;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.bean.Device;
+import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.server.Server;
 import com.github.catvod.net.OkHttp;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -21,9 +21,8 @@ public class ScanTask {
 
     private final Listener listener;
     private final OkHttpClient client;
-    private final List<Device> devices;
-    private ExecutorService executor;
-    private volatile boolean stopped;
+    private volatile ExecutorService executor;
+    private volatile long generation;
 
     public static ScanTask create(Listener listener) {
         return new ScanTask(listener);
@@ -32,7 +31,6 @@ public class ScanTask {
     public ScanTask(Listener listener) {
         this.listener = listener;
         this.client = OkHttp.client(1000);
-        this.devices = Collections.synchronizedList(new ArrayList<>());
     }
 
     public synchronized void start(List<String> ips) {
@@ -44,46 +42,52 @@ public class ScanTask {
     }
 
     public synchronized void stop() {
-        stopped = true;
+        generation++;
         if (executor != null) executor.shutdownNow();
         executor = null;
     }
 
     private void begin(List<String> urls) {
         stop();
-        stopped = false;
-        devices.clear();
+        long currentGeneration = ++generation;
+        List<Device> devices = new ArrayList<>();
         ExecutorService currentExecutor = ThreadPools.newFixed("scan", Constant.THREAD_POOL);
         executor = currentExecutor;
-        currentExecutor.execute(() -> run(urls, currentExecutor));
+        currentExecutor.execute(() -> run(urls, currentExecutor, currentGeneration, devices));
     }
 
-    private void run(List<String> items, ExecutorService currentExecutor) {
+    private void run(List<String> items, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
         boolean current;
         try {
-            getDevice(items, currentExecutor);
+            getDevice(items, currentExecutor, currentGeneration, devices);
         } catch (Exception e) {
             ThreadPools.log(e, "Scan task failed.");
         } finally {
             synchronized (this) {
-                current = executor == currentExecutor;
+                current = isCurrent(currentExecutor, currentGeneration);
                 if (current) {
                     ThreadPools.shutdown(currentExecutor);
                     executor = null;
                 }
             }
-            if (current && !stopped) App.post(() -> listener.onFind(new ArrayList<>(devices)));
+            if (current) App.post(() -> {
+                if (generation == currentGeneration) listener.onFind(new ArrayList<>(devices));
+            });
         }
     }
 
-    private void getDevice(List<String> urls, ExecutorService currentExecutor) throws Exception {
+    private void getDevice(List<String> urls, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) throws Exception {
         CountDownLatch cd = new CountDownLatch(urls.size());
         for (String url : urls) {
-            if (stopped) {
+            if (!isCurrent(currentExecutor, currentGeneration)) {
                 cd.countDown();
                 continue;
             }
-            currentExecutor.execute(() -> findDevice(cd, url));
+            try {
+                currentExecutor.execute(() -> findDevice(cd, url, currentExecutor, currentGeneration, devices));
+            } catch (RuntimeException e) {
+                cd.countDown();
+            }
         }
         cd.await();
     }
@@ -96,17 +100,21 @@ public class ScanTask {
         return new ArrayList<>(urls);
     }
 
-    private void findDevice(CountDownLatch cd, String url) {
+    private boolean isCurrent(ExecutorService currentExecutor, long currentGeneration) {
+        return executor == currentExecutor && generation == currentGeneration;
+    }
+
+    private void findDevice(CountDownLatch cd, String url, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
         try {
-            if (stopped || Thread.currentThread().isInterrupted()) return;
+            if (!isCurrent(currentExecutor, currentGeneration) || Thread.currentThread().isInterrupted()) return;
             if (url.contains(Server.get().getAddress())) return;
             String result;
             try (Response response = OkHttp.newCall(client, url.concat("/device")).execute()) {
                 if (!response.isSuccessful()) return;
                 result = response.body() == null ? "" : response.body().string();
             }
-            Device device = Device.objectFrom(result);
-            if (device == null) return;
+            Device device = DeviceRepository.get().fromJson(result);
+            if (device == null || !isCurrent(currentExecutor, currentGeneration)) return;
             devices.add(device.save());
         } catch (Exception ignored) {
         } finally {

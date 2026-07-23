@@ -60,6 +60,10 @@ Data & runtime gateways（Config / DB / Loader / Player / Server）
 
 验收：首页、分类、搜索、详情、直播 URL 解析在快速切换时不会展示过期结果，且无需依赖 Activity 生命周期完成取消。
 
+配置加载补充约束：`VodConfig`、`LiveConfig` 与 `WallConfig` 的公开加载入口必须经 `ThreadPools.configLoad()` 的 FIFO 队列执行；一次事务需在同一任务内完成初始化、清理、配置选择、读取与解析。`ThreadPools.config()` 仅承载缓存刷新等不应改写当前配置状态的后台工作，不能用于新的全局配置加载入口。
+
+页面销毁时必须使用三类配置的 `release()`，把清理请求排在已提交的加载事务之后；不得直接调用实例 `clear()` 让旧任务在销毁后重新写回状态。
+
 ### 2. 播放内核
 
 1. 从两端 `VideoActivity` 抽离共同的会话状态、剧集导航、错误恢复和资源释放策略。
@@ -67,6 +71,8 @@ Data & runtime gateways（Config / DB / Loader / Player / Server）
 3. 为 `Source`、`ParseJob`、协议 extractor 建立可注入的边界和超时回归测试。
 
 验收：两端播放、换源、下一集、循环、后台/前台恢复和退出释放保持一致；不出现旧解析结果覆盖新请求。
+
+播放取消约束：`ParseJob` 的同步网络解析必须持有活动 OkHttp `Call`；超时、换源和释放时除取消 `Future` 外还必须显式取消该 `Call`，不能仅依赖线程中断。
 
 ### 3. 内容与资料库
 

@@ -112,7 +112,6 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         StateEvent.progress();
         App.execute(() -> {
             try {
-                WallConfig.get().init();
                 List<Config> vodConfigs = getStartupConfigs(0);
                 if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
                 else VodConfig.load(vodConfigs, getCallback(), true, true);
@@ -259,9 +258,9 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        WallConfig.get().clear();
-        LiveConfig.get().clear();
-        VodConfig.get().clear();
+        WallConfig.release();
+        LiveConfig.release();
+        VodConfig.release();
         AppDatabase.backup();
         Source.get().exit();
     }

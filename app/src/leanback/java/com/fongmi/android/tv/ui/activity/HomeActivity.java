@@ -481,7 +481,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         setLoading(true);
         App.execute(() -> {
             try {
-                WallConfig.get().init();
                 List<Config> liveConfigs = getStartupConfigs(1);
                 List<Config> vodConfigs = getStartupConfigs(0);
                 if (isFinishing() || isDestroyed()) return;
@@ -879,9 +878,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     protected void onDestroy() {
         App.removeCallbacks(mRunnable, mCoolDownReset, mConfirmReset, mEnableTitleFocus);
         super.onDestroy();
-        WallConfig.get().clear();
-        LiveConfig.get().clear();
-        VodConfig.get().clear();
+        WallConfig.release();
+        LiveConfig.release();
+        VodConfig.release();
         AppDatabase.backup();
         Source.get().exit();
     }

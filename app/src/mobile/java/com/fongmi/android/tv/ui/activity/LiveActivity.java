@@ -278,7 +278,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     private void checkLive() {
         if (isEmpty()) {
-            LiveConfig.get().init().load(getCallback());
+            LiveConfig.reload(getCallback());
         } else {
             getLive();
         }
@@ -673,7 +673,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         Keep keep = new Keep();
         keep.setKey(item.getName());
         keep.setType(1);
-        keep.save();
+        KeepRepository.get().save(keep);
     }
 
     private void delKeep(Channel item) {

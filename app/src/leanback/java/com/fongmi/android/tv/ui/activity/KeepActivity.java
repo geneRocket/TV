@@ -126,7 +126,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     public void onItemDelete(Keep item) {
         mKeepRequestId++;
         mOpenRequestId++;
-        int index = mAdapter.delete(item.delete());
+        int index = mAdapter.delete(KeepRepository.get().delete(item));
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
         updateEmptyView();
         if (index != -1 && mAdapter.getItemCount() > 0) {

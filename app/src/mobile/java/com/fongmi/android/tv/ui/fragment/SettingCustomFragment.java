@@ -144,9 +144,9 @@ public class SettingCustomFragment extends BaseFragment {
     }
 
     private void reset() {
-        new Thread(() -> {
+        App.execute(() -> {
             Shell.exec("pm clear " + App.get().getPackageName());
-        }).start();
+        });
     }
 
 }

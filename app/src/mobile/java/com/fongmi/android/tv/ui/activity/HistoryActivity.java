@@ -125,7 +125,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemDelete(History item) {
-        mAdapter.remove(item.delete());
+        mAdapter.remove(HistoryRepository.get().delete(item));
         if (mAdapter.getItemCount() > 0) return;
         mBinding.delete.setVisibility(View.GONE);
         mAdapter.setDelete(false);

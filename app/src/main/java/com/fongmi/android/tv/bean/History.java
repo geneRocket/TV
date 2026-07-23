@@ -11,6 +11,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.utils.ThreadPools;
@@ -434,7 +435,7 @@ public class History {
     private static List<Integer> getLoadedCids() {
         Set<Integer> cids = new LinkedHashSet<>();
         Map<String, Integer> idMap = new HashMap<>();
-        for (Config item : Config.findUrls()) idMap.put(item.getUrl(), item.getId());
+        for (Config item : ConfigRepository.get().urls()) idMap.put(item.getUrl(), item.getId());
         List<String> urls = VodConfig.get().getLoadUrls();
         if (urls.isEmpty()) {
             urls.addAll(ConfigUrlParser.parse(Setting.getVodConfigUrls()));

@@ -49,8 +49,20 @@ public final class ConfigRepository {
         return Config.find(depot, type);
     }
 
+    public Config save(Config config) {
+        return config.save();
+    }
+
+    public void delete(Config config) {
+        config.delete();
+    }
+
     public void delete(String url, int type) {
         Config.delete(url, type);
+    }
+
+    public void delete(String url) {
+        Config.delete(url);
     }
 
     public void clearMemoryCache() {

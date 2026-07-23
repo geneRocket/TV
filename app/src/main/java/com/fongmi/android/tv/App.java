@@ -36,10 +36,10 @@ public class App extends Application {
 
     private final ExecutorService executor;
     private final Handler handler;
-    private static App instance;
-    private Activity activity;
+    private static volatile App instance;
+    private volatile Activity activity;
     private final Gson gson;
-    private boolean hook;
+    private volatile boolean hook;
 
     public App() {
         instance = this;

@@ -456,9 +456,8 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     }
 
     private void initConfig() {
-        WallConfig.get().init();
-        LiveConfig.get().init().load();
-        VodConfig.get().init().load(getCallback());
+        LiveConfig.reload(new Callback());
+        VodConfig.reload(getCallback());
     }
 
     private void onBackup(View view) {

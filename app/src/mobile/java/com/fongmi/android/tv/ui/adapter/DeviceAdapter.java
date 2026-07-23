@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Device;
+import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.databinding.AdapterDeviceBinding;
 
 import java.util.ArrayList;
@@ -46,7 +47,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
 
     public void clear() {
         mItems.clear();
-        Device.delete();
+        DeviceRepository.get().deleteAll();
         notifyDataSetChanged();
     }
 

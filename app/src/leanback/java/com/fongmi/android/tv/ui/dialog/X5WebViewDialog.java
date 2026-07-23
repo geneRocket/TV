@@ -22,10 +22,12 @@ public class X5WebViewDialog  implements Download.Callback {
     private Activity activity;
     private X5WebViewCallback callback;
     private boolean confirm;
+    private boolean cancelled;
 
     public X5WebViewDialog(Activity activity) {
         this.activity = activity;
         this.confirm = false;
+        this.cancelled = false;
         this.callback = (X5WebViewCallback) activity;
     }
 
@@ -50,8 +52,10 @@ public class X5WebViewDialog  implements Download.Callback {
     }
 
     private void cancel(View view) {
+        cancelled = true;
         dismiss();
-        callback.onX5Cancel();
+        if (callback != null) callback.onX5Cancel();
+        clear();
     }
 
     private void confirm(View view) {
@@ -71,20 +75,31 @@ public class X5WebViewDialog  implements Download.Callback {
 
     @Override
     public void progress(int progress) {
-        binding.confirm.setText(String.format(Locale.getDefault(), "%1$d%%", progress));
+        if (!cancelled && binding != null) binding.confirm.setText(String.format(Locale.getDefault(), "%1$d%%", progress));
     }
 
     @Override
     public void error(String msg) {
+        if (cancelled) return;
         Notify.show(msg);
         dismiss();
-        callback.onX5Error();
+        if (callback != null) callback.onX5Error();
+        clear();
     }
 
     @Override
     public void success(File file) {
+        if (cancelled || callback == null) return;
         dismiss();
         Tbs.install(callback);
+        clear();
+    }
+
+    private void clear() {
+        binding = null;
+        dialog = null;
+        activity = null;
+        callback = null;
     }
 
 }

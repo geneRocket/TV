@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.google.gson.annotations.SerializedName;
@@ -224,7 +225,7 @@ public class Keep {
     public static void deleteLoaded() {
         Map<String, Integer> idMap = new HashMap<>();
         Set<Integer> cids = new LinkedHashSet<>();
-        for (Config item : Config.findUrls()) idMap.put(item.getUrl(), item.getId());
+        for (Config item : ConfigRepository.get().urls()) idMap.put(item.getUrl(), item.getId());
         List<String> urls = VodConfig.get().getLoadUrls();
         if (urls.isEmpty()) {
             urls.addAll(ConfigUrlParser.parse(Setting.getVodConfigUrls()));
@@ -280,7 +281,7 @@ public class Keep {
         for (Keep target : targets) {
             for (Config config : configs) {
                 if (target.getCid() == config.getId()) {
-                    target.save(Config.find(config).getId());
+                    target.save(ConfigRepository.get().find(config).getId());
                 }
             }
         }

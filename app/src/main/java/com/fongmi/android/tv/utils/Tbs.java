@@ -17,6 +17,7 @@ import com.tencent.smtt.sdk.TbsListener;
 import com.tencent.smtt.export.external.TbsCoreSettings;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 
 public class Tbs {
@@ -90,6 +91,7 @@ public class Tbs {
         HashMap map = new HashMap();
         map.put(TbsCoreSettings.TBS_SETTINGS_USE_PRIVATE_CLASSLOADER, true);
         QbSdk.initTbsSettings(map);
+        WeakReference<X5WebViewCallback> callbackRef = new WeakReference<>(callback);
         TbsListener tbsListener = new TbsListener() {
 
             /**
@@ -106,8 +108,10 @@ public class Tbs {
             @Override
             public void onInstallFinish(int stateCode) {
                 Logger.t(TAG).d("onInstallFinish:" + stateCode);
-                if (stateCode == TbsCommonCode.INSTALL_SUCCESS) callback.onX5Success();
-                else callback.onX5Error();
+                X5WebViewCallback target = callbackRef.get();
+                if (target == null) return;
+                if (stateCode == TbsCommonCode.INSTALL_SUCCESS) target.onX5Success();
+                else target.onX5Error();
             }
 
             /**

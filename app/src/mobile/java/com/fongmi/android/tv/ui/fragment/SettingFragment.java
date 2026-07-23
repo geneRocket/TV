@@ -451,9 +451,8 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
     }
 
     private void initConfig() {
-        WallConfig.get().init();
-        LiveConfig.get().init().load();
-        VodConfig.get().init().load(getCallback());
+        LiveConfig.reload(new Callback());
+        VodConfig.reload(getCallback());
     }
 
     @Override

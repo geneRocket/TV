@@ -23,6 +23,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.CastVideo;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Device;
+import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
 import com.fongmi.android.tv.event.ScanEvent;
@@ -63,6 +64,8 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     private DeviceControl control;
     private Listener listener;
     private CastVideo video;
+    private ScanTask scanTask;
+    private volatile Call castCall;
     private boolean fm;
 
     public static CastDialog create() {
@@ -71,7 +74,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
 
     public CastDialog() {
         body = new FormBody.Builder();
-        body.add("device", Device.get().toString());
+        body.add("device", DeviceRepository.get().current().toString());
         body.add("config", Config.vod().toString());
         client = OkHttp.client(Constant.TIMEOUT_SYNC);
     }
@@ -111,6 +114,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     protected void initView() {
         binding.scan.setVisibility(fm ? View.VISIBLE : View.GONE);
         EventBus.getDefault().register(this);
+        scanTask = ScanTask.create(this);
         setRecyclerView();
         getDevice();
         initDLNA();
@@ -128,7 +132,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void getDevice() {
-        if (fm) adapter.addAll(Device.getAll());
+        if (fm) adapter.addAll(DeviceRepository.get().all());
         adapter.addAll(DLNADevice.get().getAll());
     }
 
@@ -161,35 +165,46 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void onRefresh() {
-        if (fm) ScanTask.create(this).start(adapter.getIps());
+        if (fm && scanTask != null) scanTask.start(adapter.getIps());
         DLNACastManager.INSTANCE.search(null);
         adapter.clear();
     }
 
     private void onCasted() {
+        if (!isViewActive() || listener == null) return;
         // 在投屏前先暂停当前播放的视频，避免与DLNA协议冲突导致绿屏
         listener.onCasted();
         dismiss();
     }
 
+    private boolean isViewActive() {
+        return isAdded() && !isRemoving() && binding != null;
+    }
+
+    private void postIfActive(Runnable task) {
+        App.post(() -> {
+            if (isViewActive()) task.run();
+        });
+    }
+
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onScanEvent(ScanEvent event) {
-        ScanTask.create(this).start(event.getAddress());
+        if (scanTask != null) scanTask.start(event.getAddress());
     }
 
     @Override
     public void onFind(List<Device> devices) {
-        if (devices.size() > 0) adapter.addAll(devices);
+        if (devices.size() > 0) postIfActive(() -> adapter.addAll(devices));
     }
 
     @Override
     public void onDeviceAdded(@NonNull org.fourthline.cling.model.meta.Device<?, ?, ?> device) {
-        adapter.addAll(DLNADevice.get().add(device));
+        postIfActive(() -> adapter.addAll(DLNADevice.get().add(device)));
     }
 
     @Override
     public void onDeviceRemoved(@NonNull org.fourthline.cling.model.meta.Device<?, ?, ?> device) {
-        adapter.remove(DLNADevice.get().remove(device));
+        postIfActive(() -> adapter.remove(DLNADevice.get().remove(device)));
     }
 
     @Override
@@ -199,45 +214,63 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
 
     @Override
     public void onDisconnected(@NonNull org.fourthline.cling.model.meta.Device<?, ?, ?> device) {
-        Notify.show(R.string.device_offline);
+        postIfActive(() -> Notify.show(R.string.device_offline));
     }
 
     @Override
     public void onSuccess(Unit unit) {
-        control.play("1", null);
-        onCasted();
+        postIfActive(() -> {
+            if (control != null) control.play("1", null);
+            onCasted();
+        });
     }
 
     @Override
     public void onFailure(@NonNull String s) {
-        Notify.show(s);
+        postIfActive(() -> Notify.show(s));
     }
 
     @Override
     public void onFailure(@NonNull Call call, @NonNull IOException e) {
-        App.post(() -> Notify.show(e.getMessage()));
+        postIfActive(() -> Notify.show(e.getMessage()));
     }
 
     @Override
     public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-        if (response.body().string().equals("OK")) App.post(this::onCasted);
-        else App.post(() -> Notify.show(R.string.device_offline));
+        try (Response ignored = response) {
+            boolean success = response.body() != null && "OK".equals(response.body().string());
+            if (success) postIfActive(this::onCasted);
+            else postIfActive(() -> Notify.show(R.string.device_offline));
+        }
     }
 
     @Override
     public void onItemClick(Device item) {
         if (item.isDLNA()) control = DLNACastManager.INSTANCE.connectDevice(DLNADevice.get().find(item), this);
-        else OkHttp.newCall(client, item.getIp().concat("/action?do=cast"), body.build()).enqueue(this);
+        else {
+            Call previous = castCall;
+            if (previous != null) previous.cancel();
+            castCall = OkHttp.newCall(client, item.getIp().concat("/action?do=cast"), body.build());
+            castCall.enqueue(this);
+        }
     }
 
     @Override
     public void onDestroyView() {
-        super.onDestroyView();
+        if (scanTask != null) scanTask.stop();
+        scanTask = null;
+        Call call = castCall;
+        castCall = null;
+        if (call != null) call.cancel();
+        binding = null;
+        listener = null;
+        control = null;
         releaseLock();
         DLNADevice.get().disconnect();
         EventBus.getDefault().unregister(this);
         DLNACastManager.INSTANCE.unregisterListener(this);
         DLNACastManager.INSTANCE.unbindCastService(App.get());
+        super.onDestroyView();
     }
 
     @Override

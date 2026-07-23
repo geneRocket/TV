@@ -37,6 +37,14 @@ public final class HistoryRepository {
         return History.prepare(history, key, cid, vod, speed, mark);
     }
 
+    public History save(History history) {
+        return history.save();
+    }
+
+    public History delete(History history) {
+        return history.delete();
+    }
+
     public History fromJson(String value) {
         return History.objectFrom(value);
     }

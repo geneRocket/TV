@@ -28,6 +28,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -37,6 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okhttp3.Call;
 
 public class ParseJob implements ParseCallback {
 
@@ -45,6 +48,8 @@ public class ParseJob implements ParseCallback {
     private ExecutorService executor;
     private ExecutorService infinite;
     private Future<?> task;
+    private final Set<Call> activeCalls;
+    private volatile boolean callsCancelled;
     private Runnable timeout;
     private ParseCallback callback;
     private Parse parse;
@@ -60,12 +65,14 @@ public class ParseJob implements ParseCallback {
         this.infinite = ThreadPools.parse();
         this.webViews = new ArrayList<>();
         this.parseTasks = new CopyOnWriteArrayList<>();
+        this.activeCalls = ConcurrentHashMap.newKeySet();
         this.callback = callback;
         this.completed = new AtomicBoolean(false);
     }
 
     public ParseJob start(Result result, boolean useParse) {
         stopped = false;
+        callsCancelled = false;
         completed.set(false);
         setParse(result, useParse);
         execute(result);
@@ -92,6 +99,7 @@ public class ParseJob implements ParseCallback {
         clearTimeout();
         timeout = () -> {
             if (task != null) task.cancel(true);
+            cancelActiveCalls();
             onParseError();
         };
         try {
@@ -150,10 +158,21 @@ public class ParseJob implements ParseCallback {
     }
 
     private String requestString(String url, Map<String, String> headers) throws Exception {
-        try (Response response = OkHttp.client(Constant.TIMEOUT_PARSE_DEF).newCall(new okhttp3.Request.Builder().url(url).headers(okhttp3.Headers.of(headers)).build()).execute()) {
+        Call call = OkHttp.client(Constant.TIMEOUT_PARSE_DEF).newCall(new okhttp3.Request.Builder().url(url).headers(okhttp3.Headers.of(headers)).build());
+        synchronized (activeCalls) {
+            activeCalls.add(call);
+            if (callsCancelled) {
+                call.cancel();
+                activeCalls.remove(call);
+                throw new IOException("Parse request cancelled");
+            }
+        }
+        try (Response response = call.execute()) {
             if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
             ResponseBody body = response.body();
             return body == null ? "" : body.string();
+        } finally {
+            activeCalls.remove(call);
         }
     }
 
@@ -297,11 +316,20 @@ public class ParseJob implements ParseCallback {
         webViews.clear();
     }
 
+    private void cancelActiveCalls() {
+        synchronized (activeCalls) {
+            callsCancelled = true;
+            for (Call call : activeCalls) call.cancel();
+            activeCalls.clear();
+        }
+    }
+
     public void stop() {
         stopped = true;
         completed.set(true);
         clearTimeout();
         if (task != null) task.cancel(true);
+        cancelActiveCalls();
         ThreadPools.shutdown(executor);
         for (Future<?> task : parseTasks) task.cancel(true);
         parseTasks.clear();

@@ -19,6 +19,7 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Device;
+import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
@@ -67,14 +68,14 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     public SyncDialog history() {
-        body.add("device", Device.get().toString());
+        body.add("device", DeviceRepository.get().current().toString());
         body.add("config", Config.vod().toString());
         body.add("targets", App.gson().toJson(HistoryRepository.get().all()));
         return type("history");
     }
 
     public SyncDialog keep() {
-        body.add("device", Device.get().toString());
+        body.add("device", DeviceRepository.get().current().toString());
         body.add("targets", App.gson().toJson(KeepRepository.get().vod()));
         body.add("configs", App.gson().toJson(ConfigRepository.get().urls()));
         return type("keep");
@@ -117,7 +118,7 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void getDevice() {
-        adapter.addAll(Device.getAll());
+        adapter.addAll(DeviceRepository.get().all());
         if (adapter.getItemCount() == 0) App.post(this::onRefresh, 1000);
     }
 

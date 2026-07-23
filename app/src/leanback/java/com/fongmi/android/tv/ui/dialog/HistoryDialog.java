@@ -13,6 +13,7 @@ import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.databinding.DialogConfigHistoryBinding;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.ui.adapter.ConfigAdapter;
@@ -82,7 +83,7 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
         binding.recycler.setAdapter(adapter.multi(multi).includeCurrent(multi));
         if (binding.recycler.getItemDecorationCount() == 0) binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
         App.execute(() -> {
-            List<Config> items = Config.getAll(type);
+            List<Config> items = ConfigRepository.get().all(type);
             if (!multi) items.remove(type == 0 ? VodConfig.get().getConfig() : LiveConfig.get().getConfig());
             App.post(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;

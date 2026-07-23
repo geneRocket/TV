@@ -15,6 +15,7 @@ public final class ThreadPools {
 
     private static final String TAG = "ThreadPools";
     private static final ExecutorService CONFIG = newFixed("config", Math.max(2, Constant.THREAD_POOL / 2));
+    private static final ExecutorService CONFIG_LOAD = newSingle("config-load");
     private static final ExecutorService LOADER = newFixed("loader", Math.max(2, Constant.THREAD_POOL / 2));
     private static final ExecutorService SEARCH = newFixed("search", Constant.THREAD_POOL);
     private static final ExecutorService PARSE = newFixed("parse", Constant.THREAD_POOL);
@@ -37,6 +38,10 @@ public final class ThreadPools {
 
     public static ExecutorService config() {
         return CONFIG;
+    }
+
+    public static ExecutorService configLoad() {
+        return CONFIG_LOAD;
     }
 
     public static ExecutorService loader() {

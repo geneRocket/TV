@@ -20,6 +20,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.util.Locale;
 
 public class Updater implements Download.Callback {
@@ -70,28 +71,32 @@ public class Updater implements Download.Callback {
     }
 
     public void start(Activity activity) {
-        App.execute(() -> doInBackground(activity));
+        App.execute(() -> doInBackground(new WeakReference<>(activity)));
     }
 
     private boolean need(int code, String name) {
         return Setting.getUpdate() && (dev ? !name.equals(BuildConfig.VERSION_NAME) && code >= BuildConfig.VERSION_CODE : code > BuildConfig.VERSION_CODE);
     }
 
-    private void doInBackground(Activity activity) {
+    private void doInBackground(WeakReference<Activity> activityRef) {
         try {
             JSONObject object = new JSONObject(OkHttp.string(getJson()));
             String name = object.optString("name");
             String desc = object.optString("desc");
             int code = object.optInt("code");
-            if (need(code, name)) App.post(() -> show(activity, name, desc));
+            if (need(code, name)) App.post(() -> {
+                Activity activity = activityRef.get();
+                if (canShow(activity)) show(activity, name, desc);
+            });
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     private void show(Activity activity, String version, String desc) {
+        check();
         binding = DialogUpdateBinding.inflate(LayoutInflater.from(activity));
-        check().create(activity, ResUtil.getString(R.string.update_version, version)).show();
+        create(activity, ResUtil.getString(R.string.update_version, version)).show();
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(this::confirm);
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setOnClickListener(this::cancel);
         binding.desc.setText(desc);
@@ -115,12 +120,19 @@ public class Updater implements Download.Callback {
         try {
             if (dialog != null) dialog.dismiss();
         } catch (Exception ignored) {
+        } finally {
+            dialog = null;
+            binding = null;
         }
+    }
+
+    private boolean canShow(Activity activity) {
+        return activity != null && !activity.isFinishing() && !activity.isDestroyed();
     }
 
     @Override
     public void progress(int progress) {
-        dialog.getButton(DialogInterface.BUTTON_POSITIVE).setText(String.format(Locale.getDefault(), "%1$d%%", progress));
+        if (dialog != null) dialog.getButton(DialogInterface.BUTTON_POSITIVE).setText(String.format(Locale.getDefault(), "%1$d%%", progress));
     }
 
     @Override

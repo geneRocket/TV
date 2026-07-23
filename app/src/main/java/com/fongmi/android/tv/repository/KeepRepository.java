@@ -33,6 +33,14 @@ public final class KeepRepository {
         return Keep.arrayFrom(value);
     }
 
+    public void save(Keep keep) {
+        keep.save();
+    }
+
+    public Keep delete(Keep keep) {
+        return keep.delete();
+    }
+
     public void deleteAll() {
         Keep.deleteAll();
     }

@@ -10,6 +10,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.FileUtil;
@@ -47,7 +48,20 @@ public class WallConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().clear().config(config).load(callback);
+        get().submit(() -> get().clear().config(config).loadConfig(callback));
+    }
+
+    /** Clears shared state after already queued configuration work has finished. */
+    public static void release() {
+        get().submit(get()::clear);
+    }
+
+    private void submit(Runnable task) {
+        ThreadPools.configLoad().execute(() -> {
+            synchronized (this) {
+                task.run();
+            }
+        });
     }
 
     public WallConfig init() {
@@ -71,7 +85,7 @@ public class WallConfig {
     }
 
     public void load(Callback callback) {
-        ThreadPools.config().execute(() -> loadConfig(callback));
+        submit(() -> loadConfig(callback));
     }
 
     private void loadConfig(Callback callback) {
@@ -79,12 +93,12 @@ public class WallConfig {
             if (config.isEmpty()) config(Config.wall());
             File file = write(FileUtil.getWall(0));
             if (file.exists() && file.length() > 0) refresh(0);
-            else config(Config.find(VodConfig.get().getWall(), 2));
+            else config(ConfigRepository.get().find(VodConfig.get().getWall(), 2));
             App.post(callback::success);
             config.update();
         } catch (Throwable e) {
             App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
-            config(Config.find(VodConfig.get().getWall(), 2));
+            config(ConfigRepository.get().find(VodConfig.get().getWall(), 2));
             e.printStackTrace();
         }
     }
@@ -116,6 +130,7 @@ public class WallConfig {
     }
 
     public boolean needSync(String url) {
+        Config config = getConfig();
         return sync || TextUtils.isEmpty(config.getUrl()) || url.equals(config.getUrl());
     }
 

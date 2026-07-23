@@ -45,7 +45,7 @@ public class BootReceiver extends BroadcastReceiver {
         }
 
         private void doJob() {
-            LiveConfig.get().init().load();
+            LiveConfig.reload(new com.fongmi.android.tv.impl.Callback());
             StableDLNARendererService.start(App.get(), R.drawable.ic_logo);
             ((ConnectivityManager) App.get().getSystemService(Context.CONNECTIVITY_SERVICE)).unregisterNetworkCallback(this);
         }

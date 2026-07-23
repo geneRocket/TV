@@ -240,9 +240,9 @@ public class SettingCustomActivity extends BaseActivity implements MenuKeyCallba
     }
 
     private void reset() {
-        new Thread(() -> {
+        App.execute(() -> {
             Shell.exec("pm clear " + App.get().getPackageName());
-        }).start();
+        });
     }
 
     @Override

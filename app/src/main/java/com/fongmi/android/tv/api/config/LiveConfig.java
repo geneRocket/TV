@@ -11,6 +11,7 @@ import com.fongmi.android.tv.api.LiveParser;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Depot;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Keep;
@@ -18,6 +19,7 @@ import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.repository.LiveRepository;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
 import com.fongmi.android.tv.utils.Notify;
@@ -96,21 +98,51 @@ public class LiveConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().init().clear().config(config).load(callback);
+        get().submit(() -> get().init().clear().config(config).loadConfig(callback));
     }
 
     public static void load(Config config, Callback callback, boolean cache) {
-        get().init().clear().config(config).load(callback, cache);
+        get().submit(() -> {
+            LiveConfig target = get().init().clear().config(config);
+            if (cache) target.loadConfigCache(callback);
+            else target.loadConfig(callback);
+        });
     }
 
     public static void load(List<Config> configs, Callback callback) {
         if (configs == null || configs.isEmpty()) return;
-        get().init().clear().config(configs.get(0)).loadMulti(configs, callback);
+        get().submit(() -> get().init().clear().config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
     }
 
     public static void load(List<Config> configs, Callback callback, boolean cache) {
         if (configs == null || configs.isEmpty()) return;
-        get().init().clear().config(configs.get(0)).loadMulti(configs, callback, cache);
+        get().submit(() -> {
+            LiveConfig target = get().init().clear().config(configs.get(0)).setPersistCache(false);
+            if (cache) target.loadConfigsCache(configs, callback);
+            else target.loadConfigs(configs, callback);
+        });
+    }
+
+    public static void reload(Callback callback) {
+        get().submit(() -> get().init().clear().config(Config.live()).loadConfig(callback));
+    }
+
+    /** Clears shared state after already queued configuration work has finished. */
+    public static void release() {
+        get().submit(get()::clear);
+    }
+
+    private void submit(Runnable task) {
+        ThreadPools.configLoad().execute(() -> {
+            synchronized (this) {
+                task.run();
+            }
+        });
+    }
+
+    private LiveConfig setPersistCache(boolean persistCache) {
+        this.persistCache = persistCache;
+        return this;
     }
 
     public synchronized LiveConfig init() {
@@ -153,23 +185,27 @@ public class LiveConfig {
     }
 
     public void load(Callback callback) {
-        ThreadPools.config().execute(() -> loadConfig(callback));
+        submit(() -> loadConfig(callback));
     }
 
     public void load(Callback callback, boolean cache) {
-        if (cache) ThreadPools.config().execute(() -> loadConfigCache(callback));
-        else ThreadPools.config().execute(() -> loadConfig(callback));
+        submit(() -> {
+            if (cache) loadConfigCache(callback);
+            else loadConfig(callback);
+        });
     }
 
     public void loadMulti(List<Config> configs, Callback callback) {
         this.persistCache = false;
-        ThreadPools.config().execute(() -> loadConfigs(configs, callback));
+        submit(() -> loadConfigs(configs, callback));
     }
 
     public void loadMulti(List<Config> configs, Callback callback, boolean cache) {
         this.persistCache = false;
-        if (cache) ThreadPools.config().execute(() -> loadConfigsCache(configs, callback));
-        else ThreadPools.config().execute(() -> loadConfigs(configs, callback));
+        submit(() -> {
+            if (cache) loadConfigsCache(configs, callback);
+            else loadConfigs(configs, callback);
+        });
     }
 
     private void loadConfig(Callback callback) {
@@ -477,11 +513,11 @@ public class LiveConfig {
     private void parseDepotOrThrow(JsonObject object) throws Throwable {
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
         if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-        Config.delete(config.getUrl());
+        ConfigRepository.get().delete(config.getUrl());
         Throwable error = null;
         for (Depot item : items) {
             try {
-                Config target = Config.find(item, 1);
+                Config target = ConfigRepository.get().find(item, 1);
                 String text = loadDepotConfig(target);
                 clear();
                 config(target);
@@ -554,7 +590,7 @@ public class LiveConfig {
     private void initLive(JsonObject object) {
         String spider = Json.safeString(object, "spider");
         Map<String, Live> cache = new HashMap<>();
-        for (Live live : AppDatabase.get().getLiveDao().getAll()) cache.put(live.getName(), live);
+        for (Live live : LiveRepository.get().all()) cache.put(live.getName(), live);
         for (JsonElement element : Json.safeListElement(object, "lives")) {
             Live live = Live.objectFrom(element, spider);
             if (liveMap.containsKey(live.getName())) {
@@ -682,6 +718,7 @@ public class LiveConfig {
     }
 
     public boolean needSync(String url) {
+        Config config = getConfig();
         return sync || TextUtils.isEmpty(config.getUrl()) || url.equals(config.getUrl());
     }
 

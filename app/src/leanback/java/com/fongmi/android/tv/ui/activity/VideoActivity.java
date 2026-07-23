@@ -56,6 +56,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.repository.TrackRepository;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
@@ -259,7 +260,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         private void stopWithError(ErrorEvent event, boolean terminal) {
-            Track.delete(host.getHistoryKey());
+            TrackRepository.get().delete(host.getHistoryKey());
             host.showError(event.getMsg());
             host.markCurrentSourceBroken(event);
             host.stopActivePlayback();
@@ -560,7 +561,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         public void checkHistory() {
             if (host.mHistory == null) return;
-            if (Setting.isIncognito() && host.mHistory.getKey().equals(host.getHistoryKey())) host.mHistory.delete();
+            if (Setting.isIncognito() && host.mHistory.getKey().equals(host.getHistoryKey())) HistoryRepository.get().delete(host.mHistory);
             host.setPlainTextIfChanged(host.mBinding.control.opening, host.mHistory.getOpening() == 0 ? host.getString(R.string.play_op) : host.mPlayers.stringToTime(host.mHistory.getOpening()));
             host.setPlainTextIfChanged(host.mBinding.control.ending, host.mHistory.getEnding() == 0 ? host.getString(R.string.play_ed) : host.mPlayers.stringToTime(host.mHistory.getEnding()));
             host.mPlayers.setPlayer(host.getPlayer());
@@ -1691,7 +1692,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void onKeep() {
         Keep keep = KeepRepository.get().find(getHistoryKey());
         Notify.show(keep != null ? R.string.keep_del : R.string.keep_add);
-        if (keep != null) keep.delete();
+        if (keep != null) KeepRepository.get().delete(keep);
         else createKeep();
         RefreshEvent.keep();
         checkKeep();
@@ -2291,7 +2292,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         keep.setVodPic(mBinding.video.getTag().toString());
         keep.setVodName(textOf(mBinding.name));
         keep.setCreateTime(System.currentTimeMillis());
-        keep.save();
+        KeepRepository.get().save(keep);
     }
 
     @Override
@@ -2301,8 +2302,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onTrackClick(Track item) {
-        item.setKey(getHistoryKey());
-        item.save();
+        TrackRepository.get().save(item, getHistoryKey());
     }
 
     @Override
@@ -2440,7 +2440,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (isInitTrack()) {
             setInitTrack(false);
             mPlayers.prepared();
-            mPlayers.setTrack(Track.find(getHistoryKey()));
+            mPlayers.setTrack(TrackRepository.get().find(getHistoryKey()));
         }
     }
 

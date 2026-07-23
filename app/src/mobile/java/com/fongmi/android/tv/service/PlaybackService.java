@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
 import androidx.media.session.MediaButtonReceiver;
 
+import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.fongmi.android.tv.App;
@@ -34,7 +35,9 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -47,11 +50,13 @@ public class PlaybackService extends Service {
         }
     };
     private final Set<String> loadingArtwork = Collections.synchronizedSet(new HashSet<>());
-    private static Players player;
+    private final Set<CustomTarget<Bitmap>> artworkTargets = Collections.synchronizedSet(new HashSet<>());
+    private static volatile Players player;
+    private volatile boolean destroyed;
 
     public static void start(Players player) {
-        ContextCompat.startForegroundService(App.get(), new Intent(App.get(), PlaybackService.class));
         PlaybackService.player = player;
+        ContextCompat.startForegroundService(App.get(), new Intent(App.get(), PlaybackService.class));
     }
 
     public static void stop() {
@@ -117,7 +122,9 @@ public class PlaybackService extends Service {
         } else {
             if (loadingArtwork.contains(artUri)) return;
             loadingArtwork.add(artUri);
-            ImgUtil.load(artUri, getCallback(builder, artUri));
+            CustomTarget<Bitmap> target = getCallback(builder, artUri);
+            artworkTargets.add(target);
+            ImgUtil.load(artUri, target);
         }
     }
 
@@ -149,6 +156,8 @@ public class PlaybackService extends Service {
             @Override
             public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
                 loadingArtwork.remove(artUri);
+                artworkTargets.remove(this);
+                if (destroyed) return;
                 cache.put(artUri, resource);
                 setLargeIcon(builder, resource);
                 Notify.show(builder.build());
@@ -157,11 +166,13 @@ public class PlaybackService extends Service {
             @Override
             public void onLoadCleared(@Nullable Drawable placeholder) {
                 loadingArtwork.remove(artUri);
+                artworkTargets.remove(this);
             }
 
             @Override
             public void onLoadFailed(@Nullable Drawable errorDrawable) {
                 loadingArtwork.remove(artUri);
+                artworkTargets.remove(this);
             }
         };
     }
@@ -174,6 +185,7 @@ public class PlaybackService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        destroyed = false;
         EventBus.getDefault().register(this);
     }
 
@@ -191,9 +203,15 @@ public class PlaybackService extends Service {
 
     @Override
     public void onDestroy() {
+        destroyed = true;
         EventBus.getDefault().unregister(this);
         getManager().cancel(Notify.ID);
         stopForeground(true);
+        synchronized (artworkTargets) {
+            List<CustomTarget<Bitmap>> targets = new ArrayList<>(artworkTargets);
+            artworkTargets.clear();
+            for (CustomTarget<Bitmap> target : targets) Glide.with(App.get()).clear(target);
+        }
         cache.evictAll();
         loadingArtwork.clear();
         player = null;

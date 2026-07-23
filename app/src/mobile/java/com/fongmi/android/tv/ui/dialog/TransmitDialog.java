@@ -13,6 +13,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Device;
+import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.event.ScanEvent;
 import com.fongmi.android.tv.utils.ScanTask;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
@@ -141,7 +142,7 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
     }
 
     private void getDevice() {
-        adapter.addAll(Device.getAll());
+        adapter.addAll(DeviceRepository.get().all());
         if (adapter.getItemCount() == 0) App.post(this::onRefresh, 1000);
     }
 
