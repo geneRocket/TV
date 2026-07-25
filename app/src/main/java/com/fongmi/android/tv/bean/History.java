@@ -42,9 +42,11 @@ public class History {
 
     private static final Map<String, History> CACHE = new ConcurrentHashMap<>();
     private static final int MAX_CACHE_SIZE = 512;
-    private static final Map<String, History> PENDING_WRITES = new ConcurrentHashMap<>();
+    private static final Map<String, PendingWrite> PENDING_WRITES = new ConcurrentHashMap<>();
     private static final Set<String> ACTIVE_WRITES = ConcurrentHashMap.newKeySet();
+    private static final Map<String, Long> WRITE_VERSIONS = new ConcurrentHashMap<>();
     private static final ExecutorService WRITE_EXECUTOR = ThreadPools.newSingle("history-write");
+    private static final Object WRITE_LOCK = new Object();
     private static final Pattern PATTERN_END = Pattern.compile("(?i)[\\s\\p{P}\\p{S}]+$");
     private static final Pattern PATTERN_VERSION = Pattern.compile("(?i)(?:粤语版|国语版|普通话版|粤语中字|国语中字|国粤双语|双语版|中英双字|中文字幕|中字|粤语|国语|普通话|高清版|hd中字|hd|bd|正片|全集|4k|2160p|1080p|720p|x264|x265|h264|h265|mp4|mkv|m3u8|mp3|avi|flv|wmv|ts|mov)$");
     private static final Pattern PATTERN_ALL = Pattern.compile("[\\s\\p{P}\\p{S}]+");
@@ -457,8 +459,11 @@ public class History {
     }
 
     public static void delete(int cid) {
-        AppDatabase.get().getHistoryDao().delete(cid);
-        removeCache(cid);
+        synchronized (WRITE_LOCK) {
+            cancelWrites(cid);
+            AppDatabase.get().getHistoryDao().delete(cid);
+            removeCache(cid);
+        }
     }
 
     public static void deleteLoaded() {
@@ -468,8 +473,11 @@ public class History {
             delete(cids.get(0));
             return;
         }
-        AppDatabase.get().getHistoryDao().delete(cids);
-        for (Integer cid : cids) removeCache(cid);
+        synchronized (WRITE_LOCK) {
+            for (Integer cid : cids) cancelWrites(cid);
+            AppDatabase.get().getHistoryDao().delete(cids);
+            for (Integer cid : cids) removeCache(cid);
+        }
     }
 
     private void checkParam(History item) {
@@ -501,8 +509,10 @@ public class History {
     }
 
     public void update() {
-        merge(find(), false);
-        save();
+        synchronized (WRITE_LOCK) {
+            merge(find(), false);
+            save();
+        }
     }
 
     public History update(int cid) {
@@ -510,23 +520,30 @@ public class History {
     }
 
     public History update(int cid, List<History> items) {
-        setCid(cid);
-        merge(items, true);
-        return save();
+        synchronized (WRITE_LOCK) {
+            setCid(cid);
+            merge(items, true);
+            return save();
+        }
     }
 
     public History save() {
         if (TextUtils.isEmpty(getKey())) return this;
-        AppDatabase.get().getHistoryDao().insertOrUpdate(this);
-        return cache(this);
+        synchronized (WRITE_LOCK) {
+            AppDatabase.get().getHistoryDao().insertOrUpdate(this);
+            return cache(this);
+        }
     }
 
     public void saveAsync() {
         if (TextUtils.isEmpty(getKey())) return;
         History snapshot = copy(this);
         String key = cacheKey(snapshot.getCid(), snapshot.getKey());
-        PENDING_WRITES.put(key, snapshot);
-        scheduleWrite(key);
+        synchronized (WRITE_LOCK) {
+            long version = WRITE_VERSIONS.merge(key, 1L, Long::sum);
+            PENDING_WRITES.put(key, new PendingWrite(snapshot, version));
+            scheduleWrite(key);
+        }
     }
 
     private static void scheduleWrite(String key) {
@@ -536,11 +553,18 @@ public class History {
 
     private static void drainWrite(String key) {
         try {
-            History item;
-            while ((item = PENDING_WRITES.remove(key)) != null) item.save();
+            PendingWrite pending;
+            while ((pending = PENDING_WRITES.remove(key)) != null) {
+                synchronized (WRITE_LOCK) {
+                    if (pending.version == WRITE_VERSIONS.getOrDefault(key, 0L)) pending.item.save();
+                }
+            }
         } finally {
-            ACTIVE_WRITES.remove(key);
-            if (PENDING_WRITES.containsKey(key)) scheduleWrite(key);
+            synchronized (WRITE_LOCK) {
+                ACTIVE_WRITES.remove(key);
+                if (PENDING_WRITES.containsKey(key)) scheduleWrite(key);
+                else WRITE_VERSIONS.remove(key);
+            }
         }
     }
 
@@ -550,10 +574,28 @@ public class History {
     }
 
     private History deleteSelf() {
-        AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
-        AppDatabase.get().getTrackDao().delete(getKey());
-        removeCache(getCid(), getKey());
+        synchronized (WRITE_LOCK) {
+            cancelWrite(getCid(), getKey());
+            AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
+            AppDatabase.get().getTrackDao().delete(getKey());
+            removeCache(getCid(), getKey());
+        }
         return this;
+    }
+
+    private static void cancelWrites(int cid) {
+        String prefix = cid + "@";
+        for (String key : WRITE_VERSIONS.keySet()) if (key.startsWith(prefix)) cancelWrite(key);
+    }
+
+    private static void cancelWrite(int cid, String key) {
+        cancelWrite(cacheKey(cid, key));
+    }
+
+    private static void cancelWrite(String key) {
+        WRITE_VERSIONS.merge(key, 1L, Long::sum);
+        PENDING_WRITES.remove(key);
+        if (!ACTIVE_WRITES.contains(key)) WRITE_VERSIONS.remove(key);
     }
 
     public List<History> find() {
@@ -634,6 +676,17 @@ public class History {
         private EpisodeMatch history(History history) {
             this.history = history;
             return this;
+        }
+    }
+
+    private static class PendingWrite {
+
+        private final History item;
+        private final long version;
+
+        private PendingWrite(History item, long version) {
+            this.item = item;
+            this.version = version;
         }
     }
 

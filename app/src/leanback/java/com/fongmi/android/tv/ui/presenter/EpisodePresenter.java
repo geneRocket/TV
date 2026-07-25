@@ -26,12 +26,16 @@ public class EpisodePresenter extends Presenter {
         void onItemClick(Episode item);
     }
 
-    public void setNextFocusDown(int nextFocus) {
+    public boolean setNextFocusDown(int nextFocus) {
+        if (this.nextFocusDown == nextFocus) return false;
         this.nextFocusDown = nextFocus;
+        return true;
     }
 
-    public void setNextFocusUp(int nextFocus) {
+    public boolean setNextFocusUp(int nextFocus) {
+        if (this.nextFocusUp == nextFocus) return false;
         this.nextFocusUp = nextFocus;
+        return true;
     }
 
     public int getNumColumns() {
@@ -63,22 +67,26 @@ public class EpisodePresenter extends Presenter {
         holder.binding.text.setText(item.getDesc().concat(item.getName()));
         holder.binding.text.setNextFocusUpId(numColumns > 0 ? (item.getIndex() < numColumns ? nextFocusUp : 0) : nextFocusUp);
         holder.binding.text.setNextFocusDownId(numColumns > 0 ? (item.getIndex() >= (numRows - 1) * numColumns ? nextFocusDown : 0) : nextFocusDown);
-        setOnClickListener(holder, view -> mListener.onItemClick(item));
+        holder.item = item;
     }
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
-        viewHolder.view.setOnClickListener(null);
+        ((ViewHolder) viewHolder).item = null;
     }
 
-    public static class ViewHolder extends Presenter.ViewHolder {
+    public class ViewHolder extends Presenter.ViewHolder {
 
         private final AdapterEpisodeBinding binding;
+        private Episode item;
 
         public ViewHolder(@NonNull AdapterEpisodeBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
             this.binding.text.setMaxEms(Product.getEms());
+            this.binding.getRoot().setOnClickListener(view -> {
+                if (item != null) mListener.onItemClick(item);
+            });
         }
     }
 }

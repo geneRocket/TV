@@ -88,10 +88,12 @@ import com.fongmi.android.tv.ui.presenter.FlagPresenter;
 import com.fongmi.android.tv.ui.presenter.ParsePresenter;
 import com.fongmi.android.tv.ui.presenter.PartPresenter;
 import com.fongmi.android.tv.ui.presenter.QuickPresenter;
+import com.fongmi.android.tv.utils.AppTaskScheduler;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
+import com.fongmi.android.tv.utils.KeyedLatestTask;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SearchSorter;
@@ -141,8 +143,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private static final long SEEK_READY_STABLE_MS = 300;
     private static final long SEEK_BOUNCE_WINDOW_MS = 1500;
     private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 5000;
+    private static final long HISTORY_LOAD_TIMEOUT_MS = 5000;
     private static final int QUICK_RESULT_LIMIT = 50;
+    private static final String TASK_HISTORY = "history";
     private static final int QUICK_FLUSH_DELAY_MS = 100;
+    private static final int SOURCE_SEARCH_CONCURRENCY = Math.max(2, Math.min(10, Constant.THREAD_POOL));
     private static final DiffCallback<Vod> QUICK_DIFF = new DiffCallback<Vod>() {
         @Override
         public boolean areItemsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
@@ -198,6 +203,117 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
     }
 
+    private static class PlaybackRequest {
+
+        private String key;
+        private String flag;
+        private String id;
+        private String token;
+        private String timeoutToken;
+
+        void set(String key, String flag, String id, String token) {
+            this.key = key;
+            this.flag = flag;
+            this.id = id;
+            this.token = token;
+        }
+
+        void setTimeout(String token) {
+            timeoutToken = token;
+        }
+
+        void clearTimeout() {
+            timeoutToken = null;
+        }
+
+        boolean isCurrent(Result result) {
+            return result != null
+                    && TextUtils.equals(result.getKey(), key)
+                    && TextUtils.equals(result.getRequestFlag(), flag)
+                    && TextUtils.equals(result.getRequestId(), id)
+                    && TextUtils.equals(result.getRequestToken(), token);
+        }
+
+        boolean isCurrentTimeout() {
+            return !TextUtils.isEmpty(timeoutToken) && TextUtils.equals(timeoutToken, token);
+        }
+
+        String getToken() {
+            return token;
+        }
+
+        void clear() {
+            key = null;
+            flag = null;
+            id = null;
+            token = null;
+            timeoutToken = null;
+        }
+    }
+
+    private static class SourceSwitchState {
+
+        private boolean active;
+        private boolean pending;
+        private boolean manual;
+        private boolean singleEpisode;
+        private String episode;
+        private String targetFlag;
+        private String targetEpisodeKey;
+        private String actor = "";
+        private long position;
+
+        void clear() {
+            active = false;
+            pending = false;
+            manual = false;
+            singleEpisode = false;
+            episode = null;
+            targetFlag = null;
+            targetEpisodeKey = null;
+            position = 0;
+        }
+
+        void clearTarget() {
+            targetFlag = null;
+            targetEpisodeKey = null;
+        }
+    }
+
+    private static class FlagSwitchState {
+
+        private String targetFlag;
+        private String targetEpisodeKey;
+        private long position;
+
+        void clear() {
+            targetFlag = null;
+            targetEpisodeKey = null;
+            position = 0;
+        }
+    }
+
+    private static class HistoryUpdate {
+
+        private Flag flag;
+        private Episode episode;
+        private long position;
+        private boolean skipOpening;
+        private String progressFlag;
+        private String progressEpisodeKey;
+        private long progressPosition;
+
+        void clear() {
+            flag = null;
+            episode = null;
+            position = 0;
+            skipOpening = false;
+            progressFlag = null;
+            progressEpisodeKey = null;
+            progressPosition = 0;
+        }
+    }
+
     private static class ErrorRecoveryController {
 
         private static final int MAX_ERROR_COUNT = 20;
@@ -209,7 +325,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void onPlayerReady() {
-            host.mPlayers.reset();
             state.resetToggle();
             state.resetError();
         }
@@ -627,15 +742,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             App.removeCallbacks(host.mR4);
             host.mSelectedFlagPosition = 0;
             host.mSelectedEpisodePosition = 0;
-            App.execute(() -> {
-                host.mHistory = HistoryRepository.get().prepare(HistoryRepository.get().find(host.getHistoryKey()), host.getHistoryKey(), host.getSiteCid(), item, Setting.getPlaySpeed(), host.getMark());
-                App.post(() -> {
-                    if (host.isFinishing() || host.isDestroyed()) return;
-                    checkHistory();
-                    checkFlag(item);
-                    host.checkKeep();
-                });
-            });
+            host.loadHistory(item, host.pendingDetailToken);
         }
 
         private void initSearch(String keyword, boolean auto, boolean advance) {
@@ -655,7 +762,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mQuickKeys.clear();
             List<Site> sites = new ArrayList<>();
             Set<String> keys = new HashSet<>();
-            host.mExecutor = ThreadPools.newFixed("video-search", Constant.THREAD_POOL);
+            host.mExecutor = ThreadPools.newFixed("video-search", SOURCE_SEARCH_CONCURRENCY);
             host.mSearchActive = true;
             for (Site site : VodConfig.get().getSites()) {
                 if (!isPass(site)) continue;
@@ -713,6 +820,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private CustomKeyDownVod mKeyDown;
     private ExecutorService mExecutor;
     private final Set<Future<?>> mSearchTasks = Collections.synchronizedSet(new HashSet<>());
+    private final KeyedLatestTask<History> mHistoryTasks = new KeyedLatestTask<>(ThreadPools.newSingle("video-history"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "History load failed."));
     private SiteViewModel mViewModel;
     private List<Danmaku> mDanmakus;
     private final Set<String> mBroken = new HashSet<>();
@@ -740,6 +848,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long mLastHistorySaveAt;
     private long mLastSavedHistoryPosition = -1;
     private long mLastSavedHistoryDuration = -1;
+    private boolean mHistorySessionModified;
     private boolean mShouldSkipOpening;
     private Runnable mR1;
     private Runnable mR2;
@@ -761,11 +870,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String mArtworkUrl;
     private long requestTokenSeed;
     private String pendingDetailToken;
-    private String pendingPlaybackKey;
-    private String pendingPlaybackFlag;
-    private String pendingPlaybackId;
-    private String pendingPlaybackToken;
-    private String pendingPlaybackTimeoutToken;
+    private final PlaybackRequest mPlaybackRequest = new PlaybackRequest();
     private String pendingSearchToken;
     private int mEpisodeNumColumns;
     private int mEpisodeColumnWidth;
@@ -775,28 +880,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean mArrayRevPlay;
     private boolean mDisplayTrafficPolling;
     private boolean mProgressTrafficPolling;
-    private boolean mFocusUpdateScheduled;
-    private boolean pendingSiteSwitch;
-    private boolean sourceSwitching;
-    private boolean manualSourceSearch;
-    private boolean sourceSwitchSingleEpisode;
-    private String sourceSwitchEpisode;
-    private String sourceSwitchKeyword;
-    private String sourceSwitchTargetFlag;
-    private String sourceSwitchTargetEpisodeKey;
-    private String sourceSearchActor;
-    private String flagSwitchTargetFlag;
-    private String flagSwitchTargetEpisodeKey;
-    private long flagSwitchPosition;
-    private long sourceSwitchPosition;
-    private Flag pendingHistoryFlag;
-    private Episode pendingHistoryEpisode;
-    private long pendingHistoryPosition;
-    private long lastPlaybackAttemptPosition;
-    private boolean pendingHistorySkipOpening;
-    private String pendingProgressFlag;
-    private String pendingProgressEpisodeKey;
-    private long pendingProgressPosition;
+    private float mSpeedBeforeLongPress = Float.NaN;
+    private final SourceSwitchState mSourceSwitch = new SourceSwitchState();
+    private final FlagSwitchState mFlagSwitch = new FlagSwitchState();
+    private final HistoryUpdate mHistoryUpdate = new HistoryUpdate();
     private CustomTarget<Drawable> mArtworkTarget;
 
     public static void push(FragmentActivity activity, String text) {
@@ -1148,6 +1235,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         ExoUtil.setSubtitleView(mBinding.exo);
         IjkUtil.setSubtitleView(mBinding.ijk);
         mBinding.control.reset.setText(getResetText());
+        setPlainTextIfChanged(mBinding.control.player, mPlayers.getPlayerText());
+        setPlainTextIfChanged(mBinding.control.decode, mPlayers.getDecodeText());
+        setPlainTextIfChanged(mBinding.control.speed, mPlayers.getSpeedText());
+        String[] scale = ResUtil.getStringArray(R.array.select_scale);
+        setPlainTextIfChanged(mBinding.control.scale, scale[safeIndex(Setting.getScale(), scale.length)]);
+        setPlainTextIfChanged(mBinding.control.opening, getString(R.string.play_op));
+        setPlainTextIfChanged(mBinding.control.ending, getString(R.string.play_ed));
     }
 
     private void setDanmuViewSettings() {
@@ -1217,6 +1311,31 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         
     }
 
+    private void loadHistory(Vod item, String detailToken) {
+        final String historyKey = getHistoryKey();
+        final int siteCid = getSiteCid();
+        final String mark = getMark();
+        mHistory = HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark);
+        mHistorySessionModified = false;
+        mHistoryTasks.submit(TASK_HISTORY,
+                () -> HistoryRepository.get().prepare(HistoryRepository.get().find(historyKey), historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
+                HISTORY_LOAD_TIMEOUT_MS,
+                history -> App.post(() -> applyHistory(history, item, historyKey, detailToken)),
+                error -> HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
+                null,
+                null);
+    }
+
+    private void applyHistory(History history, Vod item, String historyKey, String detailToken) {
+        if (isFinishing() || isDestroyed()) return;
+        if (!TextUtils.equals(detailToken, pendingDetailToken) || !TextUtils.equals(historyKey, getHistoryKey())) return;
+        if (!mHistorySessionModified) mHistory = history;
+        if (mPlayers.isReady()) commitPendingHistoryUpdate();
+        mContent.checkHistory();
+        mContent.checkFlag(item);
+        checkKeep();
+    }
+
     private void setDecodeView() {
         setPlainTextIfChanged(mBinding.control.decode, mPlayers.getDecodeText());
     }
@@ -1267,11 +1386,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void applyPlayerResult(Result result) {
         if (!isCurrentPlayerResult(result)) return;
-        String token = pendingPlaybackToken;
+        String token = mPlaybackRequest.getToken();
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         mPlayers.start(result, isUseParse(), getSite().getTimeout());
-        if (!TextUtils.equals(token, pendingPlaybackToken)) return;
+        if (!TextUtils.equals(token, mPlaybackRequest.getToken())) return;
         setVisibilityIfChanged(mBinding.control.parse, isUseParse() ? View.VISIBLE : View.GONE);
         setQualityVisible(result.getUrl().isMulti());
         setDanmakus(result.getDanmakus());
@@ -1480,7 +1599,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void seamless(Flag flag) {
-        String episodeName = isSourceSwitching() ? sourceSwitchEpisode : (mHistory == null ? "" : mHistory.getVodRemarks());
+        String episodeName = isSourceSwitching() ? mSourceSwitch.episode : (mHistory == null ? "" : mHistory.getVodRemarks());
         Episode episode = isSourceSwitchSingleEpisode()
                 ? getDefaultSourceSwitchEpisode(flag)
                 : flag.find(episodeName, !TextUtils.isEmpty(episodeName));
@@ -1569,20 +1688,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void updateFocus() {
-        mFocusUpdateScheduled = false;
         hasKeyEvent = false;
-        mEpisodePresenter.setNextFocusDown(findFocusDown(Setting.getEpisode() == 0 ? 2 : 4));
-        mEpisodePresenter.setNextFocusUp(findFocusUp(Setting.getEpisode() == 0 ? 2 : 4));
-        mQualityAdapter.setNextFocusDown(findFocusDown(1));
-        mArrayPresenter.setNextFocusDown(findFocusDown(3));
-        mFlagPresenter.setNextFocusDown(findFocusDown(0));
-        mArrayPresenter.setNextFocusUp(findFocusUp(3));
-        mPartPresenter.setNextFocusUp(findFocusUp(5));
-        notifyItemChanged(mBinding.flag, mFlagAdapter);
-        notifyItemChanged(mBinding.quality, mQualityAdapter);
-        notifyItemChanged(mBinding.array, mArrayAdapter);
-        notifyItemChanged(getEpisodeView(), mEpisodeAdapter);
-        notifyItemChanged(mBinding.part, mPartAdapter);
+        boolean episodeChanged = mEpisodePresenter.setNextFocusDown(findFocusDown(Setting.getEpisode() == 0 ? 2 : 4));
+        episodeChanged |= mEpisodePresenter.setNextFocusUp(findFocusUp(Setting.getEpisode() == 0 ? 2 : 4));
+        boolean qualityChanged = mQualityAdapter.setNextFocusDown(findFocusDown(1));
+        boolean arrayChanged = mArrayPresenter.setNextFocusDown(findFocusDown(3));
+        arrayChanged |= mArrayPresenter.setNextFocusUp(findFocusUp(3));
+        boolean flagChanged = mFlagPresenter.setNextFocusDown(findFocusDown(0));
+        boolean partChanged = mPartPresenter.setNextFocusUp(findFocusUp(5));
+        if (flagChanged) notifyItemChanged(mBinding.flag, mFlagAdapter);
+        if (qualityChanged) notifyItemChanged(mBinding.quality, mQualityAdapter);
+        if (arrayChanged) notifyItemChanged(mBinding.array, mArrayAdapter);
+        if (episodeChanged) notifyItemChanged(getEpisodeView(), mEpisodeAdapter);
+        if (partChanged) notifyItemChanged(mBinding.part, mPartAdapter);
     }
 
     private void showDisplayInfo() {
@@ -1643,12 +1761,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onRevSort() {
+        if (mHistory == null) return;
         mHistory.setRevSort(!mHistory.isRevSort());
         reverseEpisode(false);
     }
 
     @Override
     public void onRevPlay(TextView view) {
+        if (mHistory == null) return;
         mHistory.setRevPlay(!mHistory.isRevPlay());
         view.setText(mHistory.getRevPlayText());
         Notify.show(mHistory.getRevPlayHint());
@@ -1778,13 +1898,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void onScale() {
         int index = getScale();
         String[] array = ResUtil.getStringArray(R.array.select_scale);
-        mHistory.setScale(index = index == array.length - 1 ? 0 : ++index);
+        index = index == array.length - 1 ? 0 : ++index;
+        if (mHistory != null) mHistory.setScale(index);
         setScale(index);
     }
 
     private void onSpeed() {
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.addSpeed());
-        mHistory.setSpeed(mPlayers.getSpeed());
+        if (mHistory != null) mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
         
         
@@ -1793,7 +1914,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean onSpeedAdd() {
         if (mPlayers.getSpeed() >= 5.0f) return false;
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.addSpeed(0.25f));
-        mHistory.setSpeed(mPlayers.getSpeed());
+        if (mHistory != null) mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
         return true;
     }
@@ -1801,14 +1922,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean onSpeedSub() {
         if (mPlayers.getSpeed() <= 0.2f) return false;
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.subSpeed(0.25f));
-        mHistory.setSpeed(mPlayers.getSpeed());
+        if (mHistory != null) mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
         return true;
     }
 
     private boolean onSpeedLong() {
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.toggleSpeed());
-        mHistory.setSpeed(mPlayers.getSpeed());
+        if (mHistory != null) mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
         
         
@@ -1825,6 +1946,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void saveHistoryNow() {
+        commitPendingHistoryUpdate();
         if (mHistory == null) return;
         long position = mPlayers.getPosition();
         long duration = mPlayers.getDuration();
@@ -1871,12 +1993,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean onOpeningAdd() {
+        if (mHistory == null) return false;
         if (mHistory.getOpening() >= mPlayers.getDuration() / 2) return false;
         setOpening(Math.min(mHistory.getOpening() + 1000, mPlayers.getDuration() / 2));
         return true;
     }
 
     private boolean onOpeningSub() {
+        if (mHistory == null) return false;
         if (mHistory.getOpening() <= 0) return false;
         setOpening(Math.max(0, mHistory.getOpening() - 1000));
         return true;
@@ -1888,6 +2012,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setOpening(long opening) {
+        if (mHistory == null) return;
         mHistory.setOpening(opening);
         setPlainTextIfChanged(mBinding.control.opening, opening == 0 ? getString(R.string.play_op) : mPlayers.stringToTime(mHistory.getOpening()));
     }
@@ -1900,12 +2025,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean onEndingAdd() {
+        if (mHistory == null) return false;
         if (mHistory.getEnding() >= mPlayers.getDuration() / 2) return false;
         setEnding(Math.min(mPlayers.getDuration() / 2, mHistory.getEnding() + 1000));
         return true;
     }
 
     private boolean onEndingSub() {
+        if (mHistory == null) return false;
         if (mHistory.getEnding() <= 0) return false;
         setEnding(Math.max(0, mHistory.getEnding() - 1000));
         return true;
@@ -1917,6 +2044,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setEnding(long ending) {
+        if (mHistory == null) return;
         mHistory.setEnding(ending);
         setPlainTextIfChanged(mBinding.control.ending, ending == 0 ? getString(R.string.play_ed) : mPlayers.stringToTime(mHistory.getEnding()));
     }
@@ -2125,8 +2253,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setR2Callback(long delayMillis) {
-        if (mFocusUpdateScheduled) App.removeCallbacks(mR2);
-        mFocusUpdateScheduled = true;
         App.post(mR2, delayMillis);
     }
 
@@ -2235,43 +2361,35 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean hasProgressOverride = hasPendingProgressOverride(flag, item);
         boolean sameEpisode = hasProgressOverride || isSameHistoryEpisode(item);
         replay = replay || !sameEpisode;
-        pendingHistoryFlag = flag;
-        pendingHistoryEpisode = item;
-        pendingHistoryPosition = hasProgressOverride ? pendingProgressPosition : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
-        lastPlaybackAttemptPosition = pendingHistoryPosition;
-        pendingHistorySkipOpening = replay;
-        mPlayers.setPosition(Math.max(mHistory == null ? 0 : mHistory.getOpening(), pendingHistoryPosition));
+        mHistoryUpdate.flag = flag;
+        mHistoryUpdate.episode = item;
+        mHistoryUpdate.position = hasProgressOverride ? mHistoryUpdate.progressPosition : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
+        mHistoryUpdate.skipOpening = replay;
+        mPlayers.setPosition(Math.max(mHistory == null ? 0 : mHistory.getOpening(), mHistoryUpdate.position));
     }
 
     private void commitPendingHistoryUpdate() {
-        if (pendingHistoryFlag == null || pendingHistoryEpisode == null || mHistory == null) return;
-        mHistory.setPosition(pendingHistoryPosition);
-        mShouldSkipOpening = pendingHistorySkipOpening;
-        mHistory.setEpisodeUrl(pendingHistoryEpisode.getUrl());
-        mHistory.setVodRemarks(pendingHistoryEpisode.getName());
-        mHistory.setVodFlag(pendingHistoryFlag.getFlag());
+        if (mHistoryUpdate.flag == null || mHistoryUpdate.episode == null || mHistory == null) return;
+        mHistory.setPosition(mHistoryUpdate.position);
+        mShouldSkipOpening = mHistoryUpdate.skipOpening;
+        mHistory.setEpisodeUrl(mHistoryUpdate.episode.getUrl());
+        mHistory.setVodRemarks(mHistoryUpdate.episode.getName());
+        mHistory.setVodFlag(mHistoryUpdate.flag.getFlag());
         mHistory.setCreateTime(System.currentTimeMillis());
         mLastHistorySaveAt = System.currentTimeMillis();
         saveHistorySnapshot();
-        lastPlaybackAttemptPosition = 0;
         clearPendingHistoryUpdate();
     }
 
     private void clearPendingHistoryUpdate() {
-        pendingHistoryFlag = null;
-        pendingHistoryEpisode = null;
-        pendingHistoryPosition = 0;
-        pendingHistorySkipOpening = false;
-        pendingProgressFlag = null;
-        pendingProgressEpisodeKey = null;
-        pendingProgressPosition = 0;
+        mHistoryUpdate.clear();
     }
 
     private boolean hasPendingProgressOverride(Flag flag, Episode episode) {
         return flag != null
                 && episode != null
-                && TextUtils.equals(pendingProgressFlag, flag.getFlag())
-                && TextUtils.equals(pendingProgressEpisodeKey, getSourceSwitchEpisodeKey(episode));
+                && TextUtils.equals(mHistoryUpdate.progressFlag, flag.getFlag())
+                && TextUtils.equals(mHistoryUpdate.progressEpisodeKey, getSourceSwitchEpisodeKey(episode));
     }
 
     private boolean isSameHistoryEpisode(Episode item) {
@@ -2363,7 +2481,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean hasPendingHistoryUpdate() {
-        return pendingHistoryEpisode != null;
+        return mHistoryUpdate.episode != null;
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -2561,51 +2679,43 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean isManualSourceSearch() {
-        return manualSourceSearch;
+        return mSourceSwitch.manual;
     }
 
     private void setManualSourceSearch(boolean manualSourceSearch) {
-        this.manualSourceSearch = manualSourceSearch;
+        mSourceSwitch.manual = manualSourceSearch;
     }
 
     private boolean isSourceSwitching() {
-        return sourceSwitching;
+        return mSourceSwitch.active;
     }
 
     private boolean isSourceSwitchSingleEpisode() {
-        return sourceSwitchSingleEpisode;
+        return mSourceSwitch.singleEpisode;
     }
 
     private boolean isPendingSiteSwitch() {
-        return pendingSiteSwitch;
+        return mSourceSwitch.pending;
     }
 
     private void setPendingSiteSwitch(boolean pendingSiteSwitch) {
-        this.pendingSiteSwitch = pendingSiteSwitch;
+        mSourceSwitch.pending = pendingSiteSwitch;
     }
 
     private void beginSourceSwitch() {
         if (isSourceSwitching()) return;
-        sourceSwitching = true;
+        mSourceSwitch.active = true;
         mBroken.clear();
-        sourceSwitchSingleEpisode = isCurrentSingleEpisode();
-        sourceSwitchEpisode = getCurrentSwitchEpisode();
-        sourceSwitchKeyword = getCurrentSwitchKeyword();
-        if (!isAutoMode() || TextUtils.isEmpty(sourceSearchActor)) setSourceSearchActor(getCurrentSwitchActor());
+        mSourceSwitch.singleEpisode = isCurrentSingleEpisode();
+        mSourceSwitch.episode = getCurrentSwitchEpisode();
+        if (!isAutoMode() || TextUtils.isEmpty(mSourceSwitch.actor)) setSourceSearchActor(getCurrentSwitchActor());
         setSourceSwitchTarget(null, null);
-        sourceSwitchPosition = getCurrentSwitchPosition();
+        mSourceSwitch.position = getCurrentSwitchPosition();
     }
 
     private void clearSourceSwitch() {
         clearSourceSwitchTimeout();
-        setPendingSiteSwitch(false);
-        sourceSwitching = false;
-        manualSourceSearch = false;
-        sourceSwitchSingleEpisode = false;
-        sourceSwitchEpisode = null;
-        sourceSwitchKeyword = null;
-        setSourceSwitchTarget(null, null);
-        sourceSwitchPosition = 0;
+        mSourceSwitch.clear();
     }
 
     private void continueSourceSwitch() {
@@ -2647,13 +2757,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long getCurrentSwitchPosition() {
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
-        if (pendingHistoryEpisode != null && pendingHistoryPosition > 0) return pendingHistoryPosition;
-        if (lastPlaybackAttemptPosition > 0) return lastPlaybackAttemptPosition;
+        if (mHistoryUpdate.episode != null && mHistoryUpdate.position > 0) return mHistoryUpdate.position;
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
     }
 
     private void saveHistorySnapshot() {
         if (mHistory == null || Setting.isIncognito()) return;
+        mHistorySessionModified = true;
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
         mHistory.saveAsync();
@@ -2672,17 +2782,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setPendingPlaybackRequest(String key, String flag, String id, String token) {
-        pendingPlaybackKey = key;
-        pendingPlaybackFlag = flag;
-        pendingPlaybackId = id;
-        pendingPlaybackToken = token;
+        mPlaybackRequest.set(key, flag, id, token);
     }
 
     private void clearPendingPlaybackRequest() {
-        pendingPlaybackKey = null;
-        pendingPlaybackFlag = null;
-        pendingPlaybackId = null;
-        pendingPlaybackToken = null;
+        mPlaybackRequest.clear();
         clearPendingHistoryUpdate();
     }
 
@@ -2703,13 +2807,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void schedulePlaybackTimeout(String token) {
-        pendingPlaybackTimeoutToken = token;
+        mPlaybackRequest.setTimeout(token);
         App.removeCallbacks(mR7);
         App.post(mR7, Constant.TIMEOUT_PLAY);
     }
 
     private void clearPlaybackTimeout() {
-        pendingPlaybackTimeoutToken = null;
+        mPlaybackRequest.clearTimeout();
         App.removeCallbacks(mR7);
     }
 
@@ -2720,8 +2824,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onPlaybackTimeout() {
-        String token = pendingPlaybackTimeoutToken;
-        if (TextUtils.isEmpty(token) || !TextUtils.equals(token, pendingPlaybackToken) || isBackground()) return;
+        if (!mPlaybackRequest.isCurrentTimeout() || isBackground()) return;
         boolean recoverable = isSourceSwitching() || isAutoMode();
         stopActivePlayback();
         showError(getString(R.string.error_play_timeout));
@@ -2750,11 +2853,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean isCurrentPlayerResult(Result result) {
-        return result != null
-                && TextUtils.equals(result.getKey(), pendingPlaybackKey)
-                && TextUtils.equals(result.getRequestFlag(), pendingPlaybackFlag)
-                && TextUtils.equals(result.getRequestId(), pendingPlaybackId)
-                && TextUtils.equals(result.getRequestToken(), pendingPlaybackToken);
+        return mPlaybackRequest.isCurrent(result);
     }
 
     private boolean isCurrentSearchResult(Result result) {
@@ -2821,7 +2920,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setSourceSearchActor(String actor) {
-        sourceSearchActor = Objects.toString(actor, "");
+        mSourceSwitch.actor = Objects.toString(actor, "");
     }
 
     private boolean matchSourceTitle(String title, String keyword) {
@@ -2874,7 +2973,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (mQuickQueue.size() < QUICK_RESULT_LIMIT) {
                 mQuickQueue.offer(item);
                 changed = true;
-            } else if (mQuickQueue.peek() != null && SearchSorter.compare(item, mQuickQueue.peek(), keyword, sourceSearchActor) < 0) {
+            } else if (mQuickQueue.peek() != null && SearchSorter.compare(item, mQuickQueue.peek(), keyword, mSourceSwitch.actor) < 0) {
                 mQuickQueue.poll();
                 mQuickQueue.offer(item);
                 changed = true;
@@ -2894,7 +2993,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int compareQuickForQueue(Vod left, Vod right) {
-        return SearchSorter.compare(right, left, getSourceSwitchKeyword(), sourceSearchActor);
+        return SearchSorter.compare(right, left, getSourceSwitchKeyword(), mSourceSwitch.actor);
     }
 
     private void scheduleQuickFlush() {
@@ -2908,7 +3007,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mQuickFlushScheduled = false;
         if (!mSearchActive) return;
         List<Vod> items = new ArrayList<>(mQuickQueue);
-        items.sort((left, right) -> SearchSorter.compare(left, right, getSourceSwitchKeyword(), sourceSearchActor));
+        items.sort((left, right) -> SearchSorter.compare(left, right, getSourceSwitchKeyword(), mSourceSwitch.actor));
         mQuickAdapter.setItems(items, QUICK_DIFF);
         setVisibilityIfChanged(mBinding.quick, items.isEmpty() ? View.GONE : View.VISIBLE);
     }
@@ -2932,9 +3031,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean hasEpisode(Flag flag) {
-        if (sourceSwitchSingleEpisode) return flag != null && !flag.getEpisodes().isEmpty();
+        if (mSourceSwitch.singleEpisode) return flag != null && !flag.getEpisodes().isEmpty();
         if (flag != null && flag.getEpisodes().size() == 1) return false;
-        return flag != null && flag.find(sourceSwitchEpisode, !TextUtils.isEmpty(sourceSwitchEpisode)) != null;
+        return flag != null && flag.find(mSourceSwitch.episode, !TextUtils.isEmpty(mSourceSwitch.episode)) != null;
     }
 
     private Episode getDefaultSourceSwitchEpisode(Flag flag) {
@@ -2945,24 +3044,22 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setSourceSwitchTarget(Flag flag, Episode episode) {
-        sourceSwitchTargetFlag = flag == null ? null : flag.getFlag();
-        sourceSwitchTargetEpisodeKey = getSourceSwitchEpisodeKey(episode);
+        mSourceSwitch.targetFlag = flag == null ? null : flag.getFlag();
+        mSourceSwitch.targetEpisodeKey = getSourceSwitchEpisodeKey(episode);
     }
 
     private void setFlagSwitchTarget(Flag flag, Episode episode) {
-        flagSwitchTargetFlag = flag == null ? null : flag.getFlag();
-        flagSwitchTargetEpisodeKey = getSourceSwitchEpisodeKey(episode);
-        flagSwitchPosition = getCurrentSwitchPosition();
+        mFlagSwitch.targetFlag = flag == null ? null : flag.getFlag();
+        mFlagSwitch.targetEpisodeKey = getSourceSwitchEpisodeKey(episode);
+        mFlagSwitch.position = getCurrentSwitchPosition();
     }
 
     private void clearFlagSwitchTarget() {
-        flagSwitchTargetFlag = null;
-        flagSwitchTargetEpisodeKey = null;
-        flagSwitchPosition = 0;
+        mFlagSwitch.clear();
     }
 
     private boolean hasPendingSourceSwitchTarget() {
-        return isSourceSwitching() && !TextUtils.isEmpty(sourceSwitchTargetEpisodeKey);
+        return isSourceSwitching() && !TextUtils.isEmpty(mSourceSwitch.targetEpisodeKey);
     }
 
     private void cancelPendingSourceSwitchTarget() {
@@ -2976,13 +3073,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private boolean shouldApplySourceSwitchProgress(Flag flag, Episode episode) {
         if (!isSourceSwitching() || flag == null || episode == null) return false;
-        if (TextUtils.isEmpty(sourceSwitchTargetEpisodeKey)) return true;
-        return TextUtils.equals(sourceSwitchTargetFlag, flag.getFlag()) && TextUtils.equals(sourceSwitchTargetEpisodeKey, getSourceSwitchEpisodeKey(episode));
+        if (TextUtils.isEmpty(mSourceSwitch.targetEpisodeKey)) return true;
+        return TextUtils.equals(mSourceSwitch.targetFlag, flag.getFlag()) && TextUtils.equals(mSourceSwitch.targetEpisodeKey, getSourceSwitchEpisodeKey(episode));
     }
 
     private boolean shouldApplyFlagSwitchProgress(Flag flag, Episode episode) {
-        if (isSourceSwitching() || flag == null || episode == null || TextUtils.isEmpty(flagSwitchTargetEpisodeKey)) return false;
-        return TextUtils.equals(flagSwitchTargetFlag, flag.getFlag()) && TextUtils.equals(flagSwitchTargetEpisodeKey, getSourceSwitchEpisodeKey(episode));
+        if (isSourceSwitching() || flag == null || episode == null || TextUtils.isEmpty(mFlagSwitch.targetEpisodeKey)) return false;
+        return TextUtils.equals(mFlagSwitch.targetFlag, flag.getFlag()) && TextUtils.equals(mFlagSwitch.targetEpisodeKey, getSourceSwitchEpisodeKey(episode));
     }
 
     private void applySwitchProgress(Flag flag, Episode episode) {
@@ -2991,21 +3088,21 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void applySourceSwitchProgress(Flag flag, Episode episode) {
-        if (!isSourceSwitching() || mHistory == null || episode == null) return;
-        setPendingProgressOverride(flag, episode, sourceSwitchPosition);
+        if (!isSourceSwitching() || episode == null) return;
+        setPendingProgressOverride(flag, episode, mSourceSwitch.position);
     }
 
     private void applyFlagSwitchProgress(Flag flag, Episode episode) {
-        if (mHistory == null || flag == null || episode == null) return;
+        if (flag == null || episode == null) return;
         long position = getCurrentSwitchPosition();
-        if (position <= 0) position = flagSwitchPosition;
+        if (position <= 0) position = mFlagSwitch.position;
         setPendingProgressOverride(flag, episode, position);
     }
 
     private void setPendingProgressOverride(Flag flag, Episode episode, long position) {
-        pendingProgressFlag = flag == null ? null : flag.getFlag();
-        pendingProgressEpisodeKey = getSourceSwitchEpisodeKey(episode);
-        pendingProgressPosition = Math.max(position, 0);
+        mHistoryUpdate.progressFlag = flag == null ? null : flag.getFlag();
+        mHistoryUpdate.progressEpisodeKey = getSourceSwitchEpisodeKey(episode);
+        mHistoryUpdate.progressPosition = Math.max(position, 0);
     }
 
     public boolean isUseParse() {
@@ -3107,6 +3204,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onSpeedUp() {
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
+        if (Float.isNaN(mSpeedBeforeLongPress)) mSpeedBeforeLongPress = mPlayers.getSpeed();
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
         setDanmuViewSettings();
         
@@ -3117,8 +3215,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onSpeedEnd() {
-        if (mHistory == null) return;
-        setPlainTextIfChanged(mBinding.control.speed, mPlayers.setSpeed(mHistory.getSpeed()));
+        if (!Float.isNaN(mSpeedBeforeLongPress)) setPlainTextIfChanged(mBinding.control.speed, mPlayers.setSpeed(mSpeedBeforeLongPress));
+        mSpeedBeforeLongPress = Float.NaN;
         setDanmuViewSettings();
         setVisibilityIfChanged(mBinding.widget.speed, View.GONE);
         mBinding.widget.speed.clearAnimation();
@@ -3211,6 +3309,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     protected void onPause() {
+        mKeyDown.release();
         super.onPause();
         setBackground(true);
         saveHistoryNow();
@@ -3241,11 +3340,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     protected void onDestroy() {
-        super.onDestroy();
+        mKeyDown.release();
         saveHistoryNow();
+        mHistoryTasks.close();
+        super.onDestroy();
         clearPartRequest();
         mPlaybackState.release();
-        mKeyDown.release();
         mContent.stopSearch();
         mClock.release();
         mPlayers.release();

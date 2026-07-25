@@ -107,13 +107,17 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
 
     @Override
     protected void initView() {
-        EventBus.getDefault().register(this);
         setRecyclerView();
         setAppBarView();
         setViewModel();
         showProgress();
         initHot();
         getHot();
+    }
+
+    @Override
+    protected boolean useEventBus() {
+        return true;
     }
 
     @Override
@@ -505,7 +509,6 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     public void onDestroyView() {
         super.onDestroyView();
         App.removeCallbacks(mRunnable);
-        EventBus.getDefault().unregister(this);
     }
 
     class PageAdapter extends FragmentStatePagerAdapter {

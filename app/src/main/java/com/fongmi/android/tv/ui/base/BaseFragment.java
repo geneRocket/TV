@@ -10,6 +10,8 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.viewbinding.ViewBinding;
 
+import org.greenrobot.eventbus.EventBus;
+
 public abstract class BaseFragment extends Fragment {
 
     protected abstract ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container);
@@ -26,6 +28,7 @@ public abstract class BaseFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         viewCreated = true;
+        if (useEventBus()) EventBus.getDefault().register(this);
         initView();
         initEvent();
         tryInitData();
@@ -38,6 +41,14 @@ public abstract class BaseFragment extends Fragment {
     }
 
     protected void initData() {
+    }
+
+    public boolean canBack() {
+        return true;
+    }
+
+    protected boolean useEventBus() {
+        return false;
     }
 
     private void tryInitData() {
@@ -55,6 +66,7 @@ public abstract class BaseFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        if (useEventBus()) EventBus.getDefault().unregister(this);
         viewCreated = false;
         initialized = false;
     }

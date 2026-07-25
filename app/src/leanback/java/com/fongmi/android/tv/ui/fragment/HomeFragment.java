@@ -8,7 +8,6 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.leanback.widget.ArrayObjectAdapter;
-import androidx.leanback.widget.DiffCallback;
 import androidx.leanback.widget.ItemBridgeAdapter;
 import androidx.leanback.widget.ListRow;
 import androidx.leanback.widget.OnChildViewHolderSelectedListener;
@@ -43,6 +42,7 @@ import com.fongmi.android.tv.ui.activity.SettingActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.activity.VodActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
+import com.fongmi.android.tv.ui.base.VodDiff;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.presenter.FuncPresenter;
@@ -60,24 +60,6 @@ import java.util.List;
 import java.util.Map;
 
 public class HomeFragment extends BaseFragment implements VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, KeepPresenter.OnClickListener {
-
-    private static final DiffCallback<Vod> VOD_DIFF = new DiffCallback<Vod>() {
-        @Override
-        public boolean areItemsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
-            String oldId = oldItem.getVodId();
-            String newId = newItem.getVodId();
-            if (!oldId.isEmpty() || !newId.isEmpty()) return oldItem.getSiteKey().equals(newItem.getSiteKey()) && oldId.equals(newId);
-            return oldItem.getVodName().equals(newItem.getVodName()) && oldItem.getVodPic().equals(newItem.getVodPic());
-        }
-
-        @Override
-        public boolean areContentsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
-            return oldItem.equals(newItem)
-                    && oldItem.getVodRemarks().equals(newItem.getVodRemarks())
-                    && oldItem.getVodYear().equals(newItem.getVodYear())
-                    && oldItem.getSiteName().equals(newItem.getSiteName());
-        }
-    };
 
     public FragmentHomeBinding mBinding;
 
@@ -193,10 +175,10 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
             int position = index + i;
             if (position < mAdapter.size()) {
                 ArrayObjectAdapter adapter = (ArrayObjectAdapter) ((ListRow) mAdapter.get(position)).getAdapter();
-                adapter.setItems(rows.get(i), VOD_DIFF);
+                adapter.setItems(rows.get(i), VodDiff.ITEM);
             } else {
                 ArrayObjectAdapter adapter = new ArrayObjectAdapter(getPresenter(style));
-                adapter.setItems(rows.get(i), VOD_DIFF);
+                adapter.setItems(rows.get(i), VodDiff.ITEM);
                 mAdapter.add(new ListRow(adapter));
             }
         }
@@ -392,7 +374,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private void clearHistory() {
         mHistoryRequestId++;
         removeHistorySection();
-        HistoryRepository.get().deleteLoaded();
+        App.execute(() -> HistoryRepository.get().deleteLoaded());
         mPresenter.setDelete(false);
         mHistoryAdapter.clear();
     }
@@ -400,7 +382,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private void clearKeep() {
         mKeepRequestId++;
         removeKeepSection();
-        KeepRepository.get().deleteAll();
+        App.execute(() -> KeepRepository.get().deleteAll());
         mKeepPresenter.setDelete(false);
         mKeepAdapter.clear();
     }
@@ -488,7 +470,8 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     @Override
     public void onItemDelete(History item) {
         mHistoryRequestId++;
-        mHistoryAdapter.remove(HistoryRepository.get().delete(item));
+        mHistoryAdapter.remove(item);
+        App.execute(() -> HistoryRepository.get().delete(item));
         if (mHistoryAdapter.size() > 0) return;
         removeHistorySection();
         mPresenter.setDelete(false);
@@ -542,7 +525,8 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     @Override
     public void onItemDelete(Keep item) {
         mKeepRequestId++;
-        mKeepAdapter.remove(KeepRepository.get().delete(item));
+        mKeepAdapter.remove(item);
+        App.execute(() -> KeepRepository.get().delete(item));
         if (mKeepAdapter.size() > 0) return;
         removeKeepSection();
         mKeepPresenter.setDelete(false);

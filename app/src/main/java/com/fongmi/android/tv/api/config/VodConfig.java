@@ -335,7 +335,7 @@ public class VodConfig {
     private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
-        ExecutorService executor = ThreadPools.newFixed("vod-config", Math.min(unique.size(), com.fongmi.android.tv.Constant.THREAD_POOL));
+        ExecutorService executor = ThreadPools.newFixed("vod-config", Math.min(unique.size(), ThreadPools.networkConfigConcurrency()));
         List<Future<ConfigResult>> futures = new ArrayList<>();
         List<ConfigResult> results = new ArrayList<>();
         try {

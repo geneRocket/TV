@@ -151,6 +151,8 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
 
     public void release() {
         App.removeCallbacks(seekRunnable);
+        if (changeSpeed) listener.onSpeedEnd();
+        changeSpeed = false;
         resetTime();
     }
 

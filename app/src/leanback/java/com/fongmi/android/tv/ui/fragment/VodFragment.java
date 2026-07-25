@@ -37,6 +37,7 @@ import com.fongmi.android.tv.ui.activity.VodActivity;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
+import com.fongmi.android.tv.ui.base.VodDiff;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
@@ -341,12 +342,12 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
                 Object item = mAdapter.get(index);
                 if (item instanceof ListRow) {
                     ArrayObjectAdapter adapter = (ArrayObjectAdapter) ((ListRow) item).getAdapter();
-                    if (adapter != null) adapter.setItems(subList, null);
+                    if (adapter != null) adapter.setItems(subList, VodDiff.ITEM);
                     if (i == rowCount - 1) mLast = adapter;
                 }
             } else {
                 mLast = new ArrayObjectAdapter(getPresenter(style));
-                mLast.setItems(subList, null);
+                mLast.setItems(subList, VodDiff.ITEM);
                 mAdapter.add(new ListRow(mLast));
             }
         }

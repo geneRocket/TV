@@ -18,12 +18,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 public final class M3u8AdFilter {
 
     private static final int SUBTITLE_WHITELIST_MAX = 512;
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
+    private static final int MAX_CACHED_PATTERNS = 256;
+    private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
     private static final Set<String> SUBTITLE_PLAYLIST_WHITELIST = Collections.newSetFromMap(new LinkedHashMap<String, Boolean>(SUBTITLE_WHITELIST_MAX, 0.75f, true) {
         @Override
@@ -243,18 +246,21 @@ public final class M3u8AdFilter {
             String host = UrlUtil.host(UrlUtil.uri(baseUrl));
             if (TextUtils.isEmpty(host)) return content;
 
-            List<Rule> rules = new ArrayList<>();
-            rules.addAll(VodConfig.get().getRules());
-            rules.addAll(LiveConfig.get().getRules());
-
-            String filtered = content;
-            for (Rule rule : rules) {
-                if (matchesRuleHost(host, rule.getHosts())) filtered = filterByRegexRules(filtered, rule.getRegex());
-            }
-            return filtered;
+            return filterConfiguredRules(content, host, VodConfig.get().getRules(), LiveConfig.get().getRules());
         } catch (Throwable ignored) {
             return content;
         }
+    }
+
+    private static String filterConfiguredRules(String content, String host, List<Rule> vodRules, List<Rule> liveRules) {
+        String filtered = filterConfiguredRules(content, host, vodRules);
+        return filterConfiguredRules(filtered, host, liveRules);
+    }
+
+    private static String filterConfiguredRules(String content, String host, List<Rule> rules) {
+        String filtered = content;
+        for (Rule rule : rules) if (matchesRuleHost(host, rule.getHosts())) filtered = filterByRegexRules(filtered, rule.getRegex());
+        return filtered;
     }
 
     private static boolean matchesRuleHost(String host, List<String> hosts) {
@@ -264,8 +270,7 @@ public final class M3u8AdFilter {
             String rule = item.toLowerCase(Locale.US).trim();
             if (value.contains(rule)) return true;
             if (!rule.contains("*")) continue;
-            String glob = Pattern.quote(rule).replace("*", "\\E.*\\Q");
-            if (Pattern.compile(glob).matcher(value).find()) return true;
+            if (getPattern("glob:" + rule, Pattern.quote(rule).replace("*", "\\E.*\\Q")).matcher(value).find()) return true;
         }
         return false;
     }
@@ -281,7 +286,7 @@ public final class M3u8AdFilter {
             if (!isM3u8AdRegex(regex)) continue;
 
             try {
-                String candidate = Pattern.compile(regex).matcher(filtered).replaceAll("");
+                String candidate = getPattern("regex:" + regex, regex).matcher(filtered).replaceAll("");
                 int candidateSegments = countSegmentsFromString(candidate);
                 if (candidateSegments <= 0 || candidateSegments >= segmentCount || !startsWithM3uHeader(candidate)) continue;
                 filtered = candidate;
@@ -300,6 +305,15 @@ public final class M3u8AdFilter {
                 || lower.contains(".ts")
                 || lower.contains(".m4s")
                 || lower.contains(".mp4");
+    }
+
+    private static Pattern getPattern(String key, String expression) {
+        Pattern pattern = PATTERN_CACHE.get(key);
+        if (pattern != null) return pattern;
+        if (PATTERN_CACHE.size() >= MAX_CACHED_PATTERNS) PATTERN_CACHE.clear();
+        pattern = Pattern.compile(expression);
+        Pattern previous = PATTERN_CACHE.putIfAbsent(key, pattern);
+        return previous == null ? pattern : previous;
     }
 
     private static boolean startsWithM3uHeader(String content) {

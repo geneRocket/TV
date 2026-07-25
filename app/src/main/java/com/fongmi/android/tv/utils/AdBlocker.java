@@ -53,16 +53,7 @@ public final class AdBlocker {
             "adbreak", "adpod", "scte35", "ssai", "csai", "tracking", "beacon"
     ));
 
-    private static int vodAdsHash;
-    private static int liveAdsHash;
-    private static final Set<String> vodHosts = new HashSet<>();
-    private static final Set<String> liveHosts = new HashSet<>();
-    private static final List<String> vodUrls = new ArrayList<>();
-    private static final List<String> liveUrls = new ArrayList<>();
-    private static List<Pattern> vodHostPatterns = Collections.emptyList();
-    private static List<Pattern> liveHostPatterns = Collections.emptyList();
-    private static List<Pattern> vodUrlPatterns = Collections.emptyList();
-    private static List<Pattern> liveUrlPatterns = Collections.emptyList();
+    private static volatile AdsRules rules = AdsRules.empty();
 
     private static final Pattern PATTERN_TOKEN_SPLIT = Pattern.compile("[^a-z0-9]+");
 
@@ -71,67 +62,53 @@ public final class AdBlocker {
 
     public static boolean isAdUrl(String url) {
         if (TextUtils.isEmpty(url)) return false;
-        ensurePatterns();
+        AdsRules rules = ensureRules();
         String value = url.toLowerCase(Locale.US);
         Uri uri = UrlUtil.uri(value);
         String host = uri.getHost();
-        if (matchesConfiguredHost(host) || matchesConfiguredUrl(value)) return true;
+        if (matchesConfiguredHost(rules, host) || matchesConfiguredUrl(rules, value)) return true;
         if (!Setting.isRemoveAd()) return false;
         return hasDefaultAdHost(host) || hasDefaultAdSignal(uri);
     }
 
     public static boolean isAdHost(String host) {
         if (TextUtils.isEmpty(host)) return false;
-        ensurePatterns();
+        AdsRules rules = ensureRules();
         String value = host.toLowerCase(Locale.US);
-        if (matchesConfiguredHost(value)) return true;
+        if (matchesConfiguredHost(rules, value)) return true;
         return Setting.isRemoveAd() && hasDefaultAdHost(value);
     }
 
-    private static boolean matchesConfiguredHost(String host) {
+    private static boolean matchesConfiguredHost(AdsRules rules, String host) {
         if (TextUtils.isEmpty(host)) return false;
-        if (vodHosts.contains(host) || liveHosts.contains(host)) return true;
+        if (rules.hosts.contains(host)) return true;
         int index = host.lastIndexOf('.');
         if (index > 0) {
             int prev = host.lastIndexOf('.', index - 1);
             if (prev != -1) {
                 String domain = host.substring(prev + 1);
-                if (vodHosts.contains(domain) || liveHosts.contains(domain)) return true;
+                if (rules.hosts.contains(domain)) return true;
             }
         }
-        for (Pattern pattern : vodHostPatterns) if (pattern.matcher(host).find()) return true;
-        for (Pattern pattern : liveHostPatterns) if (pattern.matcher(host).find()) return true;
+        for (Pattern pattern : rules.hostPatterns) if (pattern.matcher(host).find()) return true;
         return false;
     }
 
-    private static boolean matchesConfiguredUrl(String value) {
-        for (String ad : vodUrls) if (value.contains(ad)) return true;
-        for (String ad : liveUrls) if (value.contains(ad)) return true;
-        for (Pattern pattern : vodUrlPatterns) if (pattern.matcher(value).find()) return true;
-        for (Pattern pattern : liveUrlPatterns) if (pattern.matcher(value).find()) return true;
+    private static boolean matchesConfiguredUrl(AdsRules rules, String value) {
+        for (String ad : rules.urls) if (value.contains(ad)) return true;
+        for (Pattern pattern : rules.urlPatterns) if (pattern.matcher(value).find()) return true;
         return false;
     }
 
-    private static synchronized void ensurePatterns() {
+    private static AdsRules ensureRules() {
         List<String> vodAds = VodConfig.get().getAds();
         List<String> liveAds = LiveConfig.get().getAds();
-        int vodHash = vodAds.hashCode();
-        int liveHash = liveAds.hashCode();
-        if (vodHash != vodAdsHash) {
-            vodAdsHash = vodHash;
-            vodHosts.clear();
-            vodUrls.clear();
-            parseRules(vodAds, vodHosts, vodUrls);
-            vodHostPatterns = compilePatterns(vodAds, true);
-            vodUrlPatterns = compilePatterns(vodAds, false);
-        }
-        if (liveHash != liveAdsHash) {
-            liveAdsHash = liveHash;
-            liveHosts.clear();
-            liveUrls.clear();
-            parseRules(liveAds, liveHosts, liveUrls);
-            liveHostPatterns = compilePatterns(liveAds, true);
-            liveUrlPatterns = compilePatterns(liveAds, false);
+        AdsRules current = rules;
+        if (current.matches(vodAds, liveAds)) return current;
+        synchronized (AdBlocker.class) {
+            current = rules;
+            if (!current.matches(vodAds, liveAds)) rules = current = AdsRules.create(vodAds, liveAds);
+            return current;
         }
     }
 
@@ -169,6 +146,45 @@ public final class AdBlocker {
             }
         }
         return patterns;
+    }
+
+    private static final class AdsRules {
+
+        private final List<String> vodAds;
+        private final List<String> liveAds;
+        private final Set<String> hosts;
+        private final List<String> urls;
+        private final List<Pattern> hostPatterns;
+        private final List<Pattern> urlPatterns;
+
+        private AdsRules(List<String> vodAds, List<String> liveAds, Set<String> hosts, List<String> urls, List<Pattern> hostPatterns, List<Pattern> urlPatterns) {
+            this.vodAds = Collections.unmodifiableList(new ArrayList<>(vodAds));
+            this.liveAds = Collections.unmodifiableList(new ArrayList<>(liveAds));
+            this.hosts = hosts;
+            this.urls = urls;
+            this.hostPatterns = hostPatterns;
+            this.urlPatterns = urlPatterns;
+        }
+
+        private boolean matches(List<String> vodAds, List<String> liveAds) {
+            return this.vodAds.equals(vodAds) && this.liveAds.equals(liveAds);
+        }
+
+        private static AdsRules empty() {
+            return new AdsRules(Collections.emptyList(), Collections.emptyList(), Collections.emptySet(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        }
+
+        private static AdsRules create(List<String> vodAds, List<String> liveAds) {
+            Set<String> hosts = new HashSet<>();
+            List<String> urls = new ArrayList<>();
+            parseRules(vodAds, hosts, urls);
+            parseRules(liveAds, hosts, urls);
+            List<Pattern> hostPatterns = new ArrayList<>(compilePatterns(vodAds, true));
+            hostPatterns.addAll(compilePatterns(liveAds, true));
+            List<Pattern> urlPatterns = new ArrayList<>(compilePatterns(vodAds, false));
+            urlPatterns.addAll(compilePatterns(liveAds, false));
+            return new AdsRules(vodAds, liveAds, hosts, urls, hostPatterns, urlPatterns);
+        }
     }
 
     private static boolean isHostRule(String rule) {

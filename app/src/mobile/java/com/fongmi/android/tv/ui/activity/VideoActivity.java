@@ -164,6 +164,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private Set<String> mBroken;
     private History mHistory;
     private Players mPlayers;
+    private float mSpeedBeforeLongPress = Float.NaN;
     private boolean foreground;
     private boolean fullscreen;
     private boolean initTrack;
@@ -904,10 +905,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onMore() {
+        if (mHistory == null) return;
         EpisodeGridDialog.create().reverse(mHistory.isRevSort()).episodes(mEpisodeAdapter.getItems()).show(this);
     }
 
     private void onDownload() {
+        if (mHistory == null) return;
         EpisodeGridDialog.create().reverse(mHistory.isRevSort()).episodes(mEpisodeAdapter.getItems()).download(true).show(this);
     }
 
@@ -920,6 +923,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onReverse() {
+        if (mHistory == null) return;
         mHistory.setRevSort(!mHistory.isRevSort());
         reverseEpisode(false);
     }
@@ -935,6 +939,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onCast() {
+        if (mHistory == null) return;
         CastDialog.create().history(mHistory).video(CastVideo.get(mBinding.name.getText().toString(), mPlayers.getUrl())).fm(true).show(this);
     }
 
@@ -1000,6 +1005,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onSetting() {
+        if (mHistory == null) return;
         mControlDialog = ControlDialog.create().parent(mBinding).history(mHistory).player(mPlayers).parse(isUseParse()).show(this);
     }
 
@@ -1028,6 +1034,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onScale() {
+        if (mHistory == null) return;
         int index = getScale();
         String[] array = ResUtil.getStringArray(R.array.select_scale);
         mHistory.setScale(index = index == array.length - 1 ? 0 : ++index);
@@ -1036,6 +1043,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onSpeed() {
+        if (mHistory == null) return;
         mBinding.control.action.speed.setText(mPlayers.addSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
@@ -1045,6 +1053,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private boolean onSpeedLong() {
+        if (mHistory == null) return false;
         mBinding.control.action.speed.setText(mPlayers.toggleSpeed());
         mHistory.setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
@@ -1097,6 +1106,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onEnding() {
+        if (mHistory == null) return;
         long current = mPlayers.getPosition();
         long duration = mPlayers.getDuration();
         if (current < 0 || current < duration / 2) return;
@@ -1106,6 +1116,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private boolean onEndingReset() {
+        if (mHistory == null) return false;
         mHistory.setEnding(0);
         mBinding.control.action.ending.setText(R.string.play_ed);
         setR1Callback();
@@ -1113,6 +1124,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onOpening() {
+        if (mHistory == null) return;
         long current = mPlayers.getPosition();
         long duration = mPlayers.getDuration();
         if (current < 0 || current > duration / 2) return;
@@ -1122,6 +1134,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private boolean onOpeningReset() {
+        if (mHistory == null) return false;
         mHistory.setOpening(0);
         mBinding.control.action.opening.setText(R.string.play_op);
         setR1Callback();
@@ -1351,6 +1364,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void checkFlag(Vod item) {
+        if (mHistory == null) return;
         boolean empty = mFlagAdapter.isEmpty();
         mBinding.flag.setVisibility(empty ? View.GONE : View.VISIBLE);
         if (empty) {
@@ -1412,6 +1426,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void updateHistory(Episode item, boolean replay) {
+        if (mHistory == null || item == null || getFlag() == null) return;
         replay = replay || !isSameHistoryEpisode(item);
         long position = replay ? 0 : mHistory.getPosition();
         mHistory.setPosition(position);
@@ -1501,6 +1516,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onTimeChanged() {
         onTimeChangeDisplaySpeed();
+        if (mHistory == null) return;
         long position, duration;
         mHistory.setPosition(position = mPlayers.getPosition());
         mHistory.setDuration(duration = mPlayers.getDuration());
@@ -1508,8 +1524,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
-                History snapshot = mHistory.copy();
-                App.execute(snapshot::update);
+                mHistory.saveAsync();
             }
         }
         
@@ -2068,6 +2083,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onScale(int tag) {
+        if (mHistory == null) return;
         mHistory.setScale(tag);
         setScale(tag);
     }
@@ -2080,6 +2096,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onSpeedUp() {
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
+        if (Float.isNaN(mSpeedBeforeLongPress)) mSpeedBeforeLongPress = mPlayers.getSpeed();
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
         setDanmuViewSettings();
         
@@ -2090,8 +2107,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onSpeedEnd() {
-        float speed = mHistory == null ? Setting.getPlaySpeed() : mHistory.getSpeed();
-        mBinding.control.action.speed.setText(mPlayers.setSpeed(speed));
+        if (!Float.isNaN(mSpeedBeforeLongPress)) mBinding.control.action.speed.setText(mPlayers.setSpeed(mSpeedBeforeLongPress));
+        mSpeedBeforeLongPress = Float.NaN;
         setDanmuViewSettings();
         
         
@@ -2252,9 +2269,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     protected void onPause() {
+        mKeyDown.release();
         super.onPause();
         setForeground(false);
         App.removeCallbacks(mR0);
+        saveHistoryNow();
         if (isRedirect()) onPaused();
         else if (Setting.isBackgroundOn() && !isFinishing()) PlaybackService.start(mPlayers);
     }
@@ -2281,6 +2300,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     protected void onDestroy() {
+        saveHistoryNow();
         super.onDestroy();
         stopSearch();
         clearPlaybackTimeout();
@@ -2292,6 +2312,17 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Source.get().stop();
         RefreshEvent.history();
         App.removeCallbacks(mR1, mR2, mR3, mR4, mR5);
+    }
+
+    private void saveHistoryNow() {
+        if (mHistory == null || Setting.isIncognito()) return;
+        long position = mPlayers.getPosition();
+        long duration = mPlayers.getDuration();
+        if (position < 0 || duration <= 0) return;
+        mHistory.setPosition(position);
+        mHistory.setDuration(duration);
+        mLastHistorySaveAt = System.currentTimeMillis();
+        mHistory.saveAsync();
     }
 
 }

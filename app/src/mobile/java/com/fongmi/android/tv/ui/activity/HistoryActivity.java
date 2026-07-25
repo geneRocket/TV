@@ -28,10 +28,13 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import java.util.List;
+
 public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnClickListener {
 
     private ActivityHistoryBinding mBinding;
     private HistoryAdapter mAdapter;
+    private int mHistoryRequestId;
     private int mOpenRequestId;
 
     public static void start(Activity activity) {
@@ -64,8 +67,15 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     }
 
     private void getHistory() {
-        mAdapter.addAll(HistoryRepository.get().loaded());
-        mBinding.delete.setVisibility(mAdapter.getItemCount() > 0 ? View.VISIBLE : View.GONE);
+        int requestId = ++mHistoryRequestId;
+        App.execute(() -> {
+            List<History> items = HistoryRepository.get().loaded();
+            App.post(() -> {
+                if (isFinishing() || isDestroyed() || requestId != mHistoryRequestId) return;
+                mAdapter.addAll(items);
+                mBinding.delete.setVisibility(mAdapter.getItemCount() > 0 ? View.VISIBLE : View.GONE);
+            });
+        });
     }
 
     private void onSync(View view) {
@@ -74,7 +84,11 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     private void onDelete(View view) {
         if (mAdapter.isDelete()) {
-            new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_history).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> mAdapter.clear()).show();
+            new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_history).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+                mHistoryRequestId++;
+                mAdapter.clear();
+                App.execute(() -> HistoryRepository.get().deleteLoaded());
+            }).show();
         } else if (mAdapter.getItemCount() > 0) {
             mAdapter.setDelete(true);
         } else {
@@ -125,7 +139,8 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemDelete(History item) {
-        mAdapter.remove(HistoryRepository.get().delete(item));
+        mAdapter.remove(item);
+        App.execute(() -> HistoryRepository.get().delete(item));
         if (mAdapter.getItemCount() > 0) return;
         mBinding.delete.setVisibility(View.GONE);
         mAdapter.setDelete(false);

@@ -27,8 +27,10 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
         void onItemClick(Result result);
     }
 
-    public void setNextFocusDown(int nextFocusDown) {
+    public boolean setNextFocusDown(int nextFocusDown) {
+        if (this.nextFocusDown == nextFocusDown) return false;
         this.nextFocusDown = nextFocusDown;
+        return true;
     }
 
     public int getPosition() {

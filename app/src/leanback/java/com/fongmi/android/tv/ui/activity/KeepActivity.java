@@ -95,10 +95,12 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
             new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_keep).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                 mKeepRequestId++;
                 mOpenRequestId++;
-                KeepRepository.get().deleteAll();
                 mAdapter.clear();
                 updateEmptyView();
-                RefreshEvent.keep();
+                App.execute(() -> {
+                    KeepRepository.get().deleteAll();
+                    RefreshEvent.keep();
+                });
             }).show();
         } else if (mAdapter.getItemCount() > 0) {
             mAdapter.setDelete(true);
@@ -126,7 +128,8 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     public void onItemDelete(Keep item) {
         mKeepRequestId++;
         mOpenRequestId++;
-        int index = mAdapter.delete(KeepRepository.get().delete(item));
+        int index = mAdapter.delete(item);
+        App.execute(() -> KeepRepository.get().delete(item));
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
         updateEmptyView();
         if (index != -1 && mAdapter.getItemCount() > 0) {

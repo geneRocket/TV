@@ -42,29 +42,33 @@ public class ChannelPresenter extends Presenter {
         holder.binding.name.setText(item.getName());
         holder.binding.number.setText(item.getNumber());
         holder.binding.getRoot().setSelected(item.isSelected());
-        setOnClickListener(holder, view -> mListener.onItemClick(item));
-        holder.view.setOnLongClickListener(view -> mListener.onLongClick(item));
-        holder.binding.getRoot().setRightListener(() -> mListener.showEpg(item));
+        holder.item = item;
         holder.binding.epg.setVisibility(item.getData().getList().isEmpty() || !item.isSelected() ? View.GONE : View.VISIBLE);
     }
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
         ViewHolder holder = (ViewHolder) viewHolder;
-        holder.view.setOnClickListener(null);
-        holder.view.setOnLongClickListener(null);
-        holder.binding.getRoot().setRightListener(null);
+        holder.item = null;
         ImgUtil.clear(holder.binding.logo, ImageView.ScaleType.FIT_CENTER);
         holder.binding.epg.setVisibility(View.GONE);
     }
 
-    public static class ViewHolder extends Presenter.ViewHolder {
+    public class ViewHolder extends Presenter.ViewHolder {
 
         private final AdapterChannelBinding binding;
+        private Channel item;
 
         public ViewHolder(@NonNull AdapterChannelBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            this.binding.getRoot().setOnClickListener(view -> {
+                if (item != null) mListener.onItemClick(item);
+            });
+            this.binding.getRoot().setOnLongClickListener(view -> item != null && mListener.onLongClick(item));
+            this.binding.getRoot().setRightListener(() -> {
+                if (item != null) mListener.showEpg(item);
+            });
         }
     }
 }

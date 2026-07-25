@@ -16,6 +16,7 @@ import com.android.cast.dlna.dmc.DLNACastManager;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.activity.CrashActivity;
+import com.fongmi.android.tv.utils.ActivityManager;
 import com.fongmi.android.tv.utils.LanguageUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ThreadPools;
@@ -37,7 +38,6 @@ public class App extends Application {
     private final ExecutorService executor;
     private final Handler handler;
     private static volatile App instance;
-    private volatile Activity activity;
     private final Gson gson;
     private volatile boolean hook;
 
@@ -57,7 +57,7 @@ public class App extends Application {
     }
 
     public static Activity activity() {
-        return get().activity;
+        return ActivityManager.get().getActivity();
     }
 
     public static void execute(Runnable runnable) {
@@ -92,10 +92,6 @@ public class App extends Application {
         this.hook = hook;
     }
 
-    private void setActivity(Activity activity) {
-        this.activity = activity;
-    }
-
     private LogAdapter getLogAdapter() {
         return new AndroidLogAdapter(PrettyFormatStrategy.newBuilder().methodCount(0).showThreadInfo(false).tag("").build()) {
             @Override
@@ -125,46 +121,11 @@ public class App extends Application {
         });
         Notify.createChannel();
         LanguageUtil.init(this);
+        ActivityManager.get().init(this);
         Logger.addLogAdapter(getLogAdapter());
         OkHttp.get().setProxy(Setting.getProxy());
         OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
         CaocConfig.Builder.create().backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT).errorActivity(CrashActivity.class).apply();
-        registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
-            @Override
-            public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
-                if (activity != activity()) setActivity(activity);
-            }
-
-            @Override
-            public void onActivityStarted(@NonNull Activity activity) {
-                if (activity != activity()) setActivity(activity);
-            }
-
-            @Override
-            public void onActivityResumed(@NonNull Activity activity) {
-                if (activity != activity()) setActivity(activity);
-            }
-
-            @Override
-            public void onActivityPaused(@NonNull Activity activity) {
-                if (activity == activity()) setActivity(null);
-            }
-
-            @Override
-            public void onActivityStopped(@NonNull Activity activity) {
-                if (activity == activity()) setActivity(null);
-            }
-
-            @Override
-            public void onActivityDestroyed(@NonNull Activity activity) {
-                if (activity == activity()) setActivity(null);
-            }
-
-            @Override
-            public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle outState) {
-            }
-        });
-
     }
 
     @Override

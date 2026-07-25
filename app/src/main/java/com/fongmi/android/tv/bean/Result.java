@@ -443,6 +443,10 @@ public class Result implements Parcelable {
         return App.gson().toJson(this);
     }
 
+    public boolean isEmpty() {
+        return (list == null || list.isEmpty()) && (types == null || types.isEmpty());
+    }
+
     @Override
     public int describeContents() {
         return 0;

@@ -24,6 +24,7 @@ import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.activity.VodActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
+import com.fongmi.android.tv.ui.base.VodDiff;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
@@ -162,11 +163,11 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
             List<Vod> subList = new ArrayList<>(items.subList(start, end));
             if (i < mAdapter.size()) {
                 ArrayObjectAdapter adapter = (ArrayObjectAdapter) ((ListRow) mAdapter.get(i)).getAdapter();
-                if (adapter != null) adapter.setItems(subList, null);
+                if (adapter != null) adapter.setItems(subList, VodDiff.ITEM);
                 if (i == rowCount - 1) mLast = adapter;
             } else {
                 mLast = new ArrayObjectAdapter(new VodPresenter(this));
-                mLast.setItems(subList, null);
+                mLast.setItems(subList, VodDiff.ITEM);
                 mAdapter.add(new ListRow(mLast));
             }
         }

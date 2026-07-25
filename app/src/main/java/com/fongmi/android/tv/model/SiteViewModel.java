@@ -1,84 +1,53 @@
 package com.fongmi.android.tv.model;
 
-import android.net.Uri;
 import android.text.TextUtils;
 
-import androidx.collection.ArrayMap;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.ViewModel;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
-import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Danmu;
 import com.fongmi.android.tv.bean.Episode;
-import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
-import com.fongmi.android.tv.bean.Url;
-import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
-import com.fongmi.android.tv.utils.ResUtil;
-import com.fongmi.android.tv.utils.KeyedLatestTask;
-import com.fongmi.android.tv.utils.TaskScheduler;
-import com.fongmi.android.tv.utils.Sniffer;
-import com.fongmi.android.tv.utils.ThreadPools;
-import com.fongmi.android.tv.utils.UrlUtil;
-import com.github.catvod.crawler.Spider;
-import com.github.catvod.crawler.SpiderDebug;
-import com.github.catvod.net.OkHttp;
+import com.fongmi.android.tv.repository.SpiderRepository;
 import com.github.catvod.utils.Trans;
-import com.github.catvod.utils.Util;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import okhttp3.Call;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 
-public class SiteViewModel extends ViewModel {
+public class SiteViewModel extends BaseSiteViewModel {
 
     private final MutableLiveData<Episode> ep;
     private final MutableLiveData<Episode> episode;
-    private final MutableLiveData<Result> result;
     private final MutableLiveData<Result> player;
     private final MutableLiveData<Result> search;
     private final MutableLiveData<Result> action;
     private final MutableLiveData<Danmu> danmaku;
     private final MutableLiveData<Result> download;
-    private final KeyedLatestTask<Result> requests;
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<Call>> activeSearchCalls = new ConcurrentHashMap<>();
 
-    private static final String REQUEST_RESULT = "result";
     private static final String REQUEST_PLAYER = "player";
     private static final String REQUEST_DOWNLOAD = "download";
     private static final String REQUEST_ACTION = "action";
 
     public SiteViewModel() {
+        super();
         this.ep = new MutableLiveData<>();
         this.episode = new MutableLiveData<>();
-        this.result = new MutableLiveData<>();
         this.player = new MutableLiveData<>();
         this.search = new MutableLiveData<>();
         this.action = new MutableLiveData<>();
         this.danmaku = new MutableLiveData<>();
         this.download = new MutableLiveData<>();
-        TaskScheduler scheduler = new TaskScheduler() {
-            @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
-            @Override public void remove(Runnable task) { App.removeCallbacks(task); }
-        };
-        this.requests = new KeyedLatestTask<>(ThreadPools.newFixed("site-vm", Math.max(2, Constant.THREAD_POOL / 2)), scheduler, error -> ThreadPools.log(error, "Site request failed."));
     }
 
     public void setEpisode(Episode value) {
@@ -88,8 +57,6 @@ public class SiteViewModel extends ViewModel {
     public LiveData<Episode> ep() { return ep; }
 
     public LiveData<Episode> episode() { return episode; }
-
-    public LiveData<Result> result() { return result; }
 
     public LiveData<Result> player() { return player; }
 
@@ -106,184 +73,36 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void homeContent() {
-        execute(result, () -> loadHomeResult(VodConfig.get().getHome().getKey()));
+        homeContent("");
+    }
+
+    public void homeContent(String key) {
+        homeContent(key, "");
     }
 
     public void homeContent(String key, String token) {
-        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> loadHomeResult(key), data -> result.postValue(withHomeRequest(data, key, token)), this::homeFallback);
-    }
-
-    private Result loadHomeResult(String key) throws Exception {
-        Site site = TextUtils.isEmpty(key) ? VodConfig.get().getHome() : VodConfig.get().getSite(key);
-        if (site.isEmpty()) return Result.empty();
-        if (site.getType() == 3) {
-            Spider spider = site.recent().spider();
-            String homeContent = spider.homeContent(true);
-            SpiderDebug.log(homeContent);
-            Result result = Result.fromJson(homeContent);
-            if (result.getList().size() > 0) return result;
-            String homeVideoContent = spider.homeVideoContent();
-            SpiderDebug.log(homeVideoContent);
-            result.setList(Result.fromJson(homeVideoContent).getList());
-            return result;
-        } else if (site.getType() == 4) {
-            ArrayMap<String, String> params = new ArrayMap<>();
-            params.put("filter", "true");
-            String homeContent = call(site, params, false);
-            SpiderDebug.log(homeContent);
-            return Result.fromJson(homeContent);
-        } else {
-            String homeContent = call(OkHttp.newCall(site.getApi(), site.getHeaders()));
-            SpiderDebug.log(homeContent);
-            return fetchPic(site, Result.fromType(site.getType(), homeContent));
-        }
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().homeContent(key), data -> result.postValue(withHomeRequest(data, key, token)), this::homeFallback);
     }
 
     public void categoryContent(String key, String tid, String page, boolean filter, HashMap<String, String> extend) {
         HashMap<String, String> extendSnapshot = extend == null ? new HashMap<>() : new HashMap<>(extend);
-        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> {
-            Site site = VodConfig.get().getSite(key);
-            if (site.isEmpty()) return Result.empty();
-            if (site.getType() == 3) {
-                Spider spider = site.recent().spider();
-                String categoryContent = spider.categoryContent(tid, page, filter, extendSnapshot);
-                SpiderDebug.log(categoryContent);
-                return Result.fromJson(categoryContent);
-            } else {
-                ArrayMap<String, String> params = new ArrayMap<>();
-                if (site.getType() == 1 && !extendSnapshot.isEmpty()) params.put("f", App.gson().toJson(extendSnapshot));
-                if (site.getType() == 4) params.put("ext", Util.base64(App.gson().toJson(extendSnapshot), Util.URL_SAFE));
-                params.put("ac", site.getType() == 0 ? "videolist" : "detail");
-                params.put("t", tid);
-                params.put("pg", page);
-                String categoryContent = call(site, params, true);
-                SpiderDebug.log(categoryContent);
-                return Result.fromType(site.getType(), categoryContent);
-            }
-        }, data -> result.postValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::categoryFallback);
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().categoryContent(key, tid, page, filter, extendSnapshot), data -> result.postValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::categoryFallback);
     }
 
     public void cancelCategoryContent() {
-        cancelRequest(REQUEST_RESULT);
-    }
-
-    private Result withCategoryRequest(Result result, String key, String tid, String page, HashMap<String, String> extend) {
-        Result value = result == null ? Result.empty() : result;
-        value.setKey(key);
-        value.setRequestTypeId(tid);
-        value.setRequestPage(page);
-        value.setRequestExtend(getRequestExtend(extend));
-        return value;
+        requests.cancel(REQUEST_RESULT, null);
     }
 
     public void detailContent(String key, String id) {
         detailContent(key, id, "");
     }
 
-    public void detailContent(String key, String id, String token) {
-        requestDetailContent(key, id, token);
-    }
-
     public void detailContentFast(String key, String id, String token) {
-        requestDetailContent(key, id, token);
+        detailContent(key, id, token);
     }
 
-    private void requestDetailContent(String key, String id, String token) {
-        executeRequest(result, () -> loadDetailResult(key, id), key, id, null, token);
-    }
-
-    private Result loadDetailResult(String key, String id) throws Exception {
-        Site site = VodConfig.get().getSite(key);
-        if (site.getType() == 3) {
-            Spider spider = site.recent().spider();
-            String detailContent = spider.detailContent(Arrays.asList(id));
-            SpiderDebug.log(detailContent);
-            return prepareDetailResult(Result.fromJson(detailContent));
-        } else if (site.isEmpty() && "push_agent".equals(key)) {
-            Vod vod = new Vod();
-            vod.setVodId(id);
-            vod.setVodName(id);
-            vod.setVodPic(ResUtil.getString(R.string.push_image));
-            vod.setVodFlags(Flag.create(ResUtil.getString(R.string.push), ResUtil.getString(R.string.play), id));
-            return prepareDetailResult(Result.vod(vod));
-        } else if (site.isEmpty()) {
-            return Result.empty();
-        } else {
-            ArrayMap<String, String> params = new ArrayMap<>();
-            params.put("ac", site.getType() == 0 ? "videolist" : "detail");
-            params.put("ids", id);
-            String detailContent = call(site, params, true);
-            SpiderDebug.log(detailContent);
-            return prepareDetailResult(Result.fromType(site.getType(), detailContent));
-        }
-    }
-
-    private Result prepareDetailResult(Result result) {
-        if (result.getList().isEmpty()) return result;
-        Vod vod = result.getList().get(0);
-        vod.setVodFlags();
-        return result;
-    }
-
-    private void executePlayer(MutableLiveData<Result> data, String key, String flag, String id) {
-        executePlayer(data, key, flag, id, "");
-    }
-
-    private void executePlayer(MutableLiveData<Result> data, String key, String flag, String id, String token) {
-        executeRequest(data, () -> {
-            Site site = VodConfig.get().getSite(key);
-            if (site.getType() == 3) {
-                Spider spider = site.recent().spider();
-                String playerContent = spider.playerContent(flag, id, VodConfig.get().getFlags());
-                SpiderDebug.log(playerContent);
-                Result result = Result.fromJson(playerContent);
-                if (result.getFlag().isEmpty()) result.setFlag(flag);
-                result.setHeader(site.getHeader());
-                result.getUrl().normalize(site.getApi());
-                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
-                result.setKey(key);
-                return result;
-            } else if (site.getType() == 4) {
-                ArrayMap<String, String> params = new ArrayMap<>();
-                params.put("play", id);
-                params.put("flag", flag);
-                String playerContent = call(site, params, true);
-                SpiderDebug.log(playerContent);
-                Result result = Result.fromJson(playerContent);
-                if (result.getFlag().isEmpty()) result.setFlag(flag);
-                result.setHeader(site.getHeader());
-                result.getUrl().normalize(site.getApi());
-                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
-                result.setKey(key);
-                return result;
-            } else if (site.isEmpty() && "push_agent".equals(key)) {
-                Result result = new Result();
-                result.setParse(0);
-                result.setFlag(flag);
-                result.setUrl(Url.create().add(UrlUtil.normalize(id, "")));
-                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), ""));
-                return result;
-            } else if (site.isEmpty()) {
-                return emptyRequestResult();
-            } else {
-                Result result = new Result();
-                Url url = Url.create().add(UrlUtil.normalize(id, site.getApi()));
-                String type = Uri.parse(id).getQueryParameter("type");
-                if ("json".equals(type)) {
-                    result = Result.fromJson(call(OkHttp.newCall(id, site.getHeaders())));
-                    url = result.getUrl().normalize(site.getApi());
-                }
-                result.setUrl(url);
-                if (result.getFlag().isEmpty()) result.setFlag(flag);
-                result.setHeader(site.getHeader());
-                if (result.getPlayUrl().isEmpty()) result.setPlayUrl(site.getPlayUrl());
-                result.setKey(key);
-                result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
-                if (!"json".equals(type)) result.setParse(Sniffer.isVideoFormat(url.v()) && result.getPlayUrl().isEmpty() ? 0 : 1);
-                SpiderDebug.log(result.toString());
-                return result;
-            }
-        }, key, id, flag, token);
+    public void detailContent(String key, String id, String token) {
+        executeRequest(result, () -> SpiderRepository.get().detailContent(key, id), key, id, null, token);
     }
 
     public void playerContent(String key, String flag, String id) {
@@ -291,166 +110,60 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void playerContent(String key, String flag, String id, String token) {
-        executePlayer(player, key, flag, id, token);
+        executeRequest(player, () -> SpiderRepository.get().playerContent(key, flag, id), key, id, flag, token);
     }
 
     public void download(String key, String flag, String id) {
-        executePlayer(download, key, flag, id);
+        executeRequest(download, () -> SpiderRepository.get().playerContent(key, flag, id), key, id, flag, "");
     }
 
     public void action(String key, String action) {
-        executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> {
-            Site site = VodConfig.get().getSite(key);
-            if (site.isEmpty()) return Result.empty();
-            if (site.getType() == 3) return Result.fromJson(site.recent().spider().action(action));
-            if (site.getType() == 4) return Result.fromJson(OkHttp.string(action));
-            return Result.empty();
-        }, this.action::postValue, this::requestFallback);
+        executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> SpiderRepository.get().action(key, action), this.action::postValue, this::requestFallback);
     }
 
     public void searchContent(Site site, String keyword, boolean quick) throws Throwable {
         searchContent(site, keyword, quick, "");
     }
 
+    public void searchContent(Site site, String keyword, String page) {
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().searchContent(site, Trans.t2s(keyword), false, page), data -> {
+            Result res = java.util.Objects.requireNonNullElseGet(data, Result::empty);
+            res.setKey(site.getKey());
+            res.setKeyword(keyword);
+            this.result.postValue(res);
+        }, this::requestFallback);
+    }
+
     public void searchContent(Site site, String keyword, boolean quick, String token) throws Throwable {
         String original = keyword == null ? "" : keyword.trim();
         String query = Trans.t2s(original);
         throwIfInterrupted();
-        if (site.getType() == 3) {
-            String searchContent = site.recent().spider().searchContent(query, quick);
-            throwIfInterrupted();
-            SpiderDebug.log(site.getName() + "," + searchContent);
-            post(site, Result.fromJson(searchContent), original, token);
-        } else {
-            ArrayMap<String, String> params = new ArrayMap<>();
-            params.put("wd", query);
-            params.put("quick", String.valueOf(quick));
-            String searchContent = call(site, params, true, token);
-            throwIfInterrupted();
-            SpiderDebug.log(site.getName() + "," + searchContent);
-            Result result = Result.fromType(site.getType(), searchContent);
-            throwIfInterrupted();
-            post(site, quick ? result : fetchPic(site, result, token), original, token);
-        }
+        Result result = SpiderRepository.get().searchContent(site, query, quick, "1", call -> trackSearchCall(token, call));
+        throwIfInterrupted();
+        post(site, result, original, token);
     }
 
-    public void cancelSearch(String token) {
-        if (TextUtils.isEmpty(token)) return;
-        CopyOnWriteArrayList<Call> calls = activeSearchCalls.remove(token);
-        if (calls == null) return;
-        for (Call call : calls) call.cancel();
-        calls.clear();
-    }
-
-    public void searchContent(Site site, String keyword, String page) {
-        execute(result, () -> {
-            if (site.getType() == 3) {
-                String searchContent = site.recent().spider().searchContent(Trans.t2s(keyword), false, page);
-                SpiderDebug.log(site.getName() + "," + searchContent);
-                Result result = Result.fromJson(searchContent);
-                for (Vod vod : result.getList()) vod.setSite(site);
-                result.setKey(site.getKey());
-                result.setKeyword(keyword);
-                return result;
-            } else {
-                ArrayMap<String, String> params = new ArrayMap<>();
-                params.put("wd", Trans.t2s(keyword));
-                params.put("pg", page);
-                String searchContent = call(site, params, true);
-                SpiderDebug.log(site.getName() + "," + searchContent);
-                Result result = fetchPic(site, Result.fromType(site.getType(), searchContent));
-                for (Vod vod : result.getList()) vod.setSite(site);
-                result.setKey(site.getKey());
-                result.setKeyword(keyword);
-                return result;
-            }
-        });
-    }
-
-    private String call(Site site, ArrayMap<String, String> params, boolean limit) throws IOException {
-        return call(site, params, limit, "");
-    }
-
-    private String call(Site site, ArrayMap<String, String> params, boolean limit, String token) throws IOException {
-        Call call = fetchExt(site, params, limit, token).length() <= 1000 ? OkHttp.newCall(site.getApi(), site.getHeaders(), params) : OkHttp.newCall(site.getApi(), site.getHeaders(), OkHttp.toBody(params));
-        return call(call, token);
-    }
-
-    private String call(Call call) throws IOException {
-        return call(call, "");
-    }
-
-    private String call(Call call, String token) throws IOException {
-        addSearchCall(token, call);
-        try (Response res = call.execute()) {
-            return body(res);
-        } finally {
-            removeSearchCall(token, call);
-        }
-    }
-
-    private String body(Response response) throws IOException {
-        if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
-        ResponseBody body = response.body();
-        return body == null ? "" : body.string();
-    }
-
-    private String fetchExt(Site site, ArrayMap<String, String> params, boolean limit) throws IOException {
-        return fetchExt(site, params, limit, "");
-    }
-
-    private String fetchExt(Site site, ArrayMap<String, String> params, boolean limit, String token) throws IOException {
-        String extend = site.getExt();
-        if (extend.startsWith("http")) extend = fetchExt(site, token);
-        if (!extend.isEmpty()) params.put("extend", extend);
-        return extend;
-    }
-
-    private String fetchExt(Site site) throws IOException {
-        return fetchExt(site, "");
-    }
-
-    private String fetchExt(Site site, String token) throws IOException {
-        Call call = OkHttp.newCall(site.getExt(), site.getHeaders());
-        addSearchCall(token, call);
-        try (Response res = call.execute()) {
-            if (!res.isSuccessful()) return "";
-            site.setExt(body(res));
-            return site.getExt();
-        } finally {
-            removeSearchCall(token, call);
-        }
-    }
-
-    private Result fetchPic(Site site, Result result) throws Exception {
-        return fetchPic(site, result, "");
-    }
-
-    private Result fetchPic(Site site, Result result, String token) throws Exception {
-        if (site.getType() > 2 || result.getList().isEmpty() || result.getList().get(0).getVodPic().length() > 0) return result;
-        ArrayList<String> ids = new ArrayList<>();
-        if (site.getCategories().isEmpty()) for (Vod item : result.getList()) ids.add(item.getVodId());
-        else for (Vod item : result.getList()) if (site.getCategories().contains(item.getTypeName())) ids.add(item.getVodId());
-        if (ids.isEmpty()) return result.clear();
-        ArrayMap<String, String> params = new ArrayMap<>();
-        params.put("ac", site.getType() == 0 ? "videolist" : "detail");
-        params.put("ids", TextUtils.join(",", ids));
-        String response = call(OkHttp.newCall(site.getApi(), site.getHeaders(), params), token);
-        result.setList(Result.fromType(site.getType(), response).getList());
-        return result;
-    }
-
-    private void addSearchCall(String token, Call call) {
+    private void trackSearchCall(String token, Call call) {
         if (TextUtils.isEmpty(token) || call == null) return;
+        if (call.isExecuted()) {
+            removeSearchCall(token, call);
+            return;
+        }
         activeSearchCalls.computeIfAbsent(token, key -> new CopyOnWriteArrayList<>()).add(call);
     }
 
     private void removeSearchCall(String token, Call call) {
-        if (TextUtils.isEmpty(token) || call == null) return;
         CopyOnWriteArrayList<Call> calls = activeSearchCalls.get(token);
         if (calls == null) return;
         calls.remove(call);
         if (calls.isEmpty()) activeSearchCalls.remove(token, calls);
+    }
+
+    public void cancelSearch(String token) {
+        if (token == null) return;
+        CopyOnWriteArrayList<Call> calls = activeSearchCalls.remove(token);
+        if (calls == null) return;
+        for (Call call : calls) call.cancel();
     }
 
     private void post(Site site, Result result, String keyword, String token) {
@@ -458,12 +171,7 @@ public class SiteViewModel extends ViewModel {
         result.setKey(site.getKey());
         result.setKeyword(keyword);
         result.setRequestToken(token);
-        for (Vod vod : result.getList()) vod.setSite(site);
         App.post(() -> this.search.setValue(result));
-    }
-
-    private void execute(MutableLiveData<Result> result, Callable<Result> callable) {
-        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, callable, result::postValue, this::requestFallback);
     }
 
     private void executeRequest(MutableLiveData<Result> result, Callable<Result> callable, String key, String id, String flag, String token) {
@@ -472,18 +180,14 @@ public class SiteViewModel extends ViewModel {
         executeAsync(requestKey, timeout, callable, data -> result.postValue(withRequest(data, key, id, flag, token)), this::requestRequestFallback);
     }
 
-    private void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, java.util.function.Consumer<Result> poster, java.util.function.Function<Throwable, Result> fallback) {
+    @Override
+    protected void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, java.util.function.Consumer<Result> poster, java.util.function.Function<Throwable, Result> fallback) {
         Runnable stopPlayback = isPlaybackRequest(requestKey) ? Source.get()::stop : null;
         requests.submit(requestKey, callable, timeoutMs, poster, fallback, stopPlayback, stopPlayback);
     }
 
     private boolean isPlaybackRequest(String requestKey) {
         return REQUEST_PLAYER.equals(requestKey) || REQUEST_DOWNLOAD.equals(requestKey);
-    }
-
-    private void cancelRequest(String requestKey) {
-        if (TextUtils.isEmpty(requestKey)) return;
-        requests.cancel(requestKey, isPlaybackRequest(requestKey) ? Source.get()::stop : null);
     }
 
     private Result requestFallback(Throwable error) {
@@ -522,6 +226,15 @@ public class SiteViewModel extends ViewModel {
         return value;
     }
 
+    private Result withCategoryRequest(Result result, String key, String tid, String page, HashMap<String, String> extend) {
+        Result value = result == null ? Result.empty() : result;
+        value.setKey(key);
+        value.setRequestTypeId(tid);
+        value.setRequestPage(page);
+        value.setRequestExtend(getRequestExtend(extend));
+        return value;
+    }
+
     private String getRequestExtend(HashMap<String, String> extend) {
         if (extend == null || extend.isEmpty()) return "";
         return App.gson().toJson(new TreeMap<>(extend));
@@ -539,9 +252,8 @@ public class SiteViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
-        super.onCleared();
-        requests.close();
         for (String token : activeSearchCalls.keySet()) cancelSearch(token);
         activeSearchCalls.clear();
+        super.onCleared();
     }
 }

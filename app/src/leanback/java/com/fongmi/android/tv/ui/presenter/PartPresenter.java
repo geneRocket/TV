@@ -22,8 +22,10 @@ public class PartPresenter extends Presenter {
         void onItemClick(String item);
     }
 
-    public void setNextFocusUp(int nextFocusUp) {
+    public boolean setNextFocusUp(int nextFocusUp) {
+        if (this.nextFocusUp == nextFocusUp) return false;
         this.nextFocusUp = nextFocusUp;
+        return true;
     }
 
     @Override

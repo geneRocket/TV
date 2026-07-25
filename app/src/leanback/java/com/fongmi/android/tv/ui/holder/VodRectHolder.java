@@ -17,6 +17,14 @@ public class VodRectHolder extends BaseVodHolder {
         super(binding.getRoot());
         this.binding = binding;
         this.listener = listener;
+        binding.getRoot().setOnClickListener(v -> {
+            Vod item = getItem();
+            if (item != null) listener.onItemClick(item);
+        });
+        binding.getRoot().setOnLongClickListener(v -> {
+            Vod item = getItem();
+            return item != null && listener.onLongClick(item);
+        });
     }
 
     public VodRectHolder size(int[] size) {
@@ -27,6 +35,7 @@ public class VodRectHolder extends BaseVodHolder {
 
     @Override
     public void initView(Vod item) {
+        setItem(item);
         binding.name.setText(item.getVodName());
         binding.year.setText(item.getVodYear());
         binding.site.setText(item.getSiteName());
@@ -35,15 +44,12 @@ public class VodRectHolder extends BaseVodHolder {
         binding.year.setVisibility(item.getYearVisible());
         binding.name.setVisibility(item.getNameVisible());
         binding.remark.setVisibility(item.getRemarkVisible());
-        binding.getRoot().setOnClickListener(v -> listener.onItemClick(item));
-        binding.getRoot().setOnLongClickListener(v -> listener.onLongClick(item));
         ImgUtil.rect(item.getVodName(), item.getVodPic(), item.getSite(), binding.image);
     }
 
     @Override
     public void onUnbind() {
-        binding.getRoot().setOnClickListener(null);
-        binding.getRoot().setOnLongClickListener(null);
+        super.onUnbind();
         ImgUtil.clear(binding.image);
     }
 }

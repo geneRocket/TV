@@ -602,10 +602,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         boolean controlVisible = isVisible(mBinding.control.getRoot());
         boolean visible = !controlVisible && !hasDialog;
         boolean showNetSpeed = Setting.isDisplaySpeed() && visible && !isVisible(mBinding.widget.progress);
-        mBinding.display.clock.setVisibility(Setting.isDisplayTime() && visible ? View.VISIBLE : View.GONE);
-        mBinding.display.netspeed.setVisibility(showNetSpeed ? View.VISIBLE : View.GONE);
-        mBinding.display.duration.setVisibility(View.GONE);
-        mBinding.display.titleLayout.setVisibility(Setting.isDisplayVideoTitle() && visible ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.display.clock, Setting.isDisplayTime() && visible ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.display.netspeed, showNetSpeed ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.display.duration, View.GONE);
+        setVisibilityIfChanged(mBinding.display.titleLayout, Setting.isDisplayVideoTitle() && visible ? View.VISIBLE : View.GONE);
     }
 
     private boolean hasDialog() {

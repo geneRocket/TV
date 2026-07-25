@@ -25,6 +25,10 @@ import okhttp3.Response;
 
 public class OkHttp {
 
+    private static final int MAX_REQUESTS = 64;
+    private static final int MAX_REQUESTS_PER_HOST = 16;
+    private static final int MAX_IDLE_CONNECTIONS = 64;
+
     private static final int TIMEOUT = 30 * 1000;
     private static final int CACHE = 100 * 1024 * 1024;
 
@@ -182,8 +186,8 @@ public class OkHttp {
 
     private static OkHttpClient.Builder getBuilder() {
         okhttp3.Dispatcher dispatcher = new okhttp3.Dispatcher();
-        dispatcher.setMaxRequests(1024);
-        dispatcher.setMaxRequestsPerHost(512);
+        dispatcher.setMaxRequests(MAX_REQUESTS);
+        dispatcher.setMaxRequestsPerHost(MAX_REQUESTS_PER_HOST);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .addInterceptor(requestInterceptor())
                 .addInterceptor(authInterceptor())
@@ -192,7 +196,7 @@ public class OkHttp {
                 .connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .readTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
-                .connectionPool(new ConnectionPool(1024, 5, TimeUnit.MINUTES))
+                .connectionPool(new ConnectionPool(MAX_IDLE_CONNECTIONS, 5, TimeUnit.MINUTES))
                 .dispatcher(dispatcher)
                 .dns(dns())
                 .hostnameVerifier((hostname, session) -> true)

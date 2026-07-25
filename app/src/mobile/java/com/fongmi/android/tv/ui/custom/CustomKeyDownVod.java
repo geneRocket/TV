@@ -43,15 +43,24 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     }
 
     public boolean onTouchEvent(MotionEvent e) {
-        if (changeTime && e.getAction() == MotionEvent.ACTION_UP) onSeekEnd();
-        if (changeSpeed && e.getAction() == MotionEvent.ACTION_UP) listener.onSpeedEnd();
-        if (changeBright && e.getAction() == MotionEvent.ACTION_UP) listener.onBrightEnd();
-        if (changeVolume && e.getAction() == MotionEvent.ACTION_UP) listener.onVolumeEnd();
+        boolean finished = e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL;
+        if (changeTime && finished) onSeekEnd();
+        if (changeSpeed && finished) {
+            listener.onSpeedEnd();
+            changeSpeed = false;
+        }
+        if (changeBright && finished) listener.onBrightEnd();
+        if (changeVolume && finished) listener.onVolumeEnd();
         return detector.onTouchEvent(e);
     }
 
     public void setLock(boolean lock) {
         this.lock = lock;
+    }
+
+    public void release() {
+        if (changeSpeed) listener.onSpeedEnd();
+        changeSpeed = false;
     }
 
     private boolean isEdge(MotionEvent e) {

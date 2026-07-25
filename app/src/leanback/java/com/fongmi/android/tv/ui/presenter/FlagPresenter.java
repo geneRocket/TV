@@ -22,8 +22,10 @@ public class FlagPresenter extends Presenter {
         void onItemClick(Flag item);
     }
 
-    public void setNextFocusDown(int nextFocusDown) {
+    public boolean setNextFocusDown(int nextFocusDown) {
+        if (this.nextFocusDown == nextFocusDown) return false;
         this.nextFocusDown = nextFocusDown;
+        return true;
     }
 
     @Override

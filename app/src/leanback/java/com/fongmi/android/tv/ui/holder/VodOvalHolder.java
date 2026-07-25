@@ -17,6 +17,14 @@ public class VodOvalHolder extends BaseVodHolder {
         super(binding.getRoot());
         this.binding = binding;
         this.listener = listener;
+        binding.getRoot().setOnClickListener(v -> {
+            Vod item = getItem();
+            if (item != null) listener.onItemClick(item);
+        });
+        binding.getRoot().setOnLongClickListener(v -> {
+            Vod item = getItem();
+            return item != null && listener.onLongClick(item);
+        });
     }
 
     public VodOvalHolder size(int[] size) {
@@ -27,17 +35,15 @@ public class VodOvalHolder extends BaseVodHolder {
 
     @Override
     public void initView(Vod item) {
+        setItem(item);
         binding.name.setText(item.getVodName());
         binding.name.setVisibility(item.getNameVisible());
-        binding.getRoot().setOnClickListener(v -> listener.onItemClick(item));
-        binding.getRoot().setOnLongClickListener(v -> listener.onLongClick(item));
         ImgUtil.oval(item.getVodName(), item.getVodPic(), item.getSite(), binding.image);
     }
 
     @Override
     public void onUnbind() {
-        binding.getRoot().setOnClickListener(null);
-        binding.getRoot().setOnLongClickListener(null);
+        super.onUnbind();
         ImgUtil.clear(binding.image);
     }
 }

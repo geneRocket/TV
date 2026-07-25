@@ -111,6 +111,9 @@ public class Site implements Parcelable {
     @Ignore
     private Spider spider;
 
+    @Ignore
+    private transient volatile Headers headers;
+
     public static Site objectFrom(JsonElement element) {
         return objectFrom(element, "");
     }
@@ -172,7 +175,7 @@ public class Site implements Parcelable {
     }
 
     public void setExt(String ext) {
-        this.ext = ext.trim();
+        this.ext = ext == null ? "" : ext.trim();
     }
 
     public String getJar() {
@@ -310,7 +313,12 @@ public class Site implements Parcelable {
     }
 
     public Headers getHeaders() {
-        return Headers.of(fixHeaders(Json.toMap(getHeader())));
+        Headers cached = headers;
+        if (cached != null) return cached;
+        synchronized (this) {
+            if (headers == null) headers = Headers.of(fixHeaders(Json.toMap(getHeader())));
+            return headers;
+        }
     }
 
     private Map<String, String> fixHeaders(Map<String, String> headers) {

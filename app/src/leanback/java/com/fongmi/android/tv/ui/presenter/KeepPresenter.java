@@ -60,7 +60,7 @@ public class KeepPresenter extends Presenter {
     public void onBindViewHolder(Presenter.ViewHolder viewHolder, Object object) {
         Keep item = (Keep) object;
         ViewHolder holder = (ViewHolder) viewHolder;
-        setClickListener(holder.view, item);
+        holder.item = item;
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.site.setVisibility(View.VISIBLE);
@@ -69,29 +69,27 @@ public class KeepPresenter extends Presenter {
         ImgUtil.loadVod(item.getVodName(), item.getVodPic(), holder.binding.image);
     }
 
-    private void setClickListener(View root, Keep item) {
-        root.setOnLongClickListener(view -> mListener.onLongClick(item));
-        root.setOnClickListener(view -> {
-            if (isDelete()) mListener.onItemDelete(item);
-            else mListener.onItemClick(item);
-        });
-    }
-
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
         ViewHolder holder = (ViewHolder) viewHolder;
-        holder.view.setOnClickListener(null);
-        holder.view.setOnLongClickListener(null);
+        holder.item = null;
         ImgUtil.clear(holder.binding.image);
     }
 
-    public static class ViewHolder extends Presenter.ViewHolder {
+    public class ViewHolder extends Presenter.ViewHolder {
 
         private final AdapterVodBinding binding;
+        private Keep item;
 
         public ViewHolder(@NonNull AdapterVodBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            this.binding.getRoot().setOnLongClickListener(view -> item != null && mListener.onLongClick(item));
+            this.binding.getRoot().setOnClickListener(view -> {
+                if (item == null) return;
+                if (isDelete()) mListener.onItemDelete(item);
+                else mListener.onItemClick(item);
+            });
         }
     }
 }

@@ -121,7 +121,6 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Keep item = mItems.get(position);
-        setFocusListener(holder.binding);
         holder.binding.name.setText(item.getVodName());
         holder.binding.remark.setVisibility(View.GONE);
         holder.binding.site.setVisibility(View.VISIBLE);
@@ -136,10 +135,6 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         ImgUtil.clear(holder.binding.image);
     }
 
-    private void setFocusListener(AdapterVodBinding binding) {
-        binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.name.setSelected(hasFocus));
-    }
-
     public class ViewHolder extends RecyclerView.ViewHolder {
 
         private final AdapterVodBinding binding;
@@ -147,6 +142,7 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
         public ViewHolder(@NonNull AdapterVodBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.name.setSelected(hasFocus));
             itemView.setOnLongClickListener(view -> mListener.onLongClick());
             itemView.setOnClickListener(view -> {
                 int index = getBindingAdapterPosition();

@@ -93,6 +93,7 @@ public class ExoUtil {
     }
 
     public static void setSubtitleView(PlayerView exo) {
+        if (exo.getSubtitleView() == null) return;
         exo.getSubtitleView().setStyle(getCaptionStyle());
         exo.getSubtitleView().setApplyEmbeddedFontSizes(false);
         exo.getSubtitleView().setApplyEmbeddedStyles(!Setting.isCaption());

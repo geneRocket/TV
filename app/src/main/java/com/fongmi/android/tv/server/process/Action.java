@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.server.process;
 
+import android.app.Activity;
 import android.os.Environment;
 import android.text.TextUtils;
 
@@ -239,7 +240,7 @@ public class Action implements Process {
     private void vodConfig(Map<String, String> params) {
         String url = params.get("url");
         if (TextUtils.isEmpty(url)) return;
-        App.post(() -> Notify.progress(App.activity()));
+        showProgress();
         VodConfig.load(ConfigRepository.get().find(url, 0), getCallback());
     }
 
@@ -250,7 +251,7 @@ public class Action implements Process {
             if (!temp.exists()) continue;
             File wall = new File(Path.download(), fn);
             Path.copy(temp, wall);
-            App.post(() -> Notify.progress(App.activity()));
+            showProgress();
             WallConfig.load(ConfigRepository.get().find("file://" + Environment.DIRECTORY_DOWNLOADS + "/" + fn, 2), new Callback() {
                 @Override
                 public void success() {
@@ -277,7 +278,7 @@ public class Action implements Process {
             AppDatabase.restore(restore, new Callback() {
                 @Override
                 public void success() {
-                    App.post(() -> Notify.progress(App.activity()));
+                    showProgress();
                     App.post(() -> {
                         AppDatabase.reset();
                         initConfig();
@@ -287,6 +288,14 @@ public class Action implements Process {
             temp.delete();
             break;
         }
+    }
+
+    private void showProgress() {
+        App.post(() -> {
+            Activity activity = App.activity();
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+            Notify.progress(activity);
+        });
     }
 
     private void pullRestore(Map<String, String> params, Map<String, String> files) {

@@ -1,213 +1,141 @@
 package com.fongmi.android.tv;
 
-
+import android.content.SharedPreferences;
 import android.content.Intent;
 import android.provider.Settings;
 
+import androidx.preference.PreferenceManager;
+
 import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.utils.LanguageUtil;
-import com.github.catvod.utils.Prefers;
 
 public class Setting {
 
+    private static SharedPreferences getPref() {
+        return PreferenceManager.getDefaultSharedPreferences(App.get());
+    }
+
+    private static SharedPreferences.Editor getEditor() {
+        return getPref().edit();
+    }
+
+    private static float getFloat(String key, float defaultValue) {
+        SharedPreferences preferences = getPref();
+        try {
+            return preferences.getFloat(key, defaultValue);
+        } catch (ClassCastException ignored) {
+            Object value = preferences.getAll().get(key);
+            if (!(value instanceof Number)) return defaultValue;
+            float result = ((Number) value).floatValue();
+            preferences.edit().putFloat(key, result).apply();
+            return result;
+        }
+    }
+
+    // region Core Settings
+
     public static String getDoh() {
-        return Prefers.getString("doh");
+        return getPref().getString("doh", "");
     }
 
     public static void putDoh(String doh) {
-        Prefers.put("doh", doh);
+        getEditor().putString("doh", doh).apply();
     }
 
     public static String getProxy() {
-        return Prefers.getString("proxy");
+        return getPref().getString("proxy", "");
     }
 
     public static void putProxy(String proxy) {
-        Prefers.put("proxy", proxy);
-    }
-
-    public static String getVodConfigDesc() {
-        return Prefers.getString("vod_config_desc");
-    }
-
-    public static void putVodConfigDesc(String desc) {
-        Prefers.put("vod_config_desc", desc);
-    }
-
-    public static String getVodConfigUrls() {
-        return Prefers.getString("vod_config_urls");
-    }
-
-    public static void putVodConfigUrls(String urls) {
-        Prefers.put("vod_config_urls", urls);
-    }
-
-    public static String getLiveConfigDesc() {
-        return Prefers.getString("live_config_desc");
-    }
-
-    public static void putLiveConfigDesc(String desc) {
-        Prefers.put("live_config_desc", desc);
-    }
-
-    public static String getLiveConfigUrls() {
-        return Prefers.getString("live_config_urls");
-    }
-
-    public static void putLiveConfigUrls(String urls) {
-        Prefers.put("live_config_urls", urls);
-    }
-
-    public static String getKeep() {
-        return Prefers.getString("keep");
-    }
-
-    public static void putKeep(String keep) {
-        Prefers.put("keep", keep);
-    }
-
-    public static String getKeyword() {
-        return Prefers.getString("keyword");
-    }
-
-    public static void putKeyword(String keyword) {
-        Prefers.put("keyword", keyword);
-    }
-
-    public static String getHot() {
-        return Prefers.getString("hot");
-    }
-
-    public static void putHot(String hot) {
-        Prefers.put("hot", hot);
+        getEditor().putString("proxy", proxy).apply();
     }
 
     public static String getUa() {
-        return Prefers.getString("ua");
+        return getPref().getString("ua", "");
     }
 
     public static void putUa(String ua) {
-        Prefers.put("ua", ua);
+        getEditor().putString("ua", ua).apply();
     }
 
-    public static int getWall() {
-        return Prefers.getInt("wall", 1);
+    public static int getQuality() {
+        return getPref().getInt("quality", 2);
     }
 
-    public static void putWall(int wall) {
-        Prefers.put("wall", wall);
+    public static void putQuality(int index) {
+        getEditor().putInt("quality", index).apply();
     }
 
-    public static int getReset() {
-        return Prefers.getInt("reset", 0);
+    public static float getThumbnail() {
+        return 0.3f * getQuality() + 0.4f;
     }
 
-    public static void putReset(int reset) {
-        Prefers.put("reset", reset);
+    public static int getConfigCache() {
+        return Math.min(getPref().getInt("config_cache", 0), 2);
     }
+
+    public static void putConfigCache(int value) {
+        getEditor().putInt("config_cache", value).apply();
+    }
+
+    // endregion
+
+    // region Player Settings
 
     public static int getPlayer() {
-        return Prefers.getInt("player", Players.EXO);
+        return getPref().getInt("player", Players.EXO);
     }
 
     public static void putPlayer(int player) {
-        Prefers.put("player", player);
+        getEditor().putInt("player", player).apply();
     }
 
     public static int getLivePlayer() {
-        return Prefers.getInt("player_live", getPlayer());
+        return getPref().getInt("player_live", getPlayer());
     }
 
     public static void putLivePlayer(int player) {
-        Prefers.put("player_live", player);
+        getEditor().putInt("player_live", player).apply();
     }
 
     public static int getDecode(int player) {
-        return Prefers.getInt("decode_" + player, Players.HARD);
+        return getPref().getInt("decode_" + player, Players.HARD);
     }
 
     public static void putDecode(int player, int decode) {
-        Prefers.put("decode_" + player, decode);
+        getEditor().putInt("decode_" + player, decode).apply();
     }
 
     public static int getRender() {
-        return Prefers.getInt("render", 0);
+        return getPref().getInt("render", 0);
     }
 
     public static void putRender(int render) {
-        Prefers.put("render", render);
+        getEditor().putInt("render", render).apply();
     }
 
-    private static int quality = -1;
-    private static int configCache = -1;
-    private static float thumbnail = -1;
-
-    public static int getQuality() {
-        if (quality == -1) quality = Prefers.getInt("quality", 2);
-        return quality;
+    public static boolean isTunnel() {
+        return getPref().getBoolean("exo_tunnel", false);
     }
 
-    public static void putQuality(int value) {
-        Prefers.put("quality", value);
-        quality = value;
-        thumbnail = -1;
+    public static void putTunnel(boolean tunnel) {
+        getEditor().putBoolean("exo_tunnel", tunnel).apply();
     }
 
-    public static int getSize() {
-        return Prefers.getInt("size", 2);
+    public static boolean isPlayWithOthers() {
+        return getPref().getBoolean("play_with_others", false);
     }
 
-    public static void putSize(int size) {
-        Prefers.put("size", size);
-    }
-
-    public static int getViewType(int viewType) {
-        return Prefers.getInt("viewType", viewType);
-    }
-
-    public static void putViewType(int viewType) {
-        Prefers.put("viewType", viewType);
-    }
-
-    public static int getScale() {
-        return Prefers.getInt("scale");
-    }
-
-    public static void putScale(int scale) {
-        Prefers.put("scale", scale);
-    }
-
-    public static int getLiveScale() {
-        return Prefers.getInt("scale_live", getScale());
-    }
-
-    public static void putLiveScale(int scale) {
-        Prefers.put("scale_live", scale);
-    }
-
-    public static int getHttp() {
-        return Prefers.getInt("exo_http", 1);
-    }
-
-    public static void putHttp(int http) {
-        Prefers.put("exo_http", http);
+    public static void putPlayWithOthers(boolean value) {
+        getEditor().putBoolean("play_with_others", value).apply();
     }
 
     public static int getBuffer() {
-        return Math.min(Math.max(Prefers.getInt("exo_buffer"), 1), 15);
+        return Math.min(Math.max(getPref().getInt("exo_buffer", 0), 1), 15);
     }
 
-    public static int getBufferMB() {
-        return getBufferMB(getBuffer());
-    }
-
-    public static int getBufferMB(int buffer) {
-        int level = Math.min(Math.max(buffer, 1), 15);
-        return level * 64;
-    }
-
-    public static int getBufferBytes() {
-        return getBufferMB() * 1024 * 1024;
+    public static void putBuffer(int value) {
+        getEditor().putInt("exo_buffer", value).apply();
     }
 
     public static String getBufferText() {
@@ -215,418 +143,528 @@ public class Setting {
     }
 
     public static String getBufferText(int buffer) {
-        return getBufferMB(buffer) + " MB";
+        return Math.min(Math.max(buffer, 1), 15) * 64 + " MB";
     }
 
-    public static void putBuffer(int buffer) {
-        Prefers.put("exo_buffer", buffer);
+    public static int getBufferBytes() {
+        return getBuffer() * 64 * 1024 * 1024;
     }
 
-    public static int getFlag() {
-        return Prefers.getInt("flag");
+    public static float getVolumeScale() {
+        return Math.min(Math.max(getFloat("volume_scale", 1.0f), 0f), 1f);
     }
 
-    public static void putFlag(int flag) {
-        Prefers.put("flag", flag);
+    public static void putVolumeScale(float value) {
+        getEditor().putFloat("volume_scale", Math.min(Math.max(value, 0f), 1f)).apply();
     }
 
-    public static int getEpisode() {
-        return Prefers.getInt("episode");
+    public static float getPlaySpeed() {
+        return getFloat("play_speed", 1.0f);
     }
 
-    public static void putEpisode(int episode) {
-        Prefers.put("episode", episode);
-    }
-
-    public static int getBackground() {
-        return Prefers.getInt("background", 2);
-    }
-
-    public static void putBackground(int background) {
-        Prefers.put("background", background);
+    public static void putPlaySpeed(float speed) {
+        getEditor().putFloat("play_speed", speed).apply();
     }
 
     public static int getRtsp() {
-        return Prefers.getInt("rtsp");
+        return getPref().getInt("rtsp", 0);
     }
 
-    public static void putRtsp(int rtsp) {
-        Prefers.put("rtsp", rtsp);
+    public static void putRtsp(int value) {
+        getEditor().putInt("rtsp", value).apply();
     }
 
-    public static int getSiteMode() {
-        return Prefers.getInt("site_mode", 1);
+    public static int getHttp() {
+        return getPref().getInt("exo_http", 1);
     }
 
-    public static void putSiteMode(int mode) {
-        Prefers.put("site_mode", mode);
+    public static void putHttp(int value) {
+        getEditor().putInt("exo_http", value).apply();
     }
 
-    public static int getSyncMode() {
-        return Prefers.getInt("sync_mode");
+    public static int getBackground() {
+        return getPref().getInt("background", 2);
     }
 
-    public static void putSyncMode(int mode) {
-        Prefers.put("sync_mode", mode);
+    public static void putBackground(int value) {
+        getEditor().putInt("background", value).apply();
     }
 
-    public static boolean isBootLive() {
-        return Prefers.getBoolean("boot_live");
-    }
+    // endregion
 
-    public static void putBootLive(boolean boot) {
-        Prefers.put("boot_live", boot);
-    }
-
-    public static boolean isInvert() {
-        return Prefers.getBoolean("invert");
-    }
-
-    public static void putInvert(boolean invert) {
-        Prefers.put("invert", invert);
-    }
-
-    public static boolean isAcross() {
-        return Prefers.getBoolean("across", true);
-    }
-
-    public static void putAcross(boolean across) {
-        Prefers.put("across", across);
-    }
-
-    public static boolean isChange() {
-        return Prefers.getBoolean("change", true);
-    }
-
-    public static void putChange(boolean change) {
-        Prefers.put("change", change);
-    }
-
-    public static boolean getUpdate() {
-        return Prefers.getBoolean("update", true);
-    }
-
-    public static void putUpdate(boolean update) {
-        Prefers.put("update", update);
-    }
-
-    public static boolean isPlayWithOthers() {
-        return Prefers.getBoolean("play_with_others", false);
-    }
-
-    public static void putPlayWithOthers(boolean play) {
-        Prefers.put("play_with_others", play);
-    }
+    // region Danmaku Settings
 
     public static boolean isDanmu() {
-        return Prefers.getBoolean("danmu", true);
+        return getPref().getBoolean("danmu", true);
     }
 
-    public static void putDanmu(boolean danmu) {
-        Prefers.put("danmu", danmu);
+    public static void putDanmu(boolean value) {
+        getEditor().putBoolean("danmu", value).apply();
+    }
+
+    public static int getDanmuSpeed() {
+        return Math.min(Math.max(getPref().getInt("danmu_speed", 2), 0), 3);
+    }
+
+    public static void putDanmuSpeed(int value) {
+        getEditor().putInt("danmu_speed", value).apply();
+    }
+
+    public static float getDanmuSize() {
+        return Math.min(Math.max(getFloat("danmu_size", 1.0f), 0.6f), 2.0f);
+    }
+
+    public static void putDanmuSize(float size) {
+        getEditor().putFloat("danmu_size", size).apply();
+    }
+
+    public static int getDanmuLine(int def) {
+        return Math.min(Math.max(getPref().getInt("danmu_line", def), 1), 15);
+    }
+
+    public static void putDanmuLine(int line) {
+        getEditor().putInt("danmu_line", line).apply();
+    }
+
+    public static int getDanmuAlpha() {
+        return Math.min(Math.max(getPref().getInt("danmu_alpha", 90), 10), 100);
+    }
+
+    public static void putDanmuAlpha(int alpha) {
+        getEditor().putInt("danmu_alpha", alpha).apply();
     }
 
     public static boolean isDanmuLoad() {
         return isDanmu();
     }
 
-    public static void putDanmuLoad(boolean load) {
-        putDanmu(load);
+    public static void putDanmuLoad(boolean value) {
+        putDanmu(value);
     }
 
-    public static int getDanmuSpeed() {
-        return Math.min(Math.max(Prefers.getInt("danmu_speed", 2), 0), 3);
+    // endregion
+
+    // region VOD & Live Settings
+
+    public static String getVodConfigUrls() {
+        return getPref().getString("vod_config_urls", "");
     }
 
-    public static void putDanmuSpeed(int speed) {
-        Prefers.put("danmu_speed", speed);
+    public static void putVodConfigUrls(String urls) {
+        getEditor().putString("vod_config_urls", urls).apply();
     }
 
-    public static float getDanmuSize() {
-        return Math.min(Math.max(Prefers.getFloat("danmu_size", 1.0f), 0.6f), 2.0f);
+    public static String getVodConfigDesc() {
+        return getPref().getString("vod_config_desc", "");
     }
 
-    public static void putDanmuSize(float size) {
-        Prefers.put("danmu_size", size);
+    public static void putVodConfigDesc(String desc) {
+        getEditor().putString("vod_config_desc", desc).apply();
     }
 
-    public static int getDanmuLine(int line) {
-        return Math.min(Math.max(Prefers.getInt("danmu_line", line), 1), 15);
+    public static String getLiveConfigUrls() {
+        return getPref().getString("live_config_urls", "");
     }
 
-    public static void putDanmuLine(int line) {
-        Prefers.put("danmu_line", line);
+    public static void putLiveConfigUrls(String urls) {
+        getEditor().putString("live_config_urls", urls).apply();
     }
 
-    public static int getDanmuAlpha() {
-        return Math.min(Math.max(Prefers.getInt("danmu_alpha", 90), 10), 100);
+    public static String getLiveConfigDesc() {
+        return getPref().getString("live_config_desc", "");
     }
 
-    public static void putDanmuAlpha(int alpha) {
-        Prefers.put("danmu_alpha", alpha);
+    public static void putLiveConfigDesc(String desc) {
+        getEditor().putString("live_config_desc", desc).apply();
+    }
+
+    public static String getKeep() {
+        return getPref().getString("keep", "");
+    }
+
+    public static void putKeep(String keep) {
+        getEditor().putString("keep", keep).apply();
+    }
+
+    public static String getHot() {
+        return getPref().getString("hot", "");
+    }
+
+    public static void putHot(String hot) {
+        getEditor().putString("hot", hot).apply();
+    }
+
+    public static boolean isBootLive() {
+        return getPref().getBoolean("boot_live", false);
+    }
+
+    public static void putBootLive(boolean value) {
+        getEditor().putBoolean("boot_live", value).apply();
+    }
+
+    public static int getLiveScale() {
+        return getPref().getInt("scale_live", getScale());
+    }
+
+    public static void putLiveScale(int index) {
+        getEditor().putInt("scale_live", index).apply();
+    }
+
+    public static boolean isInvert() {
+        return getPref().getBoolean("invert", false);
+    }
+
+    public static void putInvert(boolean value) {
+        getEditor().putBoolean("invert", value).apply();
+    }
+
+    public static boolean isAcross() {
+        return getPref().getBoolean("across", true);
+    }
+
+    public static void putAcross(boolean value) {
+        getEditor().putBoolean("across", value).apply();
+    }
+
+    public static boolean isChange() {
+        return getPref().getBoolean("change", true);
+    }
+
+    public static void putChange(boolean value) {
+        getEditor().putBoolean("change", value).apply();
+    }
+
+    public static void putHomeMenuKey(int value) {
+        getEditor().putInt("home_menu_key", value).apply();
+    }
+
+    public static int getHomeMenuKey() {
+        return getPref().getInt("home_menu_key", 0);
+    }
+
+    public static int getHomeUI() {
+        return getPref().getInt("home_ui", 1);
+    }
+
+    public static void putHomeUI(int value) {
+        getEditor().putInt("home_ui", value).apply();
+    }
+
+    public static boolean isHomeHistory() {
+        return getPref().getBoolean("home_history", true);
+    }
+
+    public static void putHomeHistory(boolean value) {
+        getEditor().putBoolean("home_history", value).apply();
+    }
+
+    public static String getHomeButtons(String def) {
+        return getPref().getString("home_buttons", def);
+    }
+
+    public static void putHomeButtons(String value) {
+        getEditor().putString("home_buttons", value).apply();
+    }
+
+    public static String getHomeButtonsSorted(String def) {
+        return getPref().getString("home_buttons_sorted", def);
+    }
+
+    public static void putHomeButtonsSorted(String value) {
+        getEditor().putString("home_buttons_sorted", value).apply();
+    }
+
+    // endregion
+
+    // region Display Settings
+
+    public static boolean isDisplaySpeed() {
+        return getPref().getBoolean("display_speed", false);
+    }
+
+    public static void putDisplaySpeed(boolean value) {
+        getEditor().putBoolean("display_speed", value).apply();
+    }
+
+    public static boolean isDisplayTime() {
+        return getPref().getBoolean("display_time", false);
+    }
+
+    public static void putDisplayTime(boolean value) {
+        getEditor().putBoolean("display_time", value).apply();
+    }
+
+    public static boolean isDisplayVideoTitle() {
+        return getPref().getBoolean("display_video_title", false);
+    }
+
+    public static void putDisplayVideoTitle(boolean value) {
+        getEditor().putBoolean("display_video_title", value).apply();
+    }
+
+    public static boolean isDisplayDuration() {
+        return getPref().getBoolean("display_duration", false);
+    }
+
+    public static void putDisplayDuration(boolean value) {
+        getEditor().putBoolean("display_duration", value).apply();
+    }
+
+    public static boolean isDisplayMiniProgress() {
+        return getPref().getBoolean("display_mini_progress", false);
+    }
+
+    public static void putDisplayMiniProgress(boolean value) {
+        getEditor().putBoolean("display_mini_progress", value).apply();
+    }
+
+    // endregion
+
+    // region Misc Settings
+
+    public static int getReset() {
+        return getPref().getInt("reset", 0);
+    }
+
+    public static void putReset(int reset) {
+        getEditor().putInt("reset", reset).apply();
     }
 
     public static boolean isCaption() {
-        return Prefers.getBoolean("caption");
-    }
-
-    public static void putCaption(boolean caption) {
-        Prefers.put("caption", caption);
-    }
-
-    public static float getVolumeScale() {
-        return Math.min(Math.max(Prefers.getFloat("volume_scale", 1.0f), 0f), 1f);
-    }
-
-    public static void putVolumeScale(float scale) {
-        Prefers.put("volume_scale", Math.min(Math.max(scale, 0f), 1f));
-    }
-
-    public static boolean isTunnel() {
-        return Prefers.getBoolean("exo_tunnel");
-    }
-
-    public static void putTunnel(boolean tunnel) {
-        Prefers.put("exo_tunnel", tunnel);
-    }
-
-    public static int getBackupMode() {
-        return Prefers.getInt("backup_mode", 1);
-    }
-
-    public static void putBackupMode(int auto) {
-        Prefers.put("backup_mode", auto);
-    }
-
-    public static boolean isZhuyin() {
-        return Prefers.getBoolean("zhuyin");
-    }
-
-    public static void putZhuyin(boolean zhuyin) {
-        Prefers.put("zhuyin", zhuyin);
-    }
-
-    public static float getSubtitleTextSize() {
-        return Prefers.getFloat("subtitle_text_size");
-    }
-
-    public static void putSubtitleTextSize(float value) {
-        Prefers.put("subtitle_text_size", value);
-    }
-
-    public static float getSubtitleBottomPadding() {
-        return Prefers.getFloat("subtitle_bottom_padding");
-    }
-
-    public static void putSubtitleBottomPadding(float value) {
-        Prefers.put("subtitle_bottom_padding", value);
-    }
-
-    public static float getThumbnail() {
-        if (thumbnail == -1) thumbnail = 0.3f * getQuality() + 0.4f;
-        return thumbnail;
-    }
-
-    public static boolean isBackgroundOff() {
-        return getBackground() == 0;
-    }
-
-    public static boolean isBackgroundOn() {
-        return getBackground() == 1 || getBackground() == 2;
-    }
-
-    public static boolean isBackgroundPiP() {
-        return getBackground() == 2;
+        return getPref().getBoolean("caption", false);
     }
 
     public static boolean hasCaption() {
         return new Intent(Settings.ACTION_CAPTIONING_SETTINGS).resolveActivity(App.get().getPackageManager()) != null;
     }
 
-    public static boolean isDisplayTime() {
-        return Prefers.getBoolean("display_time", false);
-    }
-
-    public static void putDisplayTime(boolean display) {
-        Prefers.put("display_time", display);
-    }
-
-    public static boolean isDisplaySpeed() {
-        return Prefers.getBoolean("display_speed", false);
-    }
-
-    public static void putDisplaySpeed(boolean display) {
-        Prefers.put("display_speed", display);
-    }
-
-    public static boolean isDisplayDuration() {
-        return Prefers.getBoolean("display_duration", false);
-    }
-
-    public static void putDisplayDuration(boolean display) {
-        Prefers.put("display_duration", display);
-    }
-
-    public static boolean isDisplayMiniProgress() {
-        return Prefers.getBoolean("display_mini_progress", false);
-    }
-
-    public static void putDisplayMiniProgress(boolean display) {
-        Prefers.put("display_mini_progress", display);
-    }
-
-    public static boolean isDisplayVideoTitle() {
-        return Prefers.getBoolean("display_video_title", false);
-    }
-
-    public static void putDisplayVideoTitle(boolean display) {
-        Prefers.put("display_video_title", display);
-    }
-
-    public static float getPlaySpeed() {
-        return Prefers.getFloat("play_speed", 1.0f);
-    }
-
-    public static void putPlaySpeed(float speed) {
-        Prefers.put("play_speed", speed);
-    }
-
-    public static void putFullscreenMenuKey(int key) {
-        Prefers.put("fullscreen_menu_key", key);
-    }
-
-    public static int getFullscreenMenuKey() {
-        return Prefers.getInt("fullscreen_menu_key", 0);
-    }
-
-    public static void putHomeMenuKey(int key) {
-        Prefers.put("home_menu_key", key);
-    }
-
-    public static int getHomeMenuKey() {
-        return Prefers.getInt("home_menu_key", 0);
-    }
-
-    public static boolean isHomeSiteLock() {
-        return Prefers.getBoolean("home_site_lock", false);
-    }
-
-    public static void putHomeSiteLock(boolean lock) {
-        Prefers.put("home_site_lock", lock);
-    }
-
-    public static boolean isIncognito() {
-        return Prefers.getBoolean("incognito");
-    }
-
-    public static void putIncognito(boolean incognito) {
-        Prefers.put("incognito", incognito);
-    }
-
-    public static void putSmallWindowBackKey(int key) {
-        Prefers.put("small_window_back_key", key);
-    }
-
-    public static int getSmallWindowBackKey() {
-        return Prefers.getInt("small_window_back_key", 0);
-    }
-
-    public static void putHomeDisplayName(boolean change) {
-        Prefers.put("home_display_name", change);
-    }
-
-    public static boolean isHomeDisplayName() {
-        return Prefers.getBoolean("home_display_name", false);
-    }
-
-    public static boolean isAggregatedSearch() {
-        return Prefers.getBoolean("aggregated_search", false);
-    }
-
-    public static void putAggregatedSearch(boolean search) {
-        Prefers.put("aggregated_search", search);
-    }
-
-    public static void putHomeUI(int key) {
-        Prefers.put("home_ui", key);
-    }
-
-    public static int getHomeUI() {
-        return Prefers.getInt("home_ui", 1);
-    }
-
-    public static void putHomeButtons(String buttons) {
-        Prefers.put("home_buttons", buttons);
-    }
-
-    public static String getHomeButtons(String defaultValue) {
-        return Prefers.getString("home_buttons", defaultValue);
-    }
-
-    public static void putHomeButtonsSorted(String buttons) {
-        Prefers.put("home_buttons_sorted", buttons);
-    }
-
-    public static String getHomeButtonsSorted(String defaultValue) {
-        return Prefers.getString("home_buttons_sorted", defaultValue);
-    }
-
-    public static boolean isHomeHistory() {
-        return Prefers.getBoolean("home_history", true);
-    }
-
-    public static void putHomeHistory(boolean show) {
-        Prefers.put("home_history", show);
-    }
-
-    public static void putConfigCache(int key) {
-        Prefers.put("config_cache", key);
-        configCache = key;
-    }
-
-    public static int getConfigCache() {
-        if (configCache == -1) configCache = Math.min(Prefers.getInt("config_cache", 0), 2);
-        return configCache;
-    }
-
-    public static void putLanguage(int key) {
-        Prefers.put("language", key);
-    }
-
-    public static int getLanguage() {
-        return Prefers.getInt("language", LanguageUtil.locale());
-    }
-
-    public static void putParseWebView(int key) {
-        Prefers.put("parse_webview", key);
-    }
-
-    public static int getParseWebView() {
-        return Prefers.getInt("parse_webview", 0);
-    }
-
-    public static boolean isSiteSearch() {
-        return Prefers.getBoolean("site_search", false);
-    }
-
-    public static void putSiteSearch(boolean search) {
-        Prefers.put("site_search", search);
+    public static void putCaption(boolean value) {
+        getEditor().putBoolean("caption", value).apply();
     }
 
     public static boolean isRemoveAd() {
-        return Prefers.getBoolean("remove_ad", false);
+        return getPref().getBoolean("remove_ad", false);
     }
 
-    public static void putRemoveAd(boolean remove) {
-        Prefers.put("remove_ad", remove);
+    public static void putRemoveAd(boolean value) {
+        getEditor().putBoolean("remove_ad", value).apply();
+    }
+
+    public static float getSubtitleTextSize() {
+        return getFloat("subtitle_text_size", 0);
+    }
+
+    public static void putSubtitleTextSize(float size) {
+        getEditor().putFloat("subtitle_text_size", size).apply();
+    }
+
+    public static float getSubtitleBottomPadding() {
+        return getFloat("subtitle_bottom_padding", 0);
+    }
+
+    public static void putSubtitleBottomPadding(float padding) {
+        getEditor().putFloat("subtitle_bottom_padding", padding).apply();
+    }
+
+    public static int getLanguage() {
+        return getPref().getInt("language", LanguageUtil.locale());
+    }
+
+    public static void putLanguage(int lang) {
+        getEditor().putInt("language", lang).apply();
+    }
+
+    public static int getBackupMode() {
+        return getPref().getInt("backup_mode", 1);
+    }
+
+    public static void putBackupMode(int mode) {
+        getEditor().putInt("backup_mode", mode).apply();
+    }
+
+    public static int getParseWebView() {
+        return getPref().getInt("parse_webview", 0);
+    }
+
+    public static void putParseWebView(int value) {
+        getEditor().putInt("parse_webview", value).apply();
+    }
+
+    public static boolean isAggregatedSearch() {
+        return getPref().getBoolean("aggregated_search", false);
+    }
+
+    public static void putAggregatedSearch(boolean value) {
+        getEditor().putBoolean("aggregated_search", value).apply();
+    }
+
+    public static int getWall() {
+        return getPref().getInt("wall", 1);
+    }
+
+    public static void putWall(int index) {
+        getEditor().putInt("wall", index).apply();
+    }
+
+    public static boolean isIncognito() {
+        return getPref().getBoolean("incognito", false);
+    }
+
+    public static void putIncognito(boolean value) {
+        getEditor().putBoolean("incognito", value).apply();
+    }
+
+    public static int getScale() {
+        return getPref().getInt("scale", 0);
+    }
+
+    public static void putScale(int value) {
+        getEditor().putInt("scale", value).apply();
+    }
+
+    public static int getEpisode() {
+        return getPref().getInt("episode", 0);
+    }
+
+    public static void putEpisode(int index) {
+        getEditor().putInt("episode", index).apply();
+    }
+
+    public static int getFlag() {
+        return getPref().getInt("flag", 0);
+    }
+
+    public static void putFlag(int value) {
+        getEditor().putInt("flag", value).apply();
+    }
+
+    public static int getFullscreenMenuKey() {
+        return getPref().getInt("fullscreen_menu_key", 0);
+    }
+
+    public static void putFullscreenMenuKey(int index) {
+        getEditor().putInt("fullscreen_menu_key", index).apply();
+    }
+
+    public static int getSmallWindowBackKey() {
+        return getPref().getInt("small_window_back_key", 0);
+    }
+
+    public static void putSmallWindowBackKey(int value) {
+        getEditor().putInt("small_window_back_key", value).apply();
+    }
+
+    public static boolean isHomeSiteLock() {
+        return getPref().getBoolean("home_site_lock", false);
+    }
+
+    public static void putHomeSiteLock(boolean value) {
+        getEditor().putBoolean("home_site_lock", value).apply();
+    }
+
+    public static boolean isHomeDisplayName() {
+        return getPref().getBoolean("home_display_name", false);
+    }
+
+    public static void putHomeDisplayName(boolean value) {
+        getEditor().putBoolean("home_display_name", value).apply();
     }
 
     public static String getThunderCacheDir() {
-        return Prefers.getString("thunder_cache_dir", "");
+        return getPref().getString("thunder_cache_dir", "");
     }
 
-    public static void putThunderCacheDir(String dir) {
-        Prefers.put("thunder_cache_dir", dir);
+    public static void putThunderCacheDir(String value) {
+        getEditor().putString("thunder_cache_dir", value).apply();
     }
 
+    public static int getSize() {
+        return getPref().getInt("size", 2);
+    }
+
+    public static void putSize(int index) {
+        getEditor().putInt("size", index).apply();
+    }
+
+    public static int getViewType(int def) {
+        return getPref().getInt("viewType", def);
+    }
+
+    public static void putViewType(int type) {
+        getEditor().putInt("viewType", type).apply();
+    }
+
+    public static String getKeyword() {
+        return getPref().getString("keyword", "");
+    }
+
+    public static void putKeyword(String keyword) {
+        getEditor().putString("keyword", keyword).apply();
+    }
+
+    public static boolean isBackgroundOn() {
+        return getBackground() == 1 || getBackground() == 2;
+    }
+
+    public static boolean isBackgroundOff() {
+        return getBackground() == 0;
+    }
+
+    public static boolean isBackgroundPiP() {
+        return getBackground() == 2;
+    }
+
+    public static boolean isZhuyin() {
+        return getPref().getBoolean("zhuyin", false);
+    }
+
+    public static void putZhuyin(boolean value) {
+        getEditor().putBoolean("zhuyin", value).apply();
+    }
+
+    public static int getSiteMode() {
+        return getPref().getInt("site_mode", 1);
+    }
+
+    public static void putSiteMode(int value) {
+        getEditor().putInt("site_mode", value).apply();
+    }
+
+    public static boolean isSiteSearch() {
+        return getPref().getBoolean("site_search", false);
+    }
+
+    public static void putSiteSearch(boolean value) {
+        getEditor().putBoolean("site_search", value).apply();
+    }
+
+    public static int getSyncMode() {
+        return getPref().getInt("sync_mode", 0);
+    }
+
+    public static void putSyncMode(int value) {
+        getEditor().putInt("sync_mode", value).apply();
+    }
+
+    public static boolean getUpdate() {
+        return getPref().getBoolean("update", true);
+    }
+
+    public static void putUpdate(boolean value) {
+        getEditor().putBoolean("update", value).apply();
+    }
+
+    public static void putBackgroundOn(boolean value) {
+        getEditor().putBoolean("background_on", value).apply();
+    }
+
+    public static void putBackgroundOff(boolean value) {
+        getEditor().putBoolean("background_off", value).apply();
+    }
+
+    public static void putBackgroundPiP(boolean value) {
+        getEditor().putBoolean("background_pip", value).apply();
+    }
+
+    // endregion
 }

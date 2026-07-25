@@ -61,7 +61,7 @@ public class HistoryPresenter extends Presenter {
     public void onBindViewHolder(Presenter.ViewHolder viewHolder, Object object) {
         History item = (History) object;
         ViewHolder holder = (ViewHolder) viewHolder;
-        setClickListener(holder.view, item);
+        holder.item = item;
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.site.setVisibility(item.getSiteVisible());
@@ -71,29 +71,27 @@ public class HistoryPresenter extends Presenter {
         ImgUtil.loadVod(item.getVodName(), item.getVodPic(), holder.binding.image);
     }
 
-    private void setClickListener(View root, History item) {
-        root.setOnLongClickListener(view -> mListener.onLongClick());
-        root.setOnClickListener(view -> {
-            if (isDelete()) mListener.onItemDelete(item);
-            else mListener.onItemClick(item);
-        });
-    }
-
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
         ViewHolder holder = (ViewHolder) viewHolder;
-        holder.view.setOnClickListener(null);
-        holder.view.setOnLongClickListener(null);
+        holder.item = null;
         ImgUtil.clear(holder.binding.image);
     }
 
-    public static class ViewHolder extends Presenter.ViewHolder {
+    public class ViewHolder extends Presenter.ViewHolder {
 
         private final AdapterVodBinding binding;
+        private History item;
 
         public ViewHolder(@NonNull AdapterVodBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            this.binding.getRoot().setOnLongClickListener(view -> mListener.onLongClick());
+            this.binding.getRoot().setOnClickListener(view -> {
+                if (item == null) return;
+                if (isDelete()) mListener.onItemDelete(item);
+                else mListener.onItemClick(item);
+            });
         }
     }
 }

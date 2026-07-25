@@ -20,6 +20,7 @@ import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.utils.AppTaskScheduler;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
@@ -35,7 +36,6 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import com.fongmi.android.tv.utils.LatestTask;
-import com.fongmi.android.tv.utils.TaskScheduler;
 
 import okhttp3.Headers;
 import okhttp3.Request;
@@ -69,14 +69,10 @@ public class LiveViewModel extends ViewModel {
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
-        TaskScheduler scheduler = new TaskScheduler() {
-            @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
-            @Override public void remove(Runnable task) { App.removeCallbacks(task); }
-        };
-        this.liveTask = new LatestTask<>(ThreadPools.newSingle("live-load"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
-        this.epgTask = new LatestTask<>(ThreadPools.newSingle("live-epg"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
-        this.urlTask = new LatestTask<>(ThreadPools.newSingle("live-url"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
-        this.xmlTask = new LatestTask<>(ThreadPools.newSingle("live-xml"), scheduler, error -> ThreadPools.log(error, "Live request failed."));
+        this.liveTask = new LatestTask<>(ThreadPools.newSingle("live-load"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
+        this.epgTask = new LatestTask<>(ThreadPools.newSingle("live-epg"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
+        this.urlTask = new LatestTask<>(ThreadPools.newSingle("live-url"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
+        this.xmlTask = new LatestTask<>(ThreadPools.newSingle("live-xml"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
     }
 
     public void getLive(Live item) {

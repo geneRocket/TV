@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class ThreadPools {
 
     private static final String TAG = "ThreadPools";
-    private static final ExecutorService CONFIG = newFixed("config", Math.max(2, Constant.THREAD_POOL / 2));
+    private static final int NETWORK_CONFIG_CONCURRENCY = Math.max(4, Math.min(8, Constant.THREAD_POOL));
+    private static final ExecutorService CONFIG = newFixed("config", NETWORK_CONFIG_CONCURRENCY);
     private static final ExecutorService CONFIG_LOAD = newSingle("config-load");
     private static final ExecutorService LOADER = newFixed("loader", Math.max(2, Constant.THREAD_POOL / 2));
     private static final ExecutorService SEARCH = newFixed("search", Constant.THREAD_POOL);
@@ -38,6 +39,11 @@ public final class ThreadPools {
 
     public static ExecutorService config() {
         return CONFIG;
+    }
+
+    /** Limits independent configuration downloads without starving playback traffic. */
+    public static int networkConfigConcurrency() {
+        return NETWORK_CONFIG_CONCURRENCY;
     }
 
     public static ExecutorService configLoad() {

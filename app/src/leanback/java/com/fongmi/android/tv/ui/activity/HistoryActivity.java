@@ -93,9 +93,9 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         if (mAdapter.isDelete()) {
             new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_history).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                 mHistoryRequestId++;
-                HistoryRepository.get().deleteLoaded();
                 mAdapter.clear();
                 updateViews();
+                App.execute(() -> HistoryRepository.get().deleteLoaded());
             }).show();
         } else if (mAdapter.getItemCount() > 0) {
             mAdapter.setDelete(true);
@@ -117,7 +117,8 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     @Override
     public void onItemDelete(History item) {
         mHistoryRequestId++;
-        int index = mAdapter.delete(HistoryRepository.get().delete(item));
+        int index = mAdapter.delete(item);
+        App.execute(() -> HistoryRepository.get().delete(item));
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
         updateViews();
         if (index != -1 && mAdapter.getItemCount() > 0) {

@@ -123,7 +123,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         History item = mItems.get(position);
-        setFocusListener(holder.binding);
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.site.setVisibility(item.getSiteVisible());
@@ -139,13 +138,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         ImgUtil.clear(holder.binding.image);
     }
 
-    private void setFocusListener(AdapterVodBinding binding) {
-        binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> {
-            binding.name.setSelected(hasFocus);
-            binding.remark.setSelected(hasFocus);
-        });
-    }
-
     public class ViewHolder extends RecyclerView.ViewHolder {
 
         private final AdapterVodBinding binding;
@@ -153,6 +145,10 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
         public ViewHolder(@NonNull AdapterVodBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> {
+                binding.name.setSelected(hasFocus);
+                binding.remark.setSelected(hasFocus);
+            });
             itemView.setOnLongClickListener(view -> mListener.onLongClick());
             itemView.setOnClickListener(view -> {
                 int index = getBindingAdapterPosition();

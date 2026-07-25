@@ -36,12 +36,16 @@ public class ArrayPresenter extends Presenter {
         boolean onArrayItemTouch();
     }
 
-    public void setNextFocusDown(int nextFocusDown) {
+    public boolean setNextFocusDown(int nextFocusDown) {
+        if (this.nextFocusDown == nextFocusDown) return false;
         this.nextFocusDown = nextFocusDown;
+        return true;
     }
 
-    public void setNextFocusUp(int nextFocusUp) {
+    public boolean setNextFocusUp(int nextFocusUp) {
+        if (this.nextFocusUp == nextFocusUp) return false;
         this.nextFocusUp = nextFocusUp;
+        return true;
     }
 
     @Override

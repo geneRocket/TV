@@ -36,21 +36,7 @@ Data & runtime gateways（Config / DB / Loader / Player / Server）
 
 ## 分阶段交付
 
-### 0. 护栏与观测
 
-1. 为纯 Java 逻辑建立单元测试，并为关键 UI 流程建立最小 smoke checklist。
-2. 为构建增加可重复的 Leanback、Mobile、Python 校验入口。
-3. 记录启动、首页、详情、搜索、直播切换、播放成功率与崩溃基线。
-
-验收：现有构建通过；所有既有行为都有对应的测试或可执行人工检查项。
-
-当前可通过以下命令执行共享层的回归矩阵：
-
-```bash
-./gradlew :app:verifyRefactor
-```
-
-该任务包含 `:core:test`、Leanback lint 与三套 app 构建；当前 lint 基线为 0 error、199 个既有 warning，后续改动不得引入新的 error。
 
 ### 1. 共享业务边界
 
@@ -83,14 +69,6 @@ Data & runtime gateways（Config / DB / Loader / Player / Server）
 当前进展：`HistoryRepository` 已成为 UI、同步、服务器处理和数据库缓存清理的统一入口；`History` 暂保留为兼容实体与实现，后续可在不改调用方的前提下替换其缓存/Room 细节。
 
 验收：重复列表逻辑减少，数据库升级与备份恢复可验证，离线缓存和多配置 site key 行为不回退。
-
-### 4. 视觉与交互更新
-
-1. 建立共享的色彩、间距、排版、形状和状态 token；TV 与移动端各自映射到合适的组件。
-2. 优先改造首页、详情、播放控制、直播和设置等高频路径。
-3. TV 以焦点可见性和遥控器路径为第一约束；移动端以单手操作、深色模式和自适应布局为第一约束。
-
-验收：所有高频页面在深浅主题、中文/英文和常见屏幕尺寸下可用；TV 的每个可操作元素均能通过 DPAD 到达。
 
 ### 5. 模块化与清理
 

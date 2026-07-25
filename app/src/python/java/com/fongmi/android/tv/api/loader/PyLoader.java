@@ -1,54 +1,37 @@
 package com.fongmi.android.tv.api.loader;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.chaquo.Loader;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderNull;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class PyLoader {
 
-    private final ConcurrentHashMap<String, Spider> spiders;
-    private final ConcurrentHashMap<String, Object> locks;
+    private final SpiderStore spiders;
     private final Loader loader;
-    private String recent;
 
     public PyLoader() {
-        spiders = new ConcurrentHashMap<>();
-        locks = new ConcurrentHashMap<>();
+        spiders = new SpiderStore();
         loader = new Loader();
     }
 
     public void clear() {
-        spiders.values().forEach(spider -> ThreadPools.loader().execute(spider::destroy));
         spiders.clear();
-        locks.clear();
     }
 
     public void clear(String key) {
-        Spider spider = spiders.remove(key);
-        locks.remove(key);
-        if (spider != null) ThreadPools.loader().execute(spider::destroy);
-        if (key != null && key.equals(recent)) recent = null;
+        spiders.clear(key);
     }
 
     public void setRecent(String recent) {
-        this.recent = recent;
+        spiders.setRecent(recent);
     }
 
     public Spider getSpider(String key, String api, String ext) {
-        Spider spider = spiders.get(key);
-        if (spider != null) return spider;
-        synchronized (locks.computeIfAbsent(key, k -> new Object())) {
-            spider = spiders.get(key);
-            if (spider != null) return spider;
-            spider = createSpider(key, api, ext);
-            spiders.put(key, spider);
-            return spider;
-        }
+        Spider spider = spiders.getOrCreate(key, () -> createSpider(key, api, ext));
+        return spider == null ? new SpiderNull() : spider;
     }
 
     public Spider getCached(String key) {
@@ -63,13 +46,16 @@ public class PyLoader {
             return spider;
         } catch (Throwable e) {
             e.printStackTrace();
-            return new SpiderNull();
+            return null;
         }
     }
 
     public Object[] proxyInvoke(Map<String, String> params) {
         try {
-            if (!params.containsKey("siteKey")) return recent == null ? null : getRecent(recent).proxy(params);
+            if (!params.containsKey("siteKey")) {
+                Spider spider = spiders.getRecent();
+                return spider == null ? null : spider.proxy(params);
+            }
             return BaseLoader.get().getSpider(params).proxy(params);
         } catch (Throwable e) {
             e.printStackTrace();
@@ -77,8 +63,4 @@ public class PyLoader {
         }
     }
 
-    private Spider getRecent(String key) {
-        Spider spider = getCached(key);
-        return spider == null ? new SpiderNull() : spider;
-    }
 }

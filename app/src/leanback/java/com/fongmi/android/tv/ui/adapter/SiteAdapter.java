@@ -88,9 +88,19 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         if (position == RecyclerView.NO_POSITION) return;
         Site item = mItems.get(position);
         if (type == 0) mListener.onItemClick(item);
-        if (type == 1) item.setSearchable(!item.isSearchable()).save();
-        if (type == 2) item.setChangeable(!item.isChangeable()).save();
+        if (type == 1) saveSearchable(item);
+        if (type == 2) saveChangeable(item);
         if (type != 0) notifyItemChanged(position);
+    }
+
+    private void saveSearchable(Site item) {
+        item.setSearchable(!item.isSearchable());
+        App.execute(item::save);
+    }
+
+    private void saveChangeable(Site item) {
+        item.setChangeable(!item.isChangeable());
+        App.execute(item::save);
     }
 
     private boolean setLongListener(@NonNull ViewHolder holder) {

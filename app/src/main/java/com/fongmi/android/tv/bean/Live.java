@@ -124,6 +124,9 @@ public class Live {
     private Spider spider;
 
     @Ignore
+    private transient volatile Map<String, String> headers;
+
+    @Ignore
     private int width;
 
     public static Live objectFrom(JsonElement element) {
@@ -191,7 +194,7 @@ public class Live {
     }
 
     public void setExt(String ext) {
-        this.ext = ext.trim();
+        this.ext = ext == null ? "" : ext.trim();
     }
 
     public String getJar() {
@@ -372,11 +375,20 @@ public class Live {
     }
 
     public Map<String, String> getHeaders() {
-        Map<String, String> headers = fixHeaders(Json.toMap(getHeader()));
-        if (!getUa().isEmpty()) headers.put(HttpHeaders.USER_AGENT, getUa());
-        if (!getOrigin().isEmpty()) headers.put(HttpHeaders.ORIGIN, getOrigin());
-        if (!getReferer().isEmpty()) headers.put(HttpHeaders.REFERER, getReferer());
-        return headers;
+        Map<String, String> cached = headers;
+        if (cached == null) {
+            synchronized (this) {
+                cached = headers;
+                if (cached == null) {
+                    Map<String, String> resolved = fixHeaders(Json.toMap(getHeader()));
+                    if (!getUa().isEmpty()) resolved.put(HttpHeaders.USER_AGENT, getUa());
+                    if (!getOrigin().isEmpty()) resolved.put(HttpHeaders.ORIGIN, getOrigin());
+                    if (!getReferer().isEmpty()) resolved.put(HttpHeaders.REFERER, getReferer());
+                    headers = cached = Collections.unmodifiableMap(resolved);
+                }
+            }
+        }
+        return new HashMap<>(cached);
     }
 
     private Map<String, String> fixHeaders(Map<String, String> headers) {

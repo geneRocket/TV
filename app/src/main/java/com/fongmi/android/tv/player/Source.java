@@ -134,19 +134,17 @@ public class Source {
     }
 
     public String fetch(Result result) throws Exception {
-        String url = result.getUrl().v();
-        if (TextUtils.isEmpty(url)) return "";
-        Extractor extractor = getExtractor(UrlUtil.uri(url));
-        if (extractor != null) result.setParse(0);
-        prepare(extractor);
-        return extractor == null ? url : extractor.fetch(url);
+        return fetch(result.getUrl().v(), result::setParse);
     }
 
     public String fetch(Channel channel) throws Exception {
-        String url = channel.getCurrent();
+        return fetch(channel.getCurrent(), channel::setParse);
+    }
+
+    private String fetch(String url, java.util.function.Consumer<Integer> parseSetter) throws Exception {
         if (TextUtils.isEmpty(url)) return "";
         Extractor extractor = getExtractor(UrlUtil.uri(url));
-        if (extractor != null) channel.setParse(0);
+        if (extractor != null) parseSetter.accept(0);
         prepare(extractor);
         return extractor == null ? url : extractor.fetch(url);
     }
