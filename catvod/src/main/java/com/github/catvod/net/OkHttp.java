@@ -54,15 +54,19 @@ public class OkHttp {
     }
 
     public void setDoh(Doh doh) {
-        dns().setDoh(doh);
-        client = null;
+        synchronized (OkHttp.class) {
+            dns().setDoh(doh);
+            client = null;
+        }
     }
 
     public void setProxy(String proxy) {
-        ProxySelector.setDefault(selector());
-        selector().setProxy(proxy);
-        authenticator().setProxy(proxy);
-        client = null;
+        synchronized (OkHttp.class) {
+            ProxySelector.setDefault(selector());
+            selector().setProxy(proxy);
+            authenticator().setProxy(proxy);
+            client = null;
+        }
     }
 
     public static OkProxySelector selector() {

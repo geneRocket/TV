@@ -18,19 +18,6 @@ public class Setting {
         return getPref().edit();
     }
 
-    private static float getFloat(String key, float defaultValue) {
-        SharedPreferences preferences = getPref();
-        try {
-            return preferences.getFloat(key, defaultValue);
-        } catch (ClassCastException ignored) {
-            Object value = preferences.getAll().get(key);
-            if (!(value instanceof Number)) return defaultValue;
-            float result = ((Number) value).floatValue();
-            preferences.edit().putFloat(key, result).apply();
-            return result;
-        }
-    }
-
     // region Core Settings
 
     public static String getDoh() {
@@ -150,7 +137,7 @@ public class Setting {
     }
 
     public static float getVolumeScale() {
-        return Math.min(Math.max(getFloat("volume_scale", 1.0f), 0f), 1f);
+        return Math.min(Math.max(Prefers.getFloat("volume_scale", 1.0f), 0f), 1f);
     }
 
     public static void putVolumeScale(float value) {
@@ -158,7 +145,7 @@ public class Setting {
     }
 
     public static float getPlaySpeed() {
-        return getFloat("play_speed", 1.0f);
+        return Prefers.getFloat("play_speed", 1.0f);
     }
 
     public static void putPlaySpeed(float speed) {
@@ -210,7 +197,7 @@ public class Setting {
     }
 
     public static float getDanmuSize() {
-        return Math.min(Math.max(getFloat("danmu_size", 1.0f), 0.6f), 2.0f);
+        return Math.min(Math.max(Prefers.getFloat("danmu_size", 1.0f), 0.6f), 2.0f);
     }
 
     public static void putDanmuSize(float size) {
@@ -450,7 +437,7 @@ public class Setting {
     }
 
     public static float getSubtitleTextSize() {
-        return getFloat("subtitle_text_size", 0);
+        return Prefers.getFloat("subtitle_text_size", 0);
     }
 
     public static void putSubtitleTextSize(float size) {
@@ -458,7 +445,7 @@ public class Setting {
     }
 
     public static float getSubtitleBottomPadding() {
-        return getFloat("subtitle_bottom_padding", 0);
+        return Prefers.getFloat("subtitle_bottom_padding", 0);
     }
 
     public static void putSubtitleBottomPadding(float padding) {

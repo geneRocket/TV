@@ -45,16 +45,18 @@ public class FileUtil {
         App.get().startActivity(intent);
     }
 
-    public static void zipFolder(File folder, File zip) {
-        if (folder == null || zip == null || !folder.isDirectory()) return;
+    public static boolean zipFolder(File folder, File zip) {
+        if (folder == null || zip == null || !folder.isDirectory()) return false;
         try {
             ensureParent(zip);
             File target = zip.getCanonicalFile();
             try (ZipOutputStream zipOut = new ZipOutputStream(new FileOutputStream(zip))) {
                 folderToZip("", folder, target, zipOut);
             }
+            return true;
         } catch (Exception e) {
             ThreadPools.log(e, "Zip folder failed.");
+            return false;
         }
     }
 
@@ -89,8 +91,8 @@ public class FileUtil {
         }
     }
 
-    public static void extractZip(File target, File path) {
-        if (target == null || path == null) return;
+    public static boolean extractZip(File target, File path) {
+        if (target == null || path == null) return false;
         long total = 0;
         int count = 0;
         try (ZipFile zip = new ZipFile(target)) {
@@ -110,8 +112,10 @@ public class FileUtil {
                 }
                 if (total > MAX_ZIP_BYTES) throw new IOException("Zip output is too large: " + target);
             }
+            return true;
         } catch (Exception e) {
             ThreadPools.log(e, "Extract zip failed.");
+            return false;
         }
     }
 

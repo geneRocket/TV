@@ -10,6 +10,7 @@ import com.google.gson.JsonObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
@@ -35,7 +36,7 @@ public class Local implements Process {
 
     private NanoHTTPD.Response getFile(Map<String, String> headers, String path) {
         try {
-            File file = Path.root(path.substring(5));
+            File file = getRootFile(path.substring(5));
             if (file.isDirectory()) return getFolder(file);
             if (file.isFile()) return getFile(headers, file, NanoHTTPD.getMimeTypeForFile(path));
             throw new FileNotFoundException();
@@ -45,27 +46,103 @@ public class Local implements Process {
     }
 
     private NanoHTTPD.Response upload(Map<String, String> params, Map<String, String> files) {
-        String path = params.get("path");
-        for (String k : files.keySet()) {
-            String fn = params.get(k);
-            File temp = new File(files.get(k));
-            if (fn.toLowerCase().endsWith(".zip")) FileUtil.extractZip(temp, Path.root(path));
-            else Path.copy(temp, Path.root(path, fn));
+        try {
+            File directory = getRootFile(params.get("path"));
+            if (!directory.exists() && !directory.mkdirs()) return Nano.error("Create folder failed");
+            if (!directory.isDirectory()) return Nano.error("Invalid upload path");
+            for (String k : files.keySet()) {
+                String fn = params.get(k);
+                File temp = new File(files.get(k));
+                if (fn == null) return Nano.error("Missing file name");
+                if (fn.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+                    if (!extractZip(temp, directory)) return Nano.error("Extract zip failed");
+                } else {
+                    if (!copyFile(temp, getRootFile(new File(directory, fn)))) return Nano.error("Copy file failed");
+                }
+            }
+            return Nano.success();
+        } catch (Exception e) {
+            return Nano.error(e.getMessage());
         }
-        return Nano.success();
+    }
+
+    private boolean extractZip(File target, File directory) throws IOException {
+        File staged = Path.cache("upload-" + System.nanoTime());
+        Path.clear(staged);
+        try {
+            return FileUtil.extractZip(target, staged) && copyFolder(staged, directory);
+        } finally {
+            Path.clear(staged);
+        }
+    }
+
+    private boolean copyFolder(File source, File target) throws IOException {
+        File[] files = source.listFiles();
+        if (files == null) return source.isDirectory();
+        for (File file : files) {
+            File output = getRootFile(new File(target, file.getName()));
+            if (file.isDirectory()) {
+                if (output.exists() && !output.isDirectory()) return false;
+                if (!output.exists() && !output.mkdirs()) return false;
+                if (!copyFolder(file, output)) return false;
+            } else if (!copyFile(file, output)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean copyFile(File source, File target) {
+        if (target.isDirectory()) return false;
+        File staged = new File(target.getPath() + ".upload-" + System.nanoTime());
+        Path.clear(staged);
+        if (!Path.copy(source, staged)) {
+            Path.clear(staged);
+            return false;
+        }
+        boolean copied = replace(staged, target);
+        if (!copied) Path.clear(staged);
+        return copied;
+    }
+
+    private boolean replace(File source, File target) {
+        Path.clear(target);
+        if (source.renameTo(target)) return true;
+        if (!Path.copy(source, target)) return false;
+        Path.clear(source);
+        return true;
     }
 
     private NanoHTTPD.Response newFolder(Map<String, String> params) {
-        String path = params.get("path");
-        String name = params.get("name");
-        Path.root(path, name).mkdirs();
-        return Nano.success();
+        try {
+            File folder = getRootFile(new File(getRootFile(params.get("path")), params.get("name")));
+            return folder.mkdirs() || folder.isDirectory() ? Nano.success() : Nano.error("Create folder failed");
+        } catch (Exception e) {
+            return Nano.error(e.getMessage());
+        }
     }
 
     private NanoHTTPD.Response delFolder(Map<String, String> params) {
-        String path = params.get("path");
-        Path.clear(Path.root(path));
-        return Nano.success();
+        try {
+            File target = getRootFile(params.get("path"));
+            if (target.equals(Path.root().getCanonicalFile())) return Nano.error("Delete root is not allowed");
+            Path.clear(target);
+            return Nano.success();
+        } catch (Exception e) {
+            return Nano.error(e.getMessage());
+        }
+    }
+
+    private File getRootFile(String path) throws IOException {
+        return getRootFile(new File(Path.root(), path == null ? "" : path));
+    }
+
+    private File getRootFile(File target) throws IOException {
+        File root = Path.root().getCanonicalFile();
+        File file = target.getCanonicalFile();
+        String rootPath = root.getPath() + File.separator;
+        if (!file.equals(root) && !file.getPath().startsWith(rootPath)) throw new SecurityException("Unsafe local path");
+        return file;
     }
 
     private NanoHTTPD.Response getFolder(File root) {

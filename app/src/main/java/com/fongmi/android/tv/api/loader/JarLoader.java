@@ -143,7 +143,8 @@ public class JarLoader {
             } else if (jarUrl.startsWith("file")) {
                 load(key, Path.local(jarUrl));
             } else {
-                parseJar(key, UrlUtil.convert(jarUrl));
+                String converted = UrlUtil.convert(jarUrl);
+                if (!jarUrl.equals(converted)) parseJar(key, converted);
             }
         }
     }

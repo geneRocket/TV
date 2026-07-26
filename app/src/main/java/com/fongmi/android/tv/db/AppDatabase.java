@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.db;
 
 import android.content.Context;
+import android.database.Cursor;
 
 import androidx.annotation.NonNull;
 import androidx.room.Database;
@@ -48,6 +49,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final String BACKUP_SUFFIX = "tv.backup";
 
     private static volatile AppDatabase instance;
+    private static final Object BACKUP_LOCK = new Object();
 
     public static synchronized AppDatabase get() {
         if (instance == null) instance = create(App.get());
@@ -69,39 +71,85 @@ public abstract class AppDatabase extends RoomDatabase {
 
     public static void backup(com.fongmi.android.tv.impl.Callback callback) {
         App.execute(() -> {
-            File restore = Path.restore();
-            if (!restore.exists()) return;
-            File db = App.get().getDatabasePath(NAME).getAbsoluteFile();
-            File wal = App.get().getDatabasePath(NAME + "-wal").getAbsoluteFile();
-            File shm = App.get().getDatabasePath(NAME + "-shm").getAbsoluteFile();
-            if (db.exists()) Path.copy(db, new File(restore, db.getName()));
-            if (wal.exists()) Path.copy(wal, new File(restore, wal.getName()));
-            if (shm.exists()) Path.copy(shm, new File(restore, shm.getName()));
-            Prefers.backup(new File(restore, NAME + "-pref"));
-            String time = Util.format(new SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault()), (new File(restore, db.getName())).lastModified());
-            File file = new File(Path.tv(), time + "." + BACKUP_SUFFIX);
-            FileUtil.zipFolder(restore, file);
-            App.post(() -> callback.success(file.getAbsolutePath()));
+            synchronized (BACKUP_LOCK) {
+                File restore = prepareRestoreDirectory();
+                if (restore == null) return;
+                SupportSQLiteDatabase database = get().getOpenHelper().getWritableDatabase();
+                if (!checkpoint(database)) return;
+                File file;
+                database.beginTransaction();
+                try {
+                    File db = App.get().getDatabasePath(NAME).getAbsoluteFile();
+                    if (!db.exists() || !Path.copy(db, new File(restore, db.getName()))) return;
+                    Prefers.backup(new File(restore, NAME + "-pref"));
+                    String time = Util.format(new SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault()), (new File(restore, db.getName())).lastModified());
+                    file = new File(Path.tv(), time + "." + BACKUP_SUFFIX);
+                } finally {
+                    database.endTransaction();
+                }
+                if (!FileUtil.zipFolder(restore, file)) return;
+                App.post(() -> callback.success(file.getAbsolutePath()));
+            }
         });
     }
 
     public static void restore(File file, com.fongmi.android.tv.impl.Callback callback) {
         App.execute(() -> {
-            File restore = Path.restore();
-            if (!restore.exists()) return;
-            FileUtil.extractZip(file, restore);
-            File db = new File(restore, NAME);
-            if (!db.exists()) return;
-            reset();
-            File wal = new File(restore, NAME + "-wal");
-            File shm = new File(restore, NAME + "-shm");
-            File pref = new File(restore, NAME + "-pref");
-            if (db.exists()) Path.copy(db, App.get().getDatabasePath(db.getName()).getAbsoluteFile());
-            if (wal.exists()) Path.copy(wal, App.get().getDatabasePath(wal.getName()).getAbsoluteFile());
-            if (shm.exists()) Path.copy(shm, App.get().getDatabasePath(shm.getName()).getAbsoluteFile());
-            if (pref.exists()) Prefers.restore(pref);
-            App.post(callback::success);
+            synchronized (BACKUP_LOCK) {
+                File restore = prepareRestoreDirectory();
+                if (restore == null) return;
+                if (!FileUtil.extractZip(file, restore)) return;
+                File db = new File(restore, NAME);
+                if (!db.exists()) return;
+                File targetDb = App.get().getDatabasePath(db.getName()).getAbsoluteFile();
+                File wal = new File(restore, NAME + "-wal");
+                File shm = new File(restore, NAME + "-shm");
+                File pref = new File(restore, NAME + "-pref");
+                File targetWal = App.get().getDatabasePath(wal.getName()).getAbsoluteFile();
+                File targetShm = App.get().getDatabasePath(shm.getName()).getAbsoluteFile();
+                File stagedDb = new File(targetDb.getPath() + ".restore");
+                File stagedWal = new File(targetWal.getPath() + ".restore");
+                File stagedShm = new File(targetShm.getPath() + ".restore");
+                Path.clear(stagedDb);
+                Path.clear(stagedWal);
+                Path.clear(stagedShm);
+                if (!Path.copy(db, stagedDb)) return;
+                if (wal.exists() && !Path.copy(wal, stagedWal)) return;
+                if (shm.exists() && !Path.copy(shm, stagedShm)) return;
+                reset();
+                Path.clear(targetDb);
+                Path.clear(targetWal);
+                Path.clear(targetShm);
+                if (!replace(stagedDb, targetDb)) return;
+                if (wal.exists() && !replace(stagedWal, targetWal)) return;
+                if (shm.exists() && !replace(stagedShm, targetShm)) return;
+                if (pref.exists()) Prefers.restore(pref);
+                App.post(callback::success);
+            }
         });
+    }
+
+    private static File prepareRestoreDirectory() {
+        File restore = Path.restore();
+        Path.clear(restore);
+        return restore.mkdirs() ? restore : null;
+    }
+
+    private static boolean replace(File source, File target) {
+        if (source.renameTo(target)) return true;
+        if (!Path.copy(source, target)) return false;
+        Path.clear(source);
+        return true;
+    }
+
+    private static boolean checkpoint(SupportSQLiteDatabase database) {
+        Cursor cursor = null;
+        try {
+            cursor = database.query("PRAGMA wal_checkpoint(TRUNCATE)");
+            return cursor.moveToFirst() && cursor.getInt(0) == 0;
+        } finally {
+            if (cursor != null) cursor.close();
+        }
     }
 
     private static AppDatabase create(Context context) {

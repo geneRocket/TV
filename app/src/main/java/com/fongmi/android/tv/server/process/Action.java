@@ -34,6 +34,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -224,13 +225,12 @@ public class Action implements Process {
 
     private void apk(Map<String, String> params, Map<String, String> files) {
         for (String k : files.keySet()) {
-            String fn = params.get(k);
+            String fn = getFileName(params.get(k));
             File temp = new File(files.get(k));
             if (!temp.exists()) continue;
-            if (fn.toLowerCase().endsWith(".apk")) {
+            if (fn.toLowerCase(Locale.ROOT).endsWith(".apk")) {
                 File apk = Path.cache(System.currentTimeMillis() + "-" + fn);
-                Path.copy(temp, apk);
-                FileUtil.openFile(apk);
+                if (Path.copy(temp, apk)) FileUtil.openFile(apk);
             }
             temp.delete();
             break;
@@ -246,11 +246,14 @@ public class Action implements Process {
 
     private void wallConfig(Map<String, String> params, Map<String, String> files) {
         for (String k : files.keySet()) {
-            String fn = params.get(k);
+            String fn = getFileName(params.get(k));
             File temp = new File(files.get(k));
-            if (!temp.exists()) continue;
+            if (!temp.exists() || TextUtils.isEmpty(fn)) continue;
             File wall = new File(Path.download(), fn);
-            Path.copy(temp, wall);
+            if (!Path.copy(temp, wall)) {
+                temp.delete();
+                break;
+            }
             showProgress();
             WallConfig.load(ConfigRepository.get().find("file://" + Environment.DIRECTORY_DOWNLOADS + "/" + fn, 2), new Callback() {
                 @Override
@@ -270,11 +273,14 @@ public class Action implements Process {
 
     private void pushRestore(Map<String, String> params, Map<String, String> files) {
         for (String k : files.keySet()) {
-            String fn = params.get(k);
+            String fn = getFileName(params.get(k));
             File temp = new File(files.get(k));
-            if (!temp.exists()) continue;
+            if (!temp.exists() || TextUtils.isEmpty(fn)) continue;
             File restore = Path.cache(System.currentTimeMillis() + "-" + fn);
-            Path.copy(temp, restore);
+            if (!Path.copy(temp, restore)) {
+                temp.delete();
+                break;
+            }
             AppDatabase.restore(restore, new Callback() {
                 @Override
                 public void success() {
@@ -288,6 +294,10 @@ public class Action implements Process {
             temp.delete();
             break;
         }
+    }
+
+    private String getFileName(String name) {
+        return TextUtils.isEmpty(name) ? "" : new File(name).getName();
     }
 
     private void showProgress() {

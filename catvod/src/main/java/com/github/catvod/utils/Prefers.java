@@ -49,8 +49,15 @@ public class Prefers {
     }
 
     public static float getFloat(String key, float defaultValue) {
+        SharedPreferences preferences = getPrefers();
         try {
-            return getPrefers().getFloat(key, defaultValue);
+            return preferences.getFloat(key, defaultValue);
+        } catch (ClassCastException e) {
+            Object value = preferences.getAll().get(key);
+            if (!(value instanceof Number)) return defaultValue;
+            float result = ((Number) value).floatValue();
+            preferences.edit().putFloat(key, result).apply();
+            return result;
         } catch (Exception e) {
             return defaultValue;
         }
@@ -69,20 +76,26 @@ public class Prefers {
     }
 
     public static void put(String key, Object obj) {
-        if (obj == null) return;
+        SharedPreferences.Editor editor = getPrefers().edit();
+        if (put(editor, key, obj)) editor.apply();
+    }
+
+    private static boolean put(SharedPreferences.Editor editor, String key, Object obj) {
+        if (obj == null) return false;
         if (obj instanceof String) {
-            getPrefers().edit().putString(key, (String) obj).apply();
+            editor.putString(key, (String) obj);
         } else if (obj instanceof Boolean) {
-            getPrefers().edit().putBoolean(key, (Boolean) obj).apply();
+            editor.putBoolean(key, (Boolean) obj);
         } else if (obj instanceof Float) {
-            getPrefers().edit().putFloat(key, (Float) obj).apply();
+            editor.putFloat(key, (Float) obj);
         } else if (obj instanceof Integer) {
-            getPrefers().edit().putInt(key, (Integer) obj).apply();
+            editor.putInt(key, (Integer) obj);
         } else if (obj instanceof Long) {
-            getPrefers().edit().putLong(key, (Long) obj).apply();
+            editor.putLong(key, (Long) obj);
         } else if (obj instanceof LazilyParsedNumber) {
-            getPrefers().edit().putInt(key, ((LazilyParsedNumber) obj).intValue()).apply();
-        }
+            editor.putInt(key, ((LazilyParsedNumber) obj).intValue());
+        } else return false;
+        return true;
     }
 
     public static void remove(String key) {
@@ -97,7 +110,10 @@ public class Prefers {
         try {
             Gson gson = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LAZILY_PARSED_NUMBER).create();
             Map<String, Object> map = gson.fromJson(Path.read(file), new TypeToken<Map<String, Object>>() {}.getType());
-            for (Map.Entry<String, ?> entry : map.entrySet()) Prefers.put(entry.getKey(), convert(entry));
+            SharedPreferences.Editor editor = getPrefers().edit();
+            boolean changed = false;
+            for (Map.Entry<String, ?> entry : map.entrySet()) changed |= put(editor, entry.getKey(), convert(entry));
+            if (changed) editor.apply();
         } catch (Exception e) {
             e.printStackTrace();
         }
