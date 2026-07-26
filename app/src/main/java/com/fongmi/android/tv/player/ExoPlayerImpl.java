@@ -21,10 +21,12 @@ import java.util.Map;
 public class ExoPlayerImpl implements IPlayer {
 
     private final ExoPlayer player;
+    private final PlayerView view;
     private final Player.Listener listener;
     private final int decode;
 
     public ExoPlayerImpl(PlayerView view, int decode, Player.Listener listener) {
+        this.view = view;
         this.listener = listener;
         this.decode = decode;
         player = new ExoPlayer.Builder(App.get())
@@ -71,6 +73,7 @@ public class ExoPlayerImpl implements IPlayer {
     @Override
     public void release() {
         player.stop();
+        if (view.getPlayer() == player) view.setPlayer(null);
         player.clearVideoSurface();
         player.removeListener(listener);
         player.release();

@@ -22,9 +22,11 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer;
 public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
 
     private static final String TAG = NextRenderersFactory.class.getSimpleName();
+    private final int decode;
 
     public NextRenderersFactory(@NonNull Context context, int decode) {
         super(context);
+        this.decode = decode;
         setEnableDecoderFallback(true);
         setExtensionRendererMode(decode == Players.SOFT ? EXTENSION_RENDERER_MODE_PREFER : EXTENSION_RENDERER_MODE_ON);
     }
@@ -50,10 +52,9 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
         // 先让父类添加标准的 MediaCodec (硬件) 渲染器
         super.buildVideoRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
 
-        // 修改点 3: 移除 index 计算，直接 add 到列表末尾。
         try {
             Renderer renderer = new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY);
-            out.add(renderer);
+            out.add(decode == Players.SOFT ? 0 : out.size(), renderer);
             Log.i(TAG, "Loaded FfmpegVideoRenderer.");
         } catch (RuntimeException | LinkageError e) {
             Log.e(TAG, "Error instantiating Ffmpeg extension", e);
