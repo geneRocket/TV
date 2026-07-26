@@ -16,7 +16,7 @@ import java.util.Map;
 
 public class Prefers {
 
-    private static SharedPreferences getPrefers() {
+    public static SharedPreferences getPrefers() {
         return PreferenceManager.getDefaultSharedPreferences(Init.context());
     }
 
@@ -104,10 +104,14 @@ public class Prefers {
     }
 
     private static Object convert(Map.Entry<String, ?> entry) {
-        if ("danmu_size".equals(entry.getKey())) {
-            return Float.parseFloat(entry.getValue().toString());
-        } else {
-            return entry.getValue();
+        Object value = entry.getValue();
+        if (!(value instanceof LazilyParsedNumber)) return value;
+        String number = value.toString();
+        if (number.contains(".") || number.contains("e") || number.contains("E")) return Float.parseFloat(number);
+        try {
+            return Integer.parseInt(number);
+        } catch (NumberFormatException ignored) {
+            return Long.parseLong(number);
         }
     }
 }

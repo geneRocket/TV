@@ -4,15 +4,14 @@ import android.content.SharedPreferences;
 import android.content.Intent;
 import android.provider.Settings;
 
-import androidx.preference.PreferenceManager;
-
 import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.utils.LanguageUtil;
+import com.github.catvod.utils.Prefers;
 
 public class Setting {
 
     private static SharedPreferences getPref() {
-        return PreferenceManager.getDefaultSharedPreferences(App.get());
+        return Prefers.getPrefers();
     }
 
     private static SharedPreferences.Editor getEditor() {
