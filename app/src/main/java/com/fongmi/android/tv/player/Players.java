@@ -95,6 +95,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private static final Pattern PATTERN_VOD = Pattern.compile(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
 
     public static Players create(Activity activity) {
+        Players previous = Server.get().getPlayer();
+        if (previous != null) previous.releasePlayer();
         Players player = new Players(activity);
         Server.get().setPlayer(player);
         return player;
