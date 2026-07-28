@@ -26,6 +26,8 @@ public final class M3u8AdFilter {
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
     private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
     private static final int MAX_CACHED_PATTERNS = 256;
+    private static final int URI_AD_LIKE = 1;
+    private static final int URI_STRONG_AD = 1 << 1;
     private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
     private static final Set<String> SUBTITLE_PLAYLIST_WHITELIST = Collections.newSetFromMap(new LinkedHashMap<String, Boolean>(SUBTITLE_WHITELIST_MAX, 0.75f, true) {
@@ -591,7 +593,7 @@ public final class M3u8AdFilter {
             String h = record.host == null ? "" : record.host;
             boolean sameAsMajor = isEmpty(h) || majorHost.equals(h);
             boolean explicitAd = isExplicitAdRecord(record);
-            boolean minorAdHost = !sameAsMajor && isAdLikeUri(record.resolvedUri);
+            boolean minorAdHost = !sameAsMajor && record.adLikeUri;
             boolean minorHost = !sameAsMajor && hostCount.getOrDefault(h, 0) <= Math.max(1, segmentCount / 5);
 
             if (explicitAd || minorAdHost || minorHost) {
@@ -603,7 +605,7 @@ public final class M3u8AdFilter {
         }
 
         if (removed <= 0) return build(records, original.length());
-        if (countSegmentsFromString(sb.toString()) <= 0) return build(records, original.length());
+        if (removed >= segmentCount) return build(records, original.length());
 
         if (sb.length() > 0) sb.setLength(sb.length() - 1);
         return sb.toString();
@@ -706,7 +708,7 @@ public final class M3u8AdFilter {
             }
 
             boolean explicitAd = isExplicitAdRecord(record);
-            boolean adByPendingSignal = pendingAdSignal && (explicitAd || isAdLikeUri(record.resolvedUri) || hasAdSignalTag(record.tags));
+            boolean adByPendingSignal = pendingAdSignal && (explicitAd || record.adLikeUri || hasAdSignalTag(record.tags));
             boolean hasDiscontinuity = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
 
             if (explicitAd && hasDiscontinuity) {
@@ -835,7 +837,7 @@ public final class M3u8AdFilter {
                 continue;
             }
 
-            if (isExplicitAdRecord(record) || isAdLikeUri(record.resolvedUri)) {
+            if (isExplicitAdRecord(record) || record.adLikeUri) {
                 cluster.add(record);
             } else {
                 flushCluster(cluster, kept, segmentCount);
@@ -1190,13 +1192,14 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isExplicitAdRecord(Record record) {
-        if (record == null || !record.segment) return false;
-        if (hasExplicitAdTag(record.tags)) return true;
-        if (isStrongAdSegmentUri(record.resolvedUri) || isStrongAdSegmentUri(record.line)) return true;
+        return record != null && record.explicitAd;
+    }
 
-        boolean hasDiscontinuity = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
-        return hasDiscontinuity
-                && (isWeakAdNumberSegmentUri(record.resolvedUri) || isWeakAdNumberSegmentUri(record.line));
+    private static boolean isExplicitAdSegment(List<String> tags, String resolvedUri, int uriAdSignals) {
+        if (hasExplicitAdTag(tags)) return true;
+        if ((uriAdSignals & URI_STRONG_AD) != 0) return true;
+        if (!hasTagPrefix(tags, "#EXT-X-DISCONTINUITY")) return false;
+        return containsAdNumberMediaPath(resolvedUri);
     }
 
     private static boolean hasExplicitAdTag(List<String> tags) {
@@ -1268,22 +1271,21 @@ public final class M3u8AdFilter {
         return isAdLikeUri(lower);
     }
 
-    private static boolean isStrongAdSegmentUri(String uri) {
-        if (isEmpty(uri)) return false;
+    private static int classifySegmentUri(String uri) {
+        if (isEmpty(uri)) return 0;
 
         String lower = uri.toLowerCase(Locale.US).trim();
         int fragment = lower.indexOf('#');
         if (fragment >= 0) lower = lower.substring(0, fragment);
 
-        if (!isLikelySegmentResource(lower)) return false;
-        if (containsAdJumpMediaPath(lower)) return true;
-        return isStrongAdLikeUri(lower);
+        if (!isLikelySegmentResource(lower)) return 0;
+        if (containsAdJumpMediaPath(lower)) return URI_AD_LIKE | URI_STRONG_AD;
+        if (isStrongAdLikeUri(lower)) return URI_AD_LIKE | URI_STRONG_AD;
+        return containsAdPathPart(lower) ? URI_AD_LIKE : 0;
     }
 
-    private static boolean isWeakAdNumberSegmentUri(String uri) {
+    private static boolean containsAdNumberMediaPath(String uri) {
         if (isEmpty(uri) || !isLikelySegmentResource(uri)) return false;
-        if (isStrongAdSegmentUri(uri)) return false;
-
         String path = stripQueryAndFragment(uri).toLowerCase(Locale.US);
         for (String part : path.split("[/._\\-]+")) {
             if (isAdNumber(part, "ad") || isAdNumber(part, "ads")) return true;
@@ -1522,22 +1524,30 @@ public final class M3u8AdFilter {
         private final String resolvedUri;
         private final List<String> tags;
         private final double duration;
+        private final boolean adLikeUri;
+        private final boolean explicitAd;
 
-        private Record(boolean segment, String line, String host, String resolvedUri, List<String> tags, double duration) {
+        private Record(boolean segment, String line, String host, String resolvedUri, List<String> tags, double duration,
+                       boolean adLikeUri, boolean explicitAd) {
             this.segment = segment;
             this.line = line;
             this.host = host;
             this.resolvedUri = resolvedUri;
             this.tags = tags;
             this.duration = duration;
+            this.adLikeUri = adLikeUri;
+            this.explicitAd = explicitAd;
         }
 
         public static Record plain(String line) {
-            return new Record(false, line, "", "", null, 0);
+            return new Record(false, line, "", "", null, 0, false, false);
         }
 
         public static Record segment(List<String> tags, String line, String host, String resolvedUri, double duration) {
-            return new Record(true, line, host, resolvedUri, tags, duration);
+            int uriAdSignals = classifySegmentUri(resolvedUri);
+            return new Record(true, line, host, resolvedUri, tags, duration,
+                    (uriAdSignals & URI_AD_LIKE) != 0,
+                    isExplicitAdSegment(tags, resolvedUri, uriAdSignals));
         }
     }
 
@@ -1572,7 +1582,7 @@ public final class M3u8AdFilter {
                 segments++;
                 lastSegment = i;
                 duration += record.duration;
-                strongAdSignal |= isExplicitAdRecord(record) || containsAdJumpMediaPath(record.resolvedUri);
+                strongAdSignal |= record.explicitAd;
                 fingerprint.append(Math.round(record.duration * 10)).append(',');
             }
 
