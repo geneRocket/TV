@@ -29,6 +29,8 @@ public class M3u8AdFilterTest {
     public void commonCdnQueryKeysAreNotAdsByThemselves() {
         assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?vid=movie&output=hls&sz=720"));
         assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?adid=123"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?category=pre%72oll"));
+        assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?type=video#label=ad"));
     }
 
     @Test

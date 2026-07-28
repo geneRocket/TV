@@ -777,22 +777,14 @@ public final class M3u8AdFilter {
         if (records == null || records.isEmpty()) return records;
 
         List<Pod> pods = new ArrayList<>();
+        int podStart = -1;
         for (int i = 0; i < records.size(); i++) {
             Record record = records.get(i);
             if (!record.segment || !hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) continue;
-
-            int end = records.size();
-            for (int j = i + 1; j < records.size(); j++) {
-                Record next = records.get(j);
-                if (next.segment && hasTagPrefix(next.tags, "#EXT-X-DISCONTINUITY")) {
-                    end = j;
-                    break;
-                }
-            }
-
-            Pod pod = Pod.create(records, i, end);
-            if (pod != null) pods.add(pod);
+            if (podStart >= 0) addPod(pods, records, podStart, i);
+            podStart = i;
         }
+        if (podStart >= 0) addPod(pods, records, podStart, records.size());
 
         Map<String, Integer> counts = new HashMap<>();
         for (Pod pod : pods) counts.put(pod.fingerprint, counts.getOrDefault(pod.fingerprint, 0) + 1);
@@ -807,11 +799,17 @@ public final class M3u8AdFilter {
             }
         }
 
-        if (removedSegments <= 0 || removedSegments >= countSegments(records)) return records;
+        int segmentCount = countSegments(records);
+        if (removedSegments <= 0 || removedSegments >= segmentCount) return records;
 
         List<Record> kept = new ArrayList<>(records.size());
         for (int i = 0; i < records.size(); i++) if (!remove[i]) kept.add(records.get(i));
-        return countSegments(kept) > 0 ? kept : records;
+        return kept;
+    }
+
+    private static void addPod(List<Pod> pods, List<Record> records, int start, int end) {
+        Pod pod = Pod.create(records, start, end);
+        if (pod != null) pods.add(pod);
     }
 
     static boolean shouldEndCue(double declaredSeconds, int removedSegments) {
@@ -1287,33 +1285,38 @@ public final class M3u8AdFilter {
     static boolean containsAdQueryKey(String uri) {
         int query = uri.indexOf('?');
         if (query < 0 || query >= uri.length() - 1) return false;
+        int fragment = uri.indexOf('#', query + 1);
+        int end = fragment >= 0 ? fragment : uri.length();
 
-        String queryText = uri.substring(query + 1);
-        String[] parts = queryText.split("&");
+        for (int start = query + 1; start < end; ) {
+            int separator = uri.indexOf('&', start);
+            if (separator < 0 || separator > end) separator = end;
+            int equals = uri.indexOf('=', start);
+            if (equals < 0 || equals > separator) equals = separator;
 
-        for (String part : parts) {
-            if (isEmpty(part)) continue;
-
-            int index = part.indexOf('=');
-            String key = index >= 0 ? part.substring(0, index) : part;
-            String value = index >= 0 && index < part.length() - 1 ? part.substring(index + 1) : "";
-
-            key = safeDecode(key).toLowerCase(Locale.US);
-            value = safeDecode(value).toLowerCase(Locale.US);
+            String key = safeDecode(uri.substring(start, equals)).toLowerCase(Locale.US);
 
             if (AD_QUERY_KEYS.contains(key)) return true;
             if (containsAdKeyword(key)) return true;
 
-            if ("type".equals(key) && containsAdKeyword(value)) return true;
-            if ("role".equals(key) && containsAdKeyword(value)) return true;
-            if ("class".equals(key) && containsAdKeyword(value)) return true;
-            if ("category".equals(key) && containsAdKeyword(value)) return true;
-            if ("asset".equals(key) && containsAdKeyword(value)) return true;
-            if ("content".equals(key) && containsAdKeyword(value)) return true;
-            if ("label".equals(key) && containsAdKeyword(value)) return true;
+            if (isAdValueKey(key) && equals < separator) {
+                String value = safeDecode(uri.substring(equals + 1, separator)).toLowerCase(Locale.US);
+                if (containsAdKeyword(value)) return true;
+            }
+            start = separator + 1;
         }
 
         return false;
+    }
+
+    private static boolean isAdValueKey(String key) {
+        return "type".equals(key)
+                || "role".equals(key)
+                || "class".equals(key)
+                || "category".equals(key)
+                || "asset".equals(key)
+                || "content".equals(key)
+                || "label".equals(key);
     }
 
     private static boolean isEmpty(CharSequence value) {
