@@ -14,7 +14,6 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
@@ -41,6 +40,7 @@ import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.utils.PauseExecutor;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.net.OkHttp;
@@ -213,7 +213,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mBinding.view.setVisibility(View.VISIBLE);
         mBinding.result.setVisibility(View.VISIBLE);
         stopSearch();
-        mExecutor = new PauseExecutor(Math.max(2, Math.min(6, Constant.THREAD_POOL)));
+        mExecutor = new PauseExecutor(Math.min(6, ThreadPools.searchConcurrency()), Math.max(1, mSites.size()));
         String keyword = mBinding.keyword.getText().toString().trim();
         mSearchAdapter.setKeyword(keyword);
         mSearchToken = "collect:" + System.currentTimeMillis();

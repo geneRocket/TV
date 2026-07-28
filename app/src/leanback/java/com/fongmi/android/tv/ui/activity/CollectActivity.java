@@ -20,7 +20,6 @@ import androidx.viewbinding.ViewBinding;
 import androidx.viewpager.widget.ViewPager;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Collect;
@@ -182,7 +181,7 @@ public class CollectActivity extends BaseActivity {
         mBinding.pager.setCurrentItem(0, false);
         mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
         if (TextUtils.isEmpty(getKeyword().trim())) return;
-        mExecutor = new PauseExecutor(Math.max(2, Math.min(10, Constant.THREAD_POOL)));
+        mExecutor = new PauseExecutor(Math.min(10, ThreadPools.searchConcurrency()), Math.max(1, mSites.size()));
         for (Site site : mSites) mSearchTasks.add(mExecutor.submit(() -> search(site)));
     }
 

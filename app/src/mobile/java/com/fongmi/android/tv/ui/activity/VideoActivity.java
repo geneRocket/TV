@@ -1771,10 +1771,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         List<Site> sites = new ArrayList<>();
         String token = nextRequestToken("search");
         setPendingSearchToken(token);
-        mExecutor = ThreadPools.newFixed("video-search", Math.max(2, Math.min(6, Constant.THREAD_POOL)));
         mSearchActive = true;
         Set<String> keys = new HashSet<>();
         for (Site item : VodConfig.get().getSites()) if (isPass(item) && keys.add(item.getKey())) sites.add(item);
+        mExecutor = ThreadPools.newFixedRejecting("video-search", Math.min(6, ThreadPools.searchConcurrency()), Math.max(1, sites.size()));
         int generation = beginSearchTaskState(sites.size());
         for (Site site : sites) mExecutor.execute(() -> search(site, keyword, token, generation));
         if (sites.isEmpty()) showEmpty();

@@ -3,12 +3,15 @@ package com.fongmi.android.tv.utils;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
@@ -36,7 +39,7 @@ public class KeyedLatestTaskTest {
         CountDownLatch firstStarted = new CountDownLatch(1);
         CountDownLatch releaseFirst = new CountDownLatch(1);
         CountDownLatch completed = new CountDownLatch(2);
-        List<String> values = new ArrayList<>();
+        List<String> values = Collections.synchronizedList(new ArrayList<>());
 
         tasks.submit("content", () -> { firstStarted.countDown(); releaseFirst.await(); return "old"; }, 1_000, values::add, error -> "fallback", null, null);
         assertTrue(firstStarted.await(1, TimeUnit.SECONDS));
@@ -118,6 +121,36 @@ public class KeyedLatestTaskTest {
 
         assertTrue(values.isEmpty());
         assertFalse(scheduler.size() > 0);
+    }
+
+    @Test
+    public void closingTasksDoesNotShutdownSharedExecutor() {
+        DirectExecutor executor = new DirectExecutor();
+        KeyedLatestTask<String> tasks = new KeyedLatestTask<>(executor, new Scheduler(), error -> { }, false);
+
+        tasks.close();
+
+        assertFalse(executor.isShutdown());
+    }
+
+    @Test
+    public void replacingQueuedTaskRemovesCancelledFutureFromThreadPool() throws Exception {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(4));
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        KeyedLatestTask<String> tasks = new KeyedLatestTask<>(executor, new Scheduler(), error -> { }, false);
+        try {
+            tasks.submit("running", () -> { running.countDown(); release.await(); return "running"; }, 1_000, value -> { }, error -> "", null, null);
+            assertTrue(running.await(1, TimeUnit.SECONDS));
+            tasks.submit("replace", () -> "old", 1_000, value -> { }, error -> "", null, null);
+            tasks.submit("replace", () -> "new", 1_000, value -> { }, error -> "", null, null);
+
+            assertEquals(1, executor.getQueue().size());
+        } finally {
+            release.countDown();
+            tasks.close();
+            executor.shutdownNow();
+        }
     }
 
     private static final class Scheduler implements TaskScheduler {

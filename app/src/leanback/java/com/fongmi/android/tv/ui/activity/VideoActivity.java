@@ -147,7 +147,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private static final int QUICK_RESULT_LIMIT = 50;
     private static final String TASK_HISTORY = "history";
     private static final int QUICK_FLUSH_DELAY_MS = 100;
-    private static final int SOURCE_SEARCH_CONCURRENCY = Math.max(2, Math.min(10, Constant.THREAD_POOL));
+    private static final int SOURCE_SEARCH_CONCURRENCY = Math.min(10, ThreadPools.searchConcurrency());
     private static final DiffCallback<Vod> QUICK_DIFF = new DiffCallback<Vod>() {
         @Override
         public boolean areItemsTheSame(@NonNull Vod oldItem, @NonNull Vod newItem) {
@@ -762,13 +762,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mQuickKeys.clear();
             List<Site> sites = new ArrayList<>();
             Set<String> keys = new HashSet<>();
-            host.mExecutor = ThreadPools.newFixed("video-search", SOURCE_SEARCH_CONCURRENCY);
             host.mSearchActive = true;
             for (Site site : VodConfig.get().getSites()) {
                 if (!isPass(site)) continue;
                 if (!keys.add(site.getKey())) continue;
                 sites.add(site);
             }
+            host.mExecutor = ThreadPools.newFixedRejecting("video-search", SOURCE_SEARCH_CONCURRENCY, Math.max(1, sites.size()));
             int generation = host.beginSearchTaskState(sites.size());
             for (Site site : sites) host.mSearchTasks.add(host.mExecutor.submit(() -> search(site, keyword, generation, token)));
             if (sites.isEmpty()) host.onSearchTasksSettled(generation);

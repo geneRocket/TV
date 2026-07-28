@@ -6,6 +6,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -17,13 +18,19 @@ public final class KeyedLatestTask<T> implements AutoCloseable {
     private final ExecutorService executor;
     private final TaskScheduler scheduler;
     private final Consumer<Throwable> logger;
+    private final boolean ownsExecutor;
     private final Map<String, Task> active = new HashMap<>();
     private boolean closed;
 
     public KeyedLatestTask(ExecutorService executor, TaskScheduler scheduler, Consumer<Throwable> logger) {
+        this(executor, scheduler, logger, true);
+    }
+
+    public KeyedLatestTask(ExecutorService executor, TaskScheduler scheduler, Consumer<Throwable> logger, boolean ownsExecutor) {
         this.executor = executor;
         this.scheduler = scheduler;
         this.logger = logger;
+        this.ownsExecutor = ownsExecutor;
     }
 
     public void submit(String key, Callable<T> callable, long timeoutMillis, Consumer<T> success, Function<Throwable, T> fallback, Runnable onTimeout, Runnable onReplace) {
@@ -39,7 +46,7 @@ public final class KeyedLatestTask<T> implements AutoCloseable {
         scheduler.post(task.timeout, timeoutMillis);
         try {
             task.future = executor.submit(() -> run(task, callable, fallback, success));
-            if (task.completed.get()) task.future.cancel(true);
+            if (task.completed.get()) cancelFuture(task.future);
         } catch (RejectedExecutionException error) {
             if (complete(task)) success.accept(fallback.apply(error));
         }
@@ -56,7 +63,7 @@ public final class KeyedLatestTask<T> implements AutoCloseable {
             closed = true;
             for (String key : active.keySet().toArray(new String[0])) cancelLocked(key);
         }
-        executor.shutdownNow();
+        if (ownsExecutor) executor.shutdownNow();
     }
 
     private void run(Task task, Callable<T> callable, Function<Throwable, T> fallback, Consumer<T> success) {
@@ -75,7 +82,7 @@ public final class KeyedLatestTask<T> implements AutoCloseable {
 
     private void timeout(Task task, Function<Throwable, T> fallback, Consumer<T> success, Runnable onTimeout) {
         if (!complete(task)) return;
-        if (task.future != null) task.future.cancel(true);
+        cancelFuture(task.future);
         if (onTimeout != null) onTimeout.run();
         success.accept(fallback.apply(new java.util.concurrent.TimeoutException()));
     }
@@ -94,8 +101,16 @@ public final class KeyedLatestTask<T> implements AutoCloseable {
         Task task = active.remove(key);
         if (task == null || !task.completed.compareAndSet(false, true)) return false;
         scheduler.remove(task.timeout);
-        if (task.future != null) task.future.cancel(true);
+        cancelFuture(task.future);
         return true;
+    }
+
+    private void cancelFuture(Future<?> future) {
+        if (future == null) return;
+        future.cancel(true);
+        if (executor instanceof ThreadPoolExecutor && future instanceof Runnable) {
+            ((ThreadPoolExecutor) executor).remove((Runnable) future);
+        }
     }
 
     private final class Task {

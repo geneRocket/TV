@@ -30,7 +30,9 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class Source {
 
@@ -90,7 +92,6 @@ public class Source {
             if (flag == null || flag.getEpisodes() == null || flag.getEpisodes().isEmpty()) continue;
             List<Episode> originals = new ArrayList<>(flag.getEpisodes());
             List<ParseTask> tasks = new ArrayList<>();
-            List<Callable<List<Episode>>> callables = new ArrayList<>();
             Map<Integer, List<Episode>> replacements = new HashMap<>();
             for (int i = 0; i < originals.size(); i++) {
                 Episode episode = originals.get(i);
@@ -104,21 +105,40 @@ public class Source {
                 ParseTask task = getTask(episode, i);
                 if (task == null) continue;
                 tasks.add(task);
-                callables.add(task.callable);
             }
-            if (!callables.isEmpty()) {
-                List<Future<List<Episode>>> futures = executor.invokeAll(callables, 60, TimeUnit.SECONDS);
+            if (!tasks.isEmpty()) {
+                List<ParseTask> accepted = new ArrayList<>(tasks.size());
+                List<Future<List<Episode>>> futures = new ArrayList<>(tasks.size());
+                for (ParseTask task : tasks) {
+                    try {
+                        futures.add(executor.submit(task.callable));
+                        accepted.add(task);
+                    } catch (RejectedExecutionException error) {
+                        ThreadPools.log(error, "Episode preload queue is full; keeping original episode.");
+                    }
+                }
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
                 for (int i = 0; i < futures.size(); i++) {
                     try {
                         if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-                        List<Episode> episodes = futures.get(i).get();
+                        long remaining = deadline - System.nanoTime();
+                        if (remaining <= 0) throw new TimeoutException();
+                        List<Episode> episodes = futures.get(i).get(remaining, TimeUnit.NANOSECONDS);
                         if (episodes != null && !episodes.isEmpty()) {
-                            String key = tasks.get(i).url;
+                            String key = accepted.get(i).url;
                             putCachedEpisodes(key, episodes);
-                            replacements.put(tasks.get(i).index, copyEpisodes(episodes));
+                            replacements.put(accepted.get(i).index, copyEpisodes(episodes));
                         }
                     } catch (Exception e) {
-                        if (e instanceof InterruptedException) throw e;
+                        if (e instanceof InterruptedException) {
+                            cancel(futures);
+                            throw e;
+                        }
+                        if (e instanceof TimeoutException) {
+                            cancel(futures);
+                            ThreadPools.log(e, "Episode preload parse timed out.");
+                            break;
+                        }
                         ThreadPools.log(e, "Episode preload parse failed.");
                     }
                 }
@@ -131,6 +151,10 @@ public class Source {
                 else flag.getEpisodes().add(originals.get(i));
             }
         }
+    }
+
+    private void cancel(List<? extends Future<?>> futures) {
+        for (Future<?> future : futures) future.cancel(true);
     }
 
     public String fetch(Result result) throws Exception {

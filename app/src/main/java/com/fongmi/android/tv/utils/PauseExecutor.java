@@ -1,6 +1,6 @@
 package com.fongmi.android.tv.utils;
 
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -12,8 +12,8 @@ public class PauseExecutor extends ThreadPoolExecutor {
     private final Condition condition;
     private boolean isPaused;
 
-    public PauseExecutor(int corePoolSize) {
-        super(corePoolSize, corePoolSize, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), ThreadPools.newThreadFactory("pause"));
+    public PauseExecutor(int corePoolSize, int queueCapacity) {
+        super(corePoolSize, corePoolSize, 30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(Math.max(1, queueCapacity)), ThreadPools.newThreadFactory("pause"));
         pauseLock = new ReentrantLock();
         condition = pauseLock.newCondition();
         allowCoreThreadTimeOut(true);

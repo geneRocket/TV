@@ -1,13 +1,13 @@
 package com.fongmi.android.tv.utils;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.server.Server;
 import com.github.catvod.net.OkHttp;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,8 +50,8 @@ public class ScanTask {
     private void begin(List<String> urls) {
         stop();
         long currentGeneration = ++generation;
-        List<Device> devices = new ArrayList<>();
-        ExecutorService currentExecutor = ThreadPools.newFixed("scan", Constant.THREAD_POOL);
+        List<Device> devices = Collections.synchronizedList(new ArrayList<>());
+        ExecutorService currentExecutor = ThreadPools.newFixed("scan", ThreadPools.searchConcurrency());
         executor = currentExecutor;
         currentExecutor.execute(() -> run(urls, currentExecutor, currentGeneration, devices));
     }

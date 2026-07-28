@@ -1,11 +1,11 @@
 package com.fongmi.android.tv.utils;
 
-import com.fongmi.android.tv.Constant;
 import com.orhanobut.logger.Logger;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -14,23 +14,34 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class ThreadPools {
 
     private static final String TAG = "ThreadPools";
-    private static final int NETWORK_CONFIG_CONCURRENCY = Math.max(4, Math.min(8, Constant.THREAD_POOL));
-    private static final ExecutorService CONFIG = newFixed("config", NETWORK_CONFIG_CONCURRENCY);
-    private static final ExecutorService CONFIG_LOAD = newSingle("config-load");
-    private static final ExecutorService LOADER = newFixed("loader", Math.max(2, Constant.THREAD_POOL / 2));
-    private static final ExecutorService SEARCH = newFixed("search", Constant.THREAD_POOL);
-    private static final ExecutorService PARSE = newFixed("parse", Constant.THREAD_POOL);
-    private static final ExecutorService PRELOAD_PARSE = newFixed("preload-parse", Math.max(2, Constant.THREAD_POOL / 4));
+    private static final ConcurrencyBudget BUDGET = ConcurrencyBudget.current();
+    private static final ExecutorService GENERAL = create("general", BUDGET.general, 256, new ThreadPoolExecutor.AbortPolicy());
+    private static final ExecutorService GENERAL_OVERFLOW = create("general-overflow", 1, 256, new ThreadPoolExecutor.AbortPolicy());
+    private static final ExecutorService CONFIG = create("config", BUDGET.config, 128, new ThreadPoolExecutor.CallerRunsPolicy());
+    private static final ExecutorService CONFIG_LOAD = create("config-load", 1, 32, new ThreadPoolExecutor.CallerRunsPolicy());
+    private static final ExecutorService LOADER = create("loader", BUDGET.loader, 128, new ThreadPoolExecutor.CallerRunsPolicy());
+    private static final ExecutorService SEARCH = create("search", BUDGET.search, 256, new ThreadPoolExecutor.AbortPolicy());
+    private static final ExecutorService PARSE = create("parse", BUDGET.parse, 128, new ThreadPoolExecutor.CallerRunsPolicy());
+    private static final ExecutorService PRELOAD_PARSE = create("preload-parse", BUDGET.preload, 64, new ThreadPoolExecutor.AbortPolicy());
 
     private ThreadPools() {
     }
 
     public static ExecutorService newFixed(String name, int size) {
-        return create(name, Math.max(1, size), Math.max(1, size));
+        int threads = Math.max(1, size);
+        return create(name, threads, Math.max(16, threads * 16), new ThreadPoolExecutor.CallerRunsPolicy());
+    }
+
+    public static ExecutorService newFixedRejecting(String name, int size, int queueCapacity) {
+        return create(name, Math.max(1, size), Math.max(1, queueCapacity), new ThreadPoolExecutor.AbortPolicy());
     }
 
     public static ExecutorService newSingle(String name) {
-        return create(name, 1, 1);
+        return create(name, 1, 64, new ThreadPoolExecutor.CallerRunsPolicy());
+    }
+
+    public static int searchConcurrency() {
+        return BUDGET.search;
     }
 
     public static ThreadFactory newThreadFactory(String name) {
@@ -41,9 +52,20 @@ public final class ThreadPools {
         return CONFIG;
     }
 
-    /** Limits independent configuration downloads without starving playback traffic. */
-    public static int networkConfigConcurrency() {
-        return NETWORK_CONFIG_CONCURRENCY;
+    /** Keeps overload work off the caller thread while retaining a finite process-wide backlog. */
+    public static boolean executeGeneral(Runnable task) {
+        try {
+            GENERAL.execute(task);
+            return true;
+        } catch (java.util.concurrent.RejectedExecutionException first) {
+            try {
+                GENERAL_OVERFLOW.execute(task);
+                return true;
+            } catch (java.util.concurrent.RejectedExecutionException second) {
+                log(second, "General and overflow queues are full; task was rejected.");
+                return false;
+            }
+        }
     }
 
     public static ExecutorService configLoad() {
@@ -75,16 +97,16 @@ public final class ThreadPools {
         Logger.t(TAG).e(throwable, message);
     }
 
-    private static ExecutorService create(String name, int corePoolSize, int maxPoolSize) {
-        LoggingThreadPoolExecutor executor = new LoggingThreadPoolExecutor(name, corePoolSize, maxPoolSize);
+    private static ExecutorService create(String name, int poolSize, int queueCapacity, RejectedExecutionHandler handler) {
+        LoggingThreadPoolExecutor executor = new LoggingThreadPoolExecutor(name, Math.max(1, poolSize), queueCapacity, handler);
         executor.allowCoreThreadTimeOut(true);
         return executor;
     }
 
     private static final class LoggingThreadPoolExecutor extends ThreadPoolExecutor {
 
-        LoggingThreadPoolExecutor(String name, int corePoolSize, int maxPoolSize) {
-            super(corePoolSize, maxPoolSize, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), threadFactory(name));
+        LoggingThreadPoolExecutor(String name, int poolSize, int queueCapacity, RejectedExecutionHandler handler) {
+            super(poolSize, poolSize, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(queueCapacity), threadFactory(name), handler);
         }
 
         @Override

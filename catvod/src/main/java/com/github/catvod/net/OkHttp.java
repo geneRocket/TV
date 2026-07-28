@@ -2,6 +2,7 @@ package com.github.catvod.net;
 
 import androidx.collection.ArrayMap;
 
+import com.fongmi.android.tv.utils.ConcurrencyBudget;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.interceptor.AuthInterceptor;
 import com.github.catvod.net.interceptor.ProxyRequestInterceptor;
@@ -25,9 +26,7 @@ import okhttp3.Response;
 
 public class OkHttp {
 
-    private static final int MAX_REQUESTS = 64;
-    private static final int MAX_REQUESTS_PER_HOST = 16;
-    private static final int MAX_IDLE_CONNECTIONS = 64;
+    private static final ConcurrencyBudget BUDGET = ConcurrencyBudget.current();
 
     private static final int TIMEOUT = 30 * 1000;
     private static final int CACHE = 100 * 1024 * 1024;
@@ -56,7 +55,7 @@ public class OkHttp {
     public void setDoh(Doh doh) {
         synchronized (OkHttp.class) {
             dns().setDoh(doh);
-            client = null;
+            resetClient();
         }
     }
 
@@ -65,7 +64,7 @@ public class OkHttp {
             ProxySelector.setDefault(selector());
             selector().setProxy(proxy);
             authenticator().setProxy(proxy);
-            client = null;
+            resetClient();
         }
     }
 
@@ -101,7 +100,7 @@ public class OkHttp {
         authInterceptor().clear();
         requestInterceptor().clear();
         responseInterceptor().clear();
-        get().client = null;
+        get().resetClient();
     }
 
     public static synchronized OkHttpClient client() {
@@ -190,8 +189,8 @@ public class OkHttp {
 
     private static OkHttpClient.Builder getBuilder() {
         okhttp3.Dispatcher dispatcher = new okhttp3.Dispatcher();
-        dispatcher.setMaxRequests(MAX_REQUESTS);
-        dispatcher.setMaxRequestsPerHost(MAX_REQUESTS_PER_HOST);
+        dispatcher.setMaxRequests(BUDGET.network);
+        dispatcher.setMaxRequestsPerHost(BUDGET.networkPerHost);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .addInterceptor(requestInterceptor())
                 .addInterceptor(authInterceptor())
@@ -200,7 +199,7 @@ public class OkHttp {
                 .connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .readTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
                 .writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS)
-                .connectionPool(new ConnectionPool(MAX_IDLE_CONNECTIONS, 5, TimeUnit.MINUTES))
+                .connectionPool(new ConnectionPool(BUDGET.idleConnections, 5, TimeUnit.MINUTES))
                 .dispatcher(dispatcher)
                 .dns(dns())
                 .hostnameVerifier((hostname, session) -> true)
@@ -209,5 +208,13 @@ public class OkHttp {
         builder.proxyAuthenticator(authenticator());
         builder.proxySelector(selector());
         return builder;
+    }
+
+    private void resetClient() {
+        OkHttpClient old = client;
+        client = null;
+        if (old == null) return;
+        old.dispatcher().cancelAll();
+        old.connectionPool().evictAll();
     }
 }

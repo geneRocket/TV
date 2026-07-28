@@ -16,6 +16,7 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.repository.SiteRepository;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.OrderedParallelMapper;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -36,8 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 
 import okhttp3.HttpUrl;
 
@@ -271,7 +270,7 @@ public class VodConfig {
         } catch (Throwable e) {
             if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
             else loadCache(callback, e);
-            e.printStackTrace();
+            ThreadPools.log(e, "VOD config operation failed.");
         }
     }
 
@@ -289,7 +288,7 @@ public class VodConfig {
                 success++;
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "VOD config operation failed.");
             }
         }
         setLoadUrls(urls);
@@ -318,7 +317,7 @@ public class VodConfig {
                 success++;
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "VOD config operation failed.");
             }
         }
         setLoadUrls(urls);
@@ -335,24 +334,12 @@ public class VodConfig {
     private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
-        ExecutorService executor = ThreadPools.newFixed("vod-config", Math.min(unique.size(), ThreadPools.networkConfigConcurrency()));
-        List<Future<ConfigResult>> futures = new ArrayList<>();
-        List<ConfigResult> results = new ArrayList<>();
         try {
-            for (Config item : unique) futures.add(executor.submit(() -> loadConfigResult(item, cache)));
-            for (Future<ConfigResult> future : futures) {
-                try {
-                    results.add(future.get());
-                } catch (Throwable e) {
-                    e.printStackTrace();
-                }
-            }
-        } catch (Throwable e) {
-            e.printStackTrace();
-        } finally {
-            ThreadPools.shutdown(executor);
+            return OrderedParallelMapper.map(ThreadPools.config(), unique, item -> loadConfigResult(item, cache), error -> ThreadPools.log(error, "VOD config operation failed."));
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return Collections.emptyList();
         }
-        return results;
     }
 
     private ConfigResult loadConfigResult(Config item, boolean cache) {
@@ -433,7 +420,7 @@ public class VodConfig {
                 return loadObject(item.getUrl(), depth);
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "VOD config operation failed.");
             }
         }
         if (error != null) throw error;
@@ -537,7 +524,7 @@ public class VodConfig {
                 return;
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "VOD config operation failed.");
             }
         }
         Throwable cause = error == null ? new Throwable("No valid config") : error;
@@ -565,7 +552,7 @@ public class VodConfig {
         try {
             parseConfig(Json.parse(text).getAsJsonObject(), callback);
         } catch (Throwable e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "VOD config operation failed.");
             if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
@@ -586,7 +573,7 @@ public class VodConfig {
             if (persistCache) config.json(object.toString()).update();
             postSuccess(callback, notice);
         } catch (Throwable e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "VOD config operation failed.");
             if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }

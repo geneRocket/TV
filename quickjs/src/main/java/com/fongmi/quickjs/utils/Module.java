@@ -4,6 +4,7 @@ import android.net.Uri;
 import android.system.Os;
 import android.util.Base64;
 
+import com.fongmi.android.tv.utils.BoundedCache;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Path;
@@ -16,7 +17,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import okhttp3.Headers;
 
@@ -24,9 +30,13 @@ public class Module {
 
     private static final long CACHE_TTL = 15 * 60 * 1000L;
     private static final long RETRY_INTERVAL = 60 * 1000L;
+    private static final int REFRESH_THREADS = 5;
+    private static final int MODULE_CACHE_BYTES = 4 * 1024 * 1024;
+    private static final int REFRESH_QUEUE_SIZE = 128;
+    private static final int ATTEMPT_CACHE_SIZE = 256;
 
-    private final ConcurrentHashMap<String, String> cache;
-    private final ConcurrentHashMap<String, Long> attempts;
+    private final BoundedCache<String, String> cache;
+    private final BoundedCache<String, Long> attempts;
     private final Set<String> refreshing;
     private final ExecutorService executor;
 
@@ -39,10 +49,26 @@ public class Module {
     }
 
     public Module() {
-        this.cache = new ConcurrentHashMap<>();
-        this.attempts = new ConcurrentHashMap<>();
+        this.cache = new BoundedCache<>(MODULE_CACHE_BYTES, value -> value.length() * Character.BYTES);
+        this.attempts = new BoundedCache<>(ATTEMPT_CACHE_SIZE);
         this.refreshing = ConcurrentHashMap.newKeySet();
-        this.executor = Executors.newFixedThreadPool(5);
+        this.executor = createExecutor();
+    }
+
+    private ExecutorService createExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(REFRESH_THREADS, REFRESH_THREADS, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(REFRESH_QUEUE_SIZE), new RefreshThreadFactory(), new ThreadPoolExecutor.AbortPolicy());
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
+
+    private static final class RefreshThreadFactory implements ThreadFactory {
+
+        private final AtomicInteger number = new AtomicInteger(1);
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            return new Thread(runnable, "quickjs-module-" + number.getAndIncrement());
+        }
     }
 
     public String fetch(String name) {
@@ -52,7 +78,7 @@ public class Module {
             return cached;
         }
         String content = load(name);
-        if (!content.isEmpty()) cache.putIfAbsent(name, content);
+        if (!content.isEmpty()) cache.put(name, content);
         return content;
     }
 
@@ -106,14 +132,18 @@ public class Module {
         if (attempt != null && now - attempt < RETRY_INTERVAL) return;
         if (!refreshing.add(url)) return;
         attempts.put(url, now);
-        executor.execute(() -> {
-            try {
-                String content = download(url);
-                if (!content.isEmpty()) cache.put(url, content);
-            } finally {
-                refreshing.remove(url);
-            }
-        });
+        try {
+            executor.execute(() -> {
+                try {
+                    String content = download(url);
+                    if (!content.isEmpty()) cache.put(url, content);
+                } finally {
+                    refreshing.remove(url);
+                }
+            });
+        } catch (RejectedExecutionException ignored) {
+            refreshing.remove(url);
+        }
     }
 
     private void write(File file, byte[] data) {

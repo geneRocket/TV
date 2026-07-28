@@ -25,6 +25,7 @@ public final class M3u8AdFilter {
 
     private static final int SUBTITLE_WHITELIST_MAX = 512;
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
+    private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
     private static final int MAX_CACHED_PATTERNS = 256;
     private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
@@ -631,6 +632,7 @@ public final class M3u8AdFilter {
 
         boolean cueAdOpen = false;
         double cueAdSeconds = 0;
+        int cueAdSegments = 0;
 
         double dateRangeAdSeconds = 0;
 
@@ -645,12 +647,14 @@ public final class M3u8AdFilter {
                 if (isCueOutTag(record.line)) {
                     cueAdOpen = true;
                     cueAdSeconds = Math.max(cueAdSeconds, parseCueOutDuration(record.line));
+                    cueAdSegments = 0;
                     continue;
                 }
 
                 if (isCueInTag(record.line)) {
                     cueAdOpen = false;
                     cueAdSeconds = 0;
+                    cueAdSegments = 0;
                     dateRangeAdSeconds = 0;
                     discontinuityAdOpen = false;
                     discontinuityAdSegments = 0;
@@ -722,6 +726,17 @@ public final class M3u8AdFilter {
             }
 
             if (cueAdOpen || dateRangeAdSeconds > 0) {
+                if (cueAdOpen && shouldEndCue(cueAdSeconds, cueAdSegments)) {
+                    cueAdOpen = false;
+                    cueAdSegments = 0;
+                }
+
+                if (!cueAdOpen && dateRangeAdSeconds <= 0) {
+                    kept.add(record);
+                    continue;
+                }
+
+                if (cueAdOpen) cueAdSegments++;
                 if (cueAdOpen && cueAdSeconds > 0) {
                     cueAdSeconds = nextRemaining(cueAdSeconds, record.duration);
                     if (cueAdSeconds <= 0) cueAdOpen = false;
@@ -776,7 +791,7 @@ public final class M3u8AdFilter {
         boolean[] remove = new boolean[records.size()];
         int removedSegments = 0;
         for (Pod pod : pods) {
-            if (counts.getOrDefault(pod.fingerprint, 0) < 2) continue;
+            if (!shouldRemoveRepeatedPod(counts.getOrDefault(pod.fingerprint, 0), pod.strongAdSignal)) continue;
             for (int i = pod.start; i < pod.end; i++) {
                 if (records.get(i).segment) removedSegments++;
                 remove[i] = true;
@@ -788,6 +803,15 @@ public final class M3u8AdFilter {
         List<Record> kept = new ArrayList<>(records.size());
         for (int i = 0; i < records.size(); i++) if (!remove[i]) kept.add(records.get(i));
         return countSegments(kept) > 0 ? kept : records;
+    }
+
+    static boolean shouldEndCue(double declaredSeconds, int removedSegments) {
+        int limit = declaredSeconds <= 0 ? MAX_UNBOUNDED_CUE_AD_SEGMENTS : MAX_CONTIGUOUS_AD_SEGMENTS;
+        return removedSegments >= limit;
+    }
+
+    static boolean shouldRemoveRepeatedPod(int matchingPods, boolean strongAdSignal) {
+        return strongAdSignal && matchingPods >= 2;
     }
 
     private static List<Record> filterShortAdClusters(List<Record> records) {
@@ -1454,17 +1478,20 @@ public final class M3u8AdFilter {
         private final int start;
         private final int end;
         private final String fingerprint;
+        private final boolean strongAdSignal;
 
-        private Pod(int start, int end, String fingerprint) {
+        private Pod(int start, int end, String fingerprint, boolean strongAdSignal) {
             this.start = start;
             this.end = end;
             this.fingerprint = fingerprint;
+            this.strongAdSignal = strongAdSignal;
         }
 
         private static Pod create(List<Record> records, int start, int end) {
             int segments = 0;
             int lastSegment = -1;
             double duration = 0;
+            boolean strongAdSignal = false;
             StringBuilder fingerprint = new StringBuilder();
 
             for (int i = start; i < end; i++) {
@@ -1473,11 +1500,12 @@ public final class M3u8AdFilter {
                 segments++;
                 lastSegment = i;
                 duration += record.duration;
+                strongAdSignal |= isExplicitAdRecord(record);
                 fingerprint.append(Math.round(record.duration * 10)).append(',');
             }
 
             if (segments < MIN_SEGMENTS || segments > MAX_SEGMENTS || duration <= 0 || duration > MAX_DURATION_SECONDS) return null;
-            return new Pod(start, lastSegment + 1, segments + ":" + fingerprint);
+            return new Pod(start, lastSegment + 1, segments + ":" + fingerprint, strongAdSignal);
         }
     }
 }

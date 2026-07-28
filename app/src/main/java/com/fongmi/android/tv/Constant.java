@@ -28,6 +28,4 @@ public class Constant {
     public static final int TIMEOUT_SYNC = 2 * 1000;
     //传送超時時間
     public static final int TIMEOUT_TRANSMIT = 60 * 1000;
-    //並行任務線程數量
-    public static final int THREAD_POOL = 128;
 }

@@ -29,13 +29,10 @@ import com.orhanobut.logger.LogAdapter;
 import com.orhanobut.logger.Logger;
 import com.orhanobut.logger.PrettyFormatStrategy;
 
-import java.util.concurrent.ExecutorService;
-
 import cat.ereza.customactivityoncrash.config.CaocConfig;
 
 public class App extends Application {
 
-    private final ExecutorService executor;
     private final Handler handler;
     private static volatile App instance;
     private final Gson gson;
@@ -43,7 +40,6 @@ public class App extends Application {
 
     public App() {
         instance = this;
-        executor = ThreadPools.newFixed("app", Constant.THREAD_POOL);
         handler = HandlerCompat.createAsync(Looper.getMainLooper());
         gson = new Gson();
     }
@@ -61,14 +57,15 @@ public class App extends Application {
     }
 
     public static void execute(Runnable runnable) {
-        get().executor.execute(() -> {
+        Runnable guarded = () -> {
             try {
                 runnable.run();
             } catch (Throwable e) {
                 ThreadPools.log(e, "App background task failed.");
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             }
-        });
+        };
+        ThreadPools.executeGeneral(guarded);
     }
 
     public static void post(Runnable runnable) {
@@ -122,7 +119,7 @@ public class App extends Application {
         Notify.createChannel();
         LanguageUtil.init(this);
         ActivityManager.get().init(this);
-        Logger.addLogAdapter(getLogAdapter());
+        if (BuildConfig.DEBUG) Logger.addLogAdapter(getLogAdapter());
         OkHttp.get().setProxy(Setting.getProxy());
         OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
         CaocConfig.Builder.create().backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT).errorActivity(CrashActivity.class).apply();

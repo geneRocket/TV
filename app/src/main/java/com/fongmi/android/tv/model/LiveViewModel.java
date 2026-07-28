@@ -35,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import com.fongmi.android.tv.utils.LatestTask;
 
 import okhttp3.Headers;
@@ -61,6 +62,8 @@ public class LiveViewModel extends ViewModel {
     private final LatestTask<Epg> epgTask;
     private final LatestTask<Channel> urlTask;
     private final LatestTask<Boolean> xmlTask;
+    private final ExecutorService executor;
+    private final ExecutorService urlExecutor;
 
     public LiveViewModel() {
         this.defaultTimeZone = TimeZone.getDefault();
@@ -69,10 +72,16 @@ public class LiveViewModel extends ViewModel {
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
-        this.liveTask = new LatestTask<>(ThreadPools.newSingle("live-load"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
-        this.epgTask = new LatestTask<>(ThreadPools.newSingle("live-epg"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
-        this.urlTask = new LatestTask<>(ThreadPools.newSingle("live-url"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
-        this.xmlTask = new LatestTask<>(ThreadPools.newSingle("live-xml"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."));
+        this.executor = ThreadPools.newFixed("live", 3);
+        this.urlExecutor = ThreadPools.newSingle("live-url");
+        this.liveTask = createTask();
+        this.epgTask = createTask();
+        this.urlTask = new LatestTask<>(urlExecutor, AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."), false);
+        this.xmlTask = createTask();
+    }
+
+    private <T> LatestTask<T> createTask() {
+        return new LatestTask<>(executor, AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."), false);
     }
 
     public void getLive(Live item) {
@@ -238,5 +247,7 @@ public class LiveViewModel extends ViewModel {
         epgTask.close();
         urlTask.close();
         xmlTask.close();
+        ThreadPools.shutdown(executor);
+        ThreadPools.shutdown(urlExecutor);
     }
 }

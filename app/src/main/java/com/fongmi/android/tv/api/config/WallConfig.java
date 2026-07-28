@@ -99,7 +99,7 @@ public class WallConfig {
         } catch (Throwable e) {
             App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
             config(ConfigRepository.get().find(VodConfig.get().getWall(), 2));
-            e.printStackTrace();
+            ThreadPools.log(e, "Wallpaper config load failed.");
         }
     }
 

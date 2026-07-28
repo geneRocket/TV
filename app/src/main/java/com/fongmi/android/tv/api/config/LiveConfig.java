@@ -23,6 +23,7 @@ import com.fongmi.android.tv.repository.LiveRepository;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.OrderedParallelMapper;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -43,8 +44,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 
 public class LiveConfig {
 
@@ -215,7 +214,7 @@ public class LiveConfig {
         } catch (Throwable e) {
             if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
             else loadCache(callback, e);
-            e.printStackTrace();
+            ThreadPools.log(e, "Live config operation failed.");
         }
     }
 
@@ -241,7 +240,7 @@ public class LiveConfig {
                 success++;
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "Live config operation failed.");
             }
         }
         if (merged.has("lives") || merged.has("headers") || merged.has("proxy") || merged.has("hosts") || merged.has("rules") || merged.has("ads")) parseConfig(merged, null);
@@ -303,7 +302,7 @@ public class LiveConfig {
                 success++;
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "Live config operation failed.");
             }
         }
         if (merged.has("lives") || merged.has("headers") || merged.has("proxy") || merged.has("hosts") || merged.has("rules") || merged.has("ads")) parseConfig(merged, null);
@@ -317,24 +316,12 @@ public class LiveConfig {
     private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
-        ExecutorService executor = ThreadPools.newFixed("live-config", Math.min(unique.size(), ThreadPools.networkConfigConcurrency()));
-        List<Future<ConfigResult>> futures = new ArrayList<>();
-        List<ConfigResult> results = new ArrayList<>();
         try {
-            for (Config item : unique) futures.add(executor.submit(() -> loadConfigResult(item, cache)));
-            for (Future<ConfigResult> future : futures) {
-                try {
-                    results.add(future.get());
-                } catch (Throwable e) {
-                    e.printStackTrace();
-                }
-            }
-        } catch (Throwable e) {
-            e.printStackTrace();
-        } finally {
-            ThreadPools.shutdown(executor);
+            return OrderedParallelMapper.map(ThreadPools.config(), unique, item -> loadConfigResult(item, cache), error -> ThreadPools.log(error, "Live config operation failed."));
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return Collections.emptyList();
         }
-        return results;
     }
 
     private ConfigResult loadConfigResult(Config item, boolean cache) {
@@ -419,7 +406,7 @@ public class LiveConfig {
                 return loadObject(Json.parse(Decoder.getJson(item.getUrl())).getAsJsonObject(), depth);
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "Live config operation failed.");
             }
         }
         if (error != null) throw error;
@@ -457,7 +444,7 @@ public class LiveConfig {
             parseConfigOrThrow(text);
             if (callback != null) App.post(callback::success);
         } catch (Throwable e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Live config operation failed.");
             if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
@@ -467,7 +454,7 @@ public class LiveConfig {
             parseTextOrThrow(text);
             if (callback != null) App.post(callback::success);
         } catch (Throwable e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Live config operation failed.");
             if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
@@ -505,7 +492,7 @@ public class LiveConfig {
             parseDepotOrThrow(object);
             if (callback != null) App.post(callback::success);
         } catch (Throwable e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Live config operation failed.");
             if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
         }
     }
@@ -525,7 +512,7 @@ public class LiveConfig {
                 return;
             } catch (Throwable e) {
                 error = e;
-                e.printStackTrace();
+                ThreadPools.log(e, "Live config operation failed.");
             }
         }
         if (error != null) throw error;
@@ -557,7 +544,7 @@ public class LiveConfig {
             parseConfigOrThrow(object);
             if (callback != null) App.post(callback::success);
         } catch (Throwable e) {
-            e.printStackTrace();
+            ThreadPools.log(e, "Live config operation failed.");
             if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }

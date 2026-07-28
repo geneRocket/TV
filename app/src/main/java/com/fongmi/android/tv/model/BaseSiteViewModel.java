@@ -21,7 +21,7 @@ public abstract class BaseSiteViewModel extends ViewModel {
 
     public BaseSiteViewModel() {
         this.result = new MutableLiveData<>();
-        this.requests = new KeyedLatestTask<>(ThreadPools.newFixed("site-vm", Math.max(2, Constant.THREAD_POOL / 2)), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Site request failed."));
+        this.requests = new KeyedLatestTask<>(ThreadPools.search(), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Site request failed."), false);
     }
 
     public LiveData<Result> result() {

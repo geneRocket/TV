@@ -12,7 +12,11 @@ public final class LatestTask<T> implements AutoCloseable {
     private final KeyedLatestTask<T> tasks;
 
     public LatestTask(ExecutorService executor, TaskScheduler scheduler, Consumer<Throwable> logger) {
-        this.tasks = new KeyedLatestTask<>(executor, scheduler, logger);
+        this(executor, scheduler, logger, true);
+    }
+
+    public LatestTask(ExecutorService executor, TaskScheduler scheduler, Consumer<Throwable> logger, boolean ownsExecutor) {
+        this.tasks = new KeyedLatestTask<>(executor, scheduler, logger, ownsExecutor);
     }
 
     public void submit(Callable<T> callable, long timeoutMillis, Consumer<T> success, Function<Throwable, T> fallback, Runnable onTimeout) {
