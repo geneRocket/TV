@@ -104,6 +104,24 @@ public class M3u8AdFilterTest {
         assertTrue(filtered.contains("#EXT-X-ENDLIST"));
     }
 
+    @Test
+    public void minorHostFilteringKeepsLowLatencyPartSyntax() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-PART:DURATION=0.5,URI=\"https://main.example/part-1.m4s\"\n"
+                + "#EXT-X-PART:DURATION=0.5,URI=\"https://main.example/part-2.m4s\"\n"
+                + "#EXT-X-PART:DURATION=0.5,URI=\"https://minor.example/part-3.m4s\"\n"
+                + "#EXT-X-PART:DURATION=0.5,URI=\"https://main.example/part-4.m4s\"\n"
+                + "#EXT-X-PART:DURATION=0.5,URI=\"https://main.example/part-5.m4s\"\n"
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("minor.example"));
+        assertTrue(filtered.contains("URI=\"https://main.example/part-5.m4s\""));
+        assertFalse(filtered.contains("\nhttps://main.example/part-5.m4s\n"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+    }
+
     private static String filter(String playlist) {
         byte[] filtered = M3u8AdFilter.filterMinorHost(playlist.getBytes(StandardCharsets.UTF_8), "https://video.example/live.m3u8");
         return new String(filtered, StandardCharsets.UTF_8);

@@ -1,12 +1,11 @@
 package com.fongmi.android.tv.utils;
 
-import android.net.Uri;
-
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Rule;
 import com.github.catvod.utils.UriUtil;
 
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -585,7 +584,7 @@ public final class M3u8AdFilter {
 
         for (Record record : records) {
             if (!record.segment) {
-                sb.append(record.line).append('\n');
+                appendRecord(sb, record);
                 continue;
             }
 
@@ -600,8 +599,7 @@ public final class M3u8AdFilter {
                 continue;
             }
 
-            for (String tag : record.tags) sb.append(tag).append('\n');
-            sb.append(record.line).append('\n');
+            appendRecord(sb, record);
         }
 
         if (removed <= 0) return build(records, original.length());
@@ -1410,23 +1408,21 @@ public final class M3u8AdFilter {
     private static String build(List<Record> records, int capacity) {
         StringBuilder sb = new StringBuilder(capacity);
 
-        for (Record record : records) {
-            if (!record.segment) {
-                sb.append(record.line).append('\n');
-            } else {
-                if (isPartOnlyRecord(record)) {
-                    for (String tag : record.tags) {
-                        if (!isEmpty(tag)) sb.append(tag).append('\n');
-                    }
-                } else {
-                    for (String tag : record.tags) sb.append(tag).append('\n');
-                    sb.append(record.line).append('\n');
-                }
-            }
-        }
+        for (Record record : records) appendRecord(sb, record);
 
         if (sb.length() > 0) sb.setLength(sb.length() - 1);
         return sb.toString();
+    }
+
+    private static void appendRecord(StringBuilder sb, Record record) {
+        if (!record.segment) {
+            sb.append(record.line).append('\n');
+        } else if (isPartOnlyRecord(record)) {
+            for (String tag : record.tags) if (!isEmpty(tag)) sb.append(tag).append('\n');
+        } else {
+            for (String tag : record.tags) sb.append(tag).append('\n');
+            sb.append(record.line).append('\n');
+        }
     }
 
     private static boolean isPartOnlyRecord(Record record) {
@@ -1450,7 +1446,7 @@ public final class M3u8AdFilter {
 
     private static String resolveHostFromResolved(String resolved) {
         try {
-            String host = Uri.parse(resolved).getHost();
+            String host = new URI(resolved).getHost();
             return host == null ? "" : host.toLowerCase(Locale.US);
         } catch (Throwable ignored) {
             return "";
