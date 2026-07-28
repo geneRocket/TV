@@ -856,8 +856,9 @@ public final class M3u8AdFilter {
         double duration = 0;
         for (Record record : cluster) duration += record.duration;
 
+        boolean hasExplicitAd = hasAnyExplicitAd(cluster);
         boolean looksLikeAdCluster = clusterSize <= Math.max(1, segmentCount / 3)
-                && (duration <= 120 || hasAnyExplicitAd(cluster));
+                && (hasExplicitAd || (clusterSize >= 2 && duration <= 120));
 
         if (!looksLikeAdCluster) kept.addAll(cluster);
 
@@ -1191,7 +1192,11 @@ public final class M3u8AdFilter {
     private static boolean isExplicitAdRecord(Record record) {
         if (record == null || !record.segment) return false;
         if (hasExplicitAdTag(record.tags)) return true;
-        return isLikelyAdSegmentUri(record.resolvedUri) || isLikelyAdSegmentUri(record.line);
+        if (isStrongAdSegmentUri(record.resolvedUri) || isStrongAdSegmentUri(record.line)) return true;
+
+        boolean hasDiscontinuity = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
+        return hasDiscontinuity
+                && (isWeakAdNumberSegmentUri(record.resolvedUri) || isWeakAdNumberSegmentUri(record.line));
     }
 
     private static boolean hasExplicitAdTag(List<String> tags) {
@@ -1263,6 +1268,53 @@ public final class M3u8AdFilter {
         return isAdLikeUri(lower);
     }
 
+    private static boolean isStrongAdSegmentUri(String uri) {
+        if (isEmpty(uri)) return false;
+
+        String lower = uri.toLowerCase(Locale.US).trim();
+        int fragment = lower.indexOf('#');
+        if (fragment >= 0) lower = lower.substring(0, fragment);
+
+        if (!isLikelySegmentResource(lower)) return false;
+        if (containsAdJumpMediaPath(lower)) return true;
+        return isStrongAdLikeUri(lower);
+    }
+
+    private static boolean isWeakAdNumberSegmentUri(String uri) {
+        if (isEmpty(uri) || !isLikelySegmentResource(uri)) return false;
+        if (isStrongAdSegmentUri(uri)) return false;
+
+        String path = stripQueryAndFragment(uri).toLowerCase(Locale.US);
+        for (String part : path.split("[/._\\-]+")) {
+            if (isAdNumber(part, "ad") || isAdNumber(part, "ads")) return true;
+        }
+        return false;
+    }
+
+    private static boolean containsAdJumpMediaPath(String uri) {
+        if (isEmpty(uri) || !isLikelySegmentResource(uri)) return false;
+        String path = stripQueryAndFragment(uri).toLowerCase(Locale.US);
+        for (String part : path.split("[/._\\-]+")) {
+            if ("adjump".equals(part)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isStrongAdLikeUri(String uri) {
+        if (isEmpty(uri)) return false;
+
+        String lower = uri.toLowerCase(Locale.US).trim();
+        if (containsAdQueryKey(lower)) return true;
+        if (containsAdKeyword(lower)) return true;
+        if (containsAdPathPart(lower, false)) return true;
+        try {
+            if (AdBlocker.isAdUrl(lower)) return true;
+        } catch (RuntimeException ignored) {
+            // Keep playlist filtering available when the optional URL blocker cannot parse a URI.
+        }
+        return false;
+    }
+
     private static boolean isAdLikeUri(String uri) {
         if (isEmpty(uri)) return false;
 
@@ -1322,6 +1374,10 @@ public final class M3u8AdFilter {
     }
 
     private static boolean containsAdPathPart(String uri) {
+        return containsAdPathPart(uri, true);
+    }
+
+    private static boolean containsAdPathPart(String uri, boolean includeAdNumbers) {
         String path = stripQueryAndFragment(uri);
         if (isEmpty(path)) return false;
 
@@ -1329,7 +1385,8 @@ public final class M3u8AdFilter {
         for (String part : parts) {
             if (isEmpty(part)) continue;
             if (AD_PATH_PARTS.contains(part)) return true;
-            if (part.startsWith("ad") && part.length() <= 16 && hasAdBoundaryWord(part)) return true;
+            if (part.startsWith("ad") && part.length() <= 16
+                    && (includeAdNumbers ? hasAdBoundaryWord(part) : hasStrongAdBoundaryWord(part))) return true;
             if (hasEndingAdWord(part)) return true;
             if (part.contains("adbreak") || part.contains("adpod")) return true;
         }
@@ -1338,11 +1395,15 @@ public final class M3u8AdFilter {
     }
 
     private static boolean hasAdBoundaryWord(String value) {
+        return hasStrongAdBoundaryWord(value)
+                || isAdNumber(value, "ad")
+                || isAdNumber(value, "ads");
+    }
+
+    private static boolean hasStrongAdBoundaryWord(String value) {
         return value.equals("ad")
                 || value.equals("ads")
                 || value.equals("adv")
-                || isAdNumber(value, "ad")
-                || isAdNumber(value, "ads")
                 || value.startsWith("advert")
                 || value.startsWith("adroll")
                 || value.startsWith("adpod")
@@ -1483,7 +1544,7 @@ public final class M3u8AdFilter {
     private static class Pod {
 
         private static final int MIN_SEGMENTS = 3;
-        private static final int MAX_SEGMENTS = 6;
+        private static final int MAX_SEGMENTS = 12;
         private static final double MAX_DURATION_SECONDS = 45;
 
         private final int start;
@@ -1511,7 +1572,7 @@ public final class M3u8AdFilter {
                 segments++;
                 lastSegment = i;
                 duration += record.duration;
-                strongAdSignal |= isExplicitAdRecord(record);
+                strongAdSignal |= isExplicitAdRecord(record) || containsAdJumpMediaPath(record.resolvedUri);
                 fingerprint.append(Math.round(record.duration * 10)).append(',');
             }
 
