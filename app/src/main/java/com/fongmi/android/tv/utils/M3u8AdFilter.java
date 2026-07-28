@@ -1,13 +1,13 @@
 package com.fongmi.android.tv.utils;
 
 import android.net.Uri;
-import android.text.TextUtils;
 
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Rule;
 import com.github.catvod.utils.UriUtil;
 
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -139,23 +139,6 @@ public final class M3u8AdFilter {
         add("commercial");
         add("commercial_id");
         add("commercial-id");
-        add("cust_params");
-        add("iu");
-        add("cmsid");
-        add("vid");
-        add("correlator");
-        add("ppid");
-        add("sz");
-        add("env");
-        add("gdfp_req");
-        add("impl");
-        add("unviewed_position_start");
-        add("output");
-        add("vpos");
-        add("pod");
-        add("mridx");
-        add("min_ad_duration");
-        add("max_ad_duration");
         add("scte");
         add("scte35");
         add("ssai");
@@ -241,11 +224,11 @@ public final class M3u8AdFilter {
     }
 
     private static String filterConfiguredRules(String content, String baseUrl) {
-        if (TextUtils.isEmpty(baseUrl)) return content;
+        if (isEmpty(baseUrl)) return content;
 
         try {
             String host = UrlUtil.host(UrlUtil.uri(baseUrl));
-            if (TextUtils.isEmpty(host)) return content;
+            if (isEmpty(host)) return content;
 
             return filterConfiguredRules(content, host, VodConfig.get().getRules(), LiveConfig.get().getRules());
         } catch (Throwable ignored) {
@@ -365,16 +348,16 @@ public final class M3u8AdFilter {
     }
 
     private static void addSubtitleWhitelist(String baseUrl, String uri) {
-        if (TextUtils.isEmpty(uri)) return;
+        if (isEmpty(uri)) return;
         String resolved = resolveUri(baseUrl, uri);
-        if (TextUtils.isEmpty(resolved)) return;
+        if (isEmpty(resolved)) return;
         synchronized (SUBTITLE_PLAYLIST_WHITELIST) {
             SUBTITLE_PLAYLIST_WHITELIST.add(normalizeForMatch(resolved));
         }
     }
 
     private static boolean isSubtitleWhitelisted(String url) {
-        if (TextUtils.isEmpty(url)) return false;
+        if (isEmpty(url)) return false;
         String full = normalizeForMatch(url);
         synchronized (SUBTITLE_PLAYLIST_WHITELIST) {
             return SUBTITLE_PLAYLIST_WHITELIST.contains(full);
@@ -437,7 +420,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isSubtitleUri(String uri) {
-        if (TextUtils.isEmpty(uri)) return false;
+        if (isEmpty(uri)) return false;
         String lower = stripQueryAndFragment(uri.toLowerCase(Locale.US));
         return lower.endsWith(".vtt")
                 || lower.endsWith(".webvtt")
@@ -454,7 +437,7 @@ public final class M3u8AdFilter {
                 || lower.endsWith(".xml");
     }
 
-    private static String filterAdVariantPlaylists(String content, String baseUrl) {
+    static String filterAdVariantPlaylists(String content, String baseUrl) {
         if (!content.contains("#EXT-X-STREAM-INF")
                 && !content.contains("#EXT-X-I-FRAME-STREAM-INF")
                 && !content.contains("#EXT-X-MEDIA")) return content;
@@ -462,7 +445,7 @@ public final class M3u8AdFilter {
         String[] lines = content.split("\n", -1);
         boolean[] remove = new boolean[lines.length];
         int variants = 0;
-        int ads = 0;
+        int adVariants = 0;
 
         for (int i = 0; i < lines.length; i++) {
             String line = trimLineEnd(lines[i]).trim();
@@ -472,7 +455,7 @@ public final class M3u8AdFilter {
                 String uri = parseAttributeString(line, "URI");
                 if (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line)) {
                     remove[i] = true;
-                    ads++;
+                    adVariants++;
                 }
                 continue;
             }
@@ -485,9 +468,8 @@ public final class M3u8AdFilter {
                     continue;
                 }
 
-                if (!TextUtils.isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line))) {
+                if (!isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line))) {
                     remove[i] = true;
-                    ads++;
                 }
                 continue;
             }
@@ -503,12 +485,14 @@ public final class M3u8AdFilter {
             if (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line) || containsStrongAdSignal(uri)) {
                 remove[i] = true;
                 remove[uriIndex] = true;
-                ads++;
+                adVariants++;
             }
         }
 
-        if (ads <= 0) return content;
-        if (variants > 0 && ads >= variants) return content;
+        boolean changed = false;
+        for (boolean value : remove) changed |= value;
+        if (!changed) return content;
+        if (variants > 0 && adVariants >= variants) return content;
 
         StringBuilder sb = new StringBuilder(content.length());
         for (int i = 0; i < lines.length; i++) {
@@ -535,7 +519,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isLikelyAdPlaylistUri(String uri, String baseUrl) {
-        if (TextUtils.isEmpty(uri)) return false;
+        if (isEmpty(uri)) return false;
         String resolved = resolveUri(baseUrl, uri).toLowerCase(Locale.US).trim();
         int hash = resolved.indexOf('#');
         if (hash >= 0) resolved = resolved.substring(0, hash);
@@ -585,7 +569,7 @@ public final class M3u8AdFilter {
             }
 
             String h = record.host == null ? "" : record.host;
-            boolean sameAsMajor = TextUtils.isEmpty(h) || majorHost.equals(h);
+            boolean sameAsMajor = isEmpty(h) || majorHost.equals(h);
             boolean explicitAd = isExplicitAdRecord(record);
             boolean minorAdHost = !sameAsMajor && isAdLikeUri(record.resolvedUri);
             boolean minorHost = !sameAsMajor && hostCount.getOrDefault(h, 0) <= Math.max(1, segmentCount / 5);
@@ -606,7 +590,7 @@ public final class M3u8AdFilter {
         return sb.toString();
     }
 
-    private static int countSegmentsFromString(String content) {
+    static int countSegmentsFromString(String content) {
         if (content == null || content.isEmpty()) return 0;
         int count = 0;
         String[] lines = content.split("\n", -1);
@@ -614,7 +598,11 @@ public final class M3u8AdFilter {
 
         for (String raw : lines) {
             String line = trimLineEnd(raw).trim();
-            if (line.startsWith("#EXTINF") || line.startsWith("#EXT-X-PART:")) {
+            if (line.startsWith("#EXT-X-PART:")) {
+                if (!isEmpty(parseAttributeString(line, "URI"))) count++;
+                continue;
+            }
+            if (line.startsWith("#EXTINF")) {
                 waitUri = true;
                 continue;
             }
@@ -875,7 +863,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isStandaloneAdResourceTag(String line, String baseUrl) {
-        if (TextUtils.isEmpty(line)) return false;
+        if (isEmpty(line)) return false;
 
         String lower = line.toLowerCase(Locale.US);
 
@@ -885,7 +873,7 @@ public final class M3u8AdFilter {
                 && !lower.startsWith("#ext-x-rendition-report:")) return false;
 
         String uri = parseAttributeString(line, "URI");
-        if (TextUtils.isEmpty(uri)) return false;
+        if (isEmpty(uri)) return false;
 
         return isLikelyAdSegmentUri(resolveUri(baseUrl, uri));
     }
@@ -1024,11 +1012,11 @@ public final class M3u8AdFilter {
                 || containsAdKeyword(clazz)
                 || containsAdKeyword(type)
                 || containsAdKeyword(asset)
-                || !TextUtils.isEmpty(scte);
+                || !isEmpty(scte);
     }
 
     private static boolean isAdSignalLine(String line) {
-        if (TextUtils.isEmpty(line)) return false;
+        if (isEmpty(line)) return false;
 
         String lower = line.toLowerCase(Locale.US);
 
@@ -1104,12 +1092,12 @@ public final class M3u8AdFilter {
 
     private static double parseAttributeDouble(String line, String key) {
         String value = parseAttributeString(line, key);
-        if (TextUtils.isEmpty(value)) return 0;
+        if (isEmpty(value)) return 0;
         return parseDouble(value);
     }
 
     private static String parseAttributeString(String line, String key) {
-        if (TextUtils.isEmpty(line) || TextUtils.isEmpty(key)) return "";
+        if (isEmpty(line) || isEmpty(key)) return "";
 
         int idx = indexOfKey(line, key);
         if (idx < 0) return "";
@@ -1137,7 +1125,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean containsAdKeyword(String text) {
-        if (TextUtils.isEmpty(text)) return false;
+        if (isEmpty(text)) return false;
 
         String value = text.toLowerCase(Locale.US)
                 .replace('-', ' ')
@@ -1167,7 +1155,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean containsStrongAdSignal(String text) {
-        if (TextUtils.isEmpty(text)) return false;
+        if (isEmpty(text)) return false;
 
         String lower = text.toLowerCase(Locale.US);
 
@@ -1201,7 +1189,7 @@ public final class M3u8AdFilter {
     private static boolean hasExplicitAdTag(List<String> tags) {
         if (tags == null || tags.isEmpty()) return false;
         for (String tag : tags) {
-            if (TextUtils.isEmpty(tag)) continue;
+            if (isEmpty(tag)) continue;
             if (isExplicitAdTag(tag)) return true;
         }
         return false;
@@ -1210,7 +1198,7 @@ public final class M3u8AdFilter {
     private static boolean hasAdSignalTag(List<String> tags) {
         if (tags == null || tags.isEmpty()) return false;
         for (String tag : tags) {
-            if (TextUtils.isEmpty(tag)) continue;
+            if (isEmpty(tag)) continue;
             if (isAdSignalTag(tag)) return true;
         }
         return false;
@@ -1256,7 +1244,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isLikelyAdSegmentUri(String uri) {
-        if (TextUtils.isEmpty(uri)) return false;
+        if (isEmpty(uri)) return false;
 
         String lower = uri.toLowerCase(Locale.US).trim();
         int fragment = lower.indexOf('#');
@@ -1268,19 +1256,23 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isAdLikeUri(String uri) {
-        if (TextUtils.isEmpty(uri)) return false;
+        if (isEmpty(uri)) return false;
 
         String lower = uri.toLowerCase(Locale.US).trim();
 
-        if (AdBlocker.isAdUrl(lower)) return true;
         if (containsAdQueryKey(lower)) return true;
         if (containsAdKeyword(lower)) return true;
         if (containsAdPathPart(lower)) return true;
+        try {
+            if (AdBlocker.isAdUrl(lower)) return true;
+        } catch (RuntimeException ignored) {
+            // Keep playlist filtering available when the optional URL blocker cannot parse a URI.
+        }
 
         return false;
     }
 
-    private static boolean containsAdQueryKey(String uri) {
+    static boolean containsAdQueryKey(String uri) {
         int query = uri.indexOf('?');
         if (query < 0 || query >= uri.length() - 1) return false;
 
@@ -1288,7 +1280,7 @@ public final class M3u8AdFilter {
         String[] parts = queryText.split("&");
 
         for (String part : parts) {
-            if (TextUtils.isEmpty(part)) continue;
+            if (isEmpty(part)) continue;
 
             int index = part.indexOf('=');
             String key = index >= 0 ? part.substring(0, index) : part;
@@ -1312,13 +1304,17 @@ public final class M3u8AdFilter {
         return false;
     }
 
+    private static boolean isEmpty(CharSequence value) {
+        return value == null || value.length() == 0;
+    }
+
     private static boolean containsAdPathPart(String uri) {
         String path = stripQueryAndFragment(uri);
-        if (TextUtils.isEmpty(path)) return false;
+        if (isEmpty(path)) return false;
 
         String[] parts = path.toLowerCase(Locale.US).split("[/._\\-]+");
         for (String part : parts) {
-            if (TextUtils.isEmpty(part)) continue;
+            if (isEmpty(part)) continue;
             if (AD_PATH_PARTS.contains(part)) return true;
             if (part.startsWith("ad") && part.length() <= 16 && hasAdBoundaryWord(part)) return true;
             if (hasEndingAdWord(part)) return true;
@@ -1351,7 +1347,7 @@ public final class M3u8AdFilter {
     private static String safeDecode(String value) {
         if (value == null) return "";
         try {
-            return Uri.decode(value);
+            return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
         } catch (Throwable ignored) {
             return value;
         }
@@ -1405,7 +1401,7 @@ public final class M3u8AdFilter {
             } else {
                 if (isPartOnlyRecord(record)) {
                     for (String tag : record.tags) {
-                        if (!TextUtils.isEmpty(tag)) sb.append(tag).append('\n');
+                        if (!isEmpty(tag)) sb.append(tag).append('\n');
                     }
                 } else {
                     for (String tag : record.tags) sb.append(tag).append('\n');
