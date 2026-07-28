@@ -444,6 +444,7 @@ public final class M3u8AdFilter {
 
         String[] lines = content.split("\n", -1);
         boolean[] remove = new boolean[lines.length];
+        Map<String, Integer> mediaGroupCounts = countMediaGroups(lines);
         int variants = 0;
         int adVariants = 0;
 
@@ -468,7 +469,9 @@ public final class M3u8AdFilter {
                     continue;
                 }
 
-                if (!isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line))) {
+                String groupKey = mediaGroupKey(type, parseAttributeString(line, "GROUP-ID"));
+                boolean hasAlternative = mediaGroupCounts.getOrDefault(groupKey, 0) > 1;
+                if (hasAlternative && !isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line))) {
                     remove[i] = true;
                 }
                 continue;
@@ -501,6 +504,24 @@ public final class M3u8AdFilter {
             if (i < lines.length - 1) sb.append('\n');
         }
         return sb.toString();
+    }
+
+    private static Map<String, Integer> countMediaGroups(String[] lines) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (String raw : lines) {
+            String line = trimLineEnd(raw).trim();
+            if (!line.startsWith("#EXT-X-MEDIA:")) continue;
+            String type = parseAttributeString(line, "TYPE");
+            String groupId = parseAttributeString(line, "GROUP-ID");
+            if (isEmpty(type) || isEmpty(groupId)) continue;
+            String key = mediaGroupKey(type, groupId);
+            counts.put(key, counts.getOrDefault(key, 0) + 1);
+        }
+        return counts;
+    }
+
+    private static String mediaGroupKey(String type, String groupId) {
+        return type.toLowerCase(Locale.US) + '\n' + groupId;
     }
 
     private static int findNextUriLine(String[] lines, int start) {
@@ -690,7 +711,7 @@ public final class M3u8AdFilter {
             boolean adByPendingSignal = pendingAdSignal && (explicitAd || isAdLikeUri(record.resolvedUri) || hasAdSignalTag(record.tags));
             boolean hasDiscontinuity = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
 
-            if (explicitAd && (hasDiscontinuity || hasAdSignalTag(record.tags))) {
+            if (explicitAd && hasDiscontinuity) {
                 discontinuityAdOpen = true;
                 discontinuityAdSegments = 0;
             }
@@ -892,6 +913,16 @@ public final class M3u8AdFilter {
         for (String raw : lines) {
             String line = trimLineEnd(raw);
 
+            if (isPartTag(line)) {
+                String uri = parseAttributeString(line, "URI");
+                String resolved = resolveUri(baseUrl, uri);
+                List<String> tags = new ArrayList<>(pending);
+                tags.add(line);
+                records.add(Record.segment(tags, uri, resolveHostFromResolved(resolved), resolved, parsePartDuration(line)));
+                pending.clear();
+                continue;
+            }
+
             if (isSegmentTag(line) || (!pending.isEmpty() && isSegmentFollowTag(line))) {
                 pending.add(line);
                 continue;
@@ -905,29 +936,11 @@ public final class M3u8AdFilter {
                     continue;
                 }
 
-                if (isPartTag(line)) {
-                    String uri = parseAttributeString(line, "URI");
-                    String resolved = resolveUri(baseUrl, uri);
-                    List<String> tags = new ArrayList<>(pending);
-                    tags.add(line);
-                    records.add(Record.segment(tags, uri, resolveHostFromResolved(resolved), resolved, parsePartDuration(line)));
-                    pending.clear();
-                    continue;
-                }
-
                 for (String tag : pending) records.add(Record.plain(tag));
                 pending.clear();
             }
 
-            if (isPartTag(line)) {
-                String uri = parseAttributeString(line, "URI");
-                String resolved = resolveUri(baseUrl, uri);
-                List<String> tags = new ArrayList<>();
-                tags.add(line);
-                records.add(Record.segment(tags, uri, resolveHostFromResolved(resolved), resolved, parsePartDuration(line)));
-            } else {
-                records.add(Record.plain(line));
-            }
+            records.add(Record.plain(line));
         }
 
         if (!pending.isEmpty()) {
@@ -949,8 +962,7 @@ public final class M3u8AdFilter {
         return line.startsWith("#EXT-X-BYTERANGE")
                 || line.startsWith("#EXT-X-GAP")
                 || line.startsWith("#EXT-X-PROGRAM-DATE-TIME")
-                || line.startsWith("#EXT-X-MAP:")
-                || line.startsWith("#EXT-X-PART:");
+                || line.startsWith("#EXT-X-MAP:");
     }
 
     private static boolean isPartTag(String line) {
@@ -1416,8 +1428,12 @@ public final class M3u8AdFilter {
 
     private static boolean isPartOnlyRecord(Record record) {
         if (record == null || record.tags == null || record.tags.isEmpty()) return false;
-        if (record.tags.size() != 1) return false;
-        return record.tags.get(0).startsWith("#EXT-X-PART:");
+        boolean hasPart = false;
+        for (String tag : record.tags) {
+            if (tag.startsWith("#EXTINF")) return false;
+            if (tag.startsWith("#EXT-X-PART:")) hasPart = true;
+        }
+        return hasPart;
     }
 
     private static String resolveHost(String baseUrl, String uri) {
