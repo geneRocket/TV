@@ -455,7 +455,7 @@ public final class M3u8AdFilter {
             if (line.startsWith("#EXT-X-I-FRAME-STREAM-INF")) {
                 variants++;
                 String uri = parseAttributeString(line, "URI");
-                if (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line)) {
+                if (isLikelyAdPlaylistUri(uri, baseUrl)) {
                     remove[i] = true;
                     adVariants++;
                 }
@@ -472,7 +472,7 @@ public final class M3u8AdFilter {
 
                 String groupKey = mediaGroupKey(type, parseAttributeString(line, "GROUP-ID"));
                 boolean hasAlternative = mediaGroupCounts.getOrDefault(groupKey, 0) > 1;
-                if (hasAlternative && !isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line))) {
+                if (hasAlternative && !isEmpty(uri) && isLikelyAdPlaylistUri(uri, baseUrl)) {
                     remove[i] = true;
                 }
                 continue;
@@ -486,7 +486,7 @@ public final class M3u8AdFilter {
             variants++;
             String uri = trimLineEnd(lines[uriIndex]).trim();
 
-            if (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line)) {
+            if (isLikelyAdPlaylistUri(uri, baseUrl)) {
                 remove[i] = true;
                 remove[uriIndex] = true;
                 adVariants++;
@@ -580,8 +580,6 @@ public final class M3u8AdFilter {
 
         boolean hasStableMajorHost = (majorCount * 10) >= (segmentCount * 5);
         if (!hasStableMajorHost) return build(records, original.length());
-        Set<Integer> structuralMinorHostSegments = findStructuralMinorHostSegments(records, hostCount, majorHost, segmentCount);
-
         StringBuilder sb = new StringBuilder(original.length());
         int removed = 0;
 
@@ -596,9 +594,8 @@ public final class M3u8AdFilter {
             boolean sameAsMajor = isEmpty(h) || majorHost.equals(h);
             boolean explicitAd = isExplicitAdRecord(record);
             boolean minorAdHost = !sameAsMajor && record.adLikeUri;
-            boolean structuralMinorHost = structuralMinorHostSegments.contains(index);
 
-            if (explicitAd || minorAdHost || structuralMinorHost) {
+            if (explicitAd || minorAdHost) {
                 removed++;
                 continue;
             }
@@ -611,44 +608,6 @@ public final class M3u8AdFilter {
 
         if (sb.length() > 0) sb.setLength(sb.length() - 1);
         return sb.toString();
-    }
-
-    private static Set<Integer> findStructuralMinorHostSegments(List<Record> records, Map<String, Integer> hostCount,
-                                                                 String majorHost, int segmentCount) {
-        Set<Integer> result = new HashSet<>();
-        for (int start = 0; start < records.size(); ) {
-            Record first = records.get(start);
-            String host = first.segment ? first.host : "";
-            boolean minor = first.segment && !isEmpty(host) && !majorHost.equals(host)
-                    && hostCount.getOrDefault(host, 0) <= Math.max(1, segmentCount / 5);
-            if (!minor) {
-                start++;
-                continue;
-            }
-
-            int end = start;
-            double duration = 0;
-            while (end < records.size()) {
-                Record record = records.get(end);
-                if (!record.segment) {
-                    end++;
-                    continue;
-                }
-                if (!host.equals(record.host)) break;
-                duration += record.duration;
-                end++;
-            }
-
-            boolean startsAtDiscontinuity = hasTagPrefix(first.tags, "#EXT-X-DISCONTINUITY");
-            boolean endsAtDiscontinuity = end < records.size()
-                    && records.get(end).segment
-                    && hasTagPrefix(records.get(end).tags, "#EXT-X-DISCONTINUITY");
-            if (startsAtDiscontinuity && endsAtDiscontinuity && duration > 0 && duration <= 120) {
-                for (int index = start; index < end; index++) if (records.get(index).segment) result.add(index);
-            }
-            start = Math.max(start + 1, end);
-        }
-        return result;
     }
 
     static int countSegmentsFromString(String content) {
@@ -777,6 +736,16 @@ public final class M3u8AdFilter {
             if (explicitAd || adByPendingSignal) {
                 pendingAdSignal = false;
                 pendingAdSignalLines = 0;
+                if (cueAdOpen) {
+                    cueAdSegments++;
+                    if (cueAdSeconds > 0) {
+                        cueAdSeconds = nextRemaining(cueAdSeconds, record.duration);
+                        if (cueAdSeconds <= 0) cueAdOpen = false;
+                    }
+                }
+                if (dateRangeAdSeconds > 0) {
+                    dateRangeAdSeconds = nextRemaining(dateRangeAdSeconds, record.duration);
+                }
                 continue;
             }
 
@@ -1094,11 +1063,6 @@ public final class M3u8AdFilter {
     private static boolean isAdDateRangeTag(String line) {
         if (!line.startsWith("#EXT-X-DATERANGE")) return false;
 
-        String lower = line.toLowerCase(Locale.US);
-        if (lower.contains("scte35")) return true;
-        if (lower.contains("scte-35")) return true;
-        if (lower.contains("cue")) return true;
-
         String id = parseAttributeString(line, "ID");
         String clazz = parseAttributeString(line, "CLASS");
         String type = parseAttributeString(line, "TYPE");
@@ -1109,7 +1073,19 @@ public final class M3u8AdFilter {
                 || containsAdKeyword(clazz)
                 || containsAdKeyword(type)
                 || containsAdKeyword(asset)
+                || containsCueKeyword(id)
+                || containsCueKeyword(clazz)
+                || containsCueKeyword(type)
                 || !isEmpty(scte);
+    }
+
+    private static boolean containsCueKeyword(String text) {
+        if (isEmpty(text)) return false;
+        String[] tokens = text.toLowerCase(Locale.US).split("[^a-z0-9]+");
+        for (String token : tokens) {
+            if ("cue".equals(token) || "cueout".equals(token) || "cuein".equals(token)) return true;
+        }
+        return false;
     }
 
     private static boolean isAdSignalLine(String line) {
@@ -1125,7 +1101,7 @@ public final class M3u8AdFilter {
         if (lower.startsWith("#ext-x-vast")) return true;
         if (lower.startsWith("#ext-x-vmap")) return true;
 
-        return lower.startsWith("#") && containsStrongAdSignal(lower);
+        return false;
     }
 
     private static double parseCueOutDuration(String line) {
@@ -1248,32 +1224,6 @@ public final class M3u8AdFilter {
         return false;
     }
 
-    private static boolean containsStrongAdSignal(String text) {
-        if (isEmpty(text)) return false;
-
-        String lower = text.toLowerCase(Locale.US);
-
-        if (lower.contains("scte35")) return true;
-        if (lower.contains("scte-35")) return true;
-        if (lower.contains("cue-out")) return true;
-        if (lower.contains("cue_out")) return true;
-        if (lower.contains("ad-break")) return true;
-        if (lower.contains("ad_break")) return true;
-        if (lower.contains("adbreak")) return true;
-        if (lower.contains("ad-pod")) return true;
-        if (lower.contains("ad_pod")) return true;
-        if (lower.contains("adpod")) return true;
-        if (lower.contains("preroll")) return true;
-        if (lower.contains("midroll")) return true;
-        if (lower.contains("postroll")) return true;
-        if (lower.contains("doubleclick")) return true;
-        if (lower.contains("gampad")) return true;
-        if (lower.contains("freewheel")) return true;
-        if (lower.contains("spotx")) return true;
-
-        return containsAdKeyword(lower);
-    }
-
     private static boolean isExplicitAdRecord(Record record) {
         return record != null && record.explicitAd;
     }
@@ -1318,7 +1268,7 @@ public final class M3u8AdFilter {
 
         if (lower.startsWith("#ext-x-daterange")) return isAdDateRangeTag(tag);
 
-        return lower.startsWith("#") && containsStrongAdSignal(lower);
+        return false;
     }
 
     private static boolean isAdSignalTag(String tag) {
