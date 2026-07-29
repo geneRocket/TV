@@ -580,11 +580,13 @@ public final class M3u8AdFilter {
 
         boolean hasStableMajorHost = (majorCount * 10) >= (segmentCount * 5);
         if (!hasStableMajorHost) return build(records, original.length());
+        Set<Integer> structuralMinorHostSegments = findStructuralMinorHostSegments(records, hostCount, majorHost, segmentCount);
 
         StringBuilder sb = new StringBuilder(original.length());
         int removed = 0;
 
-        for (Record record : records) {
+        for (int index = 0; index < records.size(); index++) {
+            Record record = records.get(index);
             if (!record.segment) {
                 appendRecord(sb, record);
                 continue;
@@ -594,9 +596,9 @@ public final class M3u8AdFilter {
             boolean sameAsMajor = isEmpty(h) || majorHost.equals(h);
             boolean explicitAd = isExplicitAdRecord(record);
             boolean minorAdHost = !sameAsMajor && record.adLikeUri;
-            boolean minorHost = !sameAsMajor && hostCount.getOrDefault(h, 0) <= Math.max(1, segmentCount / 5);
+            boolean structuralMinorHost = structuralMinorHostSegments.contains(index);
 
-            if (explicitAd || minorAdHost || minorHost) {
+            if (explicitAd || minorAdHost || structuralMinorHost) {
                 removed++;
                 continue;
             }
@@ -609,6 +611,44 @@ public final class M3u8AdFilter {
 
         if (sb.length() > 0) sb.setLength(sb.length() - 1);
         return sb.toString();
+    }
+
+    private static Set<Integer> findStructuralMinorHostSegments(List<Record> records, Map<String, Integer> hostCount,
+                                                                 String majorHost, int segmentCount) {
+        Set<Integer> result = new HashSet<>();
+        for (int start = 0; start < records.size(); ) {
+            Record first = records.get(start);
+            String host = first.segment ? first.host : "";
+            boolean minor = first.segment && !isEmpty(host) && !majorHost.equals(host)
+                    && hostCount.getOrDefault(host, 0) <= Math.max(1, segmentCount / 5);
+            if (!minor) {
+                start++;
+                continue;
+            }
+
+            int end = start;
+            double duration = 0;
+            while (end < records.size()) {
+                Record record = records.get(end);
+                if (!record.segment) {
+                    end++;
+                    continue;
+                }
+                if (!host.equals(record.host)) break;
+                duration += record.duration;
+                end++;
+            }
+
+            boolean startsAtDiscontinuity = hasTagPrefix(first.tags, "#EXT-X-DISCONTINUITY");
+            boolean endsAtDiscontinuity = end < records.size()
+                    && records.get(end).segment
+                    && hasTagPrefix(records.get(end).tags, "#EXT-X-DISCONTINUITY");
+            if (startsAtDiscontinuity && endsAtDiscontinuity && duration > 0 && duration <= 120) {
+                for (int index = start; index < end; index++) if (records.get(index).segment) result.add(index);
+            }
+            start = Math.max(start + 1, end);
+        }
+        return result;
     }
 
     static int countSegmentsFromString(String content) {
@@ -638,8 +678,10 @@ public final class M3u8AdFilter {
 
     private static List<Record> filterAdTagSegments(List<Record> records, String baseUrl) {
         List<Record> kept = new ArrayList<>(records.size());
+        boolean allowWeakDiscontinuitySignal = shouldUseWeakDiscontinuitySignal(records);
 
         boolean cueAdOpen = false;
+        boolean cueAdHasClosingTag = false;
         double cueAdSeconds = 0;
         int cueAdSegments = 0;
 
@@ -651,10 +693,12 @@ public final class M3u8AdFilter {
         boolean pendingAdSignal = false;
         int pendingAdSignalLines = 0;
 
-        for (Record record : records) {
+        for (int recordIndex = 0; recordIndex < records.size(); recordIndex++) {
+            Record record = records.get(recordIndex);
             if (!record.segment) {
                 if (isCueOutTag(record.line)) {
                     cueAdOpen = true;
+                    cueAdHasClosingTag = hasCueInAhead(records, recordIndex + 1);
                     cueAdSeconds = Math.max(cueAdSeconds, parseCueOutDuration(record.line));
                     cueAdSegments = 0;
                     continue;
@@ -662,6 +706,7 @@ public final class M3u8AdFilter {
 
                 if (isCueInTag(record.line)) {
                     cueAdOpen = false;
+                    cueAdHasClosingTag = false;
                     cueAdSeconds = 0;
                     cueAdSegments = 0;
                     dateRangeAdSeconds = 0;
@@ -707,9 +752,10 @@ public final class M3u8AdFilter {
                 continue;
             }
 
-            boolean explicitAd = isExplicitAdRecord(record);
-            boolean adByPendingSignal = pendingAdSignal && (explicitAd || record.adLikeUri || hasAdSignalTag(record.tags));
             boolean hasDiscontinuity = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
+            boolean explicitAd = isExplicitAdRecord(record)
+                    || (allowWeakDiscontinuitySignal && hasDiscontinuity && record.weakAdNumberUri);
+            boolean adByPendingSignal = pendingAdSignal && (explicitAd || record.adLikeUri || hasAdSignalTag(record.tags));
 
             if (explicitAd && hasDiscontinuity) {
                 discontinuityAdOpen = true;
@@ -735,8 +781,9 @@ public final class M3u8AdFilter {
             }
 
             if (cueAdOpen || dateRangeAdSeconds > 0) {
-                if (cueAdOpen && shouldEndCue(cueAdSeconds, cueAdSegments)) {
+                if (cueAdOpen && shouldEndCue(cueAdSeconds, cueAdSegments, cueAdHasClosingTag)) {
                     cueAdOpen = false;
+                    cueAdHasClosingTag = false;
                     cueAdSegments = 0;
                 }
 
@@ -773,6 +820,28 @@ public final class M3u8AdFilter {
         return kept;
     }
 
+    private static boolean hasCueInAhead(List<Record> records, int start) {
+        int segments = 0;
+        for (int index = start; index < records.size() && segments <= MAX_CONTIGUOUS_AD_SEGMENTS; index++) {
+            Record record = records.get(index);
+            if (record.segment) segments++;
+            else if (isCueInTag(record.line)) return true;
+            else if (isCueOutTag(record.line)) return false;
+        }
+        return false;
+    }
+
+    private static boolean shouldUseWeakDiscontinuitySignal(List<Record> records) {
+        int segments = 0;
+        int discontinuities = 0;
+        for (Record record : records) {
+            if (!record.segment) continue;
+            segments++;
+            if (hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) discontinuities++;
+        }
+        return discontinuities > 0 && discontinuities * 20 <= segments;
+    }
+
     private static List<Record> filterRepeatedDiscontinuityPods(List<Record> records) {
         if (records == null || records.isEmpty()) return records;
 
@@ -786,13 +855,20 @@ public final class M3u8AdFilter {
         }
         if (podStart >= 0) addPod(pods, records, podStart, records.size());
 
-        Map<String, Integer> counts = new HashMap<>();
-        for (Pod pod : pods) counts.put(pod.fingerprint, counts.getOrDefault(pod.fingerprint, 0) + 1);
+        Map<String, Integer> durationCounts = new HashMap<>();
+        Map<String, Integer> mediaCounts = new HashMap<>();
+        for (Pod pod : pods) {
+            durationCounts.put(pod.durationFingerprint, durationCounts.getOrDefault(pod.durationFingerprint, 0) + 1);
+            mediaCounts.put(pod.mediaFingerprint, mediaCounts.getOrDefault(pod.mediaFingerprint, 0) + 1);
+        }
 
         boolean[] remove = new boolean[records.size()];
         int removedSegments = 0;
         for (Pod pod : pods) {
-            if (!shouldRemoveRepeatedPod(counts.getOrDefault(pod.fingerprint, 0), pod.strongAdSignal)) continue;
+            int matchingDurations = durationCounts.getOrDefault(pod.durationFingerprint, 0);
+            int matchingMedia = mediaCounts.getOrDefault(pod.mediaFingerprint, 0);
+            if (!shouldRemoveRepeatedPod(matchingDurations, pod.strongAdSignal)
+                    && !shouldRemoveIdenticalMediaPod(matchingMedia)) continue;
             for (int i = pod.start; i < pod.end; i++) {
                 if (records.get(i).segment) removedSegments++;
                 remove[i] = true;
@@ -813,12 +889,21 @@ public final class M3u8AdFilter {
     }
 
     static boolean shouldEndCue(double declaredSeconds, int removedSegments) {
+        return shouldEndCue(declaredSeconds, removedSegments, false);
+    }
+
+    static boolean shouldEndCue(double declaredSeconds, int removedSegments, boolean hasClosingTag) {
+        if (hasClosingTag) return removedSegments >= MAX_CONTIGUOUS_AD_SEGMENTS;
         int limit = declaredSeconds <= 0 ? MAX_UNBOUNDED_CUE_AD_SEGMENTS : MAX_CONTIGUOUS_AD_SEGMENTS;
         return removedSegments >= limit;
     }
 
     static boolean shouldRemoveRepeatedPod(int matchingPods, boolean strongAdSignal) {
         return strongAdSignal && matchingPods >= 2;
+    }
+
+    static boolean shouldRemoveIdenticalMediaPod(int matchingPods) {
+        return matchingPods >= 2;
     }
 
     private static List<Record> filterShortAdClusters(List<Record> records) {
@@ -961,6 +1046,7 @@ public final class M3u8AdFilter {
         return line.startsWith("#EXT-X-BYTERANGE")
                 || line.startsWith("#EXT-X-GAP")
                 || line.startsWith("#EXT-X-PROGRAM-DATE-TIME")
+                || line.startsWith("#EXT-X-KEY:")
                 || line.startsWith("#EXT-X-MAP:");
     }
 
@@ -1157,9 +1243,6 @@ public final class M3u8AdFilter {
             }
 
             if (hasEndingAdWord(token)) return true;
-            if (token.contains("scte35")) return true;
-            if (token.contains("vast")) return true;
-            if (token.contains("vmap")) return true;
         }
 
         return false;
@@ -1195,11 +1278,9 @@ public final class M3u8AdFilter {
         return record != null && record.explicitAd;
     }
 
-    private static boolean isExplicitAdSegment(List<String> tags, String resolvedUri, int uriAdSignals) {
+    private static boolean isExplicitAdSegment(List<String> tags, int uriAdSignals) {
         if (hasExplicitAdTag(tags)) return true;
-        if ((uriAdSignals & URI_STRONG_AD) != 0) return true;
-        if (!hasTagPrefix(tags, "#EXT-X-DISCONTINUITY")) return false;
-        return containsAdNumberMediaPath(resolvedUri);
+        return (uriAdSignals & URI_STRONG_AD) != 0;
     }
 
     private static boolean hasExplicitAdTag(List<String> tags) {
@@ -1526,9 +1607,10 @@ public final class M3u8AdFilter {
         private final double duration;
         private final boolean adLikeUri;
         private final boolean explicitAd;
+        private final boolean weakAdNumberUri;
 
         private Record(boolean segment, String line, String host, String resolvedUri, List<String> tags, double duration,
-                       boolean adLikeUri, boolean explicitAd) {
+                       boolean adLikeUri, boolean explicitAd, boolean weakAdNumberUri) {
             this.segment = segment;
             this.line = line;
             this.host = host;
@@ -1537,17 +1619,19 @@ public final class M3u8AdFilter {
             this.duration = duration;
             this.adLikeUri = adLikeUri;
             this.explicitAd = explicitAd;
+            this.weakAdNumberUri = weakAdNumberUri;
         }
 
         public static Record plain(String line) {
-            return new Record(false, line, "", "", null, 0, false, false);
+            return new Record(false, line, "", "", null, 0, false, false, false);
         }
 
         public static Record segment(List<String> tags, String line, String host, String resolvedUri, double duration) {
             int uriAdSignals = classifySegmentUri(resolvedUri);
             return new Record(true, line, host, resolvedUri, tags, duration,
                     (uriAdSignals & URI_AD_LIKE) != 0,
-                    isExplicitAdSegment(tags, resolvedUri, uriAdSignals));
+                    isExplicitAdSegment(tags, uriAdSignals),
+                    (uriAdSignals & URI_STRONG_AD) == 0 && containsAdNumberMediaPath(resolvedUri));
         }
     }
 
@@ -1559,13 +1643,15 @@ public final class M3u8AdFilter {
 
         private final int start;
         private final int end;
-        private final String fingerprint;
+        private final String durationFingerprint;
+        private final String mediaFingerprint;
         private final boolean strongAdSignal;
 
-        private Pod(int start, int end, String fingerprint, boolean strongAdSignal) {
+        private Pod(int start, int end, String durationFingerprint, String mediaFingerprint, boolean strongAdSignal) {
             this.start = start;
             this.end = end;
-            this.fingerprint = fingerprint;
+            this.durationFingerprint = durationFingerprint;
+            this.mediaFingerprint = mediaFingerprint;
             this.strongAdSignal = strongAdSignal;
         }
 
@@ -1574,7 +1660,8 @@ public final class M3u8AdFilter {
             int lastSegment = -1;
             double duration = 0;
             boolean strongAdSignal = false;
-            StringBuilder fingerprint = new StringBuilder();
+            StringBuilder durationFingerprint = new StringBuilder();
+            StringBuilder mediaFingerprint = new StringBuilder();
 
             for (int i = start; i < end; i++) {
                 Record record = records.get(i);
@@ -1583,11 +1670,13 @@ public final class M3u8AdFilter {
                 lastSegment = i;
                 duration += record.duration;
                 strongAdSignal |= record.explicitAd;
-                fingerprint.append(Math.round(record.duration * 10)).append(',');
+                durationFingerprint.append(Math.round(record.duration * 10)).append(',');
+                mediaFingerprint.append(normalizeForMatch(record.resolvedUri)).append('\n');
             }
 
             if (segments < MIN_SEGMENTS || segments > MAX_SEGMENTS || duration <= 0 || duration > MAX_DURATION_SECONDS) return null;
-            return new Pod(start, lastSegment + 1, segments + ":" + fingerprint, strongAdSignal);
+            return new Pod(start, lastSegment + 1, segments + ":" + durationFingerprint,
+                    segments + ":" + mediaFingerprint, strongAdSignal);
         }
     }
 }
