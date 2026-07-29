@@ -486,7 +486,7 @@ public final class M3u8AdFilter {
             variants++;
             String uri = trimLineEnd(lines[uriIndex]).trim();
 
-            if (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line) || containsStrongAdSignal(uri)) {
+            if (isLikelyAdPlaylistUri(uri, baseUrl) || containsStrongAdSignal(line)) {
                 remove[i] = true;
                 remove[uriIndex] = true;
                 adVariants++;
@@ -1367,7 +1367,7 @@ public final class M3u8AdFilter {
 
     private static boolean containsAdNumberMediaPath(String uri) {
         if (isEmpty(uri) || !isLikelySegmentResource(uri)) return false;
-        String path = stripQueryAndFragment(uri).toLowerCase(Locale.US);
+        String path = stripQueryAndFragment(mediaPathAndQuery(uri)).toLowerCase(Locale.US);
         for (String part : path.split("[/._\\-]+")) {
             if (isAdNumber(part, "ad") || isAdNumber(part, "ads")) return true;
         }
@@ -1376,7 +1376,7 @@ public final class M3u8AdFilter {
 
     private static boolean containsAdJumpMediaPath(String uri) {
         if (isEmpty(uri) || !isLikelySegmentResource(uri)) return false;
-        String path = stripQueryAndFragment(uri).toLowerCase(Locale.US);
+        String path = stripQueryAndFragment(mediaPathAndQuery(uri)).toLowerCase(Locale.US);
         for (String part : path.split("[/._\\-]+")) {
             if ("adjump".equals(part)) return true;
         }
@@ -1388,7 +1388,7 @@ public final class M3u8AdFilter {
 
         String lower = uri.toLowerCase(Locale.US).trim();
         if (containsAdQueryKey(lower)) return true;
-        if (containsAdKeyword(lower)) return true;
+        if (containsAdKeyword(mediaPathAndQuery(lower))) return true;
         if (containsAdPathPart(lower, false)) return true;
         try {
             if (AdBlocker.isAdUrl(lower)) return true;
@@ -1404,7 +1404,7 @@ public final class M3u8AdFilter {
         String lower = uri.toLowerCase(Locale.US).trim();
 
         if (containsAdQueryKey(lower)) return true;
-        if (containsAdKeyword(lower)) return true;
+        if (containsAdKeyword(mediaPathAndQuery(lower))) return true;
         if (containsAdPathPart(lower)) return true;
         try {
             if (AdBlocker.isAdUrl(lower)) return true;
@@ -1461,7 +1461,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean containsAdPathPart(String uri, boolean includeAdNumbers) {
-        String path = stripQueryAndFragment(uri);
+        String path = stripQueryAndFragment(mediaPathAndQuery(uri));
         if (isEmpty(path)) return false;
 
         String[] parts = path.toLowerCase(Locale.US).split("[/._\\-]+");
@@ -1539,6 +1539,28 @@ public final class M3u8AdFilter {
         int hash = value.indexOf('#');
         if (hash >= 0) value = value.substring(0, hash);
         return value;
+    }
+
+    private static String mediaPathAndQuery(String uri) {
+        if (isEmpty(uri)) return "";
+        try {
+            URI parsed = new URI(uri);
+            String path = parsed.getRawPath();
+            String query = parsed.getRawQuery();
+            return (path == null ? "" : path) + (query == null ? "" : "?" + query);
+        } catch (Throwable ignored) {
+            int scheme = uri.indexOf("://");
+            if (scheme < 0) return uri;
+            int path = uri.indexOf('/', scheme + 3);
+            return path < 0 ? "" : uri.substring(path);
+        }
+    }
+
+    private static String exactMediaIdentity(String uri) {
+        if (isEmpty(uri)) return "";
+        String value = uri.trim();
+        int fragment = value.indexOf('#');
+        return fragment < 0 ? value : value.substring(0, fragment);
     }
 
     private static double parseDouble(String value) {
@@ -1671,7 +1693,7 @@ public final class M3u8AdFilter {
                 duration += record.duration;
                 strongAdSignal |= record.explicitAd;
                 durationFingerprint.append(Math.round(record.duration * 10)).append(',');
-                mediaFingerprint.append(normalizeForMatch(record.resolvedUri)).append('\n');
+                mediaFingerprint.append(exactMediaIdentity(record.resolvedUri)).append('\n');
             }
 
             if (segments < MIN_SEGMENTS || segments > MAX_SEGMENTS || duration <= 0 || duration > MAX_DURATION_SECONDS) return null;

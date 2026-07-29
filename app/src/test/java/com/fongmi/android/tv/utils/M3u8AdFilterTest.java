@@ -2,6 +2,9 @@ package com.fongmi.android.tv.utils;
 
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.Assert.assertEquals;
@@ -9,6 +12,62 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class M3u8AdFilterTest {
+
+    private static final RealFixture[] REAL_FIXTURES = {
+            new RealFixture("chimi-01.m3u8", 1645, 1645),
+            new RealFixture("chimi-02.m3u8", 1647, 1647),
+            new RealFixture("chimi-03.m3u8", 6551, 6533),
+            new RealFixture("chimi-04.m3u8", 2214, 2178),
+            new RealFixture("chimi-05.m3u8", 809, 809),
+            new RealFixture("chimi-06.m3u8", 809, 809),
+            new RealFixture("chimi-07.m3u8", 3267, 3267),
+            new RealFixture("chimi-08.m3u8", 409, 409),
+            new RealFixture("chimi-09.m3u8", 3179, 3179),
+            new RealFixture("chimi-10.m3u8", 3262, 3262),
+            new RealFixture("chimi-11.m3u8", 1315, 1315),
+            new RealFixture("chimi-12.m3u8", 3303, 3279),
+            new RealFixture("chimi-13.m3u8", 809, 809),
+            new RealFixture("chimi-14.m3u8", 809, 809),
+            new RealFixture("chimi-15.m3u8", 809, 809),
+            new RealFixture("chimi-16.m3u8", 809, 809),
+            new RealFixture("chimi-17.m3u8", 1651, 1651),
+            new RealFixture("chimi-18.m3u8", 3346, 3265),
+            new RealFixture("chimi-19.m3u8", 3267, 3267),
+            new RealFixture("qunti-01.m3u8", 1848, 1838),
+            new RealFixture("qunti-02.m3u8", 1852, 1852),
+            new RealFixture("qunti-03.m3u8", 7140, 7122),
+            new RealFixture("qunti-04.m3u8", 2491, 2449),
+            new RealFixture("qunti-07.m3u8", 3674, 3674),
+            new RealFixture("qunti-08.m3u8", 3562, 3562),
+            new RealFixture("qunti-09.m3u8", 3583, 3583),
+            new RealFixture("qunti-10.m3u8", 1478, 1478),
+            new RealFixture("qunti-11.m3u8", 3717, 3693),
+            new RealFixture("qunti-16.m3u8", 1798, 1798),
+            new RealFixture("qunti-17.m3u8", 3711, 3669),
+            new RealFixture("spirited-away-01.m3u8", 1877, 1877),
+            new RealFixture("spirited-away-02.m3u8", 1876, 1876),
+            new RealFixture("station-360.m3u8", 3220, 3200),
+            new RealFixture("station-fengbao.m3u8", 6407, 6389),
+            new RealFixture("station-zuidai.m3u8", 3222, 3222),
+            new RealFixture("xuan-an-current.m3u8", 2955, 2937),
+            new RealFixture("xuan-an-episode-01.m3u8", 2735, 2717),
+    };
+
+    @Test
+    public void filtersCapturedRealMediaPlaylistsWithoutRegressions() throws IOException {
+        for (RealFixture fixture : REAL_FIXTURES) {
+            String original = readRealFixture(fixture.name);
+            String filtered = new String(M3u8AdFilter.filterMinorHost(
+                    original.getBytes(StandardCharsets.UTF_8),
+                    "https://fixture.invalid/" + fixture.name), StandardCharsets.UTF_8);
+
+            assertEquals(fixture.name + " input changed", fixture.before, M3u8AdFilter.countSegmentsFromString(original));
+            assertEquals(fixture.name + " filtering changed", fixture.after, M3u8AdFilter.countSegmentsFromString(filtered));
+            assertTrue(fixture.name, filtered.startsWith("#EXTM3U"));
+            assertTrue(fixture.name, fixture.after > 0);
+            if (original.contains("#EXT-X-ENDLIST")) assertTrue(fixture.name, filtered.contains("#EXT-X-ENDLIST"));
+        }
+    }
 
     @Test
     public void repeatedDurationsNeedStrongAdSignal() {
@@ -81,6 +140,20 @@ public class M3u8AdFilterTest {
 
         assertTrue(filtered.contains("ads/audio.m3u8"));
         assertTrue(filtered.contains("AUDIO=\"audio\""));
+    }
+
+    @Test
+    public void preservesVariantWithRandomVastSubstringInFilename() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=1000000\n"
+                + "video/hnMl3VAST7.m3u8\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=2000000\n"
+                + "video/main.m3u8\n";
+
+        String filtered = M3u8AdFilter.filterAdVariantPlaylists(playlist, "https://video.example/master.m3u8");
+
+        assertTrue(filtered.contains("hnMl3VAST7.m3u8"));
+        assertTrue(filtered.contains("video/main.m3u8"));
     }
 
     @Test
@@ -176,6 +249,42 @@ public class M3u8AdFilterTest {
                 + "#EXT-X-ENDLIST\n";
 
         assertTrue(filter(playlist).contains("hnMl3VAST7.ts"));
+    }
+
+    @Test
+    public void preservesMediaOnHostWhoseLabelMatchesShortAdToken() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://ima.example/video/main-1.ts")
+                + segment(5.0, "https://ima.example/video/main-2.ts")
+                + segment(5.0, "https://ima.example/video/main-3.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        assertEquals(3, M3u8AdFilter.countSegmentsFromString(filter(playlist)));
+    }
+
+    @Test
+    public void preservesRepeatedPathsWhenQueriesIdentifyDifferentMedia() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(3.0, "media.ts?range=0")
+                + segment(3.0, "media.ts?range=1")
+                + segment(3.0, "media.ts?range=2")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(5.0, "main-middle.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(3.0, "media.ts?range=3")
+                + segment(3.0, "media.ts?range=4")
+                + segment(3.0, "media.ts?range=5")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertTrue(filtered.contains("range=0"));
+        assertTrue(filtered.contains("range=5"));
     }
 
     @Test
@@ -338,5 +447,30 @@ public class M3u8AdFilterTest {
     private static String filter(String playlist) {
         byte[] filtered = M3u8AdFilter.filterMinorHost(playlist.getBytes(StandardCharsets.UTF_8), "https://video.example/live.m3u8");
         return new String(filtered, StandardCharsets.UTF_8);
+    }
+
+    private static String readRealFixture(String name) throws IOException {
+        String path = "/m3u8/real/" + name;
+        try (InputStream input = M3u8AdFilterTest.class.getResourceAsStream(path)) {
+            if (input == null) throw new IOException("Missing test resource: " + path);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return output.toString(StandardCharsets.UTF_8.name());
+        }
+    }
+
+    private static final class RealFixture {
+
+        private final String name;
+        private final int before;
+        private final int after;
+
+        private RealFixture(String name, int before, int after) {
+            this.name = name;
+            this.before = before;
+            this.after = after;
+        }
     }
 }
