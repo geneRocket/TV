@@ -40,7 +40,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
         // 列表末尾意味着优先级最低 (Fallback)。
         try {
             Renderer renderer = new FfmpegAudioRenderer(eventHandler, eventListener, audioSink);
-            out.add(renderer);
+            out.add(decode == Players.SOFT ? 0 : out.size(), renderer);
             Log.i(TAG, "Loaded FfmpegAudioRenderer.");
         } catch (RuntimeException | LinkageError e) {
             Log.e(TAG, "Error instantiating Ffmpeg extension", e);
