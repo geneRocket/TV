@@ -177,7 +177,7 @@ public final class ThreadPools {
     }
 
     private static int threadPriority(String name) {
-        if ("parse".equals(name) || "parse-job".equals(name) || name.endsWith("-playback") || name.endsWith("-url")) return Process.THREAD_PRIORITY_DEFAULT;
+        if ("config-load".equals(name) || "config".equals(name) || "parse".equals(name) || "parse-job".equals(name) || name.endsWith("-playback") || name.endsWith("-url")) return Process.THREAD_PRIORITY_DEFAULT;
         return Process.THREAD_PRIORITY_BACKGROUND;
     }
 }

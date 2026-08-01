@@ -118,13 +118,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     protected void initView() {
-        mClock = Clock.create(mBinding.clock).format("MM/dd HH:mm:ss");
-        setTitleView();
         setRecyclerView();
         setViewModel();
+        // Start configuration work as soon as the result target is ready. The
+        // remaining pager setup runs on the main thread while I/O is in flight.
+        initConfig();
+        mClock = Clock.create(mBinding.clock).format("MM/dd HH:mm:ss");
         setHomeType();
         setPager();
-        initConfig();
         App.post(this::startOptionalServices, 1000);
     }
 

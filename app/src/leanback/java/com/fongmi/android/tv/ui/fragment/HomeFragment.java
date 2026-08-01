@@ -92,9 +92,11 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         setRecyclerView();
         setAdapter();
         inited = true;
-        // The function row (especially Settings) must remain reachable even when the
-        // initial configuration request fails before this fragment is ready.
-        mBinding.progressLayout.showContent();
+        // HomeActivity starts configuration work before this fragment is attached.
+        // Preserve that loading state so the function row is never drawn briefly
+        // before the initial home request shows its progress indicator.
+        if (getHomeActicity().isLoading()) mBinding.progressLayout.showProgress();
+        else mBinding.progressLayout.showContent();
     }
 
     @Override
