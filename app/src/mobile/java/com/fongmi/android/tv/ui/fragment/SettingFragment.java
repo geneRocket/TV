@@ -173,14 +173,14 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
         switch (config.getType()) {
             case 0:
                 Notify.progress(getActivity());
-                VodConfig.load(config, getCallback(), true);
+                VodConfig.loadCached(config, getCallback());
                 Setting.putVodConfigDesc(config.getDesc());
                 Setting.putVodConfigUrls(config.getUrl());
                 mBinding.vodUrl.setText(config.getDesc());
                 break;
             case 1:
                 Notify.progress(getActivity());
-                LiveConfig.load(config, getCallback(), true);
+                LiveConfig.loadCached(config, getCallback());
                 Setting.putLiveConfigDesc(config.getDesc());
                 Setting.putLiveConfigUrls(config.getUrl());
                 mBinding.liveUrl.setText(config.getDesc());
@@ -199,14 +199,14 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
         switch (first.getType()) {
             case 0:
                 Notify.progress(getActivity());
-                VodConfig.load(configs, getCallback(), false, true);
+                VodConfig.loadCached(configs, getCallback());
                 Setting.putVodConfigDesc(getConfigsDesc(configs));
                 Setting.putVodConfigUrls(getConfigsUrls(configs));
                 mBinding.vodUrl.setText(getVodConfigDesc());
                 break;
             case 1:
                 Notify.progress(getActivity());
-                LiveConfig.load(configs, getCallback(), true);
+                LiveConfig.loadCached(configs, getCallback());
                 Setting.putLiveConfigDesc(getConfigsDesc(configs));
                 Setting.putLiveConfigUrls(getConfigsUrls(configs));
                 mBinding.liveUrl.setText(getLiveConfigDesc());
@@ -402,10 +402,7 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
     public void setProxy(String proxy) {
         Source.get().stop();
         Setting.putProxy(proxy);
-        OkHttp.selector().clear();
-        OkHttp.get().setProxy(proxy);
-        Notify.progress(getActivity());
-        VodConfig.load(Config.vod(), getCallback());
+        VodConfig.refreshNetwork();
         mBinding.proxyText.setText(UrlUtil.scheme(proxy));
     }
 

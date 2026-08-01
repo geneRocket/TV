@@ -1,11 +1,14 @@
 package com.fongmi.android.tv.utils;
 
+import android.os.Process;
+
 import com.orhanobut.logger.Logger;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -15,29 +18,28 @@ public final class ThreadPools {
 
     private static final String TAG = "ThreadPools";
     private static final ConcurrencyBudget BUDGET = ConcurrencyBudget.current();
-    private static final ExecutorService GENERAL = create("general", BUDGET.general, 256, new ThreadPoolExecutor.AbortPolicy());
-    private static final ExecutorService GENERAL_OVERFLOW = create("general-overflow", 1, 256, new ThreadPoolExecutor.AbortPolicy());
-    private static final ExecutorService CONFIG = create("config", BUDGET.config, 128, new ThreadPoolExecutor.CallerRunsPolicy());
-    private static final ExecutorService CONFIG_LOAD = create("config-load", 1, 32, new ThreadPoolExecutor.CallerRunsPolicy());
-    private static final ExecutorService LOADER = create("loader", BUDGET.loader, 128, new ThreadPoolExecutor.CallerRunsPolicy());
-    private static final ExecutorService SEARCH = create("search", BUDGET.search, 256, new ThreadPoolExecutor.AbortPolicy());
-    private static final ExecutorService PARSE = create("parse", BUDGET.parse, 128, new ThreadPoolExecutor.CallerRunsPolicy());
-    private static final ExecutorService PRELOAD_PARSE = create("preload-parse", BUDGET.preload, 64, new ThreadPoolExecutor.AbortPolicy());
+    private static final ExecutorService GENERAL = createQueued("general", BUDGET.general);
+    private static final ExecutorService CONFIG = createQueued("config", BUDGET.config);
+    private static final ExecutorService CONFIG_LOAD = createQueued("config-load", 1);
+    private static final ExecutorService LOADER = createQueued("loader", BUDGET.loader);
+    private static final ExecutorService SEARCH = createQueued("search", BUDGET.search);
+    private static final ExecutorService PARSE = createQueued("parse", BUDGET.parse);
+    private static final ExecutorService PRELOAD_PARSE = createQueued("preload-parse", BUDGET.preload);
+    private static final ConcurrentHashMap<String, LatestFutureTask> CONFIG_TASKS = new ConcurrentHashMap<>();
 
     private ThreadPools() {
     }
 
     public static ExecutorService newFixed(String name, int size) {
-        int threads = Math.max(1, size);
-        return create(name, threads, Math.max(16, threads * 16), new ThreadPoolExecutor.CallerRunsPolicy());
+        return createQueued(name, size);
     }
 
-    public static ExecutorService newFixedRejecting(String name, int size, int queueCapacity) {
-        return create(name, Math.max(1, size), Math.max(1, queueCapacity), new ThreadPoolExecutor.AbortPolicy());
+    public static ExecutorService newFixedQueued(String name, int size) {
+        return createQueued(name, size);
     }
 
     public static ExecutorService newSingle(String name) {
-        return create(name, 1, 64, new ThreadPoolExecutor.CallerRunsPolicy());
+        return createQueued(name, 1);
     }
 
     public static int searchConcurrency() {
@@ -52,24 +54,31 @@ public final class ThreadPools {
         return CONFIG;
     }
 
-    /** Keeps overload work off the caller thread while retaining a finite process-wide backlog. */
+    /** Queues work on the owning executor so overload cannot escape its concurrency budget. */
     public static boolean executeGeneral(Runnable task) {
         try {
             GENERAL.execute(task);
             return true;
-        } catch (java.util.concurrent.RejectedExecutionException first) {
-            try {
-                GENERAL_OVERFLOW.execute(task);
-                return true;
-            } catch (java.util.concurrent.RejectedExecutionException second) {
-                log(second, "General and overflow queues are full; task was rejected.");
-                return false;
-            }
+        } catch (java.util.concurrent.RejectedExecutionException error) {
+            log(error, "General executor is shut down; task was rejected.");
+            return false;
         }
     }
 
     public static ExecutorService configLoad() {
         return CONFIG_LOAD;
+    }
+
+    public static void executeLatestConfig(String key, Runnable task) {
+        LatestFutureTask next = new LatestFutureTask(key, task);
+        LatestFutureTask previous = CONFIG_TASKS.put(key, next);
+        cancel(CONFIG_LOAD, previous);
+        try {
+            CONFIG_LOAD.execute(next);
+        } catch (java.util.concurrent.RejectedExecutionException error) {
+            CONFIG_TASKS.remove(key, next);
+            throw error;
+        }
     }
 
     public static ExecutorService loader() {
@@ -92,21 +101,29 @@ public final class ThreadPools {
         if (executor != null) executor.shutdownNow();
     }
 
+    public static void cancel(ExecutorService executor, Future<?> future) {
+        if (future == null) return;
+        future.cancel(true);
+        if (executor instanceof ThreadPoolExecutor && future instanceof Runnable) {
+            ((ThreadPoolExecutor) executor).remove((Runnable) future);
+        }
+    }
+
     public static void log(Throwable throwable, String message) {
         if (throwable == null || throwable instanceof InterruptedException) return;
         Logger.t(TAG).e(throwable, message);
     }
 
-    private static ExecutorService create(String name, int poolSize, int queueCapacity, RejectedExecutionHandler handler) {
-        LoggingThreadPoolExecutor executor = new LoggingThreadPoolExecutor(name, Math.max(1, poolSize), queueCapacity, handler);
+    private static ExecutorService createQueued(String name, int poolSize) {
+        LoggingThreadPoolExecutor executor = new LoggingThreadPoolExecutor(name, Math.max(1, poolSize));
         executor.allowCoreThreadTimeOut(true);
         return executor;
     }
 
     private static final class LoggingThreadPoolExecutor extends ThreadPoolExecutor {
 
-        LoggingThreadPoolExecutor(String name, int poolSize, int queueCapacity, RejectedExecutionHandler handler) {
-            super(poolSize, poolSize, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(queueCapacity), threadFactory(name), handler);
+        LoggingThreadPoolExecutor(String name, int poolSize) {
+            super(poolSize, poolSize, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), threadFactory(name), new AbortPolicy());
         }
 
         @Override
@@ -129,13 +146,38 @@ public final class ThreadPools {
         }
     }
 
+    private static final class LatestFutureTask extends FutureTask<Void> {
+
+        private final String key;
+
+        LatestFutureTask(String key, Runnable task) {
+            super(task, null);
+            this.key = key;
+        }
+
+        @Override
+        protected void done() {
+            CONFIG_TASKS.remove(key, this);
+            if (CONFIG_LOAD instanceof ThreadPoolExecutor) ((ThreadPoolExecutor) CONFIG_LOAD).remove(this);
+        }
+    }
+
     private static ThreadFactory threadFactory(String name) {
         AtomicInteger number = new AtomicInteger(1);
         return runnable -> {
-            Thread thread = new Thread(runnable, "tv-" + name + "-" + number.getAndIncrement());
+            Runnable prioritized = () -> {
+                Process.setThreadPriority(threadPriority(name));
+                runnable.run();
+            };
+            Thread thread = new Thread(prioritized, "tv-" + name + "-" + number.getAndIncrement());
             thread.setPriority(Thread.NORM_PRIORITY);
             thread.setUncaughtExceptionHandler((t, e) -> log(e, "Uncaught exception on " + t.getName()));
             return thread;
         };
+    }
+
+    private static int threadPriority(String name) {
+        if ("parse".equals(name) || "parse-job".equals(name) || name.endsWith("-playback") || name.endsWith("-url")) return Process.THREAD_PRIORITY_DEFAULT;
+        return Process.THREAD_PRIORITY_BACKGROUND;
     }
 }

@@ -30,7 +30,6 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     private ActivityKeepBinding mBinding;
     private KeepAdapter mAdapter;
     private int mKeepRequestId;
-    private int mOpenRequestId;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, KeepActivity.class));
@@ -64,7 +63,6 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     private void getKeep() {
         final int requestId = ++mKeepRequestId;
-        mOpenRequestId++;
         App.execute(() -> {
             List<Keep> items = KeepRepository.get().vod();
             App.post(() -> {
@@ -94,7 +92,6 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         if (mAdapter.isDelete()) {
             new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_keep).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                 mKeepRequestId++;
-                mOpenRequestId++;
                 mAdapter.clear();
                 updateEmptyView();
                 App.execute(() -> {
@@ -116,18 +113,16 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     @Override
     public void onItemClick(Keep item) {
-        mOpenRequestId++;
         if (VodConfig.get().hasSite(item.getSiteKey())) {
             VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
-            return;
+        } else {
+            CollectActivity.start(this, item.getVodName());
         }
-        CollectActivity.start(this, item.getVodName());
     }
 
     @Override
     public void onItemDelete(Keep item) {
         mKeepRequestId++;
-        mOpenRequestId++;
         int index = mAdapter.delete(item);
         App.execute(() -> KeepRepository.get().delete(item));
         if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);

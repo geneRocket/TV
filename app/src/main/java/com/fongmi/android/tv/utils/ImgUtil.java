@@ -72,24 +72,30 @@ public class ImgUtil {
 
     public static void load(String text, String url, Site site, ImageView view, ImageView.ScaleType scaleType, boolean rect) {
         view.setScaleType(scaleType);
-        Glide.with(view).clear(view);
         if (!TextUtils.isEmpty(url)) Glide.with(view).asBitmap().load(getUrl(url, site)).placeholder(R.drawable.ic_img_loading).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view, scaleType)).into(view);
-        else if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), rect));
-        else view.setImageResource(R.drawable.ic_img_error);
+        else {
+            Glide.with(view).clear(view);
+            if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), rect));
+            else view.setImageResource(R.drawable.ic_img_error);
+        }
     }
 
     public static void loadVod(String text, String url, ImageView view) {
         view.setScaleType(ImageView.ScaleType.CENTER);
-        Glide.with(view).clear(view);
         if (!TextUtils.isEmpty(url)) Glide.with(view).asBitmap().load(getUrl(url)).placeholder(R.drawable.ic_img_loading).dontAnimate().sizeMultiplier(Setting.getThumbnail()).signature(getSignature(url)).listener(getListener(view)).into(view);
-        else if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), true));
-        else view.setImageResource(R.drawable.ic_img_error);
+        else {
+            Glide.with(view).clear(view);
+            if (text.length() > 0) view.setImageDrawable(getTextDrawable(text.substring(0, 1), true));
+            else view.setImageResource(R.drawable.ic_img_error);
+        }
     }
 
     public static void loadLive(String url, ImageView view) {
         view.setVisibility(TextUtils.isEmpty(url) ? View.GONE : View.VISIBLE);
-        Glide.with(view).clear(view);
-        if (TextUtils.isEmpty(url)) view.setImageResource(R.drawable.ic_img_empty);
+        if (TextUtils.isEmpty(url)) {
+            Glide.with(view).clear(view);
+            view.setImageResource(R.drawable.ic_img_empty);
+        }
         else Glide.with(view).asBitmap().load(getUrl(url)).error(R.drawable.ic_img_empty).dontAnimate().signature(getSignature(url)).into(view);
     }
 

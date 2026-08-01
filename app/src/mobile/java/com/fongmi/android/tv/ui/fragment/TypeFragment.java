@@ -26,6 +26,7 @@ import com.fongmi.android.tv.bean.Value;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentTypeBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.model.CategoryRequest;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.DetailActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
@@ -41,7 +42,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 
 public class TypeFragment extends BaseFragment implements CustomScroller.Callback, VodAdapter.OnClickListener, SwipeRefreshLayout.OnRefreshListener {
 
@@ -52,9 +52,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private VodAdapter mAdapter;
     private List<Page<VodAdapter, Set<String>>> mPages;
     private Set<String> mVodKeys;
-    private String mPendingTypeId;
-    private String mPendingPage;
-    private String mPendingExtend;
+    private CategoryRequest mRequest;
     private Page<VodAdapter, Set<String>> mPage;
     private Result mHomeResult;
     private String mHomeToken;
@@ -176,9 +174,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     private void getVideo(String typeId, String page) {
-        mPendingTypeId = typeId;
-        mPendingPage = page;
-        mPendingExtend = getRequestExtend(mExtends);
+        mRequest = CategoryRequest.create(getKey(), typeId, page, mExtends);
         if ("1".equals(page)) {
             mLastRequestFailed = false;
             mBinding.progressLayout.setEmptyText(R.string.error_empty);
@@ -253,15 +249,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
             return current;
         }
         if (result == null) return false;
-        return TextUtils.equals(result.getKey(), getKey())
-                && TextUtils.equals(result.getRequestTypeId(), mPendingTypeId)
-                && TextUtils.equals(result.getRequestPage(), mPendingPage)
-                && TextUtils.equals(result.getRequestExtend(), mPendingExtend);
-    }
-
-    private String getRequestExtend(HashMap<String, String> extend) {
-        if (extend == null || extend.isEmpty()) return "";
-        return App.gson().toJson(new TreeMap<>(extend));
+        return mRequest != null && mRequest.matches(result);
     }
 
     private void checkPosition(boolean first) {
@@ -352,9 +340,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     private void restorePage(Page<VodAdapter, Set<String>> page) {
         mViewModel.cancelCategoryContent();
-        mPendingTypeId = null;
-        mPendingPage = null;
-        mPendingExtend = null;
+        mRequest = null;
         mAdapter = page.getAdapter();
         mBinding.recycler.setAdapter(mAdapter);
         mBinding.recycler.setLayoutManager(mAdapter.getStyle().isList() ? new LinearLayoutManager(getActivity()) : new GridLayoutManager(getContext(), Product.getColumn(getActivity(), mAdapter.getStyle())));

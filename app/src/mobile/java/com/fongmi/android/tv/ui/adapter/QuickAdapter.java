@@ -6,14 +6,13 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterQuickBinding;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.SortedLists;
 import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -23,11 +22,12 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
 
     private final OnClickListener mListener;
     private final List<Vod> mItems;
-    private Runnable mRunnable;
+    private final Set<String> mKeys;
 
     public QuickAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mItems = new ArrayList<>();
+        this.mKeys = new HashSet<>();
     }
 
     public interface OnClickListener {
@@ -36,34 +36,19 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     }
 
     public void clear() {
-        App.removeCallbacks(mRunnable);
         mItems.clear();
+        mKeys.clear();
         notifyDataSetChanged();
     }
 
-    public void addAll(List<Vod> items) {
+    public void addAllSorted(List<Vod> items, Comparator<Vod> comparator) {
         if (items == null || items.isEmpty()) return;
         List<Vod> added = filterNew(items);
         if (added.isEmpty()) return;
-        if (mItems.isEmpty() && added.size() > 20) {
-            List<Vod> first = new ArrayList<>(added.subList(0, 20));
-            List<Vod> second = new ArrayList<>(added.subList(20, added.size()));
-            mItems.addAll(first);
-            notifyItemRangeInserted(0, first.size());
-            App.post(mRunnable = () -> {
-                int position = mItems.size();
-                mItems.addAll(second);
-                notifyItemRangeInserted(position, second.size());
-            }, 100);
-        } else {
-            int position = mItems.size();
-            mItems.addAll(added);
-            notifyItemRangeInserted(position, added.size());
-        }
-    }
-
-    public void sort(Comparator<Vod> comparator) {
-        Collections.sort(mItems, comparator);
+        added.sort(comparator);
+        List<Vod> merged = SortedLists.merge(mItems, added, comparator);
+        mItems.clear();
+        mItems.addAll(merged);
         notifyDataSetChanged();
     }
 
@@ -74,6 +59,7 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     public Vod poll(Set<String> broken, String currentKey, String currentId) {
         while (!mItems.isEmpty()) {
             Vod item = mItems.remove(0);
+            mKeys.remove(key(item));
             notifyItemRemoved(0);
             if (item == null) continue;
             if (item.getSiteKey().equals(currentKey) && item.getVodId().equals(currentId)) continue;
@@ -84,7 +70,7 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     }
 
     public void remove(int position) {
-        mItems.remove(position);
+        mKeys.remove(key(mItems.remove(position)));
         notifyItemRemoved(position);
     }
 
@@ -94,11 +80,9 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
 
     private List<Vod> filterNew(List<Vod> items) {
         List<Vod> added = new ArrayList<>();
-        Set<String> loaded = new HashSet<>();
-        for (Vod item : mItems) loaded.add(key(item));
         for (Vod item : items) {
             String key = key(item);
-            if (key.isEmpty() || !loaded.add(key)) continue;
+            if (key.isEmpty() || !mKeys.add(key)) continue;
             added.add(item);
         }
         return added;

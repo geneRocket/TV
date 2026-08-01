@@ -33,7 +33,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -118,8 +117,6 @@ public class ParseJob implements ParseCallback {
                 Thread.currentThread().interrupt();
             } catch (Throwable e) {
                 onParseError();
-            } finally {
-                clearTimeout();
             }
         };
     }
@@ -140,6 +137,9 @@ public class ParseJob implements ParseCallback {
                 break;
             case 4: //超級解析
                 godParse(webUrl, flag);
+                break;
+            default:
+                onParseError();
                 break;
         }
     }
@@ -198,13 +198,12 @@ public class ParseJob implements ParseCallback {
         }
         CountDownLatch latch = new CountDownLatch(json.size());
         for (Parse item : json) parseTasks.add(infinite.submit(() -> jsonParse(latch, item, webUrl)));
-        if (!webs.isEmpty()) startWeb(webs, webUrl);
-        boolean finished = latch.await(Constant.TIMEOUT_PARSE_DEF, TimeUnit.MILLISECONDS);
-        if (!finished && webs.isEmpty()) {
-            onParseError();
+        if (!webs.isEmpty()) {
+            startWeb(webs, webUrl);
             return;
         }
-        if (webs.isEmpty()) onParseError();
+        latch.await();
+        onParseError();
     }
 
     private void jsonParse(CountDownLatch latch, Parse item, String webUrl) {
@@ -331,7 +330,7 @@ public class ParseJob implements ParseCallback {
         if (task != null) task.cancel(true);
         cancelActiveCalls();
         ThreadPools.shutdown(executor);
-        for (Future<?> task : parseTasks) task.cancel(true);
+        for (Future<?> task : parseTasks) ThreadPools.cancel(infinite, task);
         parseTasks.clear();
         infinite = null;
         this.task = null;

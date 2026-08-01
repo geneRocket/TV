@@ -3,6 +3,8 @@
     <!-- App -->
     <string name="app_keep">我的收藏</string>
     <string name="app_history">最近觀看</string>
+    <string name="empty_keep">暫無收藏</string>
+    <string name="empty_history">暫無觀看紀錄</string>
 
     <!-- Nav -->
     <string name="nav_vod">點播</string>

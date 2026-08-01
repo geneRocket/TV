@@ -42,22 +42,22 @@ import okhttp3.HttpUrl;
 
 public class VodConfig {
 
-    private List<Doh> doh;
-    private List<Rule> rules;
-    private List<Site> sites;
-    private List<Parse> parses;
-    private List<String> flags;
-    private List<String> ads;
-    private List<Header> headers;
-    private List<Proxy> proxy;
-    private List<String> hosts;
-    private List<String> ruleHosts;
-    private List<String> loadUrls;
-    private Map<String, Site> siteMap;
-    private Map<String, Parse> parseMap;
-    private boolean loadLive;
-    private boolean persistCache;
-    private Config config;
+    private List<Doh> doh = new ArrayList<>();
+    private List<Rule> rules = new ArrayList<>();
+    private List<Site> sites = new ArrayList<>();
+    private List<Parse> parses = new ArrayList<>();
+    private List<String> flags = new ArrayList<>();
+    private List<String> ads = new ArrayList<>();
+    private List<Header> headers = new ArrayList<>();
+    private List<Proxy> proxy = new ArrayList<>();
+    private List<String> hosts = new ArrayList<>();
+    private List<String> ruleHosts = new ArrayList<>();
+    private List<String> loadUrls = new ArrayList<>();
+    private Map<String, Site> siteMap = new HashMap<>();
+    private Map<String, Parse> parseMap = new HashMap<>();
+    private boolean loadLive = true;
+    private boolean persistCache = true;
+    private Config config = new Config();
     private Parse parse;
     private String wall;
     private Site home;
@@ -124,38 +124,33 @@ public class VodConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().submit(() -> get().init().clear().config(config).loadConfig(callback));
+        get().submit(() -> get().reset().config(config).loadConfig(callback));
     }
 
-    public static void load(Config config, Callback callback, boolean loadLive) {
+    public static void loadCached(Config config, Callback callback) {
         get().submit(() -> {
-            VodConfig target = get().init().clear().config(config);
-            if (loadLive) target.loadConfigCache(callback);
-            else target.loadConfig(callback);
+            VodConfig target = get().reset().config(config);
+            target.loadConfigCache(callback);
         });
     }
 
     public static void load(List<Config> configs, Callback callback) {
         if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().init().clear().config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
+        get().submit(() -> get().reset().config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
     }
 
-    public static void load(List<Config> configs, Callback callback, boolean loadLive) {
+    public static void loadCached(List<Config> configs, Callback callback) {
         if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().init().clear().config(configs.get(0)).setLoadLive(loadLive).setPersistCache(false).loadConfigs(configs, callback));
+        get().submit(() -> get().reset().config(configs.get(0)).setLoadLive(false).setPersistCache(false).loadConfigsCache(configs, callback));
     }
 
-    public static void load(List<Config> configs, Callback callback, boolean loadLive, boolean cache) {
+    public static void loadCachedWithLive(List<Config> configs, Callback callback) {
         if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> {
-            VodConfig target = get().init().clear().config(configs.get(0)).setLoadLive(loadLive).setPersistCache(false);
-            if (cache) target.loadConfigsCache(configs, callback);
-            else target.loadConfigs(configs, callback);
-        });
+        get().submit(() -> get().reset().config(configs.get(0)).setLoadLive(true).setPersistCache(false).loadConfigsCache(configs, callback));
     }
 
     public static void reload(Callback callback) {
-        get().submit(() -> get().init().clear().config(Config.vod()).loadConfig(callback));
+        get().submit(() -> get().reset().config(Config.vod()).loadConfig(callback));
     }
 
     /** Clears shared state after already queued configuration work has finished. */
@@ -164,7 +159,7 @@ public class VodConfig {
     }
 
     private void submit(Runnable task) {
-        ThreadPools.configLoad().execute(() -> {
+        ThreadPools.executeLatestConfig("vod-config", () -> {
             synchronized (this) {
                 task.run();
             }
@@ -181,25 +176,9 @@ public class VodConfig {
         return this;
     }
 
-    public synchronized VodConfig init() {
-        this.wall = null;
-        this.home = null;
-        this.parse = null;
+    synchronized VodConfig reset() {
+        clear();
         this.config = new Config();
-        if (this.ads == null) this.ads = new ArrayList<>();
-        if (this.doh == null) this.doh = new ArrayList<>();
-        if (this.hosts == null) this.hosts = new ArrayList<>();
-        if (this.proxy == null) this.proxy = new ArrayList<>();
-        if (this.rules == null) this.rules = new ArrayList<>();
-        if (this.headers == null) this.headers = new ArrayList<>();
-        if (this.ruleHosts == null) this.ruleHosts = new ArrayList<>();
-        if (this.loadUrls == null) this.loadUrls = new ArrayList<>();
-        if (this.siteMap == null) this.siteMap = new HashMap<>();
-        if (this.parseMap == null) this.parseMap = new HashMap<>();
-        if (this.sites == null) this.sites = new ArrayList<>();
-        if (this.flags == null) this.flags = new ArrayList<>();
-        if (this.parses == null) this.parses = new ArrayList<>();
-        this.loadLive = false;
         this.persistCache = true;
         return this;
     }
@@ -231,37 +210,6 @@ public class VodConfig {
         return this;
     }
 
-    public void load(Callback callback) {
-        load(callback, false);
-    }
-
-    public void load(Callback callback, boolean cache) {
-        submit(() -> {
-            if (cache) loadConfigCache(callback);
-            else loadConfig(callback);
-        });
-    }
-
-    public void loadMulti(List<Config> configs, Callback callback) {
-        this.persistCache = false;
-        submit(() -> loadConfigs(configs, callback));
-    }
-
-    public void loadMulti(List<Config> configs, Callback callback, boolean loadLive) {
-        this.loadLive = loadLive;
-        this.persistCache = false;
-        submit(() -> loadConfigs(configs, callback));
-    }
-
-    public void loadMulti(List<Config> configs, Callback callback, boolean loadLive, boolean cache) {
-        this.loadLive = loadLive;
-        this.persistCache = false;
-        submit(() -> {
-            if (cache) loadConfigsCache(configs, callback);
-            else loadConfigs(configs, callback);
-        });
-    }
-
     private void loadConfig(Callback callback) {
         try {
             if (config.isEmpty()) config = Config.vod();
@@ -275,11 +223,20 @@ public class VodConfig {
     }
 
     private void loadConfigs(List<Config> configs, Callback callback) {
+        loadConfigs(configs, callback, false);
+    }
+
+    private void loadConfigsCache(List<Config> configs, Callback callback) {
+        setLoadUrls(getConfigUrls(configs));
+        loadConfigs(configs, callback, true);
+    }
+
+    private void loadConfigs(List<Config> configs, Callback callback, boolean cache) {
         List<String> urls = new ArrayList<>();
         JsonObject merged = new JsonObject();
         Throwable error = null;
         int success = 0;
-        for (ConfigResult result : loadConfigResults(configs, false)) {
+        for (ConfigResult result : loadConfigResults(configs, cache)) {
             try {
                 if (result.error != null) throw result.error;
                 if (result.cacheable) cacheConfig(result.config, result.object);
@@ -297,35 +254,6 @@ public class VodConfig {
         }
         else if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
         else {
-            Throwable cause = error == null ? new Throwable("No valid config") : error;
-            App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
-        }
-    }
-
-    private void loadConfigsCache(List<Config> configs, Callback callback) {
-        setLoadUrls(getConfigUrls(configs));
-        List<String> urls = new ArrayList<>();
-        JsonObject merged = new JsonObject();
-        Throwable error = null;
-        int success = 0;
-        for (ConfigResult result : loadConfigResults(configs, true)) {
-            try {
-                if (result.error != null) throw result.error;
-                if (result.cacheable) cacheConfig(result.config, result.object);
-                urls.add(result.config.getUrl());
-                mergeConfig(merged, result.object, result.config);
-                success++;
-            } catch (Throwable e) {
-                error = e;
-                ThreadPools.log(e, "VOD config operation failed.");
-            }
-        }
-        setLoadUrls(urls);
-        if (success > 0) {
-            parseConfig(merged, callback);
-        } else if (!TextUtils.isEmpty(config.getJson())) {
-            checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
-        } else {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
             App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
         }
@@ -635,7 +563,7 @@ public class VodConfig {
         }
         if (loadUrls.isEmpty()) sync = LiveConfig.get().needSync(config.getUrl());
         if (sync) {
-            LiveConfig.get().init().clear().config(temp).parse(object);
+            LiveConfig.get().reset().config(temp).parse(object);
             putLiveSetting(loadUrls.isEmpty() ? Collections.singletonList(temp.getUrl()) : loadUrls);
         }
     }
@@ -741,7 +669,7 @@ public class VodConfig {
         this.hosts = hosts == null ? new ArrayList<>() : new ArrayList<>(hosts);
     }
 
-    static void refreshNetwork() {
+    public static void refreshNetwork() {
         OkHttp.clearConfig();
         OkHttp.get().setProxy(Setting.getProxy());
         OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));

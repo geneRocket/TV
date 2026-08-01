@@ -20,6 +20,7 @@
     <string name="detail_director">Director: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_actor">Actor: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_content">Summary: <xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_recommend">More recommendations</string>
     <string name="detail_desc">Summary</string>
 
     <!-- Keep -->
@@ -61,6 +62,7 @@
     <string name="play_switch_parse">Switching parse to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_flag">Switching flag to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_site">Switching site to <xliff:g name="name">%s</xliff:g></string>
+    <string name="play_retry">Retry playback</string>
     <string name="danmaku_select">Select danmaku</string>
 
     <!-- Parse -->

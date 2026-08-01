@@ -16,7 +16,6 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
-import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
@@ -51,6 +50,7 @@ import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
@@ -110,8 +110,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private boolean rotate;
     private boolean stop;
     private boolean lock;
-    private int toggleCount;
-    private int errorCount;
+    private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private int passCount;
     private PiP mPiP;
 
@@ -129,11 +128,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     private IjkVideoView getIjk() {
         return mBinding.ijk;
-    }
-
-    private Drawable getDefaultArtwork() {
-        if (mPlayers.isExo()) return getExo().getDefaultArtwork();
-        return getIjk().getDefaultArtwork();
     }
 
     private Group getKeep() {
@@ -214,6 +208,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mBinding.control.action.player.setOnLongClickListener(view -> onChoose());
         mBinding.control.action.speed.setOnLongClickListener(view -> onSpeedLong());
         mBinding.control.action.getRoot().setOnTouchListener(this::onActionTouch);
+        mBinding.widget.error.setOnClickListener(view -> fetch());
         mBinding.video.setOnTouchListener((view, event) -> mKeyDown.onTouchEvent(event));
     }
 
@@ -842,8 +837,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
                 break;
             case Player.STATE_READY:
                 setMetadata();
-                resetToggle();
-                resetError();
+                mRecovery.reset();
                 hideProgress();
                 mPlayers.reset();
                 setTrackVisible(true);
@@ -868,30 +862,18 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private void setMetadata() {
         String title = mBinding.widget.name.getText().toString();
         String artist = mBinding.widget.play.getText().toString();
-        mPlayers.setMetadata(title, artist, mChannel.getLogo(), getDefaultArtwork());
+        mPlayers.setMetadata(title, artist, mChannel.getLogo());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
-        if (addErrorCount() > 20) onErrorEnd(event);
-        else if (mPlayers.addRetry() > event.getRetry()) checkError(event);
-        else if (event.isDecode() && mPlayers.canToggleDecode()) onDecode(false);
-        else if (event.isExo() && mPlayers.isExo()) onExoCheck(event);
-        else fetch();
-    }
-
-    private void onExoCheck(ErrorEvent event) {
-        if (event.getCode() == PlaybackException.ERROR_CODE_IO_UNSPECIFIED || event.getCode() >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED && event.getCode() <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) mPlayers.setFormat(ExoUtil.getMimeType(event.getCode()));
-        mPlayers.setMediaSource();
-    }
-
-    private void checkError(ErrorEvent event) {
-        if (mChannel != null && event.isUrl() && event.getRetry() > 0 && getToggleCount() < 2 && mPlayers.getPlayer() != Players.SYS) {
-            toggleCount++;
-            nextPlayer();
-        } else {
-            resetToggle();
-            onError(event);
+        switch (mRecovery.next(event, mPlayers, mChannel != null)) {
+            case RETRY: fetch(); break;
+            case TOGGLE_DECODE: onDecode(false); break;
+            case RELOAD_EXO: mPlayers.recoverExo(event); break;
+            case SWITCH_PLAYER: nextPlayer(); break;
+            case ADVANCE: onError(event); break;
+            case STOP: onErrorPlayer(event); break;
         }
     }
 
@@ -899,11 +881,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mPlayers.nextPlayer();
         setPlayerView();
         fetch();
-    }
-
-    private void onErrorEnd(ErrorEvent event) {
-        onErrorPlayer(event);
-        resetError();
     }
 
     private void onErrorPlayer(ErrorEvent event) {
@@ -1049,22 +1026,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     public void setLock(boolean lock) {
         this.lock = lock;
-    }
-
-    public int getToggleCount() {
-        return toggleCount;
-    }
-
-    public void resetToggle() {
-        this.toggleCount = 0;
-    }
-
-    public int addErrorCount() {
-        return ++errorCount;
-    }
-
-    public void resetError() {
-        this.errorCount = 0;
     }
 
     private void stopService() {

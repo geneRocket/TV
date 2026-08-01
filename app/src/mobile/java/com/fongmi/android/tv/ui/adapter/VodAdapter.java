@@ -18,20 +18,25 @@ import com.fongmi.android.tv.ui.holder.VodListHolder;
 import com.fongmi.android.tv.ui.holder.VodOvalHolder;
 import com.fongmi.android.tv.ui.holder.VodRectHolder;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
 public class VodAdapter extends RecyclerView.Adapter<BaseVodHolder> {
 
+    private static final int APPEND_BATCH_SIZE = 20;
+    private static final int APPEND_BATCH_DELAY_MS = 32;
     private final OnClickListener mListener;
     private final List<Vod> mItems;
+    private final ArrayDeque<Vod> mPending;
     private final Style style;
     private final int[] size;
-    private Runnable mRunnable;
+    private final Runnable mDrainPending = this::drainPending;
 
     public VodAdapter(OnClickListener listener, Style style, int[] size) {
         this.mListener = listener;
         this.mItems = new ArrayList<>();
+        this.mPending = new ArrayDeque<>();
         this.style = style;
         this.size = size;
     }
@@ -49,27 +54,25 @@ public class VodAdapter extends RecyclerView.Adapter<BaseVodHolder> {
 
     public void addAll(List<Vod> items) {
         if (items == null || items.isEmpty()) return;
-        if (mItems.isEmpty() && items.size() > 20) {
-            List<Vod> first = new ArrayList<>(items.subList(0, 20));
-            List<Vod> second = new ArrayList<>(items.subList(20, items.size()));
-            mItems.addAll(first);
-            notifyItemRangeInserted(0, first.size());
-            App.post(mRunnable = () -> {
-                int position = mItems.size();
-                mItems.addAll(second);
-                notifyItemRangeInserted(position, second.size());
-            }, 100);
-        } else {
-            int position = mItems.size();
-            mItems.addAll(items);
-            notifyItemRangeInserted(position, items.size());
-        }
+        mPending.addAll(items);
+        if (mPending.size() == items.size()) drainPending();
     }
 
     public void clear() {
-        App.removeCallbacks(mRunnable);
+        App.removeCallbacks(mDrainPending);
+        mPending.clear();
         mItems.clear();
         notifyDataSetChanged();
+    }
+
+    private void drainPending() {
+        App.removeCallbacks(mDrainPending);
+        if (mPending.isEmpty()) return;
+        int position = mItems.size();
+        int count = Math.min(APPEND_BATCH_SIZE, mPending.size());
+        for (int i = 0; i < count; i++) mItems.add(mPending.removeFirst());
+        notifyItemRangeInserted(position, count);
+        if (!mPending.isEmpty()) App.post(mDrainPending, APPEND_BATCH_DELAY_MS);
     }
 
     @Override

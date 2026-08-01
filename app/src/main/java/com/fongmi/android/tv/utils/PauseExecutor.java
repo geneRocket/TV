@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.utils;
 
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -24,12 +26,20 @@ public class PauseExecutor extends ThreadPoolExecutor {
         super.beforeExecute(t, r);
         pauseLock.lock();
         try {
-            while (isPaused) condition.await();
+            while (isPaused && !isShutdown()) condition.await();
+            if ((isShutdown() || t.isInterrupted()) && !cancel(r)) throw new CancellationException("Executor stopped while paused");
         } catch (InterruptedException ie) {
             t.interrupt();
+            if (!cancel(r)) throw new CancellationException("Executor interrupted while paused");
         } finally {
             pauseLock.unlock();
         }
+    }
+
+    private boolean cancel(Runnable runnable) {
+        if (!(runnable instanceof Future<?>)) return false;
+        ((Future<?>) runnable).cancel(false);
+        return true;
     }
 
     @Override
@@ -55,5 +65,12 @@ public class PauseExecutor extends ThreadPoolExecutor {
         } finally {
             pauseLock.unlock();
         }
+    }
+
+    @Override
+    public java.util.List<Runnable> shutdownNow() {
+        java.util.List<Runnable> pending = super.shutdownNow();
+        resume();
+        return pending;
     }
 }

@@ -77,10 +77,6 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private int mOpenRequestId;
     private String mRecommendStyleKey;
     private boolean mHasFuncRow;
-    private Runnable mRetryAction;
-    private boolean mHomeLoadFailed;
-    private int mHomeLoadMessage = R.string.vod_load_failed;
-
     private Site getHome() {
         return VodConfig.get().getHome();
     }
@@ -93,11 +89,12 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     @Override
     protected void initView() {
         mPresenters = new HashMap<>();
-        mBinding.progressLayout.showProgress();
         setRecyclerView();
         setAdapter();
         inited = true;
-        applyHomeLoadState();
+        // The function row (especially Settings) must remain reachable even when the
+        // initial configuration request fails before this fragment is ready.
+        mBinding.progressLayout.showContent();
     }
 
     @Override
@@ -107,10 +104,6 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     protected void initEvent() {
-        mBinding.empty.retry.setOnClickListener(view -> {
-            if (mRetryAction != null) mRetryAction.run();
-            else getHomeActicity().homeContent();
-        });
         mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -184,28 +177,6 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         }
         int end = index + rows.size();
         if (mAdapter.size() > end) mAdapter.removeItems(end, mAdapter.size() - end);
-    }
-
-    public void setHomeLoadFailed(boolean failed) {
-        setHomeLoadFailed(failed, R.string.vod_load_failed, null);
-    }
-
-    public void setHomeLoadFailed(boolean failed, int message, Runnable retryAction) {
-        mHomeLoadFailed = failed;
-        mHomeLoadMessage = message;
-        mRetryAction = failed ? retryAction : null;
-        applyHomeLoadState();
-    }
-
-    private void applyHomeLoadState() {
-        if (!inited || !isViewReady()) return;
-        mBinding.empty.getRoot().setVisibility(mHomeLoadFailed ? View.VISIBLE : View.GONE);
-        if (mHomeLoadFailed) {
-            mBinding.empty.message.setText(mHomeLoadMessage);
-            App.post(() -> {
-                if (isViewReady() && mBinding.getRoot().isShown()) mBinding.empty.retry.requestFocus();
-            });
-        }
     }
 
     private String getStyleKey(Style style) {

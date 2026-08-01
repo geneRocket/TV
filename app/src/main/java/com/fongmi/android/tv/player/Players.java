@@ -2,8 +2,6 @@ package com.fongmi.android.tv.player;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
@@ -47,6 +45,8 @@ import com.orhanobut.logger.Logger;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import master.flame.danmaku.danmaku.model.android.DanmakuContext;
+import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.ui.widget.DanmakuView;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
@@ -183,6 +183,14 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         danmaku.setView(view);
     }
 
+    public void resetDanmu() {
+        danmaku.reset();
+    }
+
+    public void prepareDanmu(BaseDanmakuParser parser, DanmakuContext context) {
+        danmaku.prepare(parser, context);
+    }
+
     public ExoPlayer exo() {
         return engine instanceof ExoPlayerImpl ? ((ExoPlayerImpl) engine).getPlayer() : null;
     }
@@ -236,6 +244,16 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void setFormat(String format) {
         this.format = format;
+    }
+
+    public void recoverExo(ErrorEvent error) {
+        int code = error.getCode();
+        if (code == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+                || code >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+                && code <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) {
+            setFormat(ExoUtil.getMimeType(code));
+        }
+        setMediaSource();
     }
 
     public void setMetadata(MediaMetadataCompat metadata) {
@@ -729,15 +747,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         return subs;
     }
 
-    private MediaMetadataCompat.Builder putBitmap(MediaMetadataCompat.Builder builder, Drawable drawable) {
-        try {
-            return builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, ((BitmapDrawable) drawable).getBitmap());
-        } catch (Exception ignored) {
-            return builder;
-        }
-    }
-
-    public void setMetadata(String title, String artist, String artUri, Drawable drawable) {
+    public void setMetadata(String title, String artist, String artUri) {
         MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder();
         builder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, title);
         builder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist);
@@ -745,7 +755,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         builder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artUri);
         builder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, artUri);
         builder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, getDuration());
-        setMetadata(putBitmap(builder, drawable).build());
+        setMetadata(builder.build());
         ActionEvent.update();
     }
 

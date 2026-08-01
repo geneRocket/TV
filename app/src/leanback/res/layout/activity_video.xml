@@ -307,7 +307,7 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:orientation="vertical">
 
             <com.fongmi.android.tv.ui.custom.CustomHorizontalGridView
@@ -381,6 +381,37 @@
                 android:paddingStart="24dp"
                 android:paddingEnd="24dp"
                 android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/recommendGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/detail_recommend"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/tv_body_text_size"
+                    android:textStyle="bold" />
+
+                <com.fongmi.android.tv.ui.custom.CustomHorizontalGridView
+                    android:id="@+id/recommend"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp"
+                    android:paddingBottom="16dp"
+                    app:focusOutEnd="true"
+                    app:focusOutFront="true" />
+
+            </LinearLayout>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

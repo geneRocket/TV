@@ -14,13 +14,16 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.repository.SpiderRepository;
+import com.fongmi.android.tv.utils.AppTaskScheduler;
+import com.fongmi.android.tv.utils.TaskScope;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.utils.Trans;
 
 import java.util.HashMap;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import okhttp3.Call;
 
@@ -33,7 +36,9 @@ public class SiteViewModel extends BaseSiteViewModel {
     private final MutableLiveData<Result> action;
     private final MutableLiveData<Danmu> danmaku;
     private final MutableLiveData<Result> download;
-    private final ConcurrentHashMap<String, CopyOnWriteArrayList<Call>> activeSearchCalls = new ConcurrentHashMap<>();
+    private final TaskScope playbackRequests;
+    private final ConcurrentHashMap<String, Set<Call>> activeSearchCalls = new ConcurrentHashMap<>();
+    private final Set<String> cancelledSearchTokens = ConcurrentHashMap.newKeySet();
 
     private static final String REQUEST_PLAYER = "player";
     private static final String REQUEST_DOWNLOAD = "download";
@@ -48,6 +53,7 @@ public class SiteViewModel extends BaseSiteViewModel {
         this.action = new MutableLiveData<>();
         this.danmaku = new MutableLiveData<>();
         this.download = new MutableLiveData<>();
+        this.playbackRequests = new TaskScope(ThreadPools.newSingle("site-playback"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Playback request failed."));
     }
 
     public void setEpisode(Episode value) {
@@ -90,19 +96,18 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     public void cancelCategoryContent() {
-        requests.cancel(REQUEST_RESULT, null);
+        requests.cancel(REQUEST_RESULT);
     }
 
     public void detailContent(String key, String id) {
         detailContent(key, id, "");
     }
 
-    public void detailContentFast(String key, String id, String token) {
-        detailContent(key, id, token);
-    }
-
     public void detailContent(String key, String id, String token) {
-        executeRequest(result, () -> SpiderRepository.get().detailContent(key, id), key, id, null, token);
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD,
+                () -> SpiderRepository.get().detailContent(key, id),
+                data -> result.postValue(withRequest(data, key, id, null, token)),
+                this::requestRequestFallback);
     }
 
     public void playerContent(String key, String flag, String id) {
@@ -110,11 +115,11 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     public void playerContent(String key, String flag, String id, String token) {
-        executeRequest(player, () -> SpiderRepository.get().playerContent(key, flag, id), key, id, flag, token);
+        submitPlaybackRequest(REQUEST_PLAYER, player, key, flag, id, token);
     }
 
     public void download(String key, String flag, String id) {
-        executeRequest(download, () -> SpiderRepository.get().playerContent(key, flag, id), key, id, flag, "");
+        submitPlaybackRequest(REQUEST_DOWNLOAD, download, key, flag, id, "");
     }
 
     public void action(String key, String action) {
@@ -145,15 +150,23 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     private void trackSearchCall(String token, Call call) {
         if (TextUtils.isEmpty(token) || call == null) return;
+        if (cancelledSearchTokens.contains(token)) {
+            call.cancel();
+            return;
+        }
         if (call.isExecuted()) {
             removeSearchCall(token, call);
             return;
         }
-        activeSearchCalls.computeIfAbsent(token, key -> new CopyOnWriteArrayList<>()).add(call);
+        activeSearchCalls.computeIfAbsent(token, key -> ConcurrentHashMap.newKeySet()).add(call);
+        if (cancelledSearchTokens.contains(token)) {
+            removeSearchCall(token, call);
+            call.cancel();
+        }
     }
 
     private void removeSearchCall(String token, Call call) {
-        CopyOnWriteArrayList<Call> calls = activeSearchCalls.get(token);
+        Set<Call> calls = activeSearchCalls.get(token);
         if (calls == null) return;
         calls.remove(call);
         if (calls.isEmpty()) activeSearchCalls.remove(token, calls);
@@ -161,33 +174,28 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     public void cancelSearch(String token) {
         if (token == null) return;
-        CopyOnWriteArrayList<Call> calls = activeSearchCalls.remove(token);
+        cancelledSearchTokens.add(token);
+        Set<Call> calls = activeSearchCalls.remove(token);
         if (calls == null) return;
         for (Call call : calls) call.cancel();
     }
 
     private void post(Site site, Result result, String keyword, String token) {
-        if (result.getList().isEmpty()) return;
+        if (result.getList().isEmpty() || cancelledSearchTokens.contains(token)) return;
         result.setKey(site.getKey());
         result.setKeyword(keyword);
         result.setRequestToken(token);
-        App.post(() -> this.search.setValue(result));
+        App.post(() -> {
+            if (!cancelledSearchTokens.contains(token)) this.search.setValue(result);
+        });
     }
 
-    private void executeRequest(MutableLiveData<Result> result, Callable<Result> callable, String key, String id, String flag, String token) {
-        String requestKey = result == player ? REQUEST_PLAYER : result == download ? REQUEST_DOWNLOAD : REQUEST_RESULT;
-        long timeout = result == player || result == download ? Constant.TIMEOUT_PLAY : Constant.TIMEOUT_VOD;
-        executeAsync(requestKey, timeout, callable, data -> result.postValue(withRequest(data, key, id, flag, token)), this::requestRequestFallback);
-    }
-
-    @Override
-    protected void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, java.util.function.Consumer<Result> poster, java.util.function.Function<Throwable, Result> fallback) {
-        Runnable stopPlayback = isPlaybackRequest(requestKey) ? Source.get()::stop : null;
-        requests.submit(requestKey, callable, timeoutMs, poster, fallback, stopPlayback, stopPlayback);
-    }
-
-    private boolean isPlaybackRequest(String requestKey) {
-        return REQUEST_PLAYER.equals(requestKey) || REQUEST_DOWNLOAD.equals(requestKey);
+    private void submitPlaybackRequest(String requestKey, MutableLiveData<Result> target, String key, String flag, String id, String token) {
+        Callable<Result> request = () -> SpiderRepository.get().playerContent(key, flag, id);
+        playbackRequests.submit(requestKey, request, Constant.TIMEOUT_PLAY,
+                data -> target.postValue(withRequest(data, key, id, flag, token)),
+                this::requestRequestFallback,
+                Source.get()::stop);
     }
 
     private Result requestFallback(Throwable error) {
@@ -254,6 +262,8 @@ public class SiteViewModel extends BaseSiteViewModel {
     protected void onCleared() {
         for (String token : activeSearchCalls.keySet()) cancelSearch(token);
         activeSearchCalls.clear();
+        cancelledSearchTokens.clear();
+        playbackRequests.close();
         super.onCleared();
     }
 }

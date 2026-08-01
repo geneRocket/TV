@@ -81,7 +81,6 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
             App.post(seekRunnable, 250);
         } else if (event.getAction() == KeyEvent.ACTION_UP && KeyUtil.isUpKey(event)) {
             if (changeSpeed) listener.onSpeedEnd();
-            else listener.onKeyUp();
             changeSpeed = false;
         } else if (event.getAction() == KeyEvent.ACTION_UP && KeyUtil.isDownKey(event)) {
             listener.onKeyDown();
@@ -207,8 +206,6 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         void onSpeedUp();
 
         void onSpeedEnd();
-
-        void onKeyUp();
 
         void onKeyDown();
 

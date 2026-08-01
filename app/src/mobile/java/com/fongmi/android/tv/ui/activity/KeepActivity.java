@@ -12,17 +12,13 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
-import com.fongmi.android.tv.bean.Config;
-import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.databinding.ActivityKeepBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.adapter.KeepAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.SyncDialog;
-import com.fongmi.android.tv.utils.Notify;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -35,7 +31,6 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     private ActivityKeepBinding mBinding;
     private KeepAdapter mAdapter;
     private int mKeepRequestId;
-    private int mOpenRequestId;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, KeepActivity.class));
@@ -48,6 +43,8 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        mBinding.progress.setEmptyText(R.string.empty_keep);
+        mBinding.progress.showProgress();
         setRecyclerView();
         getKeep();
     }
@@ -73,9 +70,15 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || requestId != mKeepRequestId) return;
                 mAdapter.addAll(items);
-                mBinding.delete.setVisibility(mAdapter.getItemCount() > 0 ? View.VISIBLE : View.GONE);
+                updateViews();
             });
         });
+    }
+
+    private void updateViews() {
+        int count = mAdapter.getItemCount();
+        mBinding.delete.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
+        mBinding.progress.showContent(true, count);
     }
 
     private void onSync(View view) {
@@ -87,6 +90,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
             new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(R.string.dialog_delete_keep).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                 mKeepRequestId++;
                 mAdapter.clear();
+                updateViews();
                 App.execute(() -> KeepRepository.get().deleteAll());
             }).show();
         } else if (mAdapter.getItemCount() > 0) {
@@ -96,24 +100,6 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         }
     }
 
-    private void loadConfig(Config config, Keep item, int requestId) {
-        VodConfig.load(config, new Callback() {
-            @Override
-            public void success() {
-                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
-                VideoActivity.start(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
-                RefreshEvent.config();
-                RefreshEvent.video();
-            }
-
-            @Override
-            public void error(String msg) {
-                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
-                Notify.show(msg);
-            }
-        });
-    }
-
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
         if (event.getType().equals(RefreshEvent.Type.KEEP)) getKeep();
@@ -121,29 +107,19 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     @Override
     public void onItemClick(Keep item) {
-        mOpenRequestId++;
         if (VodConfig.get().hasSite(item.getSiteKey())) {
             VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
-            return;
+        } else {
+            CollectActivity.start(this, item.getVodName());
         }
-        final int requestId = mOpenRequestId;
-        App.execute(() -> {
-            Config config = ConfigRepository.get().find(item.getCid());
-            App.post(() -> {
-                if (isFinishing() || isDestroyed() || requestId != mOpenRequestId) return;
-                if (config == null) CollectActivity.start(this, item.getVodName());
-                else loadConfig(config, item, requestId);
-            });
-        });
     }
 
     @Override
     public void onItemDelete(Keep item) {
         mAdapter.remove(item);
         App.execute(() -> KeepRepository.get().delete(item));
-        if (mAdapter.getItemCount() > 0) return;
-        mBinding.delete.setVisibility(View.GONE);
-        mAdapter.setDelete(false);
+        if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
+        updateViews();
     }
 
     @Override

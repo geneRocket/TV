@@ -18,7 +18,6 @@ import com.fongmi.android.tv.bean.Epg;
 import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Live;
-import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.utils.AppTaskScheduler;
 import com.fongmi.android.tv.utils.ThreadPools;
@@ -34,21 +33,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
-import com.fongmi.android.tv.utils.LatestTask;
+import java.util.concurrent.atomic.AtomicReference;
+import com.fongmi.android.tv.utils.TaskScope;
 
+import okhttp3.Call;
 import okhttp3.Headers;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class LiveViewModel extends ViewModel {
-
-    private static final int LIVE = 0;
-    private static final int EPG = 1;
-    private static final int URL = 2;
-    private static final int XML = 3;
 
     private final TimeZone defaultTimeZone;
     private volatile TimeZone currentTimeZone;
@@ -58,12 +53,11 @@ public class LiveViewModel extends ViewModel {
     private final MutableLiveData<Live> live;
     private final MutableLiveData<Epg> epg;
 
-    private final LatestTask<Live> liveTask;
-    private final LatestTask<Epg> epgTask;
-    private final LatestTask<Channel> urlTask;
-    private final LatestTask<Boolean> xmlTask;
+    private final TaskScope tasks;
+    private final TaskScope urlTasks;
     private final ExecutorService executor;
     private final ExecutorService urlExecutor;
+    private final AtomicReference<Call> epgCall = new AtomicReference<>();
 
     public LiveViewModel() {
         this.defaultTimeZone = TimeZone.getDefault();
@@ -74,19 +68,13 @@ public class LiveViewModel extends ViewModel {
         this.xml = new MutableLiveData<>();
         this.executor = ThreadPools.newFixed("live", 3);
         this.urlExecutor = ThreadPools.newSingle("live-url");
-        this.liveTask = createTask();
-        this.epgTask = createTask();
-        this.urlTask = new LatestTask<>(urlExecutor, AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."), false);
-        this.xmlTask = createTask();
-    }
-
-    private <T> LatestTask<T> createTask() {
-        return new LatestTask<>(executor, AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."), false);
+        this.tasks = new TaskScope(executor, AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live request failed."), false);
+        this.urlTasks = new TaskScope(urlExecutor, AppTaskScheduler.get(), error -> ThreadPools.log(error, "Live URL request failed."), false);
     }
 
     public void getLive(Live item) {
         currentTimeZone = resolveTimeZone(item.getTimeZone(), item.getEpg(), defaultTimeZone);
-        execute(LIVE, () -> {
+        submitLive(() -> {
             LiveParser.start(item.recent());
             verify(item);
             return item;
@@ -110,7 +98,7 @@ public class LiveViewModel extends ViewModel {
     }
 
     public void getXml(Live item) {
-        execute(XML, () -> EpgParser.start(item));
+        submitXml(() -> EpgParser.start(item));
     }
 
     public void getEpg(Channel item) {
@@ -119,7 +107,7 @@ public class LiveViewModel extends ViewModel {
         String epg = item.getEpg().replace("{date}", date);
         String url = epg.startsWith("file") ? epg : UrlUtil.normalize(epg, "");
         List<SimpleDateFormat> formats = createTimeFormats(timeZone);
-        execute(EPG, () -> {
+        submitEpg(() -> {
             if (!url.startsWith("http")) return item.getData().selected();
             if (!item.getData().equal(date)) item.setData(Epg.objectFrom(requestString(url, Constant.TIMEOUT_EPG), item.getTvgId(), formats));
             return item.getData().selected();
@@ -129,16 +117,27 @@ public class LiveViewModel extends ViewModel {
     private String requestString(String url, int timeout) throws Exception {
         Map<String, String> headers = UrlUtil.getTagHeaders(url);
         Request request = new Request.Builder().url(UrlUtil.stripTag(url)).headers(Headers.of(headers)).build();
-        try (Response response = OkHttp.client(timeout).newCall(request).execute()) {
+        Call call = OkHttp.client(timeout).newCall(request);
+        Call previous = epgCall.getAndSet(call);
+        if (previous != null) previous.cancel();
+        if (Thread.currentThread().isInterrupted()) call.cancel();
+        try (Response response = call.execute()) {
             if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
             ResponseBody body = response.body();
             return body == null ? "" : body.string();
+        } finally {
+            epgCall.compareAndSet(call, null);
         }
+    }
+
+    private void cancelEpgCall() {
+        Call call = epgCall.getAndSet(null);
+        if (call != null) call.cancel();
     }
 
     public void getUrl(Channel item) {
         Channel request = snapshot(item);
-        execute(URL, () -> {
+        submitUrl(() -> {
             request.setMsg(null);
             Source.get().stop();
             request.setUrl(UrlUtil.normalize(Source.get().fetch(request), ""));
@@ -148,7 +147,7 @@ public class LiveViewModel extends ViewModel {
 
     public void getUrl(Channel item, EpgData data) {
         Channel request = snapshot(item);
-        execute(URL, () -> {
+        submitUrl(() -> {
             request.setUrl(UrlUtil.normalize(request.getCatchup().format(request.getCurrent(), data), ""));
             return request;
         }, error -> urlFallback(request, error));
@@ -207,34 +206,24 @@ public class LiveViewModel extends ViewModel {
         LiveConfig.get().setKeep(item.getGroups());
     }
 
-    private void execute(int type, Callable<?> callable) {
-        execute(type, callable, null);
+    private void submitLive(java.util.concurrent.Callable<Live> task) {
+        tasks.submit("live", task, Constant.TIMEOUT_LIVE, live::postValue, error -> new Live(), null);
     }
 
-    private void execute(int type, Callable<?> callable, java.util.function.Function<Throwable, ?> fallbackOverride) {
-        switch (type) {
-            case LIVE:
-                liveTask.submit(() -> (Live) callable.call(), Constant.TIMEOUT_LIVE, live::postValue, error -> new Live(), null);
-                break;
-            case EPG:
-                epgTask.submit(() -> (Epg) callable.call(), Constant.TIMEOUT_EPG, epg::postValue, error -> new Epg(), null);
-                break;
-            case URL:
-                @SuppressWarnings("unchecked") java.util.function.Function<Throwable, Channel> fallback = fallbackOverride == null ? this::urlFallback : (java.util.function.Function<Throwable, Channel>) fallbackOverride;
-                urlTask.submit(() -> (Channel) callable.call(), Constant.TIMEOUT_PARSE_LIVE, url::postValue, fallback, Source.get()::stop);
-                break;
-            case XML:
-                xmlTask.submit(() -> (Boolean) callable.call(), Constant.TIMEOUT_XML, xml::postValue, error -> false, null);
-                break;
-        }
+    private void submitEpg(java.util.concurrent.Callable<Epg> task) {
+        tasks.submit("epg", task, Constant.TIMEOUT_EPG, epg::postValue, error -> new Epg(), this::cancelEpgCall);
     }
 
-    private Channel urlFallback(Throwable error) {
-        return error instanceof ExtractException ? Channel.error(error.getMessage()) : new Channel();
+    private void submitUrl(java.util.concurrent.Callable<Channel> task, java.util.function.Function<Throwable, Channel> fallback) {
+        urlTasks.submit("url", task, Constant.TIMEOUT_PARSE_LIVE, url::postValue, fallback, Source.get()::stop);
+    }
+
+    private void submitXml(java.util.concurrent.Callable<Boolean> task) {
+        tasks.submit("xml", task, Constant.TIMEOUT_XML, xml::postValue, error -> false, null);
     }
 
     private Channel urlFallback(Channel request, Throwable error) {
-        String msg = error instanceof ExtractException ? error.getMessage() : error.getMessage();
+        String msg = error.getMessage();
         if (TextUtils.isEmpty(msg)) msg = App.get().getString(R.string.error_play_timeout);
         request.setMsg(msg);
         return request;
@@ -243,10 +232,9 @@ public class LiveViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-        liveTask.close();
-        epgTask.close();
-        urlTask.close();
-        xmlTask.close();
+        tasks.close();
+        urlTasks.close();
+        cancelEpgCall();
         ThreadPools.shutdown(executor);
         ThreadPools.shutdown(urlExecutor);
     }

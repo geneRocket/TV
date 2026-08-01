@@ -30,8 +30,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import java9.util.concurrent.CompletableFuture;
-
 public class Spider extends com.github.catvod.crawler.Spider {
 
     private final ExecutorService executor;
@@ -67,8 +65,7 @@ public class Spider extends com.github.catvod.crawler.Spider {
     }
 
     private Object call(String func, Object... args) throws Exception {
-        //return executor.submit((Function.call(jsObject, func, args))).get();
-        return CompletableFuture.supplyAsync(() -> Async.run(jsObject, func, args), executor).join().get();
+        return submit(() -> Async.run(jsObject, func, args)).get().get();
     }
 
     @Override

@@ -9,6 +9,8 @@ import java.util.List;
 import master.flame.danmaku.controller.DrawHandler;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.DanmakuTimer;
+import master.flame.danmaku.danmaku.model.android.DanmakuContext;
+import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.ui.widget.DanmakuView;
 
 /** Owns danmaku selection and the view lifecycle independently of the playback engine. */
@@ -79,8 +81,16 @@ final class DanmakuController implements DrawHandler.Callback {
         if (isPrepared()) view.stop();
     }
 
+    void reset() {
+        if (view != null) view.release();
+    }
+
+    void prepare(BaseDanmakuParser parser, DanmakuContext context) {
+        if (view != null) view.prepare(parser, context);
+    }
+
     void release() {
-        if (isPrepared()) view.release();
+        reset();
         view = null;
     }
 

@@ -31,11 +31,15 @@ public class Keep {
 
     private static final Map<String, Keep> VOD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, Keep> LIVE_CACHE = new ConcurrentHashMap<>();
+    private static final Set<String> VOD_MISSES = ConcurrentHashMap.newKeySet();
+    private static final Set<String> LIVE_MISSES = ConcurrentHashMap.newKeySet();
     private static final int MAX_CACHE_SIZE = 256;
 
     public static void clearCache() {
         VOD_CACHE.clear();
         LIVE_CACHE.clear();
+        VOD_MISSES.clear();
+        LIVE_MISSES.clear();
     }
 
     @NonNull
@@ -160,9 +164,12 @@ public class Keep {
         if (item == null) return null;
         if (item.getType() == 1) {
             LIVE_CACHE.put(item.getKey(), item);
+            LIVE_MISSES.remove(item.getKey());
             trimCache(LIVE_CACHE);
         } else {
-            VOD_CACHE.put(vodCacheKey(item.getCid(), item.getKey()), item);
+            String key = vodCacheKey(item.getCid(), item.getKey());
+            VOD_CACHE.put(key, item);
+            VOD_MISSES.remove(key);
             trimCache(VOD_CACHE);
         }
         return item;
@@ -173,6 +180,15 @@ public class Keep {
             String eldest = cache.keySet().stream().findFirst().orElse(null);
             if (eldest == null) return;
             cache.remove(eldest);
+        }
+    }
+
+    private static void cacheMiss(Set<String> misses, String key) {
+        misses.add(key);
+        while (misses.size() > MAX_CACHE_SIZE) {
+            String item = misses.stream().findFirst().orElse(null);
+            if (item == null) return;
+            misses.remove(item);
         }
     }
 
@@ -197,19 +213,32 @@ public class Keep {
 
     public static Keep find(String key) {
         int cid = keyCid(key);
-        Keep item = VOD_CACHE.get(vodCacheKey(cid, key));
+        String cacheKey = vodCacheKey(cid, key);
+        Keep item = VOD_CACHE.get(cacheKey);
         if (item != null) return copy(item);
-        return copy(cache(AppDatabase.get().getKeepDao().find(cid, key)));
+        if (VOD_MISSES.contains(cacheKey)) return null;
+        item = AppDatabase.get().getKeepDao().find(cid, key);
+        if (item == null) cacheMiss(VOD_MISSES, cacheKey);
+        return copy(cache(item));
     }
 
     public static Keep find(int cid, String key) {
-        Keep item = VOD_CACHE.get(vodCacheKey(cid, key));
-        return item != null ? copy(item) : copy(cache(AppDatabase.get().getKeepDao().find(cid, key)));
+        String cacheKey = vodCacheKey(cid, key);
+        Keep item = VOD_CACHE.get(cacheKey);
+        if (item != null) return copy(item);
+        if (VOD_MISSES.contains(cacheKey)) return null;
+        item = AppDatabase.get().getKeepDao().find(cid, key);
+        if (item == null) cacheMiss(VOD_MISSES, cacheKey);
+        return copy(cache(item));
     }
 
     public static boolean exist(String key) {
         Keep item = LIVE_CACHE.get(key);
-        return item != null || cache(AppDatabase.get().getKeepDao().find(key)) != null;
+        if (item != null) return true;
+        if (LIVE_MISSES.contains(key)) return false;
+        item = AppDatabase.get().getKeepDao().find(key);
+        if (item == null) cacheMiss(LIVE_MISSES, key);
+        return cache(item) != null;
     }
 
     public static void deleteAll() {
@@ -245,6 +274,7 @@ public class Keep {
     public static void delete(String key) {
         AppDatabase.get().getKeepDao().delete(key);
         LIVE_CACHE.remove(key);
+        cacheMiss(LIVE_MISSES, key);
     }
 
     public static List<Keep> getVod() {
@@ -272,8 +302,14 @@ public class Keep {
 
     public Keep delete() {
         AppDatabase.get().getKeepDao().delete(getCid(), getKey());
-        if (getType() == 1) LIVE_CACHE.remove(getKey());
-        else VOD_CACHE.remove(vodCacheKey(getCid(), getKey()));
+        if (getType() == 1) {
+            LIVE_CACHE.remove(getKey());
+            cacheMiss(LIVE_MISSES, getKey());
+        } else {
+            String key = vodCacheKey(getCid(), getKey());
+            VOD_CACHE.remove(key);
+            cacheMiss(VOD_MISSES, key);
+        }
         return this;
     }
 

@@ -32,6 +32,7 @@ import com.fongmi.android.tv.bean.Value;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentVodBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.model.CategoryRequest;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.VodActivity;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
@@ -43,6 +44,7 @@ import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.presenter.FilterPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import java.io.Serializable;
@@ -50,7 +52,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 public class VodFragment extends BaseFragment implements CustomScroller.Callback, VodPresenter.OnClickListener {
 
@@ -65,9 +66,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private List<Page<ArrayObjectAdapter, ArrayObjectAdapter>> mPages;
     private boolean mOpen;
     private Page<ArrayObjectAdapter, ArrayObjectAdapter> mPage;
-    private String mRequestTypeId;
-    private String mRequestPage;
-    private String mRequestExtend;
+    private CategoryRequest mRequest;
     private final Runnable mFilterRefresh = this::getVideo;
 
     public static VodFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, ArrayList<Filter> filters, boolean folder, boolean open) {
@@ -185,14 +184,9 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
             mScroller.endLoading(result);
             checkPosition(first);
             checkMore(size);
-            showEmpty(result, first, size);
+            if (first && size == 0 && result.isRequestFailed()) Notify.show(R.string.vod_load_failed);
             hideProgress();
         });
-    }
-
-    @Override
-    protected void initEvent() {
-        mBinding.empty.retry.setOnClickListener(view -> getVideo());
     }
 
     private void setFilters() {
@@ -237,28 +231,14 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     private void requestVideo(String typeId, String page) {
         boolean first = "1".equals(page);
-        mRequestTypeId = typeId;
-        mRequestPage = page;
-        mRequestExtend = getRequestExtend(mExtends);
+        mRequest = CategoryRequest.create(getKey(), typeId, page, mExtends);
         if (first) mLast = null;
         if (first) showProgress();
         mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
     }
 
     private boolean isCurrentRequest(Result result) {
-        return result != null
-                && getKey().equals(result.getKey())
-                && mRequestTypeId != null
-                && mRequestTypeId.equals(result.getRequestTypeId())
-                && mRequestPage != null
-                && mRequestPage.equals(result.getRequestPage())
-                && mRequestExtend != null
-                && mRequestExtend.equals(result.getRequestExtend());
-    }
-
-    private String getRequestExtend(HashMap<String, String> extend) {
-        if (extend == null || extend.isEmpty()) return "";
-        return App.gson().toJson(new TreeMap<>(extend));
+        return mRequest != null && mRequest.matches(result);
     }
 
     private void addVideo(Result result) {
@@ -362,21 +342,11 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void showProgress() {
-        mBinding.empty.getRoot().setVisibility(View.GONE);
         if (!mOpen) mBinding.progress.getRoot().setVisibility(View.VISIBLE);
     }
 
     private void hideProgress() {
         mBinding.progress.getRoot().setVisibility(View.GONE);
-    }
-
-    private void showEmpty(Result result, boolean first, int size) {
-        boolean empty = first && size == 0 && (mAdapter.size() == 0 || result.isRequestFailed());
-        mBinding.empty.getRoot().setVisibility(empty ? View.VISIBLE : View.GONE);
-        mBinding.empty.message.setText(result.isRequestFailed() ? R.string.vod_load_failed : R.string.vod_empty);
-        if (empty) App.post(() -> {
-            if (isAdded() && mBinding != null) mBinding.empty.retry.requestFocus();
-        });
     }
 
     private void showFilter() {
@@ -412,7 +382,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     public void resetFilterOnBack() {
         HashMap<String, String> defaults = getDefaultExtend();
-        boolean changed = !getRequestExtend(mExtends).equals(getRequestExtend(defaults));
+        boolean changed = !mExtends.equals(defaults);
         mExtends.clear();
         mExtends.putAll(defaults);
         setFilters();
@@ -464,9 +434,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     private void restorePage(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
         mViewModel.cancelCategoryContent();
-        mRequestTypeId = null;
-        mRequestPage = null;
-        mRequestExtend = null;
+        mRequest = null;
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = page.getAdapter()));
         mLast = page.getExtra();
         mScroller.restore(page.getPage(), page.isEnable());

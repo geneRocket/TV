@@ -159,8 +159,16 @@ public class Vod implements Parcelable {
         return TextUtils.isEmpty(vodRemarks) ? "" : vodRemarks.trim();
     }
 
+    public void setVodRemarks(String vodRemarks) {
+        this.vodRemarks = vodRemarks;
+    }
+
     public String getVodYear() {
         return TextUtils.isEmpty(vodYear) ? "" : vodYear.trim();
+    }
+
+    public void setVodYear(String vodYear) {
+        this.vodYear = vodYear;
     }
 
     public String getVodArea() {

@@ -47,16 +47,16 @@ import java.util.Set;
 
 public class LiveConfig {
 
-    private List<Live> lives;
-    private Map<String, Live> liveMap;
-    private List<Rule> rules;
-    private List<String> ads;
-    private List<Header> headers;
-    private List<Proxy> proxy;
-    private List<String> hosts;
-    private List<String> ruleHosts;
-    private boolean persistCache;
-    private Config config;
+    private List<Live> lives = new ArrayList<>();
+    private Map<String, Live> liveMap = new HashMap<>();
+    private List<Rule> rules = new ArrayList<>();
+    private List<String> ads = new ArrayList<>();
+    private List<Header> headers = new ArrayList<>();
+    private List<Proxy> proxy = new ArrayList<>();
+    private List<String> hosts = new ArrayList<>();
+    private List<String> ruleHosts = new ArrayList<>();
+    private boolean persistCache = true;
+    private Config config = new Config();
     private boolean sync;
     private Live home;
 
@@ -97,33 +97,28 @@ public class LiveConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().submit(() -> get().init().clear().config(config).loadConfig(callback));
+        get().submit(() -> get().reset().config(config).loadConfig(callback));
     }
 
-    public static void load(Config config, Callback callback, boolean cache) {
+    public static void loadCached(Config config, Callback callback) {
         get().submit(() -> {
-            LiveConfig target = get().init().clear().config(config);
-            if (cache) target.loadConfigCache(callback);
-            else target.loadConfig(callback);
+            LiveConfig target = get().reset().config(config);
+            target.loadConfigCache(callback);
         });
     }
 
     public static void load(List<Config> configs, Callback callback) {
         if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().init().clear().config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
+        get().submit(() -> get().reset().config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
     }
 
-    public static void load(List<Config> configs, Callback callback, boolean cache) {
+    public static void loadCached(List<Config> configs, Callback callback) {
         if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> {
-            LiveConfig target = get().init().clear().config(configs.get(0)).setPersistCache(false);
-            if (cache) target.loadConfigsCache(configs, callback);
-            else target.loadConfigs(configs, callback);
-        });
+        get().submit(() -> get().reset().config(configs.get(0)).setPersistCache(false).loadConfigsCache(configs, callback));
     }
 
     public static void reload(Callback callback) {
-        get().submit(() -> get().init().clear().config(Config.live()).loadConfig(callback));
+        get().submit(() -> get().reset().config(Config.live()).loadConfig(callback));
     }
 
     /** Clears shared state after already queued configuration work has finished. */
@@ -132,7 +127,7 @@ public class LiveConfig {
     }
 
     private void submit(Runnable task) {
-        ThreadPools.configLoad().execute(() -> {
+        ThreadPools.executeLatestConfig("live-config", () -> {
             synchronized (this) {
                 task.run();
             }
@@ -144,16 +139,8 @@ public class LiveConfig {
         return this;
     }
 
-    public synchronized LiveConfig init() {
-        this.home = null;
-        if (this.ads == null) this.ads = new ArrayList<>();
-        if (this.hosts == null) this.hosts = new ArrayList<>();
-        if (this.proxy == null) this.proxy = new ArrayList<>();
-        if (this.rules == null) this.rules = new ArrayList<>();
-        if (this.headers == null) this.headers = new ArrayList<>();
-        if (this.ruleHosts == null) this.ruleHosts = new ArrayList<>();
-        if (this.lives == null) this.lives = new ArrayList<>();
-        if (this.liveMap == null) this.liveMap = new HashMap<>();
+    synchronized LiveConfig reset() {
+        clear();
         this.persistCache = true;
         return config(new Config());
     }
@@ -179,34 +166,6 @@ public class LiveConfig {
         return this;
     }
 
-    public void load() {
-        if (isEmpty()) load(new Callback());
-    }
-
-    public void load(Callback callback) {
-        submit(() -> loadConfig(callback));
-    }
-
-    public void load(Callback callback, boolean cache) {
-        submit(() -> {
-            if (cache) loadConfigCache(callback);
-            else loadConfig(callback);
-        });
-    }
-
-    public void loadMulti(List<Config> configs, Callback callback) {
-        this.persistCache = false;
-        submit(() -> loadConfigs(configs, callback));
-    }
-
-    public void loadMulti(List<Config> configs, Callback callback, boolean cache) {
-        this.persistCache = false;
-        submit(() -> {
-            if (cache) loadConfigsCache(configs, callback);
-            else loadConfigs(configs, callback);
-        });
-    }
-
     private void loadConfig(Callback callback) {
         try {
             if (config.isEmpty()) config(Config.live());
@@ -219,19 +178,22 @@ public class LiveConfig {
     }
 
     private void loadConfigs(List<Config> configs, Callback callback) {
+        loadConfigs(configs, callback, false);
+    }
+
+    private void loadConfigsCache(List<Config> configs, Callback callback) {
+        loadConfigs(configs, callback, true);
+    }
+
+    private void loadConfigs(List<Config> configs, Callback callback, boolean cache) {
         JsonObject merged = new JsonObject();
         Throwable error = null;
         int success = 0;
-        for (ConfigResult result : loadConfigResults(configs, false)) {
+        for (ConfigResult result : loadConfigResults(configs, cache)) {
             try {
                 if (result.error != null) throw result.error;
                 if (result.live != null) {
                     addLive(result.live);
-                    success++;
-                    continue;
-                }
-                if (result.text != null) {
-                    parseText(result.config.getUrl(), result.text);
                     success++;
                     continue;
                 }
@@ -283,34 +245,6 @@ public class LiveConfig {
     private void loadCache(Callback callback, Throwable e) {
         if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
         else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
-    }
-
-    private void loadConfigsCache(List<Config> configs, Callback callback) {
-        JsonObject merged = new JsonObject();
-        Throwable error = null;
-        int success = 0;
-        for (ConfigResult result : loadConfigResults(configs, true)) {
-            try {
-                if (result.error != null) throw result.error;
-                if (result.text != null) {
-                    parseText(result.config.getUrl(), result.text);
-                    success++;
-                    continue;
-                }
-                if (result.cacheable) cacheConfig(result.config, result.object);
-                mergeConfig(merged, result.object);
-                success++;
-            } catch (Throwable e) {
-                error = e;
-                ThreadPools.log(e, "Live config operation failed.");
-            }
-        }
-        if (merged.has("lives") || merged.has("headers") || merged.has("proxy") || merged.has("hosts") || merged.has("rules") || merged.has("ads")) parseConfig(merged, null);
-        if (success > 0) App.post(callback::success);
-        else {
-            Throwable cause = error == null ? new Throwable("No valid config") : error;
-            App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
-        }
     }
 
     private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
@@ -780,33 +714,27 @@ public class LiveConfig {
         private final Config config;
         private final JsonObject object;
         private final Live live;
-        private final String text;
         private final Throwable error;
         private final boolean cacheable;
 
-        private ConfigResult(Config config, JsonObject object, Live live, String text, Throwable error, boolean cacheable) {
+        private ConfigResult(Config config, JsonObject object, Live live, Throwable error, boolean cacheable) {
             this.config = config;
             this.object = object;
             this.live = live;
-            this.text = text;
             this.error = error;
             this.cacheable = cacheable;
         }
 
         private static ConfigResult json(Config config, JsonObject object, boolean cacheable) {
-            return new ConfigResult(config, object, null, null, null, cacheable);
+            return new ConfigResult(config, object, null, null, cacheable);
         }
 
         private static ConfigResult live(Config config, Live live) {
-            return new ConfigResult(config, null, live, null, null, false);
-        }
-
-        private static ConfigResult text(Config config, String text) {
-            return new ConfigResult(config, null, null, text, null, false);
+            return new ConfigResult(config, null, live, null, false);
         }
 
         private static ConfigResult error(Config config, Throwable error) {
-            return new ConfigResult(config, null, null, null, error, false);
+            return new ConfigResult(config, null, null, error, false);
         }
     }
 }

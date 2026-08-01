@@ -28,7 +28,6 @@ import androidx.leanback.widget.ItemBridgeAdapter;
 import androidx.leanback.widget.OnChildViewHolderSelectedListener;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
-import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
@@ -48,6 +47,7 @@ import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
+import com.fongmi.android.tv.repository.DoubanRecommendRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Parse;
@@ -66,8 +66,11 @@ import com.fongmi.android.tv.event.PlayerEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
+import com.fongmi.android.tv.player.PlaybackRequest;
+import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.player.danmu.Parser;
@@ -88,12 +91,13 @@ import com.fongmi.android.tv.ui.presenter.FlagPresenter;
 import com.fongmi.android.tv.ui.presenter.ParsePresenter;
 import com.fongmi.android.tv.ui.presenter.PartPresenter;
 import com.fongmi.android.tv.ui.presenter.QuickPresenter;
+import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.AppTaskScheduler;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
-import com.fongmi.android.tv.utils.KeyedLatestTask;
+import com.fongmi.android.tv.utils.TaskScope;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SearchSorter;
@@ -126,8 +130,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -177,118 +179,20 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         return view == null || view.getText() == null ? "" : view.getText().toString();
     }
 
-    private static class RecoveryState {
-
-        private int toggleCount;
-        private int errorCount;
-
-        public int getToggleCount() {
-            return toggleCount;
-        }
-
-        public void addToggle() {
-            toggleCount++;
-        }
-
-        public void resetToggle() {
-            toggleCount = 0;
-        }
-
-        public int addError() {
-            return ++errorCount;
-        }
-
-        public void resetError() {
-            errorCount = 0;
-        }
-    }
-
-    private static class PlaybackRequest {
-
-        private String key;
-        private String flag;
-        private String id;
-        private String token;
-        private String timeoutToken;
-
-        void set(String key, String flag, String id, String token) {
-            this.key = key;
-            this.flag = flag;
-            this.id = id;
-            this.token = token;
-        }
-
-        void setTimeout(String token) {
-            timeoutToken = token;
-        }
-
-        void clearTimeout() {
-            timeoutToken = null;
-        }
-
-        boolean isCurrent(Result result) {
-            return result != null
-                    && TextUtils.equals(result.getKey(), key)
-                    && TextUtils.equals(result.getRequestFlag(), flag)
-                    && TextUtils.equals(result.getRequestId(), id)
-                    && TextUtils.equals(result.getRequestToken(), token);
-        }
-
-        boolean isCurrentTimeout() {
-            return !TextUtils.isEmpty(timeoutToken) && TextUtils.equals(timeoutToken, token);
-        }
-
-        String getToken() {
-            return token;
-        }
-
-        void clear() {
-            key = null;
-            flag = null;
-            id = null;
-            token = null;
-            timeoutToken = null;
-        }
-    }
-
     private static class SourceSwitchState {
 
-        private boolean active;
-        private boolean pending;
-        private boolean manual;
-        private boolean singleEpisode;
+        private Phase phase = Phase.IDLE;
         private String episode;
-        private String targetFlag;
-        private String targetEpisodeKey;
         private String actor = "";
         private long position;
 
+        private enum Phase {
+            IDLE, SEARCHING, LOADING
+        }
+
         void clear() {
-            active = false;
-            pending = false;
-            manual = false;
-            singleEpisode = false;
+            phase = Phase.IDLE;
             episode = null;
-            targetFlag = null;
-            targetEpisodeKey = null;
-            position = 0;
-        }
-
-        void clearTarget() {
-            targetFlag = null;
-            targetEpisodeKey = null;
-        }
-    }
-
-    private static class FlagSwitchState {
-
-        private String targetFlag;
-        private String targetEpisodeKey;
-        private long position;
-
-        void clear() {
-            targetFlag = null;
-            targetEpisodeKey = null;
             position = 0;
         }
     }
@@ -299,88 +203,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         private Episode episode;
         private long position;
         private boolean skipOpening;
-        private String progressFlag;
-        private String progressEpisodeKey;
-        private long progressPosition;
 
         void clear() {
             flag = null;
             episode = null;
             position = 0;
             skipOpening = false;
-            progressFlag = null;
-            progressEpisodeKey = null;
-            progressPosition = 0;
-        }
-    }
-
-    private static class ErrorRecoveryController {
-
-        private static final int MAX_ERROR_COUNT = 20;
-        private final VideoActivity host;
-        private final RecoveryState state = new RecoveryState();
-
-        public ErrorRecoveryController(VideoActivity host) {
-            this.host = host;
-        }
-
-        public void onPlayerReady() {
-            state.resetToggle();
-            state.resetError();
-        }
-
-        public void onPlayerError(ErrorEvent event) {
-            if (state.addError() > MAX_ERROR_COUNT) {
-                stopWithError(event, true);
-                return;
-            }
-            if (host.mPlayers.exceedRetry(event.getRetry())) {
-                if (tryRecoverByPlayerSwitch(event)) return;
-                state.resetToggle();
-                stopWithError(event, false);
-                return;
-            }
-            if (tryRecoverByDecode(event)) return;
-            if (tryRecoverByExoFormat(event)) return;
-            host.onRefresh();
-        }
-
-        private boolean tryRecoverByDecode(ErrorEvent event) {
-            if (!event.isDecode() || !host.mPlayers.canToggleDecode()) return false;
-            host.onDecode(false);
-            return true;
-        }
-
-        private boolean tryRecoverByExoFormat(ErrorEvent event) {
-            if (!event.isExo() || !host.mPlayers.isExo()) return false;
-            host.capturePlaybackPosition();
-            if (event.getCode() == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
-                    || event.getCode() >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
-                    && event.getCode() <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) {
-                host.mPlayers.setFormat(ExoUtil.getMimeType(event.getCode()));
-            }
-            host.mPlayers.setMediaSource();
-            return true;
-        }
-
-        private boolean tryRecoverByPlayerSwitch(ErrorEvent event) {
-            boolean canSwitch = event.isUrl()
-                    && event.getRetry() > 0
-                    && state.getToggleCount() < 2
-                    && host.mPlayers.getPlayer() != Players.SYS;
-            if (!canSwitch) return false;
-            state.addToggle();
-            host.retryWithNextPlayer();
-            return true;
-        }
-
-        private void stopWithError(ErrorEvent event, boolean terminal) {
-            TrackRepository.get().delete(host.getHistoryKey());
-            host.showError(event.getMsg());
-            host.markCurrentSourceBroken(event);
-            host.stopActivePlayback();
-            if (terminal) state.resetError();
-            else host.continueRecoveryFlow();
         }
     }
 
@@ -393,14 +221,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void switchFlag(Flag item, boolean notify) {
-            if (host.mFlagAdapter.size() == 0) return;
+            host.capturePlaybackPosition();
+            if (selectFlag(item, notify)) host.playFlag(item);
+        }
+
+        private boolean selectFlag(Flag item, boolean notify) {
+            if (host.mFlagAdapter.size() == 0 || item == null || item.getEpisodes().isEmpty()) return false;
             if (item.isActivated()) {
-                if (host.isPendingSiteSwitch() || host.isSourceSwitching()) {
+                if (host.isSourceSwitching()) {
                     host.setEpisodeAdapter(item.getEpisodes());
                     host.setQualityVisible(false);
-                    host.seamless(item);
+                    return true;
                 }
-                return;
+                return false;
             }
             int index = host.mFlagAdapter.indexOf(item);
             if (index == -1) {
@@ -414,23 +247,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setEpisodeAdapter(item.getEpisodes());
             host.setQualityVisible(false);
             if (notify) Notify.show(host.getString(R.string.play_switch_flag, item.getFlag()));
-            host.seamless(item);
+            return true;
         }
 
         public void switchEpisode(Episode item) {
             int flagPosition = host.getFlagPosition();
-            if (host.shouldEnterFullscreen(item)) return;
             if (host.isFullscreen()) Notify.show(host.getString(R.string.play_ready, item.getName()));
             for (int i = 0; i < host.mFlagAdapter.size(); i++) ((Flag) host.mFlagAdapter.get(i)).toggle(flagPosition == i, item);
             host.mSelectedEpisodePosition = Math.max(0, host.getFlag().getEpisodes().indexOf(item));
             host.setEpisodeSelectedPosition(host.getEpisodePosition());
-            if (host.shouldApplySourceSwitchProgress(host.getFlag(), item)) host.applySourceSwitchProgress(host.getFlag(), item);
-            else if (host.shouldApplyFlagSwitchProgress(host.getFlag(), item)) host.applyFlagSwitchProgress(host.getFlag(), item);
-            host.clearSourceSwitch();
-            host.clearFlagSwitchTarget();
             host.mContent.stopSearch();
             host.notifyItemChanged(host.getEpisodeView(), host.mEpisodeAdapter);
             host.onRefresh();
+            host.clearSourceSwitch();
         }
 
         public void switchParse(Parse item, boolean notify) {
@@ -447,14 +276,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mContent.openDetail(item);
         }
 
-        public void nextParse() {
-            int position = host.getParsePosition();
-            if (position >= 0 && position < host.mParseAdapter.size() - 1) switchParse((Parse) host.mParseAdapter.get(position + 1), true);
-        }
-
-        public void nextFlag() {
+        public boolean nextFlag() {
             int position = host.isGone(host.mBinding.flag) ? -1 : host.getFlagPosition();
-            if (position >= 0 && position < host.mFlagAdapter.size() - 1) switchFlag((Flag) host.mFlagAdapter.get(position + 1), true);
+            for (int i = position + 1; i < host.mFlagAdapter.size(); i++) {
+                Flag flag = (Flag) host.mFlagAdapter.get(i);
+                if (flag.getEpisodes().isEmpty()) continue;
+                switchFlag(flag, true);
+                return true;
+            }
+            return false;
         }
 
         public void nextSite() {
@@ -464,8 +294,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mQuickAdapter.removeItems(0, 1);
             host.mQuickQueue.remove(item);
             host.markCurrentSourceBroken();
-            host.setPendingSiteSwitch(true);
-            host.setInitAuto(false);
+            host.startSourceLoading();
+            host.mSiteSearch.markSelected();
             showDetail(item, true);
         }
 
@@ -549,7 +379,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.clearPlaybackTimeout();
             host.commitPendingHistoryUpdate();
             host.setMetadata();
-            host.mErrorRecovery.onPlayerReady();
+            host.mRecovery.reset();
+            host.mBroken.clear();
             host.hideProgress();
             host.mPlayers.reset();
             host.setDefaultTrack();
@@ -577,7 +408,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             String token = host.nextRequestToken("detail");
             host.setPendingDetailRequest(token);
             host.scheduleSourceSwitchTimeout();
-            host.mViewModel.detailContentFast(host.getKey(), host.getId(), token);
+            host.mViewModel.detailContent(host.getKey(), host.getId(), token);
         }
 
         public void handleMissingDetail() {
@@ -598,8 +429,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void setSearch(Result result) {
-            if (!host.mSearchActive) return;
-            if (!host.isCurrentSearchResult(result)) return;
+            if (!host.mSiteSearch.accepts(result)) return;
             if (!result.getKeyword().equals(Objects.toString(host.mBinding.part.getTag(), "").trim())) return;
             List<Vod> items = result.getList();
             if (items.isEmpty()) return;
@@ -619,29 +449,20 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.mQuickQueue.remove(item);
             host.beginSourceSwitch();
             host.markCurrentSourceBroken();
-            host.setAutoMode(false);
-            host.setInitAuto(false);
-            host.setPendingSiteSwitch(true);
+            host.mSiteSearch.setManual();
+            host.startSourceLoading();
             host.mPlaybackNavigation.showDetail(item, false);
         }
 
-        public void advanceSearch(boolean force) {
-            if (host.mQuickAdapter.size() == 0) initSearch(host.getSourceSwitchKeyword(), !force, true);
-            else if (host.isAutoMode() || force || host.isSourceSwitching()) host.mPlaybackNavigation.nextSite();
+        public void recoverSource() {
+            if (host.mQuickAdapter.size() == 0) initSearch(host.getSourceSwitchKeyword(), true);
+            else host.mPlaybackNavigation.nextSite();
         }
 
         public void stopSearch() {
-            String token = host.pendingSearchToken;
-            host.mSearchActive = false;
-            host.mViewModel.cancelSearch(token);
-            host.setPendingSearchToken(null);
-            host.resetSearchTaskState();
+            if (host.mSiteSearch != null) host.mSiteSearch.cancel();
             host.resetQuickResults();
             host.mQuickKeys.clear();
-            host.cancelSearchTasks();
-            if (host.mExecutor == null) return;
-            host.mExecutor.shutdownNow();
-            host.mExecutor = null;
         }
 
         public void showEmpty() {
@@ -655,8 +476,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             boolean empty = item.getVodFlags().isEmpty();
             host.setVisibilityIfChanged(host.mBinding.flag, empty ? View.GONE : View.VISIBLE);
             if (empty) {
-                if (host.isPendingSiteSwitch()) {
-                    host.setPendingSiteSwitch(false);
+                if (host.isSourceLoading()) {
+                    host.resumeSourceSearch();
                     host.continueSourceSwitch();
                     return;
                 }
@@ -664,11 +485,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             } else {
                 Flag target = host.findTargetFlag(item.getVodFlags());
                 if (target == null) {
-                    host.setPendingSiteSwitch(false);
+                    host.resumeSourceSearch();
                     host.continueSourceSwitch();
                     return;
                 }
-                host.setPendingSiteSwitch(false);
+                host.resumeSourceSearch();
                 host.mPlaybackNavigation.switchFlag(target, false);
                 if (host.mHistory != null && host.mHistory.isRevSort()) host.reverseEpisode(true);
             }
@@ -698,7 +519,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         private void setEmpty(boolean finish) {
             if (host.isSourceSwitching()) {
-                host.setPendingSiteSwitch(false);
+                host.resumeSourceSearch();
                 host.continueSourceSwitch();
                 return;
             }
@@ -709,7 +530,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             } else {
                 host.mBinding.name.setText(host.getName());
                 App.post(host.mR4, 10000);
-                advanceSearch(false);
+                recoverSource();
             }
         }
 
@@ -739,51 +560,26 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (!host.isSourceSwitching()) host.mBinding.video.requestFocus();
             host.setArtwork(item.getVodPic());
             host.getPart(item.getVodName());
+            if (!host.isSourceSwitching()) host.loadRecommendations(item);
             App.removeCallbacks(host.mR4);
             host.mSelectedFlagPosition = 0;
             host.mSelectedEpisodePosition = 0;
             host.loadHistory(item, host.pendingDetailToken);
         }
 
-        private void initSearch(String keyword, boolean auto, boolean advance) {
+        private void initSearch(String keyword, boolean auto) {
             stopSearch();
-            host.setAutoMode(auto);
-            host.setInitAuto(advance);
-            host.setManualSourceSearch(!auto);
-            String token = host.nextRequestToken("search");
-            host.setPendingSearchToken(token);
             host.mBinding.part.setTag(keyword);
-            startSearch(keyword, token);
-        }
-
-        private void startSearch(String keyword, String token) {
             host.mQuickAdapter.clear();
             host.resetQuickResults();
             host.mQuickKeys.clear();
             List<Site> sites = new ArrayList<>();
             Set<String> keys = new HashSet<>();
-            host.mSearchActive = true;
             for (Site site : VodConfig.get().getSites()) {
-                if (!isPass(site)) continue;
-                if (!keys.add(site.getKey())) continue;
+                if (!site.isSearchable() || auto && !site.isChangeable() || !keys.add(site.getKey())) continue;
                 sites.add(site);
             }
-            host.mExecutor = ThreadPools.newFixedRejecting("video-search", SOURCE_SEARCH_CONCURRENCY, Math.max(1, sites.size()));
-            int generation = host.beginSearchTaskState(sites.size());
-            for (Site site : sites) host.mSearchTasks.add(host.mExecutor.submit(() -> search(site, keyword, generation, token)));
-            if (sites.isEmpty()) host.onSearchTasksSettled(generation);
-        }
-
-        private void search(Site site, String keyword, int generation, String token) {
-            try {
-                if (!host.isSearchExecutionActive(generation, token)) return;
-                host.mViewModel.searchContent(site, keyword, true, token);
-            } catch (Throwable e) {
-                ThreadPools.log(e, "Video search failed for " + site.getName());
-            } finally {
-                host.pruneSearchTasks();
-                if (host.onSearchTaskFinished(generation)) App.post(() -> host.onSearchTasksSettled(generation), 100);
-            }
+            host.mSiteSearch.start(sites, keyword, auto, host::onSearchTasksSettled);
         }
 
         private boolean mismatch(Vod item) {
@@ -791,11 +587,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
             if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
             return !host.matchSourceTitle(item.getVodName(), host.getSourceSwitchKeyword());
-        }
-
-        private boolean isPass(Site item) {
-            if (host.isAutoMode() && !item.isChangeable()) return false;
-            return item.isSearchable();
         }
 
         private String getQuickKey(Vod item) {
@@ -812,15 +603,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private ArrayObjectAdapter mQuickAdapter;
     private ArrayObjectAdapter mFlagAdapter;
     private ArrayObjectAdapter mPartAdapter;
+    private ArrayObjectAdapter mRecommendAdapter;
     private QualityAdapter mQualityAdapter;
     private DanmakuContext mDanmakuContext;
     private ArrayPresenter mArrayPresenter;
     private FlagPresenter mFlagPresenter;
     private PartPresenter mPartPresenter;
     private CustomKeyDownVod mKeyDown;
-    private ExecutorService mExecutor;
-    private final Set<Future<?>> mSearchTasks = Collections.synchronizedSet(new HashSet<>());
-    private final KeyedLatestTask<History> mHistoryTasks = new KeyedLatestTask<>(ThreadPools.newSingle("video-history"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "History load failed."));
+    private SiteSearchSession mSiteSearch;
+    private final TaskScope mHistoryTasks = new TaskScope(ThreadPools.newSingle("video-history"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "History load failed."));
     private SiteViewModel mViewModel;
     private List<Danmaku> mDanmakus;
     private final Set<String> mBroken = new HashSet<>();
@@ -829,19 +620,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean background;
     private boolean fullscreen;
     private boolean initTrack;
-    private boolean initAuto;
-    private boolean autoMode;
     private boolean mDanmuVisible;
     private boolean useParse;
-    private volatile boolean mSearchActive;
-    private int mSearchGeneration;
-    private int mSearchPendingCount;
+    private int mRecommendGeneration;
     private final Set<String> mQuickKeys = new HashSet<>();
     private final PriorityQueue<Vod> mQuickQueue = new PriorityQueue<>(QUICK_RESULT_LIMIT + 1, this::compareQuickForQueue);
     private final Runnable mQuickFlush = this::flushQuickItems;
     private boolean mQuickFlushScheduled;
     private final ContentController mContent = new ContentController(this);
-    private final ErrorRecoveryController mErrorRecovery = new ErrorRecoveryController(this);
+    private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private final PlaybackNavigationController mPlaybackNavigation = new PlaybackNavigationController(this);
     private final PlaybackStateController mPlaybackState = new PlaybackStateController(this);
     private int groupSize;
@@ -858,6 +645,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private Runnable mR6;
     private Runnable mR7;
     private Runnable mR8;
+    private Runnable mRecommendRequest;
     private Call mPartCall;
     private Clock mClock;
     private View mFocus1;
@@ -871,7 +659,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long requestTokenSeed;
     private String pendingDetailToken;
     private final PlaybackRequest mPlaybackRequest = new PlaybackRequest();
-    private String pendingSearchToken;
     private int mEpisodeNumColumns;
     private int mEpisodeColumnWidth;
     private int mArraySize = -1;
@@ -882,7 +669,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean mProgressTrafficPolling;
     private float mSpeedBeforeLongPress = Float.NaN;
     private final SourceSwitchState mSourceSwitch = new SourceSwitchState();
-    private final FlagSwitchState mFlagSwitch = new FlagSwitchState();
     private final HistoryUpdate mHistoryUpdate = new HistoryUpdate();
     private CustomTarget<Drawable> mArtworkTarget;
 
@@ -946,7 +732,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         intent.putExtra("pic", pic);
         intent.putExtra("key", key);
         intent.putExtra("id", id);
-        activity.startActivityForResult(intent, 1000);
+        activity.startActivity(intent);
     }
 
     private boolean isCast() {
@@ -1093,6 +879,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     @SuppressLint("ClickableViewAccessibility")
     protected void initEvent() {
+        mBinding.widget.error.setOnClickListener(view -> retryPlayback());
         mBinding.control.seek.setListener(mPlayers);
         mBinding.desc.setOnClickListener(view -> onDesc());
         mBinding.keep.setOnClickListener(view -> onKeep());
@@ -1206,6 +993,23 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.quick.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quick.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quick.setAdapter(new ItemBridgeAdapter(mQuickAdapter = new ArrayObjectAdapter(new QuickPresenter(item -> mContent.setSearch(item)))));
+        mBinding.recommend.setHasFixedSize(true);
+        mBinding.recommend.setItemAnimator(null);
+        mBinding.recommend.setItemViewCacheSize(10);
+        mBinding.recommend.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.recommend.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        VodPresenter.OnClickListener recommendListener = new VodPresenter.OnClickListener() {
+            @Override
+            public void onItemClick(Vod item) {
+                CollectActivity.start(VideoActivity.this, item.getVodName());
+            }
+
+            @Override
+            public boolean onLongClick(Vod item) {
+                return false;
+            }
+        };
+        mBinding.recommend.setAdapter(new ItemBridgeAdapter(mRecommendAdapter = new ArrayObjectAdapter(new VodPresenter(recommendListener))));
         mBinding.control.parse.setHasFixedSize(true);
         mBinding.control.parse.setItemAnimator(null);
         mBinding.control.parse.setItemViewCacheSize(10);
@@ -1282,6 +1086,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
+        mSiteSearch = new SiteSearchSession(mViewModel, "video-search", SOURCE_SEARCH_CONCURRENCY);
         mViewModel.result().observe(this, mContent::setDetail);
         mViewModel.player().observe(this, this::applyPlayerResult);
         mViewModel.search().observe(this, mContent::setSearch);
@@ -1322,7 +1127,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 HISTORY_LOAD_TIMEOUT_MS,
                 history -> App.post(() -> applyHistory(history, item, historyKey, detailToken)),
                 error -> HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
-                null,
                 null);
     }
 
@@ -1347,7 +1151,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void stopActivePlayback() {
-        clearPendingPlaybackRequest();
+        mPlaybackRequest.clear();
+        clearPendingHistoryUpdate();
         clearPlaybackTimeout();
         mPlaybackState.clear();
         stopProgressPolling();
@@ -1365,8 +1170,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (!TextUtils.equals(mBinding.widget.title.getText(), title)) mBinding.widget.title.setText(title);
         if (!TextUtils.equals(mBinding.display.title.getText(), title)) mBinding.display.title.setText(title);
         String token = nextRequestToken("play");
-        setPendingPlaybackRequest(getKey(), flag.getFlag(), episode.getUrl(), token);
-        schedulePlaybackTimeout(token);
+        mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
+        schedulePlaybackTimeout();
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         prepareHistoryUpdate(flag, episode, replay);
@@ -1420,18 +1225,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void clearDanmakuView() {
         mDanmakus = mPlayers.getDanmakus();
-        mBinding.danmaku.release();
+        mPlayers.resetDanmu();
         mBinding.danmaku.setVisibility(View.GONE);
         ++mDanmakuRequestId;
     }
 
     private void prepareDanmaku(Danmaku item) {
         final int requestId = ++mDanmakuRequestId;
-        syncDanmuVisible();
         if (!Setting.isDanmuLoad() || !mDanmuVisible) {
-            mBinding.danmaku.release();
-            mBinding.danmaku.setVisibility(View.GONE);
+            mPlayers.resetDanmu();
             showDanmu();
+            mBinding.danmaku.setVisibility(View.GONE);
             mPlayers.prepared();
             return;
         }
@@ -1439,16 +1243,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         if (!hasSource) {
-            mBinding.danmaku.release();
+            mPlayers.resetDanmu();
             return;
         }
-        mBinding.danmaku.release();
+        mPlayers.resetDanmu();
+        showDanmu();
         App.execute(() -> {
             try {
                 Parser parser = new Parser(item.getUrl());
                 App.post(() -> {
                     if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                    mBinding.danmaku.prepare(parser, mDanmakuContext);
+                    mPlayers.prepareDanmu(parser, mDanmakuContext);
                     showDanmu();
                     mPlayers.prepared();
                 });
@@ -1456,7 +1261,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 ThreadPools.log(e, "Danmaku prepare failed.");
                 App.post(() -> {
                     if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                    mBinding.danmaku.release();
+                    mPlayers.resetDanmu();
                     mBinding.danmaku.setVisibility(View.GONE);
                 });
             }
@@ -1464,7 +1269,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void refreshDanmaku() {
-        syncDanmuVisible();
+        mDanmuVisible = Setting.isDanmu();
+        setDanmuText();
         setDanmuViewSettings();
         prepareDanmaku(mPlayers.getDanmaku());
     }
@@ -1598,35 +1404,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mEpisodePresenter.getNumRows() != rowNum) mEpisodePresenter.setNumRows(rowNum);
     }
 
-    private void seamless(Flag flag) {
-        String episodeName = isSourceSwitching() ? mSourceSwitch.episode : (mHistory == null ? "" : mHistory.getVodRemarks());
-        Episode episode = isSourceSwitchSingleEpisode()
-                ? getDefaultSourceSwitchEpisode(flag)
-                : flag.find(episodeName, !TextUtils.isEmpty(episodeName));
-        setQualityVisible(episode != null && episode.isActivated() && mQualityAdapter.getItemCount() > 1);
-        if (episode == null) return;
-        if (episode.isActivated()) {
-            applySourceSwitchProgress(flag, episode);
-            clearSourceSwitch();
-            hidePreview();
-            onRefresh();
-            return;
-        }
-        if (Setting.getFlag() == 1) {
-            if (isSourceSwitching()) setSourceSwitchTarget(flag, episode);
-            else setFlagSwitchTarget(flag, episode);
-            episode.setActivated(true);
-            mSelectedEpisodePosition = Math.max(0, flag.getEpisodes().indexOf(episode));
-            if (!isFullscreen()) getEpisodeView().requestFocus();
-            setEpisodeSelectedPosition(mSelectedEpisodePosition);
-            episode.setActivated(false);
-        } else {
-            applySwitchProgress(flag, episode);
-            if (mHistory != null) mHistory.setVodRemarks(episode.getName());
-            mPlaybackNavigation.switchEpisode(episode);
-            hidePreview();
-            clearSourceSwitch();
-        }
+    private void playFlag(Flag flag) {
+        String name = isSourceSwitching() ? mSourceSwitch.episode : (mHistory == null ? "" : mHistory.getVodRemarks());
+        Episode episode = flag.find(name, !TextUtils.isEmpty(name));
+        if (episode == null) episode = flag.getEpisodes().get(0);
+        mPlaybackNavigation.switchEpisode(episode);
+        hidePreview();
     }
 
     public void setEpisodeActivated(Episode item) {
@@ -1676,13 +1459,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int findFocusDown(int index) {
-        List<Integer> orders = Arrays.asList(R.id.flag, R.id.quality, R.id.episodeHori, R.id.array, R.id.episodeVert, R.id.part, R.id.quick);
+        List<Integer> orders = Arrays.asList(R.id.flag, R.id.quality, R.id.episodeHori, R.id.array, R.id.episodeVert, R.id.part, R.id.quick, R.id.recommend);
         for (int i = 0; i < orders.size(); i++) if (i > index) if (isVisible(findViewById(orders.get(i)))) return orders.get(i);
         return 0;
     }
 
     private int findFocusUp(int index) {
-        List<Integer> orders = Arrays.asList(R.id.flag, R.id.quality, R.id.episodeHori, R.id.array, R.id.episodeVert, R.id.part, R.id.quick);
+        List<Integer> orders = Arrays.asList(R.id.flag, R.id.quality, R.id.episodeHori, R.id.array, R.id.episodeVert, R.id.part, R.id.quick, R.id.recommend);
         for (int i = orders.size() - 1; i >= 0; i--) if (i < index) if (isVisible(findViewById(orders.get(i)))) return orders.get(i);
         return 0;
     }
@@ -1774,12 +1557,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         Notify.show(mHistory.getRevPlayHint());
     }
 
-    private boolean shouldEnterFullscreen(Episode item) {
-        boolean enter = !isFullscreen() && item.isActivated();
-        if (enter) enterFullscreen();
-        return enter;
-    }
-
     private void enterFullscreen() {
         mFocus1 = getCurrentFocus();
         mBinding.video.requestFocus();
@@ -1823,7 +1600,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onChange() {
-        mContent.advanceSearch(true);
+        mContent.recoverSource();
     }
 
     private void onLoop() {
@@ -1833,7 +1610,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void onDanmu() {
         Setting.putDanmu(!Setting.isDanmu());
         refreshDanmaku();
-        mPlayers.prepared();
     }
 
     private void syncDanmuVisible() {
@@ -1940,7 +1716,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void capturePlaybackPosition() {
-        long position = Math.max(mPlayers.getPosition(), 0);
+        long position = getCurrentSwitchPosition();
         mPlayers.setPosition(position);
         if (mHistory != null) mHistory.setPosition(position);
     }
@@ -2119,6 +1895,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setVisibilityIfChanged(mBinding.widget.error, View.VISIBLE);
         setPlainTextIfChanged(mBinding.widget.text, text);
         hideProgress();
+        App.post(() -> {
+            if (!isBackground() && isVisible(mBinding.widget.error)) mBinding.widget.error.requestFocus();
+        });
     }
 
     private void hideError() {
@@ -2199,7 +1978,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void hideControl(boolean hideInfo) {
-        cancelPendingSourceSwitchTarget();
         boolean infoChanged = hideInfo && isVisible(mBinding.widget.info);
         if (hideInfo) setVisibilityIfChanged(mBinding.widget.info, View.GONE);
         boolean changed = isVisible(mBinding.control.getRoot());
@@ -2344,6 +2122,26 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPartCall = null;
     }
 
+    private void loadRecommendations(Vod item) {
+        int generation = ++mRecommendGeneration;
+        App.removeCallbacks(mRecommendRequest);
+        mRecommendAdapter.clear();
+        setVisibilityIfChanged(mBinding.recommendGroup, View.GONE);
+        String title = item.getVodName(getName());
+        String year = item.getVodYear();
+        if (title.isEmpty()) return;
+        mRecommendRequest = () -> App.execute(() -> {
+            List<Vod> items = DoubanRecommendRepository.get(title, year);
+            App.post(() -> {
+                if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
+                mRecommendAdapter.setItems(items, null);
+                setVisibilityIfChanged(mBinding.recommendGroup, items.isEmpty() ? View.GONE : View.VISIBLE);
+                updateFocus();
+            });
+        });
+        App.post(mRecommendRequest, 1500);
+    }
+
     private void setPartAdapter(List<String> items) {
         mBinding.part.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
         mPartAdapter.setItems(items, null);
@@ -2358,12 +2156,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void prepareHistoryUpdate(Flag flag, Episode item, boolean replay) {
-        boolean hasProgressOverride = hasPendingProgressOverride(flag, item);
-        boolean sameEpisode = hasProgressOverride || isSameHistoryEpisode(item);
+        boolean continueSource = isSourceSwitching();
+        boolean sameEpisode = continueSource || isSameHistoryEpisode(item);
         replay = replay || !sameEpisode;
         mHistoryUpdate.flag = flag;
         mHistoryUpdate.episode = item;
-        mHistoryUpdate.position = hasProgressOverride ? mHistoryUpdate.progressPosition : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
+        mHistoryUpdate.position = continueSource ? mSourceSwitch.position : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
         mHistoryUpdate.skipOpening = replay;
         mPlayers.setPosition(Math.max(mHistory == null ? 0 : mHistory.getOpening(), mHistoryUpdate.position));
     }
@@ -2383,13 +2181,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void clearPendingHistoryUpdate() {
         mHistoryUpdate.clear();
-    }
-
-    private boolean hasPendingProgressOverride(Flag flag, Episode episode) {
-        return flag != null
-                && episode != null
-                && TextUtils.equals(mHistoryUpdate.progressFlag, flag.getFlag())
-                && TextUtils.equals(mHistoryUpdate.progressEpisodeKey, getSourceSwitchEpisodeKey(episode));
     }
 
     private boolean isSameHistoryEpisode(Episode item) {
@@ -2568,13 +2359,32 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         String episode = current == null ? title : current.getName();
         String artist = title.equals(episode) ? "" : getString(R.string.play_now, episode);
         String artwork = mHistory == null ? getPic() : mHistory.getVodPic();
-        mPlayers.setMetadata(title, artist, artwork, getDefaultArtwork());
+        mPlayers.setMetadata(title, artist, artwork);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
         if (isBackground()) return;
-        mErrorRecovery.onPlayerError(event);
+        switch (mRecovery.next(event, mPlayers, true)) {
+            case RETRY: retryPlayback(); break;
+            case TOGGLE_DECODE: onDecode(false); break;
+            case RELOAD_EXO:
+                capturePlaybackPosition();
+                mPlayers.recoverExo(event);
+                break;
+            case SWITCH_PLAYER: retryWithNextPlayer(); break;
+            case ADVANCE: stopWithError(event, true); break;
+            case STOP: stopWithError(event, false); break;
+        }
+    }
+
+    private void stopWithError(ErrorEvent event, boolean recover) {
+        TrackRepository.get().delete(getHistoryKey());
+        showError(event.getMsg());
+        markCurrentSourceBroken(event);
+        capturePlaybackPosition();
+        stopActivePlayback();
+        if (recover) continueRecoveryFlow();
     }
 
     private void retryWithNextPlayer() {
@@ -2582,6 +2392,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.nextPlayer();
         setPlayerView();
         setDecodeView();
+        retryPlayback();
+    }
+
+    private void retryPlayback() {
         onRefresh();
     }
 
@@ -2601,24 +2415,21 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean last = position == mParseAdapter.size() - 1;
         if (last) initParse();
         if (last) return advanceFlag();
-        mPlaybackNavigation.nextParse();
+        mPlaybackNavigation.switchParse((Parse) mParseAdapter.get(position + 1), true);
         return true;
     }
 
     private void initParse() {
         if (mParseAdapter.size() == 0) return;
         VodConfig.get().setParse((Parse) mParseAdapter.get(0));
+        mSelectedParsePosition = 0;
         notifyItemChanged(mBinding.control.parse, mParseAdapter);
     }
 
     private boolean advanceFlag() {
-        int position = getFlagPosition();
-        if (position == mFlagAdapter.size() - 1) {
-            mContent.advanceSearch(false);
-            return mSearchActive || mQuickAdapter.size() > 0 || isSourceSwitching();
-        }
-        mPlaybackNavigation.nextFlag();
-        return true;
+        if (mPlaybackNavigation.nextFlag()) return true;
+        mContent.recoverSource();
+        return mSiteSearch.isActive() || mQuickAdapter.size() > 0 || isSourceSwitching();
     }
 
     private void onPaused() {
@@ -2662,54 +2473,29 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         this.initTrack = initTrack;
     }
 
-    private boolean isInitAuto() {
-        return initAuto;
-    }
-
-    private void setInitAuto(boolean initAuto) {
-        this.initAuto = initAuto;
-    }
-
-    private boolean isAutoMode() {
-        return autoMode;
-    }
-
-    public void setAutoMode(boolean autoMode) {
-        this.autoMode = autoMode;
-    }
-
-    private boolean isManualSourceSearch() {
-        return mSourceSwitch.manual;
-    }
-
-    private void setManualSourceSearch(boolean manualSourceSearch) {
-        mSourceSwitch.manual = manualSourceSearch;
-    }
-
     private boolean isSourceSwitching() {
-        return mSourceSwitch.active;
+        return mSourceSwitch.phase != SourceSwitchState.Phase.IDLE;
     }
 
-    private boolean isSourceSwitchSingleEpisode() {
-        return mSourceSwitch.singleEpisode;
+    private boolean isSourceLoading() {
+        return mSourceSwitch.phase == SourceSwitchState.Phase.LOADING;
     }
 
-    private boolean isPendingSiteSwitch() {
-        return mSourceSwitch.pending;
+    private void startSourceLoading() {
+        if (!isSourceSwitching()) return;
+        mSourceSwitch.phase = SourceSwitchState.Phase.LOADING;
     }
 
-    private void setPendingSiteSwitch(boolean pendingSiteSwitch) {
-        mSourceSwitch.pending = pendingSiteSwitch;
+    private void resumeSourceSearch() {
+        if (!isSourceSwitching()) return;
+        mSourceSwitch.phase = SourceSwitchState.Phase.SEARCHING;
     }
 
     private void beginSourceSwitch() {
         if (isSourceSwitching()) return;
-        mSourceSwitch.active = true;
-        mBroken.clear();
-        mSourceSwitch.singleEpisode = isCurrentSingleEpisode();
+        mSourceSwitch.phase = SourceSwitchState.Phase.SEARCHING;
         mSourceSwitch.episode = getCurrentSwitchEpisode();
-        if (!isAutoMode() || TextUtils.isEmpty(mSourceSwitch.actor)) setSourceSearchActor(getCurrentSwitchActor());
-        setSourceSwitchTarget(null, null);
+        if (!mSiteSearch.isAutomatic() || TextUtils.isEmpty(mSourceSwitch.actor)) setSourceSearchActor(getCurrentSwitchActor());
         mSourceSwitch.position = getCurrentSwitchPosition();
     }
 
@@ -2722,19 +2508,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (!isSourceSwitching()) return;
         if (mQuickAdapter.size() > 0) {
             mPlaybackNavigation.nextSite();
-        } else if (!hasPendingSearchTasks()) {
+        } else if (!mSiteSearch.hasPending()) {
             clearSourceSwitch();
         }
     }
 
     private boolean canAdvancePendingSourceSwitch() {
-        return isSourceSwitching() && !isPendingSiteSwitch() && mQuickAdapter.size() > 0;
-    }
-
-    private String getCurrentSwitchFlag() {
-        if (mFlagAdapter != null && mFlagAdapter.size() > 0) return getFlag().getFlag();
-        if (mHistory != null) return mHistory.getVodFlag();
-        return "";
+        return isSourceSwitching() && !isSourceLoading() && mQuickAdapter.size() > 0;
     }
 
     private String getCurrentSwitchEpisode() {
@@ -2769,25 +2549,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistory.saveAsync();
     }
 
-    private boolean isCurrentSingleEpisode() {
-        return mEpisodeAdapter != null && mEpisodeAdapter.size() == 1;
-    }
-
     private String nextRequestToken(String prefix) {
         return prefix + ":" + (++requestTokenSeed);
     }
 
     private void setPendingDetailRequest(String token) {
         pendingDetailToken = token;
-    }
-
-    private void setPendingPlaybackRequest(String key, String flag, String id, String token) {
-        mPlaybackRequest.set(key, flag, id, token);
-    }
-
-    private void clearPendingPlaybackRequest() {
-        mPlaybackRequest.clear();
-        clearPendingHistoryUpdate();
     }
 
     private void scheduleSourceSwitchTimeout() {
@@ -2801,19 +2568,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onSourceSwitchTimeout() {
-        if (!isSourceSwitching() || !isPendingSiteSwitch()) return;
-        setPendingSiteSwitch(false);
+        if (!isSourceLoading()) return;
+        resumeSourceSearch();
         continueSourceSwitch();
     }
 
-    private void schedulePlaybackTimeout(String token) {
-        mPlaybackRequest.setTimeout(token);
+    private void schedulePlaybackTimeout() {
         App.removeCallbacks(mR7);
         App.post(mR7, Constant.TIMEOUT_PLAY);
     }
 
     private void clearPlaybackTimeout() {
-        mPlaybackRequest.clearTimeout();
         App.removeCallbacks(mR7);
     }
 
@@ -2824,25 +2589,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onPlaybackTimeout() {
-        if (!mPlaybackRequest.isCurrentTimeout() || isBackground()) return;
-        boolean recoverable = isSourceSwitching() || isAutoMode();
-        stopActivePlayback();
-        showError(getString(R.string.error_play_timeout));
-        if (recoverable) {
-            markCurrentSourceBroken();
-            continueRecoveryFlow();
-        }
-    }
-
-    private void setPendingSearchToken(String token) {
-        pendingSearchToken = token;
-    }
-
-    private synchronized boolean isSearchExecutionActive(int generation, String token) {
-        return mSearchActive
-                && generation == mSearchGeneration
-                && TextUtils.equals(token, pendingSearchToken)
-                && !Thread.currentThread().isInterrupted();
+        if (isBackground()) return;
+        ErrorEvent.timeout();
     }
 
     private boolean isCurrentDetailResult(Result result) {
@@ -2853,11 +2601,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean isCurrentPlayerResult(Result result) {
-        return mPlaybackRequest.isCurrent(result);
-    }
-
-    private boolean isCurrentSearchResult(Result result) {
-        return result != null && TextUtils.equals(result.getRequestToken(), pendingSearchToken);
+        return mPlaybackRequest.matches(result);
     }
 
     private String getSourceSwitchKeyword() {
@@ -2865,55 +2609,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         return keyword.isEmpty() ? getCurrentSwitchKeyword() : keyword;
     }
 
-    private synchronized int beginSearchTaskState(int count) {
-        mSearchGeneration++;
-        mSearchPendingCount = Math.max(count, 0);
-        return mSearchGeneration;
-    }
-
-    private synchronized void resetSearchTaskState() {
-        mSearchGeneration++;
-        mSearchPendingCount = 0;
-    }
-
-    private synchronized boolean onSearchTaskFinished(int generation) {
-        if (generation != mSearchGeneration) return false;
-        if (mSearchPendingCount > 0) mSearchPendingCount--;
-        return mSearchPendingCount == 0;
-    }
-
-    private synchronized boolean hasPendingSearchTasks() {
-        return mSearchPendingCount > 0;
-    }
-
-    private void cancelSearchTasks() {
-        synchronized (mSearchTasks) {
-            for (Future<?> task : mSearchTasks) task.cancel(true);
-            mSearchTasks.clear();
-        }
-    }
-
-    private void pruneSearchTasks() {
-        synchronized (mSearchTasks) {
-            Iterator<Future<?>> iterator = mSearchTasks.iterator();
-            while (iterator.hasNext()) {
-                Future<?> task = iterator.next();
-                if (task.isDone() || task.isCancelled()) iterator.remove();
-            }
-        }
-    }
-
-    private void onSearchTasksSettled(int generation) {
-        if (generation != mSearchGeneration || isPendingSiteSwitch() || hasPendingSearchTasks()) return;
+    private void onSearchTasksSettled() {
+        if (isSourceLoading() || mSiteSearch.hasPending()) return;
         flushQuickItems();
-        if (isInitAuto() && mQuickAdapter.size() > 0) {
-            setInitAuto(false);
+        if (mSiteSearch.shouldSelectFirst() && mQuickAdapter.size() > 0) {
+            mSiteSearch.markSelected();
             mPlaybackNavigation.nextSite();
         } else if (isSourceSwitching() && mQuickAdapter.size() == 0) {
             clearSourceSwitch();
-        } else if (isManualSourceSearch()) {
+        } else if (!mSiteSearch.isAutomatic()) {
             boolean empty = mQuickAdapter.size() == 0;
-            setManualSourceSearch(false);
             mContent.stopSearch();
             if (empty) Notify.show(R.string.play_switch_empty);
         }
@@ -2924,10 +2629,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean matchSourceTitle(String title, String keyword) {
-        String source = Util.normalize(title);
-        String target = Util.normalize(keyword);
-        if (source.isEmpty() || target.isEmpty()) return false;
-        return source.equals(target) || source.contains(target) || target.contains(source) || Util.similarity(source, target) >= 0.7;
+        return SearchSorter.matchesTitle(title, keyword);
     }
 
     private void markCurrentSourceBroken() {
@@ -2965,7 +2667,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void mergeQuickItems(List<Vod> items, String token) {
-        if (!mSearchActive || !TextUtils.equals(token, pendingSearchToken)) return;
+        if (!mSiteSearch.isActive() || !TextUtils.equals(token, mSiteSearch.getToken())) return;
         String keyword = getSourceSwitchKeyword();
         boolean changed = false;
         for (Vod item : items) {
@@ -2980,13 +2682,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             }
         }
         if (changed) scheduleQuickFlush();
-        if (isInitAuto()) {
-            if (!hasPendingSearchTasks() || mQuickQueue.size() >= 10) {
+        if (mSiteSearch.shouldSelectFirst()) {
+            if (!mSiteSearch.hasPending() || mQuickQueue.size() >= 10) {
                 flushQuickItems();
-                setInitAuto(false);
+                mSiteSearch.markSelected();
                 mPlaybackNavigation.nextSite();
             }
-        } else if (isSourceSwitching() && !isPendingSiteSwitch() && !mQuickQueue.isEmpty()) {
+        } else if (isSourceSwitching() && !isSourceLoading() && !mQuickQueue.isEmpty()) {
             flushQuickItems();
             if (canAdvancePendingSourceSwitch()) mPlaybackNavigation.nextSite();
         }
@@ -3005,9 +2707,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void flushQuickItems() {
         App.removeCallbacks(mQuickFlush);
         mQuickFlushScheduled = false;
-        if (!mSearchActive) return;
+        if (!mSiteSearch.isActive()) return;
         List<Vod> items = new ArrayList<>(mQuickQueue);
-        items.sort((left, right) -> SearchSorter.compare(left, right, getSourceSwitchKeyword(), mSourceSwitch.actor));
+        items.sort(SearchSorter.comparator(getSourceSwitchKeyword(), mSourceSwitch.actor));
         mQuickAdapter.setItems(items, QUICK_DIFF);
         setVisibilityIfChanged(mBinding.quick, items.isEmpty() ? View.GONE : View.VISIBLE);
     }
@@ -3019,90 +2721,22 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private Flag findTargetFlag(List<Flag> flags) {
-        if (isPendingSiteSwitch()) {
+        if (isSourceLoading()) {
             for (Flag flag : flags) if (hasEpisode(flag)) return flag;
-            return flags.isEmpty() ? null : flags.get(0);
+            return firstPlayableFlag(flags);
         }
         String target = mHistory != null ? mHistory.getVodFlag() : null;
-        for (Flag flag : flags) {
-            if (flag.getFlag().equals(target)) return flag;
-        }
-        return flags.isEmpty() ? null : flags.get(0);
+        for (Flag flag : flags) if (!flag.getEpisodes().isEmpty() && flag.getFlag().equals(target)) return flag;
+        return firstPlayableFlag(flags);
+    }
+
+    private Flag firstPlayableFlag(List<Flag> flags) {
+        for (Flag flag : flags) if (!flag.getEpisodes().isEmpty()) return flag;
+        return null;
     }
 
     private boolean hasEpisode(Flag flag) {
-        if (mSourceSwitch.singleEpisode) return flag != null && !flag.getEpisodes().isEmpty();
-        if (flag != null && flag.getEpisodes().size() == 1) return false;
-        return flag != null && flag.find(mSourceSwitch.episode, !TextUtils.isEmpty(mSourceSwitch.episode)) != null;
-    }
-
-    private Episode getDefaultSourceSwitchEpisode(Flag flag) {
-        if (flag == null || flag.getEpisodes().isEmpty()) return null;
-        if (flag.getPosition() >= 0 && flag.getPosition() < flag.getEpisodes().size()) return flag.getEpisodes().get(flag.getPosition());
-        for (Episode episode : flag.getEpisodes()) if (episode.isActivated()) return episode;
-        return flag.getEpisodes().get(0);
-    }
-
-    private void setSourceSwitchTarget(Flag flag, Episode episode) {
-        mSourceSwitch.targetFlag = flag == null ? null : flag.getFlag();
-        mSourceSwitch.targetEpisodeKey = getSourceSwitchEpisodeKey(episode);
-    }
-
-    private void setFlagSwitchTarget(Flag flag, Episode episode) {
-        mFlagSwitch.targetFlag = flag == null ? null : flag.getFlag();
-        mFlagSwitch.targetEpisodeKey = getSourceSwitchEpisodeKey(episode);
-        mFlagSwitch.position = getCurrentSwitchPosition();
-    }
-
-    private void clearFlagSwitchTarget() {
-        mFlagSwitch.clear();
-    }
-
-    private boolean hasPendingSourceSwitchTarget() {
-        return isSourceSwitching() && !TextUtils.isEmpty(mSourceSwitch.targetEpisodeKey);
-    }
-
-    private void cancelPendingSourceSwitchTarget() {
-        if (hasPendingSourceSwitchTarget()) clearSourceSwitch();
-    }
-
-    private String getSourceSwitchEpisodeKey(Episode episode) {
-        if (episode == null) return null;
-        return TextUtils.isEmpty(episode.getUrl()) ? episode.getName() : episode.getUrl();
-    }
-
-    private boolean shouldApplySourceSwitchProgress(Flag flag, Episode episode) {
-        if (!isSourceSwitching() || flag == null || episode == null) return false;
-        if (TextUtils.isEmpty(mSourceSwitch.targetEpisodeKey)) return true;
-        return TextUtils.equals(mSourceSwitch.targetFlag, flag.getFlag()) && TextUtils.equals(mSourceSwitch.targetEpisodeKey, getSourceSwitchEpisodeKey(episode));
-    }
-
-    private boolean shouldApplyFlagSwitchProgress(Flag flag, Episode episode) {
-        if (isSourceSwitching() || flag == null || episode == null || TextUtils.isEmpty(mFlagSwitch.targetEpisodeKey)) return false;
-        return TextUtils.equals(mFlagSwitch.targetFlag, flag.getFlag()) && TextUtils.equals(mFlagSwitch.targetEpisodeKey, getSourceSwitchEpisodeKey(episode));
-    }
-
-    private void applySwitchProgress(Flag flag, Episode episode) {
-        if (isSourceSwitching()) applySourceSwitchProgress(flag, episode);
-        else applyFlagSwitchProgress(flag, episode);
-    }
-
-    private void applySourceSwitchProgress(Flag flag, Episode episode) {
-        if (!isSourceSwitching() || episode == null) return;
-        setPendingProgressOverride(flag, episode, mSourceSwitch.position);
-    }
-
-    private void applyFlagSwitchProgress(Flag flag, Episode episode) {
-        if (flag == null || episode == null) return;
-        long position = getCurrentSwitchPosition();
-        if (position <= 0) position = mFlagSwitch.position;
-        setPendingProgressOverride(flag, episode, position);
-    }
-
-    private void setPendingProgressOverride(Flag flag, Episode episode, long position) {
-        mHistoryUpdate.progressFlag = flag == null ? null : flag.getFlag();
-        mHistoryUpdate.progressEpisodeKey = getSourceSwitchEpisodeKey(episode);
-        mHistoryUpdate.progressPosition = Math.max(position, 0);
+        return flag != null && (flag.getEpisodes().size() == 1 || flag.find(mSourceSwitch.episode, !TextUtils.isEmpty(mSourceSwitch.episode)) != null);
     }
 
     public boolean isUseParse() {
@@ -3223,14 +2857,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     @Override
-    public void onKeyUp() {
-        long current = mPlayers.getPosition();
-        long half = mPlayers.getDuration() / 2;
-        showInfo();
-        showControl(current < half ? mBinding.control.opening : mBinding.control.ending);
-    }
-
-    @Override
     public void onKeyDown() {
         showInfo();
         showControl(getFocus2());
@@ -3275,10 +2901,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK) return;
         switch (requestCode) {
-            case 1000:
-                setResult(RESULT_OK);
-                finish();
-                break;
             case 1001:
                 mPlayers.checkData(data);
                 break;
@@ -3340,6 +2962,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     protected void onDestroy() {
+        mRecommendGeneration++;
+        App.removeCallbacks(mRecommendRequest);
         mKeyDown.release();
         saveHistoryNow();
         mHistoryTasks.close();

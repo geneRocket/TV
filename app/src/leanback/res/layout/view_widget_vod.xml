@@ -74,6 +74,9 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:background="@drawable/shape_widget"
+        android:clickable="true"
+        android:contentDescription="@string/play_retry"
+        android:focusable="true"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="16dp"
@@ -98,6 +101,14 @@
             android:textColor="@color/white"
             android:textSize="16sp"
             tools:text="@string/error_play_url" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/play_retry"
+            android:textColor="@color/grey_500"
+            android:textSize="14sp" />
 
     </LinearLayout>
 

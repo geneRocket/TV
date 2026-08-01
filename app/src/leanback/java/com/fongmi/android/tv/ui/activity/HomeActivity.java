@@ -118,16 +118,21 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     protected void initView() {
-        StableDLNARendererService.start(this, R.drawable.ic_logo);
         mClock = Clock.create(mBinding.clock).format("MM/dd HH:mm:ss");
-        Updater.get().release().start(this);
-        Tbs.init();
         setTitleView();
         setRecyclerView();
         setViewModel();
         setHomeType();
         setPager();
         initConfig();
+        App.post(this::startOptionalServices, 1000);
+    }
+
+    private void startOptionalServices() {
+        if (isFinishing() || isDestroyed()) return;
+        StableDLNARendererService.start(this, R.drawable.ic_logo);
+        Updater.get().release().start(this);
+        Tbs.init();
     }
 
     @Override
@@ -251,11 +256,8 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     public void setTypes(Result result) {
-        // A refresh can fail after a usable home page has already been rendered. Keep that
-        // content and focus on screen; the full-page retry state is only for an empty home.
+        // A refresh failure must not replace usable home content or steal its focus.
         if (result.isRequestFailed() && hasHomeContent()) {
-            HomeFragment fragment = getHomeFragmentSafe();
-            if (fragment != null) fragment.setHomeLoadFailed(false);
             showHomeContent();
             Notify.show(R.string.vod_load_failed);
             App.post(() -> setFocus(), 200);
@@ -289,7 +291,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         HomeFragment fragment = getHomeFragmentSafe();
         if (fragment != null) {
             fragment.addVideo(result);
-            fragment.setHomeLoadFailed(result.isRequestFailed());
         }
         showHomeContent();
     }
@@ -385,16 +386,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private void showHomeProgress() {
         HomeFragment fragment = getHomeFragmentSafe();
         if (fragment == null || !fragment.inited || fragment.mBinding == null) return;
-        fragment.setHomeLoadFailed(false);
         fragment.mBinding.progressLayout.showProgress();
-    }
-
-    private void showHomeConfigLoadFailed() {
-        HomeFragment fragment = getHomeFragmentSafe();
-        if (fragment == null) return;
-        // HomeFragment stores this state until its view is ready, so a fast startup failure
-        // still exposes the retry action instead of leaving a blank page with only a toast.
-        fragment.setHomeLoadFailed(true, R.string.config_load_failed, this::initConfig);
     }
 
     private void showHomeContent() {
@@ -477,27 +469,20 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     public void initConfig() {
         if (isLoading()) return;
-        showHomeProgress();
         setLoading(true);
         App.execute(() -> {
             try {
-                List<Config> liveConfigs = getStartupConfigs(1);
                 List<Config> vodConfigs = getStartupConfigs(0);
                 if (isFinishing() || isDestroyed()) return;
-                if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(""), true);
-                else VodConfig.load(vodConfigs, getCallback(""), true, true);
-                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), getLiveCallback(), true);
-                else LiveConfig.load(liveConfigs, getLiveCallback(), true);
+                if (vodConfigs.size() == 1) VodConfig.loadCached(vodConfigs.get(0), getCallback("", true));
+                else VodConfig.loadCachedWithLive(vodConfigs, getCallback("", true));
             } catch (Throwable e) {
                 App.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     showHomeContent();
-                    App.post(() -> {
-                        if (!isFinishing() && !isDestroyed()) showHomeContent();
-                    }, 1000);
-                    showHomeConfigLoadFailed();
                     setLoading(false);
                     Notify.show(Notify.getError(R.string.error_config_parse, e));
+                    loadStartupLive();
                 });
             }
         });
@@ -505,6 +490,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private Callback getLiveCallback() {
         return new Callback() {
+            @Override
+            public void success() {
+                if (!isFinishing() && !isDestroyed()) RefreshEvent.config();
+            }
+
             @Override
             public void error(String msg) {
                 Notify.show(msg);
@@ -522,7 +512,13 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private Callback getCallback(String success) {
+        return getCallback(success, false);
+    }
+
+    private Callback getCallback(String success, boolean startup) {
         return new Callback() {
+            private boolean liveStarted;
+
             @Override
             public void success(String result) {
                 if (isFinishing() || isDestroyed()) return;
@@ -538,6 +534,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 RefreshEvent.history();
                 setLogo();
                 if (!TextUtils.isEmpty(success)) Notify.show(success);
+                if (startup) loadStartupLiveOnce();
             }
 
             @Override
@@ -547,15 +544,24 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                     return;
                 }
                 showHomeContent();
-                App.post(() -> {
-                    if (!isFinishing() && !isDestroyed()) showHomeContent();
-                }, 1000);
                 mResult = Result.empty();
-                showHomeConfigLoadFailed();
                 Notify.show(msg);
                 setLoading(false);
+                if (startup) loadStartupLiveOnce();
+            }
+
+            private void loadStartupLiveOnce() {
+                if (liveStarted) return;
+                liveStarted = true;
+                loadStartupLive();
             }
         };
+    }
+
+    private void loadStartupLive() {
+        List<Config> configs = getStartupConfigs(1);
+        if (configs.size() == 1) LiveConfig.loadCached(configs.get(0), getLiveCallback());
+        else LiveConfig.loadCached(configs, getLiveCallback());
     }
 
     private void load(Config config, String success) {
@@ -564,7 +570,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 showHomeProgress();
                 Setting.putVodConfigDesc(config.getDesc());
                 Setting.putVodConfigUrls(config.getUrl());
-                VodConfig.load(config, getCallback(success), true);
+                VodConfig.loadCached(config, getCallback(success));
                 break;
         }
     }
@@ -576,7 +582,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 showHomeProgress();
                 Setting.putVodConfigDesc(getConfigsDesc(configs));
                 Setting.putVodConfigUrls(getConfigsUrls(configs));
-                VodConfig.load(configs, getCallback(success), false, true);
+                VodConfig.loadCached(configs, getCallback(success));
                 break;
         }
     }

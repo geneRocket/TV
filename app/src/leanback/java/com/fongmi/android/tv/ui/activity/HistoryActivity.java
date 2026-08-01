@@ -30,7 +30,6 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     private HistoryAdapter mAdapter;
     private int mHistoryRequestId;
-    private int mOpenRequestId;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, HistoryActivity.class));
@@ -106,12 +105,11 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemClick(History item) {
-        mOpenRequestId++;
         if (VodConfig.get().hasSite(item.getSiteKey())) {
             VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
-            return;
+        } else {
+            CollectActivity.start(this, item.getVodName());
         }
-        CollectActivity.start(this, item.getVodName());
     }
 
     @Override

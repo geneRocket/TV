@@ -31,7 +31,6 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
-import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
@@ -41,6 +40,7 @@ import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
+import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
@@ -49,11 +49,13 @@ import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
+import com.fongmi.android.tv.repository.DoubanRecommendRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.repository.TrackRepository;
@@ -67,11 +69,14 @@ import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.event.PlayerEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.utils.Downloader;
 import com.fongmi.android.tv.player.exo.ExoUtil;
+import com.fongmi.android.tv.player.PlaybackRequest;
+import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.player.danmu.Parser;
@@ -82,6 +87,7 @@ import com.fongmi.android.tv.ui.adapter.FlagAdapter;
 import com.fongmi.android.tv.ui.adapter.ParseAdapter;
 import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.adapter.QuickAdapter;
+import com.fongmi.android.tv.ui.adapter.VodAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
@@ -99,7 +105,7 @@ import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.IDMUtil;
 import com.fongmi.android.tv.utils.ImgUtil;
-import com.fongmi.android.tv.utils.LatestTask;
+import com.fongmi.android.tv.utils.TaskScope;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PiP;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -129,7 +135,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
 import java.util.regex.Matcher;
 
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
@@ -153,10 +158,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private ControlDialog mControlDialog;
     private QuickAdapter mQuickAdapter;
     private ParseAdapter mParseAdapter;
+    private VodAdapter mRecommendAdapter;
     private CustomKeyDownVod mKeyDown;
     private Downloader mDownloader;
-    private ExecutorService mExecutor;
-    private LatestTask<History> mHistoryRequests;
+    private SiteSearchSession mSiteSearch;
+    private TaskScope mHistoryRequests;
     private SiteViewModel mViewModel;
     private FlagAdapter mFlagAdapter;
     private List<Dialog> mDialogs;
@@ -168,28 +174,19 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private boolean foreground;
     private boolean fullscreen;
     private boolean initTrack;
-    private boolean initAuto;
-    private boolean autoMode;
     private boolean useParse;
     private boolean redirect;
     private boolean rotate;
     private boolean stop;
     private boolean lock;
-    private boolean mSearchActive;
     private int mDanmakuRequestId;
-    private int mSearchGeneration;
-    private int mSearchPendingCount;
-    private int toggleCount;
-    private int errorCount;
+    private int mRecommendGeneration;
+    private Runnable mRecommendRequest;
+    private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private long mLastHistorySaveAt;
     private long requestTokenSeed;
     private String pendingDetailToken;
-    private String pendingPlaybackKey;
-    private String pendingPlaybackFlag;
-    private String pendingPlaybackId;
-    private String pendingPlaybackToken;
-    private String pendingPlaybackTimeoutToken;
-    private String pendingSearchToken;
+    private final PlaybackRequest mPlaybackRequest = new PlaybackRequest();
     private final Object mHistoryLock = new Object();
     private History mPreloadedHistory;
     private String mPreloadedHistoryKey;
@@ -379,7 +376,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
             @Override public void remove(Runnable task) { App.removeCallbacks(task); }
         };
-        mHistoryRequests = new LatestTask<>(ThreadPools.newSingle("video-history"), scheduler, error -> ThreadPools.log(error, "Video history request failed."));
+        mHistoryRequests = new TaskScope(ThreadPools.newSingle("video-history"), scheduler, error -> ThreadPools.log(error, "Video history request failed."));
         mDialogs = new ArrayList<>();
         mBroken = new HashSet<>();
         mClock = Clock.create(Arrays.asList(mBinding.display.clock, mBinding.control.time));
@@ -403,6 +400,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     @SuppressLint("ClickableViewAccessibility")
     protected void initEvent() {
+        mBinding.widget.error.setOnClickListener(view -> retryPlayback());
         mBinding.name.setOnClickListener(view -> onName());
         mBinding.more.setOnClickListener(view -> onMore());
         mBinding.actor.setOnClickListener(view -> onActor());
@@ -467,6 +465,21 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.parse.setItemAnimator(null);
         mBinding.control.parse.addItemDecoration(new SpaceItemDecoration(8));
         mBinding.control.parse.setAdapter(mParseAdapter = new ParseAdapter(this, ViewType.DARK));
+        mBinding.recommend.setHasFixedSize(true);
+        mBinding.recommend.setItemAnimator(null);
+        mBinding.recommend.addItemDecoration(new SpaceItemDecoration(8));
+        VodAdapter.OnClickListener recommendListener = new VodAdapter.OnClickListener() {
+            @Override
+            public void onItemClick(Vod item) {
+                CollectActivity.start(VideoActivity.this, item.getVodName());
+            }
+
+            @Override
+            public boolean onLongClick(Vod item) {
+                return false;
+            }
+        };
+        mBinding.recommend.setAdapter(mRecommendAdapter = new VodAdapter(recommendListener, Style.rect(), Product.getSpec(this)));
     }
 
     private void setPlayerView() {
@@ -490,7 +503,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.init(getExo(), getIjk());
         ExoUtil.setSubtitleView(mBinding.exo);
         IjkUtil.setSubtitleView(mBinding.ijk);
-        if (isPort() && ResUtil.isLand(this)) enterFullscreen();
         mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
         mBinding.video.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> mPiP.update(getActivity(), view));
     }
@@ -538,6 +550,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
+        mSiteSearch = new SiteSearchSession(mViewModel, "video-search", Math.min(6, ThreadPools.searchConcurrency()));
         mViewModel.result().observe(this, mObserveDetail);
         mViewModel.player().observe(this, mObservePlayer);
         mViewModel.search().observe(this, mObserveSearch);
@@ -560,11 +573,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void getDetail() {
-        clearPendingPlaybackRequest();
+        mPlaybackRequest.clear();
         clearPlaybackTimeout();
         String token = nextRequestToken("detail");
         setPendingDetailRequest(token);
-        mViewModel.detailContentFast(getKey(), getId(), token);
+        mViewModel.detailContent(getKey(), getId(), token);
         requestHistory(getHistoryKey());
     }
 
@@ -624,6 +637,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mFlagAdapter.addAll(item.getVodFlags());
         setOther(mBinding.other, item);
         setArtwork(item.getVodPic());
+        loadRecommendations(item);
         App.removeCallbacks(mR4);
         checkHistory(item);
     }
@@ -682,8 +696,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
         mBinding.display.title.setText(mBinding.control.title.getText());
         String token = nextRequestToken("play");
-        setPendingPlaybackRequest(getKey(), flag.getFlag(), episode.getUrl(), token);
-        schedulePlaybackTimeout(token);
+        mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
+        schedulePlaybackTimeout();
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         updateHistory(episode, replay);
@@ -698,13 +712,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void setPlayer(Result result) {
         if (!isCurrentPlayerResult(result)) return;
         clearPlaybackTimeout();
-        String token = pendingPlaybackToken;
+        String token = mPlaybackRequest.getToken();
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.setParseVisible(isUseParse());
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);
         mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
-        if (!TextUtils.equals(token, pendingPlaybackToken)) return;
+        if (!TextUtils.equals(token, mPlaybackRequest.getToken())) return;
         setQualityVisible(result.getUrl().isMulti());
         mBinding.swipeLayout.setRefreshing(false);
         setDanmakus(result.getDanmakus());
@@ -743,7 +757,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void clearDanmakuView() {
         mDanmakus = mPlayers.getDanmakus();
-        mBinding.danmaku.release();
+        mPlayers.resetDanmu();
         mBinding.danmaku.setVisibility(View.GONE);
         ++mDanmakuRequestId;
     }
@@ -760,7 +774,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         final int requestId = ++mDanmakuRequestId;
         boolean blocked = !Setting.isDanmuLoad() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode());
         if (blocked) {
-            mBinding.danmaku.release();
+            mPlayers.resetDanmu();
             mBinding.danmaku.setVisibility(View.GONE);
             showDanmu();
             mPlayers.prepared();
@@ -769,16 +783,16 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         boolean hasSource = item != null && !item.isEmpty();
         mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         if (!hasSource) {
-            mBinding.danmaku.release();
+            mPlayers.resetDanmu();
             return;
         }
-        mBinding.danmaku.release();
+        mPlayers.resetDanmu();
         App.execute(() -> {
             try {
                 Parser parser = new Parser(item.getUrl());
                 App.post(() -> {
                     if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                    mBinding.danmaku.prepare(parser, mDanmakuContext);
+                    mPlayers.prepareDanmu(parser, mDanmakuContext);
                     showDanmu();
                     mPlayers.prepared();
                 });
@@ -786,7 +800,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 ThreadPools.log(e, "Danmaku prepare failed.");
                 App.post(() -> {
                     if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
-                    mBinding.danmaku.release();
+                    mPlayers.resetDanmu();
                     mBinding.danmaku.setVisibility(View.GONE);
                 });
             }
@@ -795,18 +809,31 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onItemClick(Flag item) {
-        if (item == null || item.isActivated()) return;
+        switchFlag(item);
+    }
+
+    private boolean selectFlag(Flag item) {
+        if (item == null || item.isActivated()) return false;
         mFlagAdapter.setActivated(item);
         mBinding.flag.scrollToPosition(mFlagAdapter.getPosition());
         setEpisodeAdapter(item.getEpisodes());
         setQualityVisible(false);
-        seamless(item);
+        return true;
+    }
+
+    private void switchFlag(Flag item) {
+        capturePlaybackPosition();
+        if (!selectFlag(item)) return;
+        String name = mHistory == null ? "" : mHistory.getVodRemarks();
+        Episode episode = item.find(name, !TextUtils.isEmpty(name));
+        if (episode == null) episode = item.getEpisodes().get(0);
+        onItemClick(episode);
+        hidePreview();
     }
 
     @Override
     public void onItemClick(Episode item) {
         if (item == null) return;
-        if (shouldEnterFullscreen(item)) return;
         int oldPosition = mEpisodeAdapter.getPosition();
         mFlagAdapter.toggle(item);
         int newPosition = mEpisodeAdapter.getPosition();
@@ -835,7 +862,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onItemClick(Vod item) {
-        setAutoMode(false);
+        mSiteSearch.setManual();
         getDetail(item);
     }
 
@@ -867,24 +894,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.reverse.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
         mBinding.more.setVisibility(items.size() < 3 ? View.GONE : View.VISIBLE);
         mEpisodeAdapter.addAll(items);
-    }
-
-    private void seamless(Flag flag) {
-        if (flag == null || flag.getEpisodes().isEmpty()) {
-            setEpisodeAdapter(new ArrayList<>());
-            return;
-        }
-        Episode episode = flag.find(mHistory == null ? "" : mHistory.getVodRemarks(), getMark().isEmpty());
-        setQualityVisible(episode != null && episode.isActivated() && mQualityAdapter.getItemCount() > 1);
-        if (episode == null || episode.isActivated()) return;
-        if (Setting.getFlag() == 1) {
-            episode.setSelected(true);
-            mBinding.episode.scrollToPosition(mEpisodeAdapter.getPosition(episode));
-        } else {
-            if (mHistory != null) mHistory.setVodRemarks(episode.getName());
-            onItemClick(episode);
-            hidePreview();
-        }
     }
 
     private void setQualityVisible(boolean visible) {
@@ -1200,12 +1209,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         else enterFullscreen();
     }
 
-    private boolean shouldEnterFullscreen(Episode item) {
-        boolean enter = !isFullscreen() && item.isActivated();
-        if (enter) enterFullscreen();
-        return enter;
-    }
-
     private void enterFullscreen() {
         if (isFullscreen()) return;
         App.post(() -> mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT)), 50);
@@ -1370,7 +1373,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (empty) {
             ErrorEvent.flag();
         } else {
-            onItemClick(mHistory.getFlag());
+            switchFlag(mHistory.getFlag());
             if (mHistory.isRevSort()) reverseEpisode(true);
         }
     }
@@ -1380,7 +1383,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             mPreloadedHistory = null;
             mPreloadedHistoryKey = null;
         }
-        mHistoryRequests.submit(() -> HistoryRepository.get().find(key), Constant.TIMEOUT_VOD, history -> {
+        mHistoryRequests.submit("history", () -> HistoryRepository.get().find(key), Constant.TIMEOUT_VOD, history -> {
             synchronized (mHistoryLock) {
                 mPreloadedHistory = history;
                 mPreloadedHistoryKey = key;
@@ -1401,7 +1404,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void checkHistory(Vod item) {
         String historyKey = getHistoryKey();
         History preloaded = takePreloadedHistory(historyKey);
-        mHistoryRequests.submit(() -> {
+        mHistoryRequests.submit("history", () -> {
             History history = HistoryRepository.get().prepare(preloaded == null ? HistoryRepository.get().find(historyKey) : preloaded, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark());
             if (Setting.isIncognito() && history.getKey().equals(historyKey)) HistoryRepository.get().delete(history);
             return history;
@@ -1587,10 +1590,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             case Player.STATE_READY:
                 clearPlaybackTimeout();
                 stopSearch();
+                mBroken.clear();
                 checkRotate();
                 setMetadata();
-                resetToggle();
-                resetError();
+                mRecovery.reset();
                 if (isBuffering()) showProgress();
                 else hideProgress();
                 mPlayers.reset();
@@ -1655,33 +1658,28 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         String episode = current == null ? title : current.getName();
         String artist = title.equals(episode) ? "" : getString(R.string.play_now, episode);
         String artwork = mHistory == null ? getPic() : mHistory.getVodPic();
-        mPlayers.setMetadata(title, artist, artwork, getDefaultArtwork());
+        mPlayers.setMetadata(title, artist, artwork);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
         if (isRedirect()) return;
-        if (addErrorCount() > 20) onErrorEnd(event);
-        else if (mPlayers.addRetry() > event.getRetry()) checkError(event);
-        else if (event.isDecode() && mPlayers.canToggleDecode()) onDecode(false);
-        else if (event.isExo() && mPlayers.isExo()) onExoCheck(event);
-        else onRefresh();
-    }
-
-    private void onExoCheck(ErrorEvent event) {
-        if (event.getCode() == PlaybackException.ERROR_CODE_IO_UNSPECIFIED || event.getCode() >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED && event.getCode() <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) mPlayers.setFormat(ExoUtil.getMimeType(event.getCode()));
-        capturePlaybackPosition();
-        mPlayers.setMediaSource();
-    }
-
-    private void checkError(ErrorEvent event) {
-        markBrokenCurrent(event);
-        if (event.isUrl() && event.getRetry() > 0 && getToggleCount() < 2 && mPlayers.getPlayer() != Players.SYS) {
-            toggleCount++;
-            nextPlayer();
-        } else {
-            resetToggle();
-            onError(event);
+        switch (mRecovery.next(event, mPlayers, true)) {
+            case RETRY: retryPlayback(); break;
+            case TOGGLE_DECODE: onDecode(false); break;
+            case RELOAD_EXO:
+                capturePlaybackPosition();
+                mPlayers.recoverExo(event);
+                break;
+            case SWITCH_PLAYER:
+                markBrokenCurrent(event);
+                nextPlayer();
+                break;
+            case ADVANCE:
+                markBrokenCurrent(event);
+                onError(event);
+                break;
+            case STOP: onErrorPlayer(event); break;
         }
     }
 
@@ -1696,18 +1694,18 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.nextPlayer();
         setPlayerView();
         setDecodeView();
-        onRefresh();
+        retryPlayback();
     }
 
-    private void onErrorEnd(ErrorEvent event) {
-        onErrorPlayer(event);
-        resetError();
+    private void retryPlayback() {
+        onRefresh();
     }
 
     private void onErrorPlayer(ErrorEvent event) {
         mBinding.swipeLayout.setEnabled(true);
         TrackRepository.get().delete(getHistoryKey());
         showError(event.getMsg());
+        capturePlaybackPosition();
         mClock.setCallback(null);
         mPlayers.reset();
         mPlayers.stop();
@@ -1751,65 +1749,36 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void checkSearch(boolean force) {
         if (mQuickAdapter.isEmpty()) initSearch(mBinding.name.getText().toString(), true);
-        else if (isAutoMode() || force) nextSite();
+        else if (mSiteSearch.isAutomatic() || force) nextSite();
     }
 
     private void initSearch(String keyword, boolean auto) {
         stopSearch();
-        setAutoMode(auto);
-        setInitAuto(auto);
-        startSearch(keyword);
-    }
-
-    private boolean isPass(Site item) {
-        if (isAutoMode() && !item.isChangeable()) return false;
-        return item.isSearchable();
-    }
-
-    private void startSearch(String keyword) {
         mQuickAdapter.clear();
         List<Site> sites = new ArrayList<>();
-        String token = nextRequestToken("search");
-        setPendingSearchToken(token);
-        mSearchActive = true;
         Set<String> keys = new HashSet<>();
-        for (Site item : VodConfig.get().getSites()) if (isPass(item) && keys.add(item.getKey())) sites.add(item);
-        mExecutor = ThreadPools.newFixedRejecting("video-search", Math.min(6, ThreadPools.searchConcurrency()), Math.max(1, sites.size()));
-        int generation = beginSearchTaskState(sites.size());
-        for (Site site : sites) mExecutor.execute(() -> search(site, keyword, token, generation));
-        if (sites.isEmpty()) showEmpty();
+        for (Site item : VodConfig.get().getSites()) {
+            if (!item.isSearchable() || auto && !item.isChangeable() || !keys.add(item.getKey())) continue;
+            sites.add(item);
+        }
+        mSiteSearch.start(sites, keyword, auto, this::onSearchTasksSettled);
     }
 
     private void stopSearch() {
-        if (!TextUtils.isEmpty(pendingSearchToken)) mViewModel.cancelSearch(pendingSearchToken);
-        if (mExecutor != null) mExecutor.shutdownNow();
-        mExecutor = null;
-        mSearchActive = false;
-        pendingSearchToken = null;
-        resetSearchTaskState();
-    }
-
-    private void search(Site site, String keyword, String token, int generation) {
-        try {
-            if (!isSearchExecutionActive(token, generation)) return;
-            mViewModel.searchContent(site, keyword, true, token);
-        } catch (Throwable ignored) {
-        } finally {
-            onSearchTaskFinished(generation);
-        }
+        if (mSiteSearch != null) mSiteSearch.cancel();
     }
 
     private void setSearch(Result result) {
-        if (!isCurrentSearchResult(result)) return;
-        if (!mSearchActive) return;
+        if (!mSiteSearch.accepts(result)) return;
         List<Vod> items = new ArrayList<>(result.getList());
         Iterator<Vod> iterator = items.iterator();
         while (iterator.hasNext()) if (mismatch(iterator.next())) iterator.remove();
         mBinding.quick.setVisibility(View.VISIBLE);
-        mQuickAdapter.addAll(items);
-        mQuickAdapter.sort((a, b) -> SearchSorter.compare(a, b, mBinding.name.getText().toString(), getCurrentActor()));
-        if (isInitAuto()) {
-            if (!hasPendingSearchTasks() || mQuickAdapter.getItemCount() >= 10) {
+        String keyword = mBinding.name.getText().toString();
+        for (Vod item : items) SearchSorter.prepare(item, keyword);
+        mQuickAdapter.addAllSorted(items, SearchSorter.comparator(keyword, getCurrentActor()));
+        if (mSiteSearch.shouldSelectFirst()) {
+            if (!mSiteSearch.hasPending() || mQuickAdapter.getItemCount() >= 10) {
                 nextSite();
             }
         }
@@ -1817,39 +1786,20 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         App.removeCallbacks(mR4);
     }
 
-    private synchronized boolean isSearchExecutionActive(String token, int generation) {
-        return mSearchActive && generation == mSearchGeneration && TextUtils.equals(token, pendingSearchToken) && !Thread.currentThread().isInterrupted();
-    }
-
-    private synchronized void onSearchTaskFinished(int generation) {
-        if (generation != mSearchGeneration) return;
-        if (mSearchPendingCount > 0) mSearchPendingCount--;
-        if (mSearchPendingCount == 0) App.post(() -> {
-            if (generation != mSearchGeneration || !mSearchActive) return;
-            if (isInitAuto() && !mQuickAdapter.isEmpty()) nextSite();
-            else if (mQuickAdapter.isEmpty() && (isInitAuto() || isAutoMode())) showEmpty();
-        });
-    }
-
-    private synchronized int beginSearchTaskState(int count) {
-        mSearchGeneration++;
-        mSearchPendingCount = Math.max(count, 0);
-        return mSearchGeneration;
-    }
-
-    private synchronized void resetSearchTaskState() {
-        mSearchGeneration++;
-        mSearchPendingCount = 0;
-    }
-
-    private synchronized boolean hasPendingSearchTasks() {
-        return mSearchPendingCount > 0;
+    private void onSearchTasksSettled() {
+        if (mSiteSearch.shouldSelectFirst() && !mQuickAdapter.isEmpty()) nextSite();
+        else if (mQuickAdapter.isEmpty() && mSiteSearch.isAutomatic()) showEmpty();
     }
 
     private boolean mismatch(Vod item) {
         if (item == null) return true;
         if (getKey().equals(item.getSiteKey()) && getId().equals(item.getVodId())) return true;
-        return mBroken.contains(getBrokenKey(item));
+        if (mBroken.contains(getBrokenKey(item))) return true;
+        return !matchSourceTitle(item.getVodName(), mBinding.name.getText().toString());
+    }
+
+    private boolean matchSourceTitle(String title, String keyword) {
+        return SearchSorter.matchesTitle(title, keyword);
     }
 
     private String getBrokenKey(Vod item) {
@@ -1875,18 +1825,18 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void nextFlag(int position) {
         Flag flag = mFlagAdapter.get(position + 1);
         Notify.show(getString(R.string.play_switch_flag, flag.getFlag()));
-        onItemClick(flag);
+        switchFlag(flag);
     }
 
     private void nextSite() {
         Vod item = mQuickAdapter.poll(mBroken, getKey(), getId());
         if (item == null) {
-            if (!mSearchActive || !hasPendingSearchTasks()) showEmpty();
+            if (!mSiteSearch.isActive() || !mSiteSearch.hasPending()) showEmpty();
             return;
         }
         Notify.show(getString(R.string.play_switch_site, item.getSiteName()));
         mBroken.add(getBrokenKey());
-        setInitAuto(false);
+        mSiteSearch.markSelected();
         getDetail(item);
     }
 
@@ -1919,40 +1869,18 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         pendingDetailToken = token;
     }
 
-    private void setPendingPlaybackRequest(String key, String flag, String id, String token) {
-        pendingPlaybackKey = key;
-        pendingPlaybackFlag = flag;
-        pendingPlaybackId = id;
-        pendingPlaybackToken = token;
-    }
-
-    private void clearPendingPlaybackRequest() {
-        pendingPlaybackKey = null;
-        pendingPlaybackFlag = null;
-        pendingPlaybackId = null;
-        pendingPlaybackToken = null;
-    }
-
-    private void schedulePlaybackTimeout(String token) {
-        pendingPlaybackTimeoutToken = token;
+    private void schedulePlaybackTimeout() {
         App.removeCallbacks(mR5);
         App.post(mR5, Constant.TIMEOUT_PLAY);
     }
 
     private void clearPlaybackTimeout() {
-        pendingPlaybackTimeoutToken = null;
         App.removeCallbacks(mR5);
     }
 
     private void onPlaybackTimeout() {
-        String token = pendingPlaybackTimeoutToken;
-        if (TextUtils.isEmpty(token) || !TextUtils.equals(token, pendingPlaybackToken) || !isForeground()) return;
-        pendingPlaybackTimeoutToken = null;
+        if (!isForeground()) return;
         ErrorEvent.timeout();
-    }
-
-    private void setPendingSearchToken(String token) {
-        pendingSearchToken = token;
     }
 
     private boolean isCurrentDetailResult(Result result) {
@@ -1963,15 +1891,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private boolean isCurrentPlayerResult(Result result) {
-        return result != null
-                && TextUtils.equals(result.getKey(), pendingPlaybackKey)
-                && TextUtils.equals(result.getRequestFlag(), pendingPlaybackFlag)
-                && TextUtils.equals(result.getRequestId(), pendingPlaybackId)
-                && TextUtils.equals(result.getRequestToken(), pendingPlaybackToken);
-    }
-
-    private boolean isCurrentSearchResult(Result result) {
-        return result != null && TextUtils.equals(result.getRequestToken(), pendingSearchToken);
+        return mPlaybackRequest.matches(result);
     }
 
     private boolean isFullscreen() {
@@ -1988,22 +1908,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void setInitTrack(boolean initTrack) {
         this.initTrack = initTrack;
-    }
-
-    private boolean isInitAuto() {
-        return initAuto;
-    }
-
-    private void setInitAuto(boolean initAuto) {
-        this.initAuto = initAuto;
-    }
-
-    private boolean isAutoMode() {
-        return autoMode;
-    }
-
-    private void setAutoMode(boolean autoMode) {
-        this.autoMode = autoMode;
     }
 
     public boolean isUseParse() {
@@ -2053,22 +1957,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     public void setLock(boolean lock) {
         this.lock = lock;
-    }
-
-    public int getToggleCount() {
-        return toggleCount;
-    }
-
-    public void resetToggle() {
-        this.toggleCount = 0;
-    }
-
-    public int addErrorCount() {
-        return ++errorCount;
-    }
-
-    public void resetError() {
-        this.errorCount = 0;
     }
 
     private void stopService() {
@@ -2300,6 +2188,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     protected void onDestroy() {
+        mRecommendGeneration++;
+        App.removeCallbacks(mRecommendRequest);
         saveHistoryNow();
         super.onDestroy();
         stopSearch();
@@ -2312,6 +2202,25 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Source.get().stop();
         RefreshEvent.history();
         App.removeCallbacks(mR1, mR2, mR3, mR4, mR5);
+    }
+
+    private void loadRecommendations(Vod item) {
+        int generation = ++mRecommendGeneration;
+        App.removeCallbacks(mRecommendRequest);
+        mRecommendAdapter.clear();
+        mBinding.recommendGroup.setVisibility(View.GONE);
+        String title = item.getVodName(getName());
+        String year = item.getVodYear();
+        if (title.isEmpty()) return;
+        mRecommendRequest = () -> App.execute(() -> {
+            List<Vod> items = DoubanRecommendRepository.get(title, year);
+            App.post(() -> {
+                if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
+                mRecommendAdapter.addAll(items);
+                mBinding.recommendGroup.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+            });
+        });
+        App.post(mRecommendRequest, 1500);
     }
 
     private void saveHistoryNow() {

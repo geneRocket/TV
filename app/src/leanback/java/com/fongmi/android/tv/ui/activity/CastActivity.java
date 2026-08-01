@@ -5,7 +5,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.graphics.drawable.Drawable;
 import android.os.IBinder;
 import android.text.TextUtils;
 import android.view.KeyEvent;
@@ -87,11 +86,6 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     private IjkVideoView getIjk() {
         return mBinding.ijk;
-    }
-
-    private Drawable getDefaultArtwork() {
-        if (mPlayers.isExo()) return getExo().getDefaultArtwork();
-        return getIjk().getDefaultArtwork();
     }
 
     @Override
@@ -380,7 +374,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void setMetadata() {
-        mPlayers.setMetadata(textOf(mBinding.widget.title), "", "", getDefaultArtwork());
+        mPlayers.setMetadata(textOf(mBinding.widget.title), "", "");
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

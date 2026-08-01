@@ -352,11 +352,11 @@ public class Action implements Process {
 
     private void initConfig() {
         List<Config> vodConfigs = getStartupConfigs(0);
-        if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
-        else VodConfig.load(vodConfigs, getCallback(), true, true);
+        if (vodConfigs.size() == 1) VodConfig.loadCached(vodConfigs.get(0), getCallback());
+        else VodConfig.loadCachedWithLive(vodConfigs, getCallback());
         List<Config> liveConfigs = getStartupConfigs(1);
-        if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback(), true);
-        else LiveConfig.load(liveConfigs, new Callback(), true);
+        if (liveConfigs.size() == 1) LiveConfig.loadCached(liveConfigs.get(0), new Callback());
+        else LiveConfig.loadCached(liveConfigs, new Callback());
     }
 
     private List<Config> getStartupConfigs(int type) {

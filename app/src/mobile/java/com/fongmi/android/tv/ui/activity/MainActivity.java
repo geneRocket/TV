@@ -113,17 +113,15 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         App.execute(() -> {
             try {
                 List<Config> vodConfigs = getStartupConfigs(0);
-                if (vodConfigs.size() == 1) VodConfig.load(vodConfigs.get(0), getCallback(), true);
-                else VodConfig.load(vodConfigs, getCallback(), true, true);
-                List<Config> liveConfigs = getStartupConfigs(1);
-                if (liveConfigs.size() == 1) LiveConfig.load(liveConfigs.get(0), new Callback(), true);
-                else LiveConfig.load(liveConfigs, new Callback(), true);
+                if (vodConfigs.size() == 1) VodConfig.loadCached(vodConfigs.get(0), getCallback());
+                else VodConfig.loadCachedWithLive(vodConfigs, getCallback());
             } catch (RuntimeException e) {
                 App.post(() -> {
                     loading = false;
                     if (isFinishing() || isDestroyed()) return;
                     StateEvent.empty();
                     Notify.show(Notify.getError(R.string.error_config_parse, e));
+                    loadStartupLive();
                 });
             }
         });
@@ -140,9 +138,12 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
     private Callback getCallback() {
         return new Callback() {
+            private boolean liveStarted;
+
             @Override
             public void success(String result) {
                 Notify.show(result);
+                success();
             }
 
             @Override
@@ -152,6 +153,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                 checkAction(getIntent());
                 RefreshEvent.config();
                 RefreshEvent.video();
+                loadStartupLive();
             }
 
             @Override
@@ -161,8 +163,27 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                 RefreshEvent.config();
                 StateEvent.empty();
                 Notify.show(msg);
+                loadStartupLive();
+            }
+
+            private void loadStartupLive() {
+                if (liveStarted) return;
+                liveStarted = true;
+                MainActivity.this.loadStartupLive();
             }
         };
+    }
+
+    private void loadStartupLive() {
+        List<Config> configs = getStartupConfigs(1);
+        Callback callback = new Callback() {
+            @Override
+            public void success() {
+                if (!isFinishing() && !isDestroyed()) setNavigation();
+            }
+        };
+        if (configs.size() == 1) LiveConfig.loadCached(configs.get(0), callback);
+        else LiveConfig.loadCached(configs, callback);
     }
 
     private void loadLive(String url) {

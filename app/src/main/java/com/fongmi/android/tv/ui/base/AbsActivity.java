@@ -2,7 +2,6 @@ package com.fongmi.android.tv.ui.base;
 
 import android.app.Activity;
 import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.View;
@@ -132,20 +131,6 @@ public abstract class AbsActivity extends AppCompatActivity {
             WALL_INDEX = -1;
             refreshWall();
         }
-    }
-
-    @Override
-    public Resources getResources() {
-        Resources resources = super.getResources();
-        if (isLeanback()) {
-            try {
-                Class<?> clazz = Class.forName("me.jessyan.autosize.AutoSizeCompat");
-                java.lang.reflect.Method method = clazz.getMethod("autoConvertDensityOfGlobal", Resources.class);
-                method.invoke(null, resources);
-            } catch (Exception ignored) {
-            }
-        }
-        return resources;
     }
 
     @Override

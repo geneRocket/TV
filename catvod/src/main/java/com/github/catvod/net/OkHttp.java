@@ -12,6 +12,7 @@ import com.github.catvod.net.interceptor.ResponseInterceptor;
 import java.net.ProxySelector;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
@@ -32,7 +33,9 @@ public class OkHttp {
     private static final int CACHE = 100 * 1024 * 1024;
 
     private OkDns dns;
-    private OkHttpClient client;
+    private volatile OkHttpClient client;
+    private final Map<Integer, OkHttpClient> timeoutClients = new ConcurrentHashMap<>();
+    private final Map<Integer, OkHttpClient> noRedirectClients = new ConcurrentHashMap<>();
     private OkAuthenticator authenticator;
     private AuthInterceptor authInterceptor;
     private RequestInterceptor requestInterceptor;
@@ -108,12 +111,12 @@ public class OkHttp {
         return get().client = getBuilder().build();
     }
 
-    public static OkHttpClient client(int timeout) {
-        return client().newBuilder().connectTimeout(timeout, TimeUnit.MILLISECONDS).readTimeout(timeout, TimeUnit.MILLISECONDS).writeTimeout(timeout, TimeUnit.MILLISECONDS).build();
+    public static synchronized OkHttpClient client(int timeout) {
+        return get().timeoutClients.computeIfAbsent(timeout, value -> timedBuilder(value).build());
     }
 
-    public static OkHttpClient noRedirect(int timeout) {
-        return client().newBuilder().connectTimeout(timeout, TimeUnit.MILLISECONDS).readTimeout(timeout, TimeUnit.MILLISECONDS).writeTimeout(timeout, TimeUnit.MILLISECONDS).followRedirects(false).followSslRedirects(false).build();
+    public static synchronized OkHttpClient noRedirect(int timeout) {
+        return get().noRedirectClients.computeIfAbsent(timeout, value -> timedBuilder(value).followRedirects(false).followSslRedirects(false).build());
     }
 
     public static OkHttpClient client(boolean redirect, int timeout) {
@@ -210,11 +213,13 @@ public class OkHttp {
         return builder;
     }
 
+    private static OkHttpClient.Builder timedBuilder(int timeout) {
+        return client().newBuilder().connectTimeout(timeout, TimeUnit.MILLISECONDS).readTimeout(timeout, TimeUnit.MILLISECONDS).writeTimeout(timeout, TimeUnit.MILLISECONDS);
+    }
+
     private void resetClient() {
-        OkHttpClient old = client;
         client = null;
-        if (old == null) return;
-        old.dispatcher().cancelAll();
-        old.connectionPool().evictAll();
+        timeoutClients.clear();
+        noRedirectClients.clear();
     }
 }

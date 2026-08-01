@@ -387,7 +387,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
                 Notify.progress(getActivity());
                 Setting.putVodConfigDesc(config.getDesc());
                 Setting.putVodConfigUrls(config.getUrl());
-                VodConfig.load(config, getCallback(success), true);
+                VodConfig.loadCached(config, getCallback(success));
                 break;
         }
     }
@@ -399,7 +399,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
                 Notify.progress(getActivity());
                 Setting.putVodConfigDesc(getConfigsDesc(configs));
                 Setting.putVodConfigUrls(getConfigsUrls(configs));
-                VodConfig.load(configs, getCallback(success), false, true);
+                VodConfig.loadCached(configs, getCallback(success));
                 break;
         }
     }

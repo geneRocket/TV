@@ -7,7 +7,7 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.utils.Util;
+import com.fongmi.android.tv.utils.EpisodeMatcher;
 import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
 
@@ -109,19 +109,10 @@ public class Flag implements Parcelable {
     }
 
     public Episode find(String remarks, boolean strict) {
-        int number = Util.getDigit(remarks);
-        if (getEpisodes().size() == 0) return null;
-        if (getEpisodes().size() == 1) {
-            Episode only = getEpisodes().get(0);
-            if (!strict || only.rule1(remarks) || only.rule2(number) || only.rule3(remarks) || only.rule4(remarks)) return only;
-            return null;
-        }
-        for (Episode item : getEpisodes()) if (item.rule1(remarks)) return item;
-        for (Episode item : getEpisodes()) if (item.rule2(number)) return item;
-        if (number == -1) for (Episode item : getEpisodes()) if (item.rule3(remarks)) return item;
-        if (number == -1) for (Episode item : getEpisodes()) if (item.rule4(remarks)) return item;
-        if (getPosition() != -1) return getEpisodes().get(getPosition());
-        return strict ? null : getEpisodes().get(0);
+        List<String> names = new ArrayList<>(getEpisodes().size());
+        for (Episode episode : getEpisodes()) names.add(episode.getName());
+        int index = EpisodeMatcher.find(names, remarks, strict, getPosition());
+        return index == -1 ? null : getEpisodes().get(index);
     }
 
     public static List<Flag> create(String flag, String name, String url) {

@@ -20,6 +20,7 @@
     <string name="detail_director">導演：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_actor">演員：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_content">簡介：<xliff:g name="name">%s</xliff:g></string>
+    <string name="detail_recommend">更多推薦</string>
     <string name="detail_desc">簡介</string>
 
     <!-- Keep -->
@@ -61,6 +62,7 @@
     <string name="play_switch_parse">正在切换解析至「<xliff:g name="name">%s</xliff:g>」</string>
     <string name="play_switch_flag">正在切換線路至「<xliff:g name="name">%s</xliff:g>」</string>
     <string name="play_switch_site">正在切換站源至「<xliff:g name="name">%s</xliff:g>」</string>
+    <string name="play_retry">重試播放</string>
 
     <!-- Parse -->
     <string name="parse">解析</string>
