@@ -560,9 +560,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void loadStartupLive() {
-        List<Config> configs = getStartupConfigs(1);
-        if (configs.size() == 1) LiveConfig.loadCached(configs.get(0), getLiveCallback());
-        else LiveConfig.loadCached(configs, getLiveCallback());
+        ThreadPools.config().execute(() -> {
+            List<Config> configs = getStartupConfigs(1);
+            if (configs.size() == 1) LiveConfig.loadCached(configs.get(0), getLiveCallback());
+            else LiveConfig.loadCached(configs, getLiveCallback());
+        });
     }
 
     private void load(Config config, String success) {

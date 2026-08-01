@@ -50,7 +50,12 @@ public class Server {
         return "http://" + (local ? "127.0.0.1" : Util.getIp()) + ":" + getPort();
     }
 
-    public void start() {
+    /**
+     * The application prewarms the server in the background while activities can
+     * request it later. Serialise those callers so a second starter cannot race
+     * the first one for the same port.
+     */
+    public synchronized void start() {
         if (nano != null) return;
         int maxAttempts = 20;
         int attempt = 0;
@@ -69,7 +74,7 @@ public class Server {
         }
     }
 
-    public void stop() {
+    public synchronized void stop() {
         if (nano != null) nano.stop();
         nano = null;
     }

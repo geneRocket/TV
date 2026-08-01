@@ -168,7 +168,9 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mR2 = this::setTraffic;
         mR3 = this::hideInfo;
         mR4 = this::hideUI;
-        Server.get().start();
+        // App prewarms the local proxy server. Keep this fallback off the UI
+        // thread so a port bind never delays the first live frame.
+        App.execute(() -> Server.get().start());
         setRecyclerView();
         setVideoView();
         setDisplayView();
