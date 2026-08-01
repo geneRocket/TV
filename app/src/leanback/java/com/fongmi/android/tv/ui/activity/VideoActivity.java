@@ -866,13 +866,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mR8 = this::onFlagSelected;
         setBackground(false);
         setRecyclerView();
+        setViewModel();
+        // Detail loading only needs the view model and result adapters. Start it
+        // before the remaining player and display setup so its I/O overlaps them.
+        checkId();
         setEpisodeView();
         setVideoView();
         setDisplayView();
         setDanmuView();
-        setViewModel();
         checkCast();
-        checkId();
     }
 
     @Override
