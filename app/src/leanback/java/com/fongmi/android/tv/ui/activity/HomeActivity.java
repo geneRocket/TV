@@ -533,7 +533,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 if (isFinishing() || isDestroyed()) return;
                 checkAction(getIntent());
                 RefreshEvent.video();
-                RefreshEvent.history();
                 setLogo();
                 if (!TextUtils.isEmpty(success)) Notify.show(success);
                 if (startup) loadStartupLiveOnce();
