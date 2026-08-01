@@ -536,6 +536,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         private void bindDetail(Vod item) {
+            String detailToken = host.pendingDetailToken;
             host.mBinding.progressLayout.showContent();
             host.mBinding.video.setTag(item.getVodPic(host.getPic()));
             host.mBinding.name.setText(item.getVodName(host.getName()));
@@ -549,15 +550,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 SpannableStringBuilder content = host.getSpan(R.string.detail_content, Util.fromHtml(item.getVodContent()).toString());
                 SpannableStringBuilder director = host.getSpan(R.string.detail_director, Util.fromHtml(item.getVodDirector()).toString());
                 App.post(() -> {
-                    if (host.isFinishing() || host.isDestroyed()) return;
+                    if (host.isFinishing() || host.isDestroyed() || !TextUtils.equals(detailToken, host.pendingDetailToken)) return;
                     host.setText(host.mBinding.actor, actor);
                     host.setText(host.mBinding.content, content);
                     host.setText(host.mBinding.director, director);
+                    host.mBinding.content.setMaxLines(host.getMaxLines());
                 });
             });
             if (!host.isSourceSwitching()) host.setSourceSearchActor(item.getVodActor());
             host.mFlagAdapter.setItems(item.getVodFlags(), null);
-            host.mBinding.content.setMaxLines(host.getMaxLines());
             if (!host.isSourceSwitching()) host.mBinding.video.requestFocus();
             host.setArtwork(item.getVodPic());
             host.getPart(item.getVodName());
