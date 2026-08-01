@@ -70,15 +70,12 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
         int position = holder.getBindingAdapterPosition();
         if (position == RecyclerView.NO_POSITION) return;
         int oldPosition = mResult.getUrl().getPosition();
+        if (oldPosition == position) return;
         this.position = position;
         mResult.getUrl().set(position);
         mListener.onItemClick(mResult);
-        if (oldPosition == position) {
-            if (position >= 0 && position < getItemCount()) notifyItemChanged(position);
-        } else {
-            if (oldPosition >= 0 && oldPosition < getItemCount()) notifyItemChanged(oldPosition);
-            if (position >= 0 && position < getItemCount()) notifyItemChanged(position);
-        }
+        if (oldPosition >= 0 && oldPosition < getItemCount()) notifyItemChanged(oldPosition);
+        if (position >= 0 && position < getItemCount()) notifyItemChanged(position);
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

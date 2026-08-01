@@ -263,6 +263,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void switchParse(Parse item, boolean notify) {
+            if (item.isActivated()) return;
             VodConfig.get().setParse(item);
             host.mSelectedParsePosition = Math.max(0, host.mParseAdapter.indexOf(item));
             host.notifyItemChanged(host.mBinding.control.parse, host.mParseAdapter);
@@ -277,7 +278,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public boolean nextFlag() {
-            int position = host.isGone(host.mBinding.flag) ? -1 : host.getFlagPosition();
+            int position = host.getFlagPosition();
             for (int i = position + 1; i < host.mFlagAdapter.size(); i++) {
                 Flag flag = (Flag) host.mFlagAdapter.get(i);
                 if (flag.getEpisodes().isEmpty()) continue;
@@ -474,7 +475,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         public void checkFlag(Vod item) {
             boolean empty = item.getVodFlags().isEmpty();
-            host.setVisibilityIfChanged(host.mBinding.flag, empty ? View.GONE : View.VISIBLE);
+            host.setVisibilityIfChanged(host.mBinding.flag, item.getVodFlags().size() > 1 ? View.VISIBLE : View.GONE);
             if (empty) {
                 if (host.isSourceLoading()) {
                     host.resumeSourceSearch();
@@ -1351,9 +1352,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (getEpisodeView().getVisibility() != visibility) getEpisodeView().setVisibility(visibility);
         if (isVisible(mBinding.episodeVert)) setEpisodeView(items);
         mEpisodeAdapter.setItems(items, null);
+        setEpisodeControlVisible(items.size() > 1);
         mSelectedEpisodePosition = findActivatedEpisodePosition(items);
         setArrayAdapter(items.size());
         setR2Callback(50);
+    }
+
+    private void setEpisodeControlVisible(boolean multiple) {
+        setVisibilityIfChanged(mBinding.control.next, multiple ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.control.prev, multiple ? View.VISIBLE : View.GONE);
+        boolean showEpisodes = multiple && Setting.getFullscreenMenuKey() == 0;
+        setVisibilityIfChanged(mBinding.control.episodes, showEpisodes ? View.VISIBLE : View.GONE);
     }
 
     private int findActivatedEpisodePosition(List<Episode> items) {
@@ -1658,6 +1667,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onEpisodes() {
+        if (mEpisodeAdapter.size() <= 1) return;
         EpisodeDialog.create().episodes(getFlag().getEpisodes()).show(this);
         hideControl();
     }
@@ -1967,7 +1977,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         syncDanmuVisible();
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         setVisibilityIfChanged(mBinding.control.getRoot(), View.VISIBLE);
-        setVisibilityIfChanged(mBinding.control.episodes, Setting.getFullscreenMenuKey() == 0 ? View.VISIBLE : View.GONE);
+        setEpisodeControlVisible(mEpisodeAdapter.size() > 1);
         view.requestFocus();
         setControlNextFocus();
         if (changed) showDisplayInfo();
@@ -2761,7 +2771,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private View getFocus2() {
-        return mFocus2 == null || mFocus2 == mBinding.control.opening || mFocus2 == mBinding.control.ending ? mBinding.control.next : mFocus2;
+        if (mFocus2 != null && mFocus2 != mBinding.control.opening && mFocus2 != mBinding.control.ending && isVisible(mFocus2) && mFocus2.isEnabled()) return mFocus2;
+        int count = mBinding.control.actionLayout.getChildCount();
+        for (int i = 0; i < count; i++) {
+            View view = mBinding.control.actionLayout.getChildAt(i);
+            if (view != null && isVisible(view) && view.isEnabled()) return view;
+        }
+        return mBinding.video;
     }
 
     @Override
