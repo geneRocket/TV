@@ -20,7 +20,6 @@ package tv.danmaku.ijk.media.player;
 
 import android.content.ContentResolver;
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.media.MediaPlayer;
 import android.media.TimedText;
 import android.net.Uri;
@@ -153,11 +152,6 @@ public class AndroidMediaPlayer extends AbstractMediaPlayer implements MediaPlay
     @Override
     public void seekTo(long msec) throws IllegalStateException {
         mMediaPlayer.seekTo((int) msec);
-    }
-
-    @Override
-    public boolean getCurrentFrame(Bitmap bitmap) {
-        return false;
     }
 
     @Override

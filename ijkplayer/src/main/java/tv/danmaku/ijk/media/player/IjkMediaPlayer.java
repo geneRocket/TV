@@ -165,7 +165,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private int mVideoSarNum;
     private int mVideoSarDen;
 
-    private static final IjkLibLoader LOADER = new IjkLibLoader("ijkffmpeg", "ijksdl", "player") {
+    private static final IjkLibLoader LOADER = new IjkLibLoader("ijkffmpeg", "ijksdl", "ijkplayer") {
         @Override
         protected void loadLibrary(@NonNull String name) {
             System.loadLibrary(name);
@@ -177,7 +177,6 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private static void initNativeOnce() {
         if (mIsNativeInitialized) return;
         native_init();
-        native_setDot(0);
         native_setLogLevel(IjkMediaPlayer.IJK_LOG_SILENT);
         mIsNativeInitialized = true;
     }
@@ -477,9 +476,6 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
     @Override
     public native void seekTo(long msec) throws IllegalStateException;
-
-    @Override
-    public native boolean getCurrentFrame(Bitmap bitmap);
 
     @Override
     public native long getCurrentPosition();
@@ -982,7 +978,4 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
     public static native void native_setLogLevel(int level);
 
-    public static native void native_setReqLevel(int level);
-
-    public static native void native_setDot(int port);
 }
