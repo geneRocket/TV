@@ -69,6 +69,7 @@ import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SiteCategoryUtil;
 import com.fongmi.android.tv.utils.Tbs;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.permissionx.guolindev.PermissionX;
 
@@ -471,7 +472,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     public void initConfig() {
         if (isLoading()) return;
         setLoading(true);
-        App.execute(() -> {
+        ThreadPools.config().execute(() -> {
             try {
                 List<Config> vodConfigs = getStartupConfigs(0);
                 if (isFinishing() || isDestroyed()) return;
