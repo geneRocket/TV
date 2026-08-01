@@ -1414,6 +1414,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     public void setEpisodeActivated(Episode item) {
+        if (item.isActivated()) {
+            if (!isFullscreen()) enterFullscreen();
+            return;
+        }
         mPlaybackNavigation.switchEpisode(item);
     }
 
@@ -1447,9 +1451,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean revSort = mHistory != null && mHistory.isRevSort();
         if (mArraySize == size && mArrayRevSort == revSort) return;
         List<String> items = new ArrayList<>();
-        setVisibilityIfChanged(mBinding.array, size > 1 ? View.VISIBLE : View.GONE);
         if (revSort) for (int i = size; i > 0; i -= getGroupSize()) items.add(i + "-" + Math.max(i - (getGroupSize() - 1), 1));
         else for (int i = 0; i < size; i += getGroupSize()) items.add((i + 1) + "-" + Math.min(i + getGroupSize(), size));
+        setVisibilityIfChanged(mBinding.array, items.size() > 1 ? View.VISIBLE : View.GONE);
         mArrayAdapter.setItems(items, null);
         mArraySize = size;
         mArrayRevSort = revSort;

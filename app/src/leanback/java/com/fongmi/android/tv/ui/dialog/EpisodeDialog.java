@@ -171,8 +171,8 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
         else if (size > 100) setGroupSize(40);
         else setGroupSize(20);
         List<String> items = new ArrayList<>();
-        this.binding.array.setVisibility(size > 1 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < size; i += getGroupSize()) items.add((i + 1) + "-" + Math.min(i + getGroupSize(), size));
+        this.binding.array.setVisibility(items.size() > 1 ? View.VISIBLE : View.GONE);
         mArrayAdapter.setItems(items, null);
     }
 
