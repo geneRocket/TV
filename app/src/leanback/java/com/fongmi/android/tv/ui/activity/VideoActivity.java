@@ -221,8 +221,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void switchFlag(Flag item, boolean notify) {
+            int episodePosition = host.getEpisodePosition();
             host.capturePlaybackPosition();
-            if (selectFlag(item, notify)) host.playFlag(item);
+            if (selectFlag(item, notify)) {
+                if (!host.isSourceSwitching()) host.mPendingFlagSwitchPosition = host.getCurrentSwitchPosition();
+                host.playFlag(item, episodePosition);
+            }
         }
 
         private boolean selectFlag(Flag item, boolean notify) {
@@ -639,6 +643,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long mLastSavedHistoryDuration = -1;
     private boolean mHistorySessionModified;
     private boolean mShouldSkipOpening;
+    private long mPendingFlagSwitchPosition = C.TIME_UNSET;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
@@ -1415,9 +1420,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mEpisodePresenter.getNumRows() != rowNum) mEpisodePresenter.setNumRows(rowNum);
     }
 
-    private void playFlag(Flag flag) {
+    private void playFlag(Flag flag, int episodePosition) {
         String name = isSourceSwitching() ? mSourceSwitch.episode : (mHistory == null ? "" : mHistory.getVodRemarks());
         Episode episode = flag.find(name, !TextUtils.isEmpty(name));
+        if (episode == null && episodePosition >= 0 && episodePosition < flag.getEpisodes().size()) episode = flag.getEpisodes().get(episodePosition);
         if (episode == null) episode = flag.getEpisodes().get(0);
         mPlaybackNavigation.switchEpisode(episode);
         hidePreview();
@@ -1730,7 +1736,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void capturePlaybackPosition() {
         long position = getCurrentSwitchPosition();
         mPlayers.setPosition(position);
-        if (mHistory != null) mHistory.setPosition(position);
+        if (mHistory != null) {
+            mHistory.setPosition(position);
+            saveHistorySnapshot();
+        }
     }
 
     private void saveHistoryNow() {
@@ -2169,11 +2178,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void prepareHistoryUpdate(Flag flag, Episode item, boolean replay) {
         boolean continueSource = isSourceSwitching();
-        boolean sameEpisode = continueSource || isSameHistoryEpisode(item);
+        long flagSwitchPosition = mPendingFlagSwitchPosition;
+        mPendingFlagSwitchPosition = C.TIME_UNSET;
+        boolean keepFlagSwitchPosition = flagSwitchPosition != C.TIME_UNSET;
+        boolean sameEpisode = continueSource || keepFlagSwitchPosition || isSameHistoryEpisode(item);
         replay = replay || !sameEpisode;
         mHistoryUpdate.flag = flag;
         mHistoryUpdate.episode = item;
-        mHistoryUpdate.position = continueSource ? mSourceSwitch.position : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
+        mHistoryUpdate.position = continueSource ? mSourceSwitch.position : keepFlagSwitchPosition ? flagSwitchPosition : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
         mHistoryUpdate.skipOpening = replay;
         mPlayers.setPosition(Math.max(mHistory == null ? 0 : mHistory.getOpening(), mHistoryUpdate.position));
     }

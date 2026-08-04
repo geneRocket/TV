@@ -184,6 +184,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private Runnable mRecommendRequest;
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private long mLastHistorySaveAt;
+    private long mPendingFlagSwitchPosition = C.TIME_UNSET;
     private long requestTokenSeed;
     private String pendingDetailToken;
     private final PlaybackRequest mPlaybackRequest = new PlaybackRequest();
@@ -822,11 +823,14 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void switchFlag(Flag item) {
+        int episodePosition = mEpisodeAdapter.getPosition();
         capturePlaybackPosition();
         if (!selectFlag(item)) return;
         String name = mHistory == null ? "" : mHistory.getVodRemarks();
         Episode episode = item.find(name, !TextUtils.isEmpty(name));
+        if (episode == null && episodePosition >= 0 && episodePosition < item.getEpisodes().size()) episode = item.getEpisodes().get(episodePosition);
         if (episode == null) episode = item.getEpisodes().get(0);
+        mPendingFlagSwitchPosition = mHistory == null ? C.TIME_UNSET : Math.max(mHistory.getPosition(), 0);
         onItemClick(episode);
         hidePreview();
     }
@@ -1430,8 +1434,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void updateHistory(Episode item, boolean replay) {
         if (mHistory == null || item == null || getFlag() == null) return;
-        replay = replay || !isSameHistoryEpisode(item);
-        long position = replay ? 0 : mHistory.getPosition();
+        long flagSwitchPosition = mPendingFlagSwitchPosition;
+        mPendingFlagSwitchPosition = C.TIME_UNSET;
+        boolean keepFlagSwitchPosition = flagSwitchPosition != C.TIME_UNSET;
+        replay = replay || !(keepFlagSwitchPosition || isSameHistoryEpisode(item));
+        long position = keepFlagSwitchPosition ? flagSwitchPosition : replay ? 0 : mHistory.getPosition();
         mHistory.setPosition(position);
         mHistory.setEpisodeUrl(item.getUrl());
         mHistory.setVodRemarks(item.getName());
@@ -1444,7 +1451,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         long position = mPlayers.getPosition();
         if (position <= 0) return;
         mPlayers.setPosition(position);
-        if (mHistory != null) mHistory.setPosition(position);
+        if (mHistory != null) {
+            mHistory.setPosition(position);
+            if (!Setting.isIncognito()) {
+                mLastHistorySaveAt = System.currentTimeMillis();
+                mHistory.saveAsync();
+            }
+        }
     }
 
     private boolean isSameHistoryEpisode(Episode item) {
