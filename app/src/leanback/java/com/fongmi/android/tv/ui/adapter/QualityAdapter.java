@@ -24,7 +24,7 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
 
     public interface OnClickListener {
 
-        void onItemClick(Result result);
+        void onItemClick(Result result, boolean activated);
     }
 
     public boolean setNextFocusDown(int nextFocusDown) {
@@ -70,10 +70,13 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
         int position = holder.getBindingAdapterPosition();
         if (position == RecyclerView.NO_POSITION) return;
         int oldPosition = mResult.getUrl().getPosition();
-        if (oldPosition == position) return;
+        if (oldPosition == position) {
+            mListener.onItemClick(mResult, true);
+            return;
+        }
         this.position = position;
         mResult.getUrl().set(position);
-        mListener.onItemClick(mResult);
+        mListener.onItemClick(mResult, false);
         if (oldPosition >= 0 && oldPosition < getItemCount()) notifyItemChanged(oldPosition);
         if (position >= 0 && position < getItemCount()) notifyItemChanged(position);
     }

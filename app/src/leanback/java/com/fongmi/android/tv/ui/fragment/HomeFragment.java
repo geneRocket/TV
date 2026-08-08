@@ -8,9 +8,12 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.leanback.widget.ArrayObjectAdapter;
+import androidx.leanback.widget.HorizontalGridView;
 import androidx.leanback.widget.ItemBridgeAdapter;
 import androidx.leanback.widget.ListRow;
+import androidx.leanback.widget.ListRowPresenter;
 import androidx.leanback.widget.OnChildViewHolderSelectedListener;
+import androidx.leanback.widget.ViewHolderTask;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
@@ -139,8 +142,11 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private void setAdapter() {
         ListRow funcRow = getFuncRow();
         mHasFuncRow = funcRow != null;
-        if (mHasFuncRow) mAdapter.add(funcRow);
+        // Continue watching is the most likely action when opening the TV app.
+        // Keep its placeholder ahead of shortcuts so a loaded history row is the
+        // first playable row, while empty history still falls through to shortcuts.
         if (Setting.isHomeHistory()) mAdapter.add(R.string.home_history);
+        if (mHasFuncRow) mAdapter.add(funcRow);
         mAdapter.add(R.string.home_keep);
         mAdapter.add(R.string.home_recommend);
         mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
@@ -206,7 +212,9 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     private void setTitleNextFocus(ListRow funcRow) {
         int downId = -1;
-        if (funcRow != null) {
+        // Do not bypass continue watching when it is enabled. With no history
+        // cards Leanback naturally resolves the next focusable shortcut row.
+        if (!Setting.isHomeHistory() && funcRow != null) {
             Func func = (Func) funcRow.getAdapter().get(0);
             downId = getHomeActicity().mBinding.recycler.getVisibility() == View.VISIBLE ? -1 : func.getId();
         }
@@ -300,10 +308,9 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         }
         int historyIndex = getHistoryIndex();
         if (historyIndex == -1) {
-            int recommendIndex = getRecommendIndex();
-            int historyStringIndex = recommendIndex - 1;
-            historyStringIndex = historyStringIndex < 0 ? 0 : historyStringIndex;
-            mAdapter.add(historyStringIndex, R.string.home_history);
+            // History can arrive after the rest of the home content. Insert it
+            // at the top in that case as well, rather than below the shortcuts.
+            mAdapter.add(0, R.string.home_history);
         }
         historyIndex = getHistoryIndex();
         boolean exist = isHistoryRow(historyIndex);
@@ -314,6 +321,21 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         }
         if (!exist) mAdapter.add(getHistoryIndex(), new ListRow(mHistoryAdapter));
         mHistoryAdapter.setItems(items, null);
+        focusContinueWatching(getHistoryIndex());
+    }
+
+    private void focusContinueWatching(int position) {
+        if (!isActivityReady() || getHomeActicity().getCurrentFocus() != getHomeActicity().mBinding.title) return;
+        mBinding.recycler.setSelectedPosition(position, new ViewHolderTask() {
+            @Override
+            public void run(RecyclerView.ViewHolder holder) {
+                if (!(holder instanceof ItemBridgeAdapter.ViewHolder)) return;
+                Object viewHolder = ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder();
+                if (!(viewHolder instanceof ListRowPresenter.ViewHolder)) return;
+                HorizontalGridView row = ((ListRowPresenter.ViewHolder) viewHolder).getGridView();
+                row.setSelectedPosition(0, child -> child.itemView.requestFocus());
+            }
+        });
     }
 
     private void applyKeepItems(boolean renew, List<Keep> items) {

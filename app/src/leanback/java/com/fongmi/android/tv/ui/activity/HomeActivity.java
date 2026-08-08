@@ -127,7 +127,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mClock = Clock.create(mBinding.clock).format("MM/dd HH:mm:ss");
         setHomeType();
         setPager();
+        App.post(this::focusHomeButton, 100);
         App.post(this::startOptionalServices, 1000);
+    }
+
+    private void focusHomeButton() {
+        if (isFinishing() || isDestroyed() || mAdapter.size() == 0) return;
+        mBinding.recycler.setSelectedPosition(0);
+        mBinding.recycler.requestFocus();
     }
 
     private void startOptionalServices() {
@@ -823,12 +830,19 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mClock.start();
         setTitleView();
         setHomeUI();
+        App.post(this::restoreHomeFocus, 100);
     }
 
     @Override
     protected void onPause() {
+        if (isHomePageSelected()) mFocus = getCurrentFocus();
         super.onPause();
         mClock.stop();
+    }
+
+    private void restoreHomeFocus() {
+        if (!isHomePageSelected() || mFocus == null || !mFocus.isShown() || !mFocus.isFocusable()) return;
+        mFocus.requestFocus();
     }
 
     @Override

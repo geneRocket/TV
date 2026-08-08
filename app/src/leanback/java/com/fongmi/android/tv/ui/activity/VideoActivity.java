@@ -94,6 +94,7 @@ import com.fongmi.android.tv.ui.presenter.QuickPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.AppTaskScheduler;
 import com.fongmi.android.tv.utils.Clock;
+import com.fongmi.android.tv.utils.EpisodeMatcher;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
@@ -677,6 +678,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private final SourceSwitchState mSourceSwitch = new SourceSwitchState();
     private final HistoryUpdate mHistoryUpdate = new HistoryUpdate();
     private CustomTarget<Drawable> mArtworkTarget;
+    private final StringBuilder mEpisodeInput = new StringBuilder();
+    private final Runnable mEpisodeInputCommit = this::playNumberedEpisode;
 
     public static void push(FragmentActivity activity, String text) {
         if (TextUtils.isEmpty(text)) return;
@@ -976,13 +979,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.flag.setItemViewCacheSize(10);
         mBinding.flag.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.flag.setAdapter(new ItemBridgeAdapter(mFlagAdapter = new ArrayObjectAdapter(mFlagPresenter = new FlagPresenter(item -> mPlaybackNavigation.switchFlag(item, false)))));
+        mBinding.flag.setAdapter(new ItemBridgeAdapter(mFlagAdapter = new ArrayObjectAdapter(mFlagPresenter = new FlagPresenter(this::onFlagClick))));
         mBinding.quality.setHasFixedSize(true);
         mBinding.quality.setItemAnimator(null);
         mBinding.quality.setItemViewCacheSize(10);
         mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this::setQualityActivated));
+        mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this::onQualityClick));
         mBinding.array.setHasFixedSize(true);
         mBinding.array.setItemAnimator(null);
         mBinding.array.setItemViewCacheSize(10);
@@ -1452,6 +1455,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             showError(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.error_play_timeout) : e.getMessage());
             ErrorEvent.extract(e.getMessage());
         }
+    }
+
+    private void onQualityClick(Result result, boolean activated) {
+        if (activated) {
+            if (!isFullscreen()) enterFullscreen();
+            return;
+        }
+        setQualityActivated(result);
     }
 
     private void reverseEpisode(boolean scroll) {
@@ -2612,6 +2623,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlaybackNavigation.switchFlag((Flag) mFlagAdapter.get(position), false);
     }
 
+    private void onFlagClick(Flag item) {
+        if (item.isActivated()) {
+            if (!isFullscreen()) enterFullscreen();
+            return;
+        }
+        mPlaybackNavigation.switchFlag(item, false);
+    }
+
     private void onPlaybackTimeout() {
         if (isBackground()) return;
         ErrorEvent.timeout();
@@ -2797,6 +2816,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public boolean dispatchKeyEvent(KeyEvent event) {
         hasKeyEvent = true;
         boolean up = event.getAction() == KeyEvent.ACTION_UP;
+        if (!isFullscreen() && getEpisodeView().hasFocus() && KeyUtil.isDigitKey(event)) {
+            if (up) appendEpisodeNumber(event.getKeyCode());
+            return true;
+        }
         if (mBinding.progressLayout.isContent() && !isFullscreen() && KeyUtil.isBackKey(event) && Setting.getSmallWindowBackKey() == 1 && getCurrentFocus() != mBinding.video) {
             if (up) {
                 mFocus1 = mBinding.video;
@@ -2819,6 +2842,33 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             return mKeyDown.onKeyDown(event);
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    private void appendEpisodeNumber(int keyCode) {
+        if (mEpisodeInput.length() >= 4) return;
+        mEpisodeInput.append(keyCode >= KeyEvent.KEYCODE_NUMPAD_0 ? keyCode - KeyEvent.KEYCODE_NUMPAD_0 : keyCode - KeyEvent.KEYCODE_0);
+        Notify.show(mEpisodeInput.toString());
+        App.removeCallbacks(mEpisodeInputCommit);
+        App.post(mEpisodeInputCommit, 1200);
+    }
+
+    private void playNumberedEpisode() {
+        if (mEpisodeInput.length() == 0) return;
+        String number = mEpisodeInput.toString();
+        mEpisodeInput.setLength(0);
+        if (mEpisodeAdapter.size() == 0) return;
+        List<String> names = new ArrayList<>();
+        for (int i = 0; i < mEpisodeAdapter.size(); i++) names.add(((Episode) mEpisodeAdapter.get(i)).getName());
+        int position = EpisodeMatcher.find(names, number, true, -1);
+        if (position < 0) {
+            try {
+                position = Integer.parseInt(number) - 1;
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        if (position < 0 || position >= mEpisodeAdapter.size()) return;
+        setEpisodeSelectedPosition(position);
+        setEpisodeActivated((Episode) mEpisodeAdapter.get(position));
     }
 
     @Override
@@ -2887,9 +2937,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     @Override
+    public void onKeyUp() {
+        checkPrev();
+    }
+
+    @Override
     public void onKeyDown() {
-        showInfo();
-        showControl(getFocus2());
+        checkNext();
     }
 
     @Override
@@ -2994,6 +3048,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     protected void onDestroy() {
         mRecommendGeneration++;
         App.removeCallbacks(mRecommendRequest);
+        App.removeCallbacks(mEpisodeInputCommit);
+        mEpisodeInput.setLength(0);
         mKeyDown.release();
         saveHistoryNow();
         mHistoryTasks.close();

@@ -73,6 +73,15 @@ public class CustomVerticalGridView extends VerticalGridView {
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) return moveTop && moveToTop();
+        if (event.getRepeatCount() >= 6 && event.getRepeatCount() % 3 == 0 && (KeyUtil.isUpKey(event) || KeyUtil.isDownKey(event))) {
+            int count = getAdapter() == null ? 0 : getAdapter().getItemCount();
+            int delta = KeyUtil.isUpKey(event) ? -4 : 4;
+            int position = Math.max(0, Math.min(count - 1, getSelectedPosition() + delta));
+            if (count > 0 && position != getSelectedPosition()) {
+                setSelectedPosition(position);
+                return true;
+            }
+        }
         pressUp = KeyUtil.isUpKey(event);
         pressDown = KeyUtil.isDownKey(event);
         return super.dispatchKeyEvent(event);

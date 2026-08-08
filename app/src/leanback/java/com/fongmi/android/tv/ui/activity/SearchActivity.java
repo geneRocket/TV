@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -317,7 +318,18 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     @Override
     protected void onResume() {
         super.onResume();
-        mBinding.keyword.requestFocus();
+        App.post(this::focusDefaultSearchAction, 100);
+    }
+
+    private void focusDefaultSearchAction() {
+        if (isFinishing() || isDestroyed()) return;
+        if (!TextUtils.isEmpty(getKeyword()) || mRecordAdapter.getItemCount() == 0) {
+            mBinding.keyword.requestFocus();
+            return;
+        }
+        RecyclerView.ViewHolder holder = mBinding.recordRecycler.findViewHolderForAdapterPosition(0);
+        if (holder != null) holder.itemView.requestFocus();
+        else mBinding.recordRecycler.requestFocus();
     }
 
     @Override
