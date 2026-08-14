@@ -74,6 +74,7 @@ android {
         exclude 'com/sun/jna/sunos-*/**'
         exclude 'com/sun/jna/w32ce-*/**'
         exclude 'com/sun/jna/win32-*/**'
+        exclude 'org/bouncycastle/pqc/crypto/picnic/lowmc*.properties'
     }
 
     compileOptions {
