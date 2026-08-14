@@ -66,6 +66,14 @@ android {
     packagingOptions {
         exclude 'META-INF/beans.xml'
         exclude 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
+        exclude 'com/sun/jna/aix-*/**'
+        exclude 'com/sun/jna/darwin-*/**'
+        exclude 'com/sun/jna/freebsd-*/**'
+        exclude 'com/sun/jna/linux-*/**'
+        exclude 'com/sun/jna/openbsd-*/**'
+        exclude 'com/sun/jna/sunos-*/**'
+        exclude 'com/sun/jna/w32ce-*/**'
+        exclude 'com/sun/jna/win32-*/**'
     }
 
     compileOptions {
