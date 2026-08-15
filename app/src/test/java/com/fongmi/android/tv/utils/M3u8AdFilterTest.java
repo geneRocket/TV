@@ -235,6 +235,90 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void removesAppleInterstitialDateRangeWithAssetUri() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXT-X-DATERANGE:ID=\"stitched-1\",CLASS=\"com.apple.hls.interstitial\",START-DATE=\"2026-08-15T00:00:00Z\",DURATION=12,X-ASSET-URI=\"https://ads.example/preroll/ad.m3u8\"\n"
+                + segment(4.0, "https://ads.example/preroll/ad-1.ts")
+                + segment(4.0, "https://ads.example/preroll/ad-2.ts")
+                + segment(4.0, "https://ads.example/preroll/ad-3.ts")
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("preroll/ad-1.ts"));
+        assertFalse(filtered.contains("X-ASSET-URI"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
+    public void removesDateRangeMarkedByScteCmd() {
+        String playlist = "#EXTM3U\n"
+                + segment(6.0, "main-before.ts")
+                + "#EXT-X-DATERANGE:ID=\"splice-1\",SCTE35-CMD=\"/DAvAAAAAAAAAP/wFAUAAAAEf+//yBysAAA==\",PLANNED-DURATION=12\n"
+                + segment(6.0, "media-package-ad-1.ts?adid=splice")
+                + segment(6.0, "media-package-ad-2.ts?adid=splice")
+                + segment(6.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("media-package-ad-1.ts"));
+        assertFalse(filtered.contains("SCTE35-CMD"));
+        assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
+    public void removesAssetListTagAndFollowingAdSegments() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXT-X-ASSET-LIST:URI=\"https://ads.example/vast/assets.json\"\n"
+                + segment(5.0, "https://ads.example/vast/asset-1.ts")
+                + segment(5.0, "https://ads.example/vast/asset-2.ts")
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("EXT-X-ASSET-LIST"));
+        assertFalse(filtered.contains("vast/asset-1.ts"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
+    public void removesGoogleImaQueryAdSegments() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://cdn.example/video/main-1.ts")
+                + segment(5.0, "https://pubads.g.doubleclick.net/pagead/segment.ts?ad_type=video&iu=/123/preroll")
+                + segment(5.0, "https://pubads.g.doubleclick.net/pagead/segment2.ts?ad_type=video&iu=/123/preroll")
+                + segment(5.0, "https://cdn.example/video/main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("doubleclick"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-2.ts"));
+    }
+
+    @Test
+    public void preservesContentAssetListWithoutAdSignals() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-ASSET-LIST:URI=\"https://cdn.example/movie/assets.json\"\n"
+                + segment(5.0, "https://cdn.example/movie/main-1.ts")
+                + segment(5.0, "https://cdn.example/movie/main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertTrue(filtered.contains("EXT-X-ASSET-LIST"));
+        assertEquals(2, M3u8AdFilter.countSegmentsFromString(filtered));
+    }
+
+    @Test
     public void ignoresAdWordsInUnknownMetadataTags() {
         String playlist = "#EXTM3U\n"
                 + "#EXT-X-CUSTOM-METADATA:TITLE=\"Sponsored advertisement\"\n"

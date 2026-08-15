@@ -1,5 +1,8 @@
 package com.fongmi.android.tv.utils;
 
+import android.util.Log;
+
+import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Rule;
@@ -22,6 +25,7 @@ import java.util.regex.Pattern;
 
 public final class M3u8AdFilter {
 
+    private static final String TAG = "M3u8AdFilter";
     private static final int SUBTITLE_WHITELIST_MAX = 512;
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
     private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
@@ -221,7 +225,22 @@ public final class M3u8AdFilter {
         // should leave the original stream playable rather than turn into a playback error.
         if (!startsWithM3uHeader(filtered) || countSegmentsFromString(filtered) == 0) return toBytesOrOriginal(content, bytes);
 
+        logFilterResult(baseUrl, content, filtered);
         return toBytesOrOriginal(filtered, bytes);
+    }
+
+    private static void logFilterResult(String baseUrl, String original, String filtered) {
+        if (!BuildConfig.DEBUG || original == null || filtered == null || original.equals(filtered)) return;
+
+        try {
+            int before = countSegmentsFromString(original);
+            int after = countSegmentsFromString(filtered);
+            Log.d(TAG, "url=" + baseUrl + ", before=" + before + ", after=" + after + ", removed=" + (before - after)
+                    + ", bytes=" + original.length() + "->" + filtered.length());
+            Log.d(TAG, "original=\n" + original);
+            Log.d(TAG, "filtered=\n" + filtered);
+        } catch (Throwable ignored) {
+        }
     }
 
     private static String filterConfiguredRules(String content, String baseUrl) {
@@ -690,13 +709,13 @@ public final class M3u8AdFilter {
                     continue;
                 }
 
+                if (isStandaloneAdResourceTag(record.line, baseUrl)) continue;
+
                 if (record.line.startsWith("#EXT-X-CUE-")) continue;
                 if (record.line.startsWith("#EXT-OATCLS-SCTE35")) continue;
                 if (record.line.startsWith("#EXT-X-SCTE35")) continue;
                 if (record.line.startsWith("#EXT-X-SPLICEPOINT-SCTE35")) continue;
-                if (record.line.startsWith("#EXT-X-ASSET")) continue;
-
-                if (isStandaloneAdResourceTag(record.line, baseUrl)) continue;
+                if (record.line.startsWith("#EXT-X-ASSET:")) continue;
 
                 kept.add(record);
 
@@ -944,12 +963,13 @@ public final class M3u8AdFilter {
         if (!lower.startsWith("#ext-x-part:")
                 && !lower.startsWith("#ext-x-preload-hint:")
                 && !lower.startsWith("#ext-x-map:")
+                && !lower.startsWith("#ext-x-asset-list:")
                 && !lower.startsWith("#ext-x-rendition-report:")) return false;
 
         String uri = parseAttributeString(line, "URI");
         if (isEmpty(uri)) return false;
 
-        return isLikelyAdSegmentUri(resolveUri(baseUrl, uri));
+        return isLikelyAdResourceUri(resolveUri(baseUrl, uri));
     }
 
     private static double nextRemaining(double remaining, double segmentDuration) {
@@ -1067,16 +1087,30 @@ public final class M3u8AdFilter {
         String clazz = parseAttributeString(line, "CLASS");
         String type = parseAttributeString(line, "TYPE");
         String asset = parseAttributeString(line, "X-ASSET");
+        String assetUri = parseAttributeString(line, "X-ASSET-URI");
+        String assetList = parseAttributeString(line, "X-ASSET-LIST");
+        String adUrl = parseAttributeString(line, "X-AD-URL");
+        String adId = parseAttributeString(line, "X-AD-ID");
         String scte = parseAttributeString(line, "SCTE35-OUT");
+        String scteCmd = parseAttributeString(line, "SCTE35-CMD");
 
         return containsAdKeyword(id)
                 || containsAdKeyword(clazz)
                 || containsAdKeyword(type)
                 || containsAdKeyword(asset)
+                || containsAdKeyword(assetUri)
+                || containsAdKeyword(assetList)
+                || containsAdKeyword(adUrl)
+                || containsAdKeyword(adId)
+                || isLikelyAdResourceUri(assetUri)
+                || isLikelyAdResourceUri(assetList)
+                || isLikelyAdResourceUri(adUrl)
                 || containsCueKeyword(id)
                 || containsCueKeyword(clazz)
                 || containsCueKeyword(type)
-                || !isEmpty(scte);
+                || !isEmpty(scte)
+                || !isEmpty(scteCmd)
+                || hasAttributeKeyPrefix(line, "X-AD-");
     }
 
     private static boolean containsCueKeyword(String text) {
@@ -1096,7 +1130,7 @@ public final class M3u8AdFilter {
         if (lower.startsWith("#ext-oatcls-scte35")) return true;
         if (lower.startsWith("#ext-x-scte35")) return true;
         if (lower.startsWith("#ext-x-splicepoint-scte35")) return true;
-        if (lower.startsWith("#ext-x-asset")) return true;
+        if (lower.startsWith("#ext-x-asset:")) return true;
         if (lower.startsWith("#ext-x-ad")) return true;
         if (lower.startsWith("#ext-x-vast")) return true;
         if (lower.startsWith("#ext-x-vmap")) return true;
@@ -1197,6 +1231,23 @@ public final class M3u8AdFilter {
         return line.substring(start, end).trim();
     }
 
+    private static boolean hasAttributeKeyPrefix(String line, String prefix) {
+        if (isEmpty(line) || isEmpty(prefix)) return false;
+
+        String lowerLine = line.toLowerCase(Locale.US);
+        String lowerPrefix = prefix.toLowerCase(Locale.US);
+        int idx = lowerLine.indexOf(lowerPrefix);
+
+        while (idx >= 0) {
+            if (idx == 0 || lowerLine.charAt(idx - 1) == ',' || lowerLine.charAt(idx - 1) == ':' || lowerLine.charAt(idx - 1) == ' ') {
+                return true;
+            }
+            idx = lowerLine.indexOf(lowerPrefix, idx + 1);
+        }
+
+        return false;
+    }
+
     private static boolean containsAdKeyword(String text) {
         if (isEmpty(text)) return false;
 
@@ -1261,7 +1312,7 @@ public final class M3u8AdFilter {
         if (lower.startsWith("#ext-oatcls-scte35")) return true;
         if (lower.startsWith("#ext-x-scte35")) return true;
         if (lower.startsWith("#ext-x-splicepoint-scte35")) return true;
-        if (lower.startsWith("#ext-x-asset")) return true;
+        if (lower.startsWith("#ext-x-asset:")) return true;
         if (lower.startsWith("#ext-x-ad")) return true;
         if (lower.startsWith("#ext-x-vast")) return true;
         if (lower.startsWith("#ext-x-vmap")) return true;
@@ -1300,6 +1351,20 @@ public final class M3u8AdFilter {
         if (!isLikelySegmentResource(lower)) return false;
 
         return isAdLikeUri(lower);
+    }
+
+    private static boolean isLikelyAdResourceUri(String uri) {
+        if (isEmpty(uri)) return false;
+
+        String lower = uri.toLowerCase(Locale.US).trim();
+        int fragment = lower.indexOf('#');
+        if (fragment >= 0) lower = lower.substring(0, fragment);
+
+        if (isLikelySegmentResource(lower) || isLikelyPlaylistResource(lower) || stripQueryAndFragment(lower).endsWith(".json")) {
+            return isAdLikeUri(lower);
+        }
+
+        return containsAdKeyword(mediaPathAndQuery(lower)) || containsAdQueryKey(lower);
     }
 
     private static int classifySegmentUri(String uri) {
