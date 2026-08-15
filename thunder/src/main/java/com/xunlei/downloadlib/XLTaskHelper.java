@@ -41,9 +41,14 @@ public class XLTaskHelper {
     }
 
     private synchronized GetTaskId startTask(GetTaskId taskId, int index) {
-        getManager().startTask(taskId.getTaskId());
         getManager().setTaskGsState(taskId.getTaskId(), index, 2);
+        getManager().startTask(taskId.getTaskId());
         return taskId;
+    }
+
+    private void deleteFile(File file) {
+        if (file.isDirectory()) for (File f : Path.list(file)) deleteFile(f);
+        if (file.isFile() && !file.getAbsolutePath().endsWith(".torrent")) Path.clear(file);
     }
 
     public synchronized GetTaskId parse(String url, File savePath) {
@@ -63,8 +68,6 @@ public class XLTaskHelper {
     }
 
     public synchronized GetTaskId addThunderTask(String url, File savePath) {
-        if (url.startsWith("thunder://")) url = getManager().parserThunderUrl(url);
-        if (url == null) return new GetTaskId(savePath);
         String fileName = getManager().getFileNameFromUrl(url);
         GetTaskId taskId = new GetTaskId(savePath, fileName, url);
         if (url.startsWith("ftp://")) {
@@ -80,8 +83,6 @@ public class XLTaskHelper {
             param.setPass("");
             int code = getManager().createP2spTask(param, taskId);
             if (code != XLConstant.XLErrorCode.NO_ERROR) return taskId;
-            getManager().setDownloadTaskOrigin(taskId.getTaskId(), "out_app/out_app_paste");
-            getManager().setOriginUserAgent(taskId.getTaskId(), "AndroidDownloadManager/5.41.2.4980 (Linux; U; Android 4.4.4; Build/KTU84Q)");
         } else if (url.startsWith("ed2k://")) {
             EmuleTaskParam param = new EmuleTaskParam();
             param.setFilePath(savePath.getAbsolutePath());
@@ -92,6 +93,8 @@ public class XLTaskHelper {
             int code = getManager().createEmuleTask(param, taskId);
             if (code != XLConstant.XLErrorCode.NO_ERROR) return taskId;
         }
+        getManager().setDownloadTaskOrigin(taskId.getTaskId(), "out_app/out_app_paste");
+        getManager().setOriginUserAgent(taskId.getTaskId(), "AndroidDownloadManager/4.4.4 (Linux; U; Android 4.4.4; Build/KTU84Q)");
         return startTask(taskId, 0);
     }
 
@@ -100,7 +103,7 @@ public class XLTaskHelper {
         TorrentFileInfo[] fileInfos = torrentInfo.mSubFileInfo;
         BtTaskParam taskParam = new BtTaskParam();
         taskParam.setCreateMode(1);
-        taskParam.setMaxConcurrent(10);
+        taskParam.setMaxConcurrent(3);
         taskParam.setSeqId(getSeq().incrementAndGet());
         taskParam.setFilePath(savePath.getAbsolutePath());
         taskParam.setTorrentPath(torrent.getAbsolutePath());
@@ -135,7 +138,7 @@ public class XLTaskHelper {
 
     public synchronized void deleteTask(GetTaskId taskId) {
         stopTask(taskId);
-        Path.clear(taskId.getSavePath());
+        deleteFile(taskId.getSavePath());
     }
 
     public synchronized void stopTask(GetTaskId taskId) {
@@ -158,6 +161,8 @@ public class XLTaskHelper {
 
     public synchronized void release() {
         if (manager != null) manager.release();
+        Path.clear(Path.files("setting.cfg"));
+        Path.clear(Path.files("seq_id"));
         manager = null;
         seq = null;
     }
