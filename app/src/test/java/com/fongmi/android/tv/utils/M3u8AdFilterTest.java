@@ -13,6 +13,21 @@ import static org.junit.Assert.assertTrue;
 
 public class M3u8AdFilterTest {
 
+    private static final String[] LIVE_FIXTURES = {
+            "odyssey-01-live.m3u8",
+            "odyssey-03-live.m3u8",
+            "odyssey-04-live.m3u8",
+            "odyssey-05-live.m3u8",
+            "odyssey-06-live.m3u8",
+            "odyssey-07-live.m3u8",
+            "odyssey-08-live.m3u8",
+            "odyssey-09-live.m3u8",
+            "odyssey-10-live.m3u8",
+            "odyssey-11-live.m3u8",
+            "odyssey-12-live.m3u8",
+            "odyssey-13-live.m3u8",
+    };
+
     private static final RealFixture[] REAL_FIXTURES = {
             new RealFixture("chimi-01.m3u8", 1645, 1645),
             new RealFixture("chimi-02.m3u8", 1647, 1647),
@@ -80,6 +95,32 @@ public class M3u8AdFilterTest {
             assertTrue(fixture.name, fixture.after > 0);
             if (original.contains("#EXT-X-ENDLIST")) assertTrue(fixture.name, filtered.contains("#EXT-X-ENDLIST"));
         }
+    }
+
+    @Test
+    public void filtersCurrentLiveMultiHostPlaylistsWithoutBreakingPlayback() throws IOException {
+        for (String name : LIVE_FIXTURES) {
+            String original = readLiveFixture(name);
+            String filtered = filter(original, "https://live-fixture.invalid/" + name);
+            int before = M3u8AdFilter.countSegmentsFromString(original);
+            int after = M3u8AdFilter.countSegmentsFromString(filtered);
+
+            assertTrue(name + " input has no segments", before > 0);
+            assertTrue(name + " filtered playlist is empty", after > 0);
+            assertTrue(name + " gained segments", after <= before);
+            assertTrue(name, filtered.startsWith("#EXTM3U"));
+            if (original.contains("#EXT-X-ENDLIST")) assertTrue(name, filtered.contains("#EXT-X-ENDLIST"));
+        }
+    }
+
+    @Test
+    public void removesAdjumpFromCurrentLiveFengbaoPlaylist() throws IOException {
+        String original = readLiveFixture("odyssey-07-live.m3u8");
+        String filtered = filter(original, "https://s1.fengbao9.com/video/aodesai/27f955720965/index.m3u8");
+
+        assertTrue(original.contains("/video/adjump/"));
+        assertFalse(filtered.contains("/video/adjump/"));
+        assertEquals(6631, M3u8AdFilter.countSegmentsFromString(filtered));
     }
 
     @Test
@@ -632,6 +673,15 @@ public class M3u8AdFilterTest {
 
     private static String readRealFixture(String name) throws IOException {
         String path = "/m3u8/real/" + name;
+        return readFixture(path);
+    }
+
+    private static String readLiveFixture(String name) throws IOException {
+        String path = "/m3u8/live/" + name;
+        return readFixture(path);
+    }
+
+    private static String readFixture(String path) throws IOException {
         try (InputStream input = M3u8AdFilterTest.class.getResourceAsStream(path)) {
             if (input == null) throw new IOException("Missing test resource: " + path);
             ByteArrayOutputStream output = new ByteArrayOutputStream();

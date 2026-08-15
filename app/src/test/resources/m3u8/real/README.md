@@ -9,6 +9,7 @@ These files are unmodified final media playlists captured through the Android ap
 - `xuan-an-*.m3u8`: two episode playlists captured through actual App playback for `悬案`.
 - `station-*.m3u8`: three additional real station playlists used during ad-filter investigation.
 - Unreachable and zero-byte station responses are intentionally excluded because they are not valid media playlists.
+- `../live/odyssey-*-live.m3u8`: current network captures fetched from multiple reachable CDN hosts while investigating live ad filtering. They are separate from this historical corpus because remote playlist contents can drift.
 
 `M3u8AdFilterTest.filtersCapturedRealMediaPlaylistsWithoutRegressions` records the exact input and expected output segment counts. Do not regenerate or normalize these files when updating expectations; add a new captured fixture when a new real structure is discovered.
 
