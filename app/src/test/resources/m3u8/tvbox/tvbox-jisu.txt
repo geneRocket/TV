@@ -1,0 +1,7 @@
+site=极速资源
+name=影视 • 极速[直连]
+config=https://raw.githubusercontent.com/qist/tvbox/master/dianshi.json
+api=https://jszyapi.com/api.php/provide/vod/?ac=list
+vod=漫长的季节
+m3u=https://vv.jisuzyv.com/play/PdRwWWRe/index.m3u8
+uris=731

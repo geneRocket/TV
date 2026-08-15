@@ -1,0 +1,7 @@
+site=樱花资源
+name=樱花资源
+config=manual
+api=https://m3u8.apiyhzy.com/api.php/provide/vod/
+vod=公寓404
+m3u=https://vod1.wgslsw.com/20240413/YZJUyne9/index.m3u8
+uris=3026

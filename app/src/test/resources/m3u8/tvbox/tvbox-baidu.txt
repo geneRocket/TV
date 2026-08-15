@@ -1,0 +1,7 @@
+site=百度资源
+name=百度资源
+config=manual
+api=https://api.apibdzy.com/api.php/provide/vod/
+vod=喀喀喀喀
+m3u=https://vod6.bdzybf11.com/20250206/xh9JkCf7/index.m3u8
+uris=1

@@ -60,6 +60,7 @@ public final class M3u8AdFilter {
         add("vast");
         add("vmap");
         add("ima");
+        add("imads");
         add("dfp");
         add("doubleclick");
         add("googlesyndication");
@@ -710,6 +711,7 @@ public final class M3u8AdFilter {
                 }
 
                 if (isStandaloneAdResourceTag(record.line, baseUrl)) continue;
+                if (isPlainAdResourceUri(record.line, baseUrl)) continue;
 
                 if (record.line.startsWith("#EXT-X-CUE-")) continue;
                 if (record.line.startsWith("#EXT-OATCLS-SCTE35")) continue;
@@ -970,6 +972,13 @@ public final class M3u8AdFilter {
         if (isEmpty(uri)) return false;
 
         return isLikelyAdResourceUri(resolveUri(baseUrl, uri));
+    }
+
+    private static boolean isPlainAdResourceUri(String line, String baseUrl) {
+        if (isEmpty(line)) return false;
+        String value = line.trim();
+        if (value.isEmpty() || value.startsWith("#")) return false;
+        return isLikelyAdResourceUri(resolveUri(baseUrl, value));
     }
 
     private static double nextRemaining(double remaining, double segmentDuration) {
@@ -1540,6 +1549,8 @@ public final class M3u8AdFilter {
                 || path.endsWith(".mp2t")
                 || path.endsWith(".mpeg")
                 || path.endsWith(".mpg")
+                || path.endsWith(".jpg")
+                || path.endsWith(".jpeg")
                 || path.endsWith(".vtt") == false && path.contains("/seg")
                 || path.contains("/segment")
                 || path.contains("/chunk")

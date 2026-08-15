@@ -22,10 +22,27 @@ public class M3u8AdFilterTest {
             "odyssey-07-live.m3u8",
             "odyssey-08-live.m3u8",
             "odyssey-09-live.m3u8",
-            "odyssey-10-live.m3u8",
-            "odyssey-11-live.m3u8",
-            "odyssey-12-live.m3u8",
-            "odyssey-13-live.m3u8",
+    };
+
+    private static final String[] TVBOX_SITE_FIXTURES = {
+            "tvbox-360--360.m3u8",
+            "tvbox-baidu.m3u8",
+            "tvbox-baidu-2.m3u8",
+            "tvbox-dytt.m3u8",
+            "tvbox-feifan.m3u8",
+            "tvbox-feifan-2.m3u8",
+            "tvbox-guangsu.m3u8",
+            "tvbox-hongniu.m3u8",
+            "tvbox-huya.m3u8",
+            "tvbox-ikun.m3u8",
+            "tvbox-jisu.m3u8",
+            "tvbox-liangzi.m3u8",
+            "tvbox-taopian.m3u8",
+            "tvbox-uku.m3u8",
+            "tvbox-uku-2.m3u8",
+            "tvbox-xinlang.m3u8",
+            "tvbox-yinghua.m3u8",
+            "tvbox-zuidai.m3u8",
     };
 
     private static final RealFixture[] REAL_FIXTURES = {
@@ -111,6 +128,32 @@ public class M3u8AdFilterTest {
             assertTrue(name, filtered.startsWith("#EXTM3U"));
             if (original.contains("#EXT-X-ENDLIST")) assertTrue(name, filtered.contains("#EXT-X-ENDLIST"));
         }
+    }
+
+    @Test
+    public void filtersTvBoxInterfaceSitePlaylistsWithoutBreakingPlayback() throws IOException {
+        for (String name : TVBOX_SITE_FIXTURES) {
+            String original = readTvBoxFixture(name);
+            String filtered = filter(original, "https://tvbox-site-fixture.invalid/" + name);
+            int before = countPlaylistUris(original);
+            int after = countPlaylistUris(filtered);
+
+            assertTrue(name + " input has no segments", before > 0);
+            assertTrue(name + " filtered playlist is empty", after > 0);
+            assertTrue(name + " gained segments", after <= before);
+            assertTrue(name, filtered.startsWith("#EXTM3U"));
+            if (original.contains("#EXT-X-ENDLIST")) assertTrue(name, filtered.contains("#EXT-X-ENDLIST"));
+        }
+    }
+
+    @Test
+    public void removesPlainAdResourceUriFromTvBoxYinghuaPlaylist() throws IOException {
+        String original = readTvBoxFixture("tvbox-yinghua.m3u8");
+        String filtered = filter(original, "https://vod1.wgslsw.com/20240413/YZJUyne9/index.m3u8");
+
+        assertTrue(original.contains("IMADS.jpeg"));
+        assertFalse(filtered.contains("IMADS.jpeg"));
+        assertTrue(filtered.contains("11467_VpZN6.jpeg"));
     }
 
     @Test
@@ -681,6 +724,11 @@ public class M3u8AdFilterTest {
         return readFixture(path);
     }
 
+    private static String readTvBoxFixture(String name) throws IOException {
+        String path = "/m3u8/tvbox/" + name;
+        return readFixture(path);
+    }
+
     private static String readFixture(String path) throws IOException {
         try (InputStream input = M3u8AdFilterTest.class.getResourceAsStream(path)) {
             if (input == null) throw new IOException("Missing test resource: " + path);
@@ -690,6 +738,15 @@ public class M3u8AdFilterTest {
             while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
             return output.toString(StandardCharsets.UTF_8.name());
         }
+    }
+
+    private static int countPlaylistUris(String playlist) {
+        int count = 0;
+        for (String line : playlist.split("\\r?\\n")) {
+            line = line.trim();
+            if (!line.isEmpty() && !line.startsWith("#")) count++;
+        }
+        return count;
     }
 
     private static final class RealFixture {

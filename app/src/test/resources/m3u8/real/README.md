@@ -10,6 +10,7 @@ These files are unmodified final media playlists captured through the Android ap
 - `station-*.m3u8`: three additional real station playlists used during ad-filter investigation.
 - Unreachable and zero-byte station responses are intentionally excluded because they are not valid media playlists.
 - `../live/odyssey-*-live.m3u8`: current network captures fetched from multiple reachable CDN hosts while investigating live ad filtering. They are separate from this historical corpus because remote playlist contents can drift.
+- `../tvbox/tvbox-*.m3u8`: playlists discovered through TVBox interface sites (`sites[].api`) rather than by swapping final CDN hosts. The current set was collected by probing 36 de-duplicated interface APIs and keeping the 18 APIs that returned a valid M3U playlist. Each sample has a same-name `.txt` metadata file recording the source config URL, site API, VOD name, and resolved M3U URL.
 
 `M3u8AdFilterTest.filtersCapturedRealMediaPlaylistsWithoutRegressions` records the exact input and expected output segment counts. Do not regenerate or normalize these files when updating expectations; add a new captured fixture when a new real structure is discovered.
 

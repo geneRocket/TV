@@ -1,0 +1,7 @@
+site=U酷资源
+name=U酷资源
+config=manual
+api=https://api.ukuapi.com/api.php/provide/vod/
+vod=漫长的季节
+m3u=https://ukzy.ukubf4.com/20230422/NrB3OUI2/index.m3u8
+uris=1
