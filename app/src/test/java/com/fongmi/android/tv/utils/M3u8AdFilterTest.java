@@ -549,6 +549,27 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void removesAllOccurrencesOfRepeatedSegmentUris() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://cdn.example/video/main-1.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "https://cdn.example/video/main-2.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts?range=1")
+                + segment(5.0, "https://cdn.example/video/repeated.ts?range=2")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertEquals(4, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(0, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
+        assertTrue(filtered.contains("repeated.ts?range=1"));
+        assertTrue(filtered.contains("repeated.ts?range=2"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-2.ts"));
+    }
+
+    @Test
     public void preservesRealLoneAdNumberFilenameCollisions() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://cdn.example/202604/15/main001.ts")
@@ -745,6 +766,16 @@ public class M3u8AdFilterTest {
         for (String line : playlist.split("\\r?\\n")) {
             line = line.trim();
             if (!line.isEmpty() && !line.startsWith("#")) count++;
+        }
+        return count;
+    }
+
+    private static int countOccurrences(String value, String needle) {
+        int count = 0;
+        int index = 0;
+        while ((index = value.indexOf(needle, index)) >= 0) {
+            count++;
+            index += needle.length();
         }
         return count;
     }

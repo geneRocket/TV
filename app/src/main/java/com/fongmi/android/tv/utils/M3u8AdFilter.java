@@ -218,9 +218,11 @@ public final class M3u8AdFilter {
         List<Record> records = parseRecords(content, baseUrl);
         if (isSubtitlePlaylist(content, records)) return toBytesOrOriginal(content, bytes);
 
+        Set<String> repeatedSegments = collectRepeatedSegments(records);
         records = filterRepeatedDiscontinuityPods(records);
         records = filterAdTagSegments(records, baseUrl);
         records = filterShortAdClusters(records);
+        records = filterRepeatedSegments(records, repeatedSegments);
 
         String filtered = filterMinorHostSegments(records, content);
         // Never hand Exo a playlist that the filter has emptied. A false-positive ad rule
@@ -837,6 +839,48 @@ public final class M3u8AdFilter {
             if (hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) discontinuities++;
         }
         return discontinuities > 0 && discontinuities * 20 <= segments;
+    }
+
+    private static Set<String> collectRepeatedSegments(List<Record> records) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (Record record : records) {
+            if (!record.segment) continue;
+            String identity = exactMediaIdentity(record.resolvedUri);
+            if (!isEmpty(identity)) counts.put(identity, counts.getOrDefault(identity, 0) + 1);
+        }
+
+        Set<String> repeated = new HashSet<>();
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() > 1) repeated.add(entry.getKey());
+        }
+        return repeated;
+    }
+
+    private static List<Record> filterRepeatedSegments(List<Record> records, Set<String> repeatedSegments) {
+        if (records == null || records.isEmpty() || repeatedSegments == null || repeatedSegments.isEmpty()) return records;
+
+        List<Record> kept = new ArrayList<>(records.size());
+        int segmentCount = 0;
+        int removedSegments = 0;
+
+        for (Record record : records) {
+            if (!record.segment) {
+                kept.add(record);
+                continue;
+            }
+
+            segmentCount++;
+            String identity = exactMediaIdentity(record.resolvedUri);
+            if (!isEmpty(identity) && repeatedSegments.contains(identity)) {
+                removedSegments++;
+                continue;
+            }
+
+            kept.add(record);
+        }
+
+        if (removedSegments <= 0 || removedSegments >= segmentCount) return records;
+        return kept;
     }
 
     private static List<Record> filterRepeatedDiscontinuityPods(List<Record> records) {
