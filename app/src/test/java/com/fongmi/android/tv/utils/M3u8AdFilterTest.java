@@ -704,6 +704,51 @@ public class M3u8AdFilterTest {
         assertTrue(filtered.contains("main003.ts"));
     }
 
+    @Test
+    public void removesShortDiscontinuityPodWhenKeySwitchesAwayAndBack() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\"\n"
+                + segment(5.0, "main-1.ts")
+                + segment(5.0, "main-2.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + "#EXT-X-KEY:METHOD=NONE\n"
+                + segment(3.0, "insert-1.ts")
+                + segment(3.0, "insert-2.ts")
+                + segment(3.0, "insert-3.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\"\n"
+                + segment(5.0, "main-3.ts")
+                + segment(5.0, "main-4.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("insert-1.ts"));
+        assertFalse(filtered.contains("METHOD=NONE"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-4.ts"));
+    }
+
+    @Test
+    public void preservesDiscontinuityPodWhenKeySwitchDoesNotReturn() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main-a.key\"\n"
+                + segment(5.0, "main-1.ts")
+                + segment(5.0, "main-2.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main-b.key\"\n"
+                + segment(5.0, "main-3.ts")
+                + segment(5.0, "main-4.ts")
+                + segment(5.0, "main-5.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertTrue(filtered.contains("main-b.key"));
+        assertTrue(filtered.contains("main-3.ts"));
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+    }
+
     private static void appendUnlabelledPod(StringBuilder playlist, String path) {
         playlist.append("#EXT-X-DISCONTINUITY\n");
         playlist.append("#EXT-X-KEY:METHOD=NONE\n");

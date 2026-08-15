@@ -909,7 +909,8 @@ public final class M3u8AdFilter {
             int matchingDurations = durationCounts.getOrDefault(pod.durationFingerprint, 0);
             int matchingMedia = mediaCounts.getOrDefault(pod.mediaFingerprint, 0);
             if (!shouldRemoveRepeatedPod(matchingDurations, pod.strongAdSignal)
-                    && !shouldRemoveIdenticalMediaPod(matchingMedia)) continue;
+                    && !shouldRemoveIdenticalMediaPod(matchingMedia)
+                    && !shouldRemoveKeySwitchPod(pod.keySwitchSignal)) continue;
             for (int i = pod.start; i < pod.end; i++) {
                 if (records.get(i).segment) removedSegments++;
                 remove[i] = true;
@@ -945,6 +946,10 @@ public final class M3u8AdFilter {
 
     static boolean shouldRemoveIdenticalMediaPod(int matchingPods) {
         return matchingPods >= 2;
+    }
+
+    static boolean shouldRemoveKeySwitchPod(boolean keySwitchSignal) {
+        return keySwitchSignal;
     }
 
     private static List<Record> filterShortAdClusters(List<Record> records) {
@@ -1087,6 +1092,7 @@ public final class M3u8AdFilter {
         return line.startsWith("#EXTINF")
                 || line.startsWith("#EXT-X-DISCONTINUITY")
                 || line.startsWith("#EXT-X-PROGRAM-DATE-TIME")
+                || line.startsWith("#EXT-X-KEY:")
                 || line.startsWith("#EXT-X-BYTERANGE")
                 || line.startsWith("#EXT-X-GAP");
     }
@@ -1745,13 +1751,15 @@ public final class M3u8AdFilter {
         private final String durationFingerprint;
         private final String mediaFingerprint;
         private final boolean strongAdSignal;
+        private final boolean keySwitchSignal;
 
-        private Pod(int start, int end, String durationFingerprint, String mediaFingerprint, boolean strongAdSignal) {
+        private Pod(int start, int end, String durationFingerprint, String mediaFingerprint, boolean strongAdSignal, boolean keySwitchSignal) {
             this.start = start;
             this.end = end;
             this.durationFingerprint = durationFingerprint;
             this.mediaFingerprint = mediaFingerprint;
             this.strongAdSignal = strongAdSignal;
+            this.keySwitchSignal = keySwitchSignal;
         }
 
         private static Pod create(List<Record> records, int start, int end) {
@@ -1759,6 +1767,9 @@ public final class M3u8AdFilter {
             int lastSegment = -1;
             double duration = 0;
             boolean strongAdSignal = false;
+            String beforeKey = activeKeyBefore(records, start);
+            String podKey = "";
+            String afterKey = activeKeyAfter(records, end);
             StringBuilder durationFingerprint = new StringBuilder();
             StringBuilder mediaFingerprint = new StringBuilder();
 
@@ -1769,13 +1780,54 @@ public final class M3u8AdFilter {
                 lastSegment = i;
                 duration += record.duration;
                 strongAdSignal |= record.explicitAd;
+                String key = lastKey(record.tags);
+                if (!isEmpty(key)) podKey = key;
                 durationFingerprint.append(Math.round(record.duration * 10)).append(',');
                 mediaFingerprint.append(exactMediaIdentity(record.resolvedUri)).append('\n');
             }
 
             if (segments < MIN_SEGMENTS || segments > MAX_SEGMENTS || duration <= 0 || duration > MAX_DURATION_SECONDS) return null;
+            boolean keySwitchSignal = hasKeySwitchSignal(beforeKey, podKey, afterKey);
             return new Pod(start, lastSegment + 1, segments + ":" + durationFingerprint,
-                    segments + ":" + mediaFingerprint, strongAdSignal);
+                    segments + ":" + mediaFingerprint, strongAdSignal, keySwitchSignal);
+        }
+
+        private static boolean hasKeySwitchSignal(String beforeKey, String podKey, String afterKey) {
+            if (isEmpty(podKey)) return false;
+            if (podKey.equals(beforeKey)) return false;
+            return isEmpty(afterKey) || afterKey.equals(beforeKey) || !afterKey.equals(podKey);
+        }
+
+        private static String activeKeyBefore(List<Record> records, int end) {
+            String key = "";
+            for (int i = 0; i < end; i++) {
+                Record record = records.get(i);
+                if (!record.segment) continue;
+                String value = lastKey(record.tags);
+                if (!isEmpty(value)) key = value;
+            }
+            return key;
+        }
+
+        private static String activeKeyAfter(List<Record> records, int start) {
+            String key = activeKeyBefore(records, start);
+            for (int i = start; i < records.size(); i++) {
+                Record record = records.get(i);
+                if (!record.segment) continue;
+                String value = lastKey(record.tags);
+                if (!isEmpty(value)) key = value;
+                return key;
+            }
+            return key;
+        }
+
+        private static String lastKey(List<String> tags) {
+            if (tags == null || tags.isEmpty()) return "";
+            String key = "";
+            for (String tag : tags) {
+                if (tag != null && tag.startsWith("#EXT-X-KEY:")) key = tag;
+            }
+            return key;
         }
     }
 }
