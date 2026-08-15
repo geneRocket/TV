@@ -3,9 +3,6 @@ package com.fongmi.android.tv.utils;
 import android.util.Log;
 
 import com.fongmi.android.tv.BuildConfig;
-import com.fongmi.android.tv.api.config.LiveConfig;
-import com.fongmi.android.tv.api.config.VodConfig;
-import com.fongmi.android.tv.bean.Rule;
 import com.github.catvod.utils.UriUtil;
 
 import java.net.URI;
@@ -20,8 +17,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 
 public final class M3u8AdFilter {
 
@@ -29,11 +24,9 @@ public final class M3u8AdFilter {
     private static final int SUBTITLE_WHITELIST_MAX = 512;
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
     private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
-    private static final int MAX_CACHED_PATTERNS = 256;
     private static final int MAX_LOG_CONTENT_CHARS = 8000;
     private static final int URI_AD_LIKE = 1;
     private static final int URI_STRONG_AD = 1 << 1;
-    private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
     private static final Set<String> SUBTITLE_PLAYLIST_WHITELIST = Collections.newSetFromMap(new LinkedHashMap<String, Boolean>(SUBTITLE_WHITELIST_MAX, 0.75f, true) {
         @Override
@@ -207,7 +200,6 @@ public final class M3u8AdFilter {
 
         if (isSubtitleWhitelisted(baseUrl)) return toBytesOrOriginal(content, bytes);
 
-        content = filterConfiguredRules(content, baseUrl);
         registerSubtitlePlaylists(content, baseUrl);
         content = filterAdVariantPlaylists(content, baseUrl);
 
@@ -251,83 +243,6 @@ public final class M3u8AdFilter {
         if (content == null || content.length() <= MAX_LOG_CONTENT_CHARS) return content;
         return content.substring(0, MAX_LOG_CONTENT_CHARS)
                 + "\n... truncated, totalChars=" + content.length();
-    }
-
-    private static String filterConfiguredRules(String content, String baseUrl) {
-        if (isEmpty(baseUrl)) return content;
-
-        try {
-            String host = UrlUtil.host(UrlUtil.uri(baseUrl));
-            if (isEmpty(host)) return content;
-
-            return filterConfiguredRules(content, host, VodConfig.get().getRules(), LiveConfig.get().getRules());
-        } catch (Throwable ignored) {
-            return content;
-        }
-    }
-
-    private static String filterConfiguredRules(String content, String host, List<Rule> vodRules, List<Rule> liveRules) {
-        String filtered = filterConfiguredRules(content, host, vodRules);
-        return filterConfiguredRules(filtered, host, liveRules);
-    }
-
-    private static String filterConfiguredRules(String content, String host, List<Rule> rules) {
-        String filtered = content;
-        for (Rule rule : rules) if (matchesRuleHost(host, rule.getHosts())) filtered = filterByRegexRules(filtered, rule.getRegex());
-        return filtered;
-    }
-
-    private static boolean matchesRuleHost(String host, List<String> hosts) {
-        String value = host.toLowerCase(Locale.US);
-        for (String item : hosts) {
-            if (item == null || item.isEmpty()) continue;
-            String rule = item.toLowerCase(Locale.US).trim();
-            if (value.contains(rule)) return true;
-            if (!rule.contains("*")) continue;
-            if (getPattern("glob:" + rule, Pattern.quote(rule).replace("*", "\\E.*\\Q")).matcher(value).find()) return true;
-        }
-        return false;
-    }
-
-    static String filterByRegexRules(String content, List<String> regexes) {
-        if (content == null || content.isEmpty() || regexes == null || regexes.isEmpty()) return content;
-
-        String filtered = content;
-        int segmentCount = countSegmentsFromString(content);
-        if (segmentCount <= 0) return content;
-
-        for (String regex : regexes) {
-            if (!isM3u8AdRegex(regex)) continue;
-
-            try {
-                String candidate = getPattern("regex:" + regex, regex).matcher(filtered).replaceAll("");
-                int candidateSegments = countSegmentsFromString(candidate);
-                if (candidateSegments <= 0 || candidateSegments >= segmentCount || !startsWithM3uHeader(candidate)) continue;
-                filtered = candidate;
-                segmentCount = candidateSegments;
-            } catch (Throwable ignored) {
-            }
-        }
-
-        return filtered;
-    }
-
-    private static boolean isM3u8AdRegex(String regex) {
-        if (regex == null || regex.isEmpty()) return false;
-        String lower = regex.toLowerCase(Locale.US);
-        return lower.contains("#ext")
-                || lower.contains(".ts")
-                || lower.contains(".m4s")
-                || lower.contains(".mp4");
-    }
-
-    private static Pattern getPattern(String key, String expression) {
-        Pattern pattern = PATTERN_CACHE.get(key);
-        if (pattern != null) return pattern;
-        if (PATTERN_CACHE.size() >= MAX_CACHED_PATTERNS) PATTERN_CACHE.clear();
-        pattern = Pattern.compile(expression);
-        Pattern previous = PATTERN_CACHE.putIfAbsent(key, pattern);
-        return previous == null ? pattern : previous;
     }
 
     private static boolean startsWithM3uHeader(String content) {
