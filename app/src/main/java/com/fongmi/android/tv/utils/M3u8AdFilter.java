@@ -30,6 +30,7 @@ public final class M3u8AdFilter {
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
     private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
     private static final int MAX_CACHED_PATTERNS = 256;
+    private static final int MAX_LOG_CONTENT_CHARS = 8000;
     private static final int URI_AD_LIKE = 1;
     private static final int URI_STRONG_AD = 1 << 1;
     private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
@@ -238,10 +239,16 @@ public final class M3u8AdFilter {
             int after = countSegmentsFromString(filtered);
             Log.d(TAG, "url=" + baseUrl + ", before=" + before + ", after=" + after + ", removed=" + (before - after)
                     + ", bytes=" + original.length() + "->" + filtered.length());
-            Log.d(TAG, "original=\n" + original);
-            Log.d(TAG, "filtered=\n" + filtered);
+            Log.d(TAG, "original=\n" + truncateLogContent(original));
+            Log.d(TAG, "filtered=\n" + truncateLogContent(filtered));
         } catch (Throwable ignored) {
         }
+    }
+
+    private static String truncateLogContent(String content) {
+        if (content == null || content.length() <= MAX_LOG_CONTENT_CHARS) return content;
+        return content.substring(0, MAX_LOG_CONTENT_CHARS)
+                + "\n... truncated, totalChars=" + content.length();
     }
 
     private static String filterConfiguredRules(String content, String baseUrl) {
