@@ -293,11 +293,19 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void nextSite() {
-            if (host.mQuickAdapter.size() == 0) return;
+            Vod item = null;
+            while (host.mQuickAdapter.size() > 0) {
+                Vod next = (Vod) host.mQuickAdapter.get(0);
+                host.mQuickAdapter.removeItems(0, 1);
+                host.mQuickQueue.remove(next);
+                String brokenKey = host.getBrokenKey(next);
+                if (!TextUtils.isEmpty(brokenKey) && brokenKey.equals(host.getCurrentBrokenKey())) continue;
+                if (!TextUtils.isEmpty(brokenKey) && host.mBroken.contains(brokenKey)) continue;
+                item = next;
+                break;
+            }
+            if (item == null) return;
             host.beginSourceSwitch();
-            Vod item = (Vod) host.mQuickAdapter.get(0);
-            host.mQuickAdapter.removeItems(0, 1);
-            host.mQuickQueue.remove(item);
             host.markCurrentSourceBroken();
             host.startSourceLoading();
             host.mSiteSearch.markSelected();
@@ -441,7 +449,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             Iterator<Vod> iterator = items.iterator();
             while (iterator.hasNext()) {
                 Vod item = iterator.next();
-                if (mismatch(item) || !host.mQuickKeys.add(getQuickKey(item))) iterator.remove();
+                if (!host.mQuickKeys.add(getQuickKey(item))) iterator.remove();
             }
             if (items.isEmpty()) return;
             host.mergeQuickItems(items, result.getRequestToken());
@@ -581,17 +589,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             List<Site> sites = new ArrayList<>();
             Set<String> keys = new HashSet<>();
             for (Site site : VodConfig.get().getSites()) {
-                if (!site.isSearchable() || auto && !site.isChangeable() || !keys.add(site.getKey())) continue;
+                if (!site.isSearchable() || !keys.add(site.getKey())) continue;
                 sites.add(site);
             }
             host.mSiteSearch.start(sites, keyword, auto, host::onSearchTasksSettled);
-        }
-
-        private boolean mismatch(Vod item) {
-            String brokenKey = host.getBrokenKey(item);
-            if (!brokenKey.isEmpty() && brokenKey.equals(host.getCurrentBrokenKey())) return true;
-            if (!brokenKey.isEmpty() && host.mBroken.contains(brokenKey)) return true;
-            return !host.matchSourceTitle(item.getVodName(), host.getSourceSwitchKeyword());
         }
 
         private String getQuickKey(Vod item) {
@@ -2658,10 +2659,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             mContent.stopSearch();
             if (empty) Notify.show(R.string.play_switch_empty);
         }
-    }
-
-    private boolean matchSourceTitle(String title, String keyword) {
-        return SearchSorter.matchesTitle(title, keyword);
     }
 
     private void markCurrentSourceBroken() {

@@ -98,7 +98,7 @@ public final class SiteSearchSession implements AutoCloseable {
     private void search(Site site, String keyword, String token, int generation, Runnable onComplete) {
         try {
             if (!isCurrent(generation, token)) return;
-            viewModel.searchContent(site, keyword, true, token);
+            viewModel.searchContent(site, keyword, false, token);
         } catch (Throwable error) {
             ThreadPools.log(error, "Video search failed for " + site.getName());
         } finally {

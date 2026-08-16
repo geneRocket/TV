@@ -129,7 +129,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1771,7 +1770,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         List<Site> sites = new ArrayList<>();
         Set<String> keys = new HashSet<>();
         for (Site item : VodConfig.get().getSites()) {
-            if (!item.isSearchable() || auto && !item.isChangeable() || !keys.add(item.getKey())) continue;
+            if (!item.isSearchable() || !keys.add(item.getKey())) continue;
             sites.add(item);
         }
         mSiteSearch.start(sites, keyword, auto, this::onSearchTasksSettled);
@@ -1784,8 +1783,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void setSearch(Result result) {
         if (!mSiteSearch.accepts(result)) return;
         List<Vod> items = new ArrayList<>(result.getList());
-        Iterator<Vod> iterator = items.iterator();
-        while (iterator.hasNext()) if (mismatch(iterator.next())) iterator.remove();
         mBinding.quick.setVisibility(View.VISIBLE);
         String keyword = mBinding.name.getText().toString();
         for (Vod item : items) SearchSorter.prepare(item, keyword);
@@ -1802,17 +1799,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void onSearchTasksSettled() {
         if (mSiteSearch.shouldSelectFirst() && !mQuickAdapter.isEmpty()) nextSite();
         else if (mQuickAdapter.isEmpty() && mSiteSearch.isAutomatic()) showEmpty();
-    }
-
-    private boolean mismatch(Vod item) {
-        if (item == null) return true;
-        if (getKey().equals(item.getSiteKey()) && getId().equals(item.getVodId())) return true;
-        if (mBroken.contains(getBrokenKey(item))) return true;
-        return !matchSourceTitle(item.getVodName(), mBinding.name.getText().toString());
-    }
-
-    private boolean matchSourceTitle(String title, String keyword) {
-        return SearchSorter.matchesTitle(title, keyword);
     }
 
     private String getBrokenKey(Vod item) {
