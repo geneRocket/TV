@@ -129,6 +129,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -144,6 +145,7 @@ import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 public class VideoActivity extends BaseActivity implements Clock.Callback, CustomKeyDownVod.Listener, TrackDialog.Listener, PlayerDialog.Listener, ControlDialog.Listener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener {
 
     private static final int REQUEST_DANMAKU_FILE = 9998;
+    private static final double SOURCE_MIN_SCORE = 0.5;
 
     private ActivityVideoBinding mBinding;
     private ViewGroup.LayoutParams mFrameParams;
@@ -1785,7 +1787,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         List<Vod> items = new ArrayList<>(result.getList());
         mBinding.quick.setVisibility(View.VISIBLE);
         String keyword = mBinding.name.getText().toString();
-        for (Vod item : items) SearchSorter.prepare(item, keyword);
+        Iterator<Vod> iterator = items.iterator();
+        while (iterator.hasNext()) {
+            Vod item = iterator.next();
+            SearchSorter.prepare(item, keyword);
+            if (item.getScore() < SOURCE_MIN_SCORE) iterator.remove();
+        }
         mQuickAdapter.addAllSorted(items, SearchSorter.comparator(keyword, ""));
         if (mSiteSearch.shouldSelectFirst()) {
             if (!mSiteSearch.hasPending() || mQuickAdapter.getItemCount() >= 10) {

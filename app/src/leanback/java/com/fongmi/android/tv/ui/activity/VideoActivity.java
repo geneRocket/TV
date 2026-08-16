@@ -148,6 +148,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 5000;
     private static final long HISTORY_LOAD_TIMEOUT_MS = 5000;
     private static final int QUICK_RESULT_LIMIT = 50;
+    private static final double SOURCE_MIN_SCORE = 0.5;
     private static final String TASK_HISTORY = "history";
     private static final int QUICK_FLUSH_DELAY_MS = 100;
     private static final int SOURCE_SEARCH_CONCURRENCY = Math.min(10, ThreadPools.searchConcurrency());
@@ -447,8 +448,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             List<Vod> items = result.getList();
             if (items.isEmpty()) return;
             Iterator<Vod> iterator = items.iterator();
+            String keyword = host.getSourceSwitchKeyword();
             while (iterator.hasNext()) {
                 Vod item = iterator.next();
+                SearchSorter.prepare(item, keyword);
+                if (item.getScore() < SOURCE_MIN_SCORE) {
+                    iterator.remove();
+                    continue;
+                }
                 if (!host.mQuickKeys.add(getQuickKey(item))) iterator.remove();
             }
             if (items.isEmpty()) return;
@@ -2701,6 +2708,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean changed = false;
         for (Vod item : items) {
             SearchSorter.prepare(item, keyword);
+            if (item.getScore() < SOURCE_MIN_SCORE) continue;
             if (mQuickQueue.size() < QUICK_RESULT_LIMIT) {
                 mQuickQueue.offer(item);
                 changed = true;
