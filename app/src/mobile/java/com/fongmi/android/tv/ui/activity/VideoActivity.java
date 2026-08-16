@@ -1789,7 +1789,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.quick.setVisibility(View.VISIBLE);
         String keyword = mBinding.name.getText().toString();
         for (Vod item : items) SearchSorter.prepare(item, keyword);
-        mQuickAdapter.addAllSorted(items, SearchSorter.comparator(keyword, getCurrentActor()));
+        mQuickAdapter.addAllSorted(items, SearchSorter.comparator(keyword, ""));
         if (mSiteSearch.shouldSelectFirst()) {
             if (!mSiteSearch.hasPending() || mQuickAdapter.getItemCount() >= 10) {
                 nextSite();
@@ -1823,10 +1823,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private String getBrokenKey() {
         return getKey() + "@" + (getId().isEmpty() ? Util.normalize(mBinding.name.getText().toString()) : getId());
-    }
-
-    private String getCurrentActor() {
-        return mBinding.actor.getTag() == null ? "" : mBinding.actor.getTag().toString();
     }
 
     private void nextParse(int position) {

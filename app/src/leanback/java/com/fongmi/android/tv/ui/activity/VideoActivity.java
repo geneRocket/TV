@@ -184,7 +184,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         private Phase phase = Phase.IDLE;
         private String episode;
-        private String actor = "";
         private long position;
 
         private enum Phase {
@@ -562,7 +561,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                     host.mBinding.content.setMaxLines(host.getMaxLines());
                 });
             });
-            if (!host.isSourceSwitching()) host.setSourceSearchActor(item.getVodActor());
             host.mFlagAdapter.setItems(item.getVodFlags(), null);
             if (!host.isSourceSwitching()) host.mBinding.video.requestFocus();
             host.setArtwork(item.getVodPic());
@@ -2531,7 +2529,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (isSourceSwitching()) return;
         mSourceSwitch.phase = SourceSwitchState.Phase.SEARCHING;
         mSourceSwitch.episode = getCurrentSwitchEpisode();
-        if (!mSiteSearch.isAutomatic() || TextUtils.isEmpty(mSourceSwitch.actor)) setSourceSearchActor(getCurrentSwitchActor());
         mSourceSwitch.position = getCurrentSwitchPosition();
     }
 
@@ -2563,11 +2560,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String getCurrentSwitchKeyword() {
         if (mHistory != null && !TextUtils.isEmpty(mHistory.getVodName())) return mHistory.getVodName();
         return mBinding == null ? getName() : textOf(mBinding.name);
-    }
-
-    private String getCurrentSwitchActor() {
-        if (mBinding == null || mBinding.actor.getTag() == null) return "";
-        return mBinding.actor.getTag().toString();
     }
 
     private long getCurrentSwitchPosition() {
@@ -2668,10 +2660,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
     }
 
-    private void setSourceSearchActor(String actor) {
-        mSourceSwitch.actor = Objects.toString(actor, "");
-    }
-
     private boolean matchSourceTitle(String title, String keyword) {
         return SearchSorter.matchesTitle(title, keyword);
     }
@@ -2719,7 +2707,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (mQuickQueue.size() < QUICK_RESULT_LIMIT) {
                 mQuickQueue.offer(item);
                 changed = true;
-            } else if (mQuickQueue.peek() != null && SearchSorter.compare(item, mQuickQueue.peek(), keyword, mSourceSwitch.actor) < 0) {
+            } else if (mQuickQueue.peek() != null && SearchSorter.compare(item, mQuickQueue.peek(), keyword, "") < 0) {
                 mQuickQueue.poll();
                 mQuickQueue.offer(item);
                 changed = true;
@@ -2739,7 +2727,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int compareQuickForQueue(Vod left, Vod right) {
-        return SearchSorter.compare(right, left, getSourceSwitchKeyword(), mSourceSwitch.actor);
+        return SearchSorter.compare(right, left, getSourceSwitchKeyword(), "");
     }
 
     private void scheduleQuickFlush() {
@@ -2753,7 +2741,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mQuickFlushScheduled = false;
         if (!mSiteSearch.isActive()) return;
         List<Vod> items = new ArrayList<>(mQuickQueue);
-        items.sort(SearchSorter.comparator(getSourceSwitchKeyword(), mSourceSwitch.actor));
+        items.sort(SearchSorter.comparator(getSourceSwitchKeyword(), ""));
         mQuickAdapter.setItems(items, QUICK_DIFF);
         setVisibilityIfChanged(mBinding.quick, items.isEmpty() ? View.GONE : View.VISIBLE);
     }
