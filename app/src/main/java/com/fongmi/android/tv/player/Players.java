@@ -485,7 +485,12 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void seekTo(long time) {
         danmaku.seekTo(time);
-        if (engine != null) engine.seekTo(time);
+        if (engine != null) {
+            // Keep the published state in sync with seek-driven UI feedback. The engine's
+            // subsequent READY callback will now be observable even after a smooth seek.
+            setPlayerState(Player.STATE_BUFFERING);
+            engine.seekTo(time);
+        }
     }
 
     public void play() {
@@ -910,6 +915,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     public void onCompletion(IMediaPlayer mp) {
         setPlayerState(Player.STATE_ENDED);
         pauseDanmu();
+        setPlaybackState(PlaybackStateCompat.STATE_STOPPED);
     }
 
     public void prepared() {
