@@ -8,6 +8,7 @@ public class SubtitleData {
     private List<Subtitle> subtitleList;
     private Boolean isNew;
     private Boolean isZip;
+    private Boolean hasNext;
 
     public SubtitleData() {
     }
@@ -40,5 +41,13 @@ public class SubtitleData {
 
     public void setIsZip(Boolean isZip) {
         this.isZip = isZip;
+    }
+
+    public Boolean getHasNext() {
+        return hasNext != null && hasNext;
+    }
+
+    public void setHasNext(Boolean hasNext) {
+        this.hasNext = hasNext;
     }
 }

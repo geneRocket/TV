@@ -7,6 +7,7 @@ public class Subtitle implements Serializable {
     private String name;
     private String url;
     private Boolean isZip;
+    private String source;
 
     public Subtitle() {
     }
@@ -39,5 +40,13 @@ public class Subtitle implements Serializable {
 
     public void setIsZip(Boolean isZip) {
         this.isZip = isZip;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 }

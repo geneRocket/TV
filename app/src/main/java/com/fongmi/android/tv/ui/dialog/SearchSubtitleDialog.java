@@ -31,7 +31,6 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
     private Listener listener;
     private String currentTitle;
     private int currentPage;
-    private boolean isZip;
 
     public static SearchSubtitleDialog create() {
         return new SearchSubtitleDialog();
@@ -72,7 +71,6 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
         binding.previous.setEnabled(false);
         binding.next.setEnabled(false);
         currentPage = 1;
-        isZip = false;
     }
 
     @Override
@@ -159,12 +157,11 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
     private void onSearchResult(SubtitleData data) {
         binding.loading.setVisibility(View.GONE);
         binding.previous.setEnabled(currentPage > 1);
-        binding.next.setEnabled(data.getSubtitleList().size() > 0);
+        binding.next.setEnabled(data.getHasNext());
         if (data.getSubtitleList().isEmpty()) {
             binding.empty.setVisibility(View.VISIBLE);
             binding.recycler.setVisibility(View.GONE);
         } else {
-            isZip = data.getIsZip();
             adapter.addAll(data.getSubtitleList());
             binding.recycler.setVisibility(View.VISIBLE);
             binding.empty.setVisibility(View.GONE);
@@ -174,7 +171,7 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
 
     @Override
     public void onItemClick(Subtitle item, int position) {
-        if (isZip) {
+        if (Boolean.TRUE.equals(item.getIsZip())) {
             binding.loading.setVisibility(View.VISIBLE);
             binding.recycler.setVisibility(View.GONE);
             binding.previous.setEnabled(false);
