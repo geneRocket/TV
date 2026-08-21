@@ -47,7 +47,7 @@ public class Sniffer {
         return SNIFFER.matcher(url).find();
     }
 
-    public static Rule getRule(Uri uri) {
+    public static synchronized Rule getRule(Uri uri) {
         if (uri.getHost() == null) return Rule.empty();
         ensureRules();
         String host = UrlUtil.host(uri);

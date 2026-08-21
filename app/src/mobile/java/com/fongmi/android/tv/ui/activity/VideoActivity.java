@@ -828,6 +828,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         int episodePosition = mEpisodeAdapter.getPosition();
         capturePlaybackPosition();
         if (!selectFlag(item)) return;
+        if (item.getEpisodes().isEmpty()) return;
         String name = mHistory == null ? "" : mHistory.getVodRemarks();
         Episode episode = item.find(name, !TextUtils.isEmpty(name));
         if (episode == null && episodePosition >= 0 && episodePosition < item.getEpisodes().size()) episode = item.getEpisodes().get(episodePosition);

@@ -69,7 +69,7 @@ public class Setting {
     // region Player Settings
 
     public static int getPlayer() {
-        return getPref().getInt("player", Players.EXO);
+        return Math.min(Math.max(getPref().getInt("player", Players.EXO), Players.SYS), Players.EXO);
     }
 
     public static void putPlayer(int player) {
@@ -77,7 +77,7 @@ public class Setting {
     }
 
     public static int getLivePlayer() {
-        return getPref().getInt("player_live", getPlayer());
+        return Math.min(Math.max(getPref().getInt("player_live", getPlayer()), Players.SYS), Players.EXO);
     }
 
     public static void putLivePlayer(int player) {
@@ -85,7 +85,7 @@ public class Setting {
     }
 
     public static int getDecode(int player) {
-        return getPref().getInt("decode_" + player, Players.HARD);
+        return Math.min(Math.max(getPref().getInt("decode_" + player, Players.HARD), Players.SOFT), Players.HARD);
     }
 
     public static void putDecode(int player, int decode) {
@@ -93,7 +93,7 @@ public class Setting {
     }
 
     public static int getRender() {
-        return getPref().getInt("render", 0);
+        return Math.min(Math.max(getPref().getInt("render", 0), 0), 1);
     }
 
     public static void putRender(int render) {
@@ -153,7 +153,7 @@ public class Setting {
     }
 
     public static int getRtsp() {
-        return getPref().getInt("rtsp", 0);
+        return Math.min(Math.max(getPref().getInt("rtsp", 0), 0), 1);
     }
 
     public static void putRtsp(int value) {
@@ -161,7 +161,7 @@ public class Setting {
     }
 
     public static int getHttp() {
-        return getPref().getInt("exo_http", 1);
+        return Math.min(Math.max(getPref().getInt("exo_http", 1), 0), 1);
     }
 
     public static void putHttp(int value) {
@@ -289,7 +289,7 @@ public class Setting {
     }
 
     public static int getLiveScale() {
-        return getPref().getInt("scale_live", getScale());
+        return Math.min(Math.max(getPref().getInt("scale_live", getScale()), 0), 4);
     }
 
     public static void putLiveScale(int index) {
@@ -501,7 +501,7 @@ public class Setting {
     }
 
     public static int getScale() {
-        return getPref().getInt("scale", 0);
+        return Math.min(Math.max(getPref().getInt("scale", 0), 0), 4);
     }
 
     public static void putScale(int value) {
@@ -517,7 +517,7 @@ public class Setting {
     }
 
     public static int getFlag() {
-        return getPref().getInt("flag", 0);
+        return Math.min(Math.max(getPref().getInt("flag", 0), 0), 1);
     }
 
     public static void putFlag(int value) {

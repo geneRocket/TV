@@ -1072,30 +1072,40 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     @Override
     public boolean nextGroup(boolean skip) {
-        if (mGroup == null || mGroupAdapter.size() == 0) return false;
-        int position = mBinding.group.getSelectedPosition() + 1;
-        if (position > mGroupAdapter.size() - 1) position = 0;
-        if (mGroup.equals(mGroupAdapter.get(position))) return false;
-        mGroup = (Group) mGroupAdapter.get(position);
-        mBinding.group.setSelectedPosition(position);
-        if (skip && mGroup.skip()) return nextGroup(true);
-        setChannels(mGroup);
-        mGroup.setPosition(0);
-        return true;
+        int size = mGroupAdapter.size();
+        if (mGroup == null || size == 0) return false;
+        int selected = mBinding.group.getSelectedPosition();
+        for (int offset = 1; offset <= size; offset++) {
+            int position = (selected + offset) % size;
+            Group group = (Group) mGroupAdapter.get(position);
+            if (mGroup.equals(group)) return false;
+            if (skip && group.skip()) continue;
+            mGroup = group;
+            mBinding.group.setSelectedPosition(position);
+            setChannels(mGroup);
+            mGroup.setPosition(0);
+            return true;
+        }
+        return false;
     }
 
     @Override
     public boolean prevGroup(boolean skip) {
-        if (mGroup == null || mGroupAdapter.size() == 0) return false;
-        int position = mBinding.group.getSelectedPosition() - 1;
-        if (position < 0) position = mGroupAdapter.size() - 1;
-        if (mGroup.equals(mGroupAdapter.get(position))) return false;
-        mGroup = (Group) mGroupAdapter.get(position);
-        mBinding.group.setSelectedPosition(position);
-        if (skip && mGroup.skip()) return prevGroup(true);
-        setChannels(mGroup);
-        mGroup.setPosition(mGroup.getChannel().size() - 1);
-        return true;
+        int size = mGroupAdapter.size();
+        if (mGroup == null || size == 0) return false;
+        int selected = mBinding.group.getSelectedPosition();
+        for (int offset = 1; offset <= size; offset++) {
+            int position = (selected - offset + size) % size;
+            Group group = (Group) mGroupAdapter.get(position);
+            if (mGroup.equals(group)) return false;
+            if (skip && group.skip()) continue;
+            mGroup = group;
+            mBinding.group.setSelectedPosition(position);
+            setChannels(mGroup);
+            mGroup.setPosition(mGroup.getChannel().size() - 1);
+            return true;
+        }
+        return false;
     }
 
     @Override

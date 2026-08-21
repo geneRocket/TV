@@ -57,6 +57,7 @@ public abstract class AppDatabase extends RoomDatabase {
     }
 
     public static void reset() {
+        HistoryRepository.get().cancelPendingWrites();
         AppDatabase database = instance;
         if (database != null && database.isOpen()) database.close();
         instance = null;

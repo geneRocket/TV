@@ -66,7 +66,16 @@ public class Download {
         try (Response response = OkHttp.client().newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IllegalStateException(response.code() + " " + response.message());
             if (response.body() == null) throw new IllegalStateException("Empty download body");
-            download(response.body().byteStream(), Math.max(1, Double.parseDouble(response.header(HttpHeaders.CONTENT_LENGTH, "1"))));
+            download(response.body().byteStream(), getContentLength(response.header(HttpHeaders.CONTENT_LENGTH)));
+        }
+    }
+
+    private double getContentLength(String value) {
+        try {
+            double length = Double.parseDouble(value);
+            return length > 0 ? length : 1;
+        } catch (Exception ignored) {
+            return 1;
         }
     }
 

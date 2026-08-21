@@ -43,6 +43,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -125,6 +126,7 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
     }
 
     private Map<String, String> checkHeader(String url, Map<String, String> headers) {
+        headers = headers == null ? new HashMap<>() : new HashMap<>(headers);
         Uri uri = Uri.parse(url);
         String host = uri.getHost() == null ? url : uri.getScheme() + "://" + uri.getHost();
         if (!headers.containsKey("X-Requested-With")) headers.put("X-Requested-With", WebViewUtil.spoof());

@@ -55,6 +55,13 @@ public class History {
         CACHE.clear();
     }
 
+    public static void cancelPendingWrites() {
+        synchronized (WRITE_LOCK) {
+            for (String key : WRITE_VERSIONS.keySet()) WRITE_VERSIONS.merge(key, 1L, Long::sum);
+            PENDING_WRITES.clear();
+        }
+    }
+
     @NonNull
     @PrimaryKey
     @SerializedName("key")

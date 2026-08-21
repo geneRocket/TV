@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 
+import androidx.fragment.app.Fragment;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
@@ -49,11 +50,13 @@ public class FolderActivity extends BaseActivity {
     }
 
     private TypeFragment getFragment() {
-        return (TypeFragment) getSupportFragmentManager().findFragmentByTag("0");
+        Fragment fragment = getSupportFragmentManager().findFragmentByTag("0");
+        return fragment instanceof TypeFragment ? (TypeFragment) fragment : null;
     }
 
     @Override
     public void onBackPressed() {
-        if (getFragment().canBack()) super.onBackPressed();
+        TypeFragment fragment = getFragment();
+        if (fragment == null || fragment.canBack()) super.onBackPressed();
     }
 }

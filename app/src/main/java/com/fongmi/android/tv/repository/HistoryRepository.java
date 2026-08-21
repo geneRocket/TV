@@ -68,4 +68,8 @@ public final class HistoryRepository {
     public void clearMemoryCache() {
         History.clearCache();
     }
+
+    public void cancelPendingWrites() {
+        History.cancelPendingWrites();
+    }
 }

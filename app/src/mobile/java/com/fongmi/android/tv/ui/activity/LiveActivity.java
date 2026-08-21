@@ -304,6 +304,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     private void setGroup(Live live) {
         List<Group> items = new ArrayList<>();
+        mHides.clear();
         for (Group group : live.getGroups()) (group.isHidden() ? mHides : items).add(group);
         mGroupAdapter.addAll(items);
         setPosition(LiveConfig.get().find(items));
@@ -909,27 +910,39 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private boolean prevGroup() {
-        int position = mGroupAdapter.getPosition() - 1;
-        if (position < 0) position = mGroupAdapter.getItemCount() - 1;
-        if (mGroup.equals(mGroupAdapter.get(position))) return false;
-        mGroup = mGroupAdapter.get(position);
-        mGroupAdapter.setSelected(position);
-        if (mGroup.skip()) return prevGroup();
-        mChannelAdapter.addAll(mGroup.getChannel());
-        mGroup.setPosition(mGroup.getChannel().size() - 1);
-        return true;
+        int size = mGroupAdapter.getItemCount();
+        if (mGroup == null || size == 0) return false;
+        int selected = mGroupAdapter.getPosition();
+        for (int offset = 1; offset <= size; offset++) {
+            int position = (selected - offset + size) % size;
+            Group group = mGroupAdapter.get(position);
+            if (mGroup.equals(group)) return false;
+            if (group.skip()) continue;
+            mGroup = group;
+            mGroupAdapter.setSelected(position);
+            mChannelAdapter.addAll(mGroup.getChannel());
+            mGroup.setPosition(mGroup.getChannel().size() - 1);
+            return true;
+        }
+        return false;
     }
 
     private boolean nextGroup() {
-        int position = mGroupAdapter.getPosition() + 1;
-        if (position > mGroupAdapter.getItemCount() - 1) position = 0;
-        if (mGroup.equals(mGroupAdapter.get(position))) return false;
-        mGroup = mGroupAdapter.get(position);
-        mGroupAdapter.setSelected(position);
-        if (mGroup.skip()) return nextGroup();
-        mChannelAdapter.addAll(mGroup.getChannel());
-        mGroup.setPosition(0);
-        return true;
+        int size = mGroupAdapter.getItemCount();
+        if (mGroup == null || size == 0) return false;
+        int selected = mGroupAdapter.getPosition();
+        for (int offset = 1; offset <= size; offset++) {
+            int position = (selected + offset) % size;
+            Group group = mGroupAdapter.get(position);
+            if (mGroup.equals(group)) return false;
+            if (group.skip()) continue;
+            mGroup = group;
+            mGroupAdapter.setSelected(position);
+            mChannelAdapter.addAll(mGroup.getChannel());
+            mGroup.setPosition(0);
+            return true;
+        }
+        return false;
     }
 
     private void prevChannel() {

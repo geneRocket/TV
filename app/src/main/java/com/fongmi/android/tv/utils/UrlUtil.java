@@ -74,7 +74,10 @@ public class UrlUtil {
         String link = index < 0 ? url : url.substring(0, index);
         if (link.startsWith("//")) link = "https:" + link;
         Uri uri = uri(link);
-        if (!TextUtils.isEmpty(baseUri) && scheme(uri).isEmpty() && !link.startsWith("data:") && isRelativePath(link)) link = resolve(baseUri, link);
+        if (!TextUtils.isEmpty(baseUri) && scheme(uri).isEmpty() && !link.startsWith("data:") && isRelativePath(link)) {
+            link = resolve(baseUri, link);
+            uri = uri(link);
+        }
         return convert(link + suffix, uri);
     }
 

@@ -31,7 +31,7 @@ public class JarLoader {
     private final ConcurrentHashMap<String, Method> methods;
     private final ConcurrentHashMap<String, Spider> spiders;
     private final ConcurrentHashMap<String, Object> locks;
-    private String recent;
+    private volatile String recent;
 
     public JarLoader() {
         loaders = new ConcurrentHashMap<>();

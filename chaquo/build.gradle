@@ -18,7 +18,7 @@ android {
             pip {
                 install "lxml"
                 install "ujson"
-                install "pyquery"
+                install "pyquery==2.0.1"
                 install "requests"
                 install "jsonpath"
                 install "pycryptodome"
