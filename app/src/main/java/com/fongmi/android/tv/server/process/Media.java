@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.server.process;
 
 import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.text.TextUtils;
 
@@ -10,8 +11,6 @@ import com.fongmi.android.tv.server.Server;
 import com.google.gson.JsonObject;
 
 import java.util.Map;
-import java.util.Objects;
-
 import fi.iki.elonen.NanoHTTPD;
 
 public class Media implements Process {
@@ -23,71 +22,48 @@ public class Media implements Process {
 
     @Override
     public NanoHTTPD.Response doResponse(NanoHTTPD.IHTTPSession session, String path, Map<String, String> files) {
-        if (isNull()) return Nano.success("{}");
+        Players player = Server.get().getPlayer();
+        if (player == null) return Nano.success("{}");
+        MediaSessionCompat mediaSession = player.getSession();
+        if (mediaSession == null) return Nano.success("{}");
+        PlaybackStateCompat playbackState = mediaSession.getController().getPlaybackState();
+        MediaMetadataCompat metadata = mediaSession.getController().getMetadata();
         JsonObject result = new JsonObject();
-        result.addProperty("url", getUrl());
-        result.addProperty("state", getState());
-        result.addProperty("speed", getSpeed());
-        result.addProperty("title", getTitle());
-        result.addProperty("artist", getArtist());
-        result.addProperty("artwork", getArtUri());
-        result.addProperty("duration", getDuration());
-        result.addProperty("position", getPosition());
+        result.addProperty("url", getUrl(player));
+        result.addProperty("state", getState(playbackState));
+        result.addProperty("speed", getSpeed(playbackState));
+        result.addProperty("title", getMetadataString(metadata, MediaMetadataCompat.METADATA_KEY_TITLE));
+        result.addProperty("artist", getMetadataString(metadata, MediaMetadataCompat.METADATA_KEY_ARTIST));
+        result.addProperty("artwork", getMetadataString(metadata, MediaMetadataCompat.METADATA_KEY_ART_URI));
+        result.addProperty("duration", getDuration(metadata));
+        result.addProperty("position", getPosition(playbackState));
         return Nano.success(result.toString());
     }
 
-    private Players getPlayer() {
-        return Server.get().getPlayer();
+    private String getUrl(Players player) {
+        String url = player.getUrl();
+        return TextUtils.isEmpty(url) ? "" : url;
     }
 
-    private boolean isNull() {
-        return Objects.isNull(getPlayer()) || Objects.isNull(getPlayer().getSession());
-    }
-
-    private PlaybackStateCompat getPlaybackState() {
-        return getPlayer().getSession().getController().getPlaybackState();
-    }
-
-    private MediaMetadataCompat getMetadata() {
-        return getPlayer().getSession().getController().getMetadata();
-    }
-
-    private String getUrl() {
-        return TextUtils.isEmpty(getPlayer().getUrl()) ? "" : getPlayer().getUrl();
-    }
-
-    private String getMetadataString(String key) {
-        MediaMetadataCompat metadata = getMetadata();
+    private String getMetadataString(MediaMetadataCompat metadata, String key) {
         if (metadata == null) return "";
         String value = metadata.getString(key);
         return TextUtils.isEmpty(value) ? "" : value;
     }
 
-    private String getTitle() {
-        return getMetadataString(MediaMetadataCompat.METADATA_KEY_TITLE);
+    private long getDuration(MediaMetadataCompat metadata) {
+        return metadata == null ? -1 : metadata.getLong(MediaMetadataCompat.METADATA_KEY_DURATION);
     }
 
-    private String getArtist() {
-        return getMetadataString(MediaMetadataCompat.METADATA_KEY_ARTIST);
+    private int getState(PlaybackStateCompat playbackState) {
+        return playbackState == null ? -1 : playbackState.getState();
     }
 
-    private String getArtUri() {
-        return getMetadataString(MediaMetadataCompat.METADATA_KEY_ART_URI);
+    private long getPosition(PlaybackStateCompat playbackState) {
+        return playbackState == null ? -1 : playbackState.getPosition();
     }
 
-    private long getDuration() {
-        return getMetadata() == null ? -1 : getMetadata().getLong(MediaMetadataCompat.METADATA_KEY_DURATION);
-    }
-
-    private int getState() {
-        return getPlaybackState() == null ? -1 : getPlaybackState().getState();
-    }
-
-    private long getPosition() {
-        return getPlaybackState() == null ? -1 : getPlaybackState().getPosition();
-    }
-
-    private float getSpeed() {
-        return getPlaybackState() == null ? -1 : getPlaybackState().getPlaybackSpeed();
+    private float getSpeed(PlaybackStateCompat playbackState) {
+        return playbackState == null ? -1 : playbackState.getPlaybackSpeed();
     }
 }

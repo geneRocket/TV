@@ -6,7 +6,9 @@ import com.github.catvod.utils.Util;
 
 public class Server {
 
-    private Players player;
+    // The local HTTP server reads this from its worker threads while playback
+    // activities replace it on the main thread.
+    private volatile Players player;
     private Nano nano;
     private int port;
 

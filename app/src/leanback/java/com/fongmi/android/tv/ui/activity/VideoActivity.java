@@ -73,6 +73,7 @@ import com.fongmi.android.tv.player.PlaybackRequest;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.player.danmu.Parser;
 import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -2319,7 +2320,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onActionEvent(ActionEvent event) {
-        if (isBackground()) return;
+        if (!isCurrentPlayer() || isBackground()) return;
         if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
             onKeyCenter();
         } else if (ActionEvent.NEXT.equals(event.getAction())) {
@@ -2333,7 +2334,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
-        if (isBackground()) return;
+        if (!isCurrentPlayer() || isBackground()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) mContent.requestDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
         else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
@@ -2342,7 +2343,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
-        if (isBackground()) return;
+        if (!isCurrentPlayer() || isBackground()) return;
         switch (event.getState()) {
             case 0:
                 setPlayerView();
@@ -2406,7 +2407,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
-        if (isBackground()) return;
+        if (!isCurrentPlayer() || isBackground()) return;
         switch (mRecovery.next(event, mPlayers, true)) {
             case RETRY: retryPlayback(); break;
             case TOGGLE_DECODE: onDecode(false); break;
@@ -2493,6 +2494,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     public boolean isBackground() {
         return background;
+    }
+
+    private boolean isCurrentPlayer() {
+        return Server.get().getPlayer() == mPlayers;
     }
 
     public void setBackground(boolean background) {

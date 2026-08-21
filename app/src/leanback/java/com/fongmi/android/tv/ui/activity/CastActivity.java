@@ -40,6 +40,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.StableDLNARendererService;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownCast;
@@ -324,6 +325,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onActionEvent(ActionEvent event) {
+        if (!isCurrentPlayer()) return;
         if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
             onKeyCenter();
         } else if (ActionEvent.STOP.equals(event.getAction())) {
@@ -333,11 +335,13 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
+        if (!isCurrentPlayer()) return;
         if (event.getType() == RefreshEvent.Type.SUBTITLE) mPlayers.setSub(Sub.from(event.getPath()));
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
+        if (!isCurrentPlayer()) return;
         switch (event.getState()) {
             case 0:
                 setTrackVisible(false);
@@ -379,10 +383,15 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
+        if (!isCurrentPlayer()) return;
         if (mPlayers.addRetry() > event.getRetry()) onError(event);
         else if (event.isDecode() && mPlayers.canToggleDecode()) onDecode(false);
         else if (event.isExo() && mPlayers.isExo()) onExoCheck(event);
         else onReset();
+    }
+
+    private boolean isCurrentPlayer() {
+        return Server.get().getPlayer() == mPlayers;
     }
 
     private void onExoCheck(ErrorEvent event) {
