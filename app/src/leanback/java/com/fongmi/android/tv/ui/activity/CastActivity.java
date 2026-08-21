@@ -67,7 +67,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private ActivityCastBinding mBinding;
     private DLNARendererService mService;
     private CustomKeyDownCast mKeyDown;
-    private RenderState mState;
+    private RenderState mState = RenderState.IDLE;
     private CastAction mAction;
     private DIDLParser mParser;
     private Players mPlayers;
@@ -420,7 +420,8 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void setState(RenderState state) {
-        if (mService != null) mService.notifyAvTransportLastChange(this.mState = state);
+        mState = state;
+        if (mService != null) mService.notifyAvTransportLastChange(state);
     }
 
     @NonNull

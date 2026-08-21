@@ -49,6 +49,7 @@ import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.repository.DoubanRecommendRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.repository.KeepRepository;
@@ -1559,13 +1560,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onCastEvent(CastEvent event) {
-        if (isRedirect()) return;
+        if (!isCurrentPlayer() || isRedirect()) return;
         ReceiveDialog.create().event(event).show(this);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onActionEvent(ActionEvent event) {
-        if (isRedirect()) return;
+        if (!isCurrentPlayer() || isRedirect()) return;
         if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
             mBinding.control.play.performClick();
         } else if (ActionEvent.NEXT.equals(event.getAction())) {
@@ -1579,7 +1580,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
-        if (isRedirect()) return;
+        if (!isCurrentPlayer() || isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
         else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
@@ -1588,7 +1589,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
-        if (isRedirect()) return;
+        if (!isCurrentPlayer() || isRedirect()) return;
         switch (event.getState()) {
             case 0:
                 setPlayerView();
@@ -1677,7 +1678,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
-        if (isRedirect()) return;
+        if (!isCurrentPlayer() || isRedirect()) return;
         switch (mRecovery.next(event, mPlayers, true)) {
             case RETRY: retryPlayback(); break;
             case TOGGLE_DECODE: onDecode(false); break;
@@ -1857,6 +1858,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     public boolean isForeground() {
         return foreground;
+    }
+
+    private boolean isCurrentPlayer() {
+        return Server.get().getPlayer() == mPlayers;
     }
 
     public void setForeground(boolean foreground) {

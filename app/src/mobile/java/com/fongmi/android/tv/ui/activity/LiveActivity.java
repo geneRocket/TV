@@ -800,6 +800,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onActionEvent(ActionEvent event) {
+        if (!isCurrentPlayer()) return;
         if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
             checkPlay();
         } else if (ActionEvent.NEXT.equals(event.getAction())) {
@@ -813,6 +814,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
+        if (!isCurrentPlayer()) return;
         switch (event.getType()) {
             case LIVE:
                 setLive(getHome());
@@ -825,6 +827,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
+        if (!isCurrentPlayer()) return;
         switch (event.getState()) {
             case 0:
                 setTrackVisible(false);
@@ -867,6 +870,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
+        if (!isCurrentPlayer()) return;
         switch (mRecovery.next(event, mPlayers, mChannel != null)) {
             case RETRY: fetch(); break;
             case TOGGLE_DECODE: onDecode(false); break;
@@ -981,6 +985,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     public boolean isForeground() {
         return foreground;
+    }
+
+    private boolean isCurrentPlayer() {
+        return Server.get().getPlayer() == mPlayers;
     }
 
     public void setForeground(boolean foreground) {
@@ -1211,7 +1219,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         setForeground(false);
         App.removeCallbacks(mR0);
         if (isRedirect()) onPaused();
-        if (Setting.isBackgroundOn() && !isFinishing()) PlaybackService.start(mPlayers);
+        else if (Setting.isBackgroundOn() && !isFinishing()) PlaybackService.start(mPlayers);
     }
 
     @Override
