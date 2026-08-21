@@ -494,7 +494,8 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void play() {
-        if (isPlaying() || isEnd()) return;
+        if (isPlaying()) return;
+        if (isEnd()) seekTo(0);
         Server.get().setPlayer(this);
         mediaSession.setActive(true);
         if (engine != null) engine.play();
@@ -702,6 +703,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     private void setPlaybackState(int state) {
         mediaSession.setPlaybackState(state, getPosition(), getSpeed());
+        ActionEvent.update();
     }
 
     private boolean isIllegal(String url) {

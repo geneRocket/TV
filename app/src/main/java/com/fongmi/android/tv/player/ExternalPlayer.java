@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
@@ -64,7 +65,9 @@ final class ExternalPlayer {
             if (data == null || data.getExtras() == null) return;
             int position = data.getExtras().getInt("position", 0);
             String endBy = data.getExtras().getString("end_by", "");
-            if ("playback_completion".equals(endBy)) ActionEvent.next();
+            // Activity-result delivery precedes resume. Post the navigation event so the
+            // returning activity has cleared its foreground/redirect guard first.
+            if ("playback_completion".equals(endBy)) App.post(ActionEvent::next);
             if ("user".equals(endBy)) players.seekTo(position);
         } catch (Exception e) {
             ThreadPools.log(e, "Handle external player result failed.");
