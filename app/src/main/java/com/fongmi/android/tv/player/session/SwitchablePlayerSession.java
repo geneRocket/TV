@@ -20,7 +20,10 @@ public final class SwitchablePlayerSession implements PlayerSession {
     public synchronized void replace(PlayerSession next) {
         if (released) throw new IllegalStateException("session is released");
         if (next == null) throw new IllegalArgumentException("delegate must not be null");
-        if (delegateSubscription != null) delegateSubscription.cancel();
+        if (next == delegate) return;
+        PlayerSession previous = delegate;
+        Subscription previousSubscription = delegateSubscription;
+        if (previousSubscription != null) previousSubscription.cancel();
         delegate = next;
         delegateSubscription = next.observe(value -> {
             // A freshly created engine always emits an empty IDLE snapshot. The
@@ -29,6 +32,7 @@ public final class SwitchablePlayerSession implements PlayerSession {
             if (value.getPhase() == PlaybackPhase.IDLE && value.getItem() == null) return;
             publish(value);
         });
+        if (previous != null) previous.release();
     }
 
     @Override public long prepare(PlaybackItem item) { return delegate.prepare(item); }
@@ -42,6 +46,8 @@ public final class SwitchablePlayerSession implements PlayerSession {
     @Override public synchronized PlaybackState state() { return state; }
 
     @Override public synchronized Subscription observe(PlaybackObserver observer) {
+        requireActive();
+        if (observer == null) throw new IllegalArgumentException("observer must not be null");
         observers.add(observer);
         observer.onPlaybackState(state);
         return () -> remove(observer);
@@ -49,8 +55,15 @@ public final class SwitchablePlayerSession implements PlayerSession {
 
     private synchronized void remove(PlaybackObserver observer) { observers.remove(observer); }
     private synchronized void publish(PlaybackState next) {
+        if (released || next == null) return;
         state = next;
-        for (PlaybackObserver observer : new LinkedHashSet<>(observers)) observer.onPlaybackState(next);
+        for (PlaybackObserver observer : new LinkedHashSet<>(observers)) {
+            try {
+                observer.onPlaybackState(next);
+            } catch (RuntimeException ignored) {
+                // One presentation observer must not interrupt state propagation.
+            }
+        }
     }
 
     @Override public synchronized void release() {
@@ -59,5 +72,9 @@ public final class SwitchablePlayerSession implements PlayerSession {
         if (delegateSubscription != null) delegateSubscription.cancel();
         delegate.release();
         observers.clear();
+    }
+
+    private void requireActive() {
+        if (released) throw new IllegalStateException("session is released");
     }
 }

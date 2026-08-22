@@ -34,7 +34,7 @@ public class SwitchablePlayerSessionTest {
     }
 
     @Test
-    public void commandsAlwaysReachCurrentDelegateAndReleaseOnlyCurrentDelegate() {
+    public void replacementTransfersOwnershipAndCommandsReachCurrentDelegate() {
         FakeSession first = new FakeSession();
         FakeSession second = new FakeSession();
         SwitchablePlayerSession session = new SwitchablePlayerSession(first);
@@ -45,9 +45,37 @@ public class SwitchablePlayerSessionTest {
         session.release();
 
         assertEquals(0, first.playCount);
+        assertTrue(first.released);
         assertEquals(1, second.playCount);
         assertEquals(42, second.seekPosition);
         assertTrue(second.released);
+    }
+
+    @Test
+    public void replacingWithSameDelegateIsNoOp() {
+        FakeSession delegate = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(delegate);
+
+        session.replace(delegate);
+        session.play();
+
+        assertEquals(1, delegate.playCount);
+        assertTrue(!delegate.released);
+    }
+
+    @Test
+    public void brokenObserverDoesNotBlockOtherObservers() {
+        FakeSession delegate = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(delegate);
+        List<PlaybackPhase> phases = new ArrayList<>();
+        session.observe(state -> { if (state.getPhase() != PlaybackPhase.IDLE) throw new IllegalStateException("broken UI"); });
+        session.observe(state -> phases.add(state.getPhase()));
+
+        delegate.emit(PlaybackPhase.READY);
+
+        assertEquals(PlaybackPhase.READY, session.state().getPhase());
+        assertEquals(2, phases.size());
+        assertEquals(PlaybackPhase.READY, phases.get(1));
     }
 
     private static final class FakeSession implements PlayerSession {
