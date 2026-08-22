@@ -197,8 +197,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
     }
 
     public void setMediaSource(MediaSource source, long position) {
+        mStartPosition = Math.max(position, 0);
         setVideoURI(source.getUri(), source.getHeaders());
-        mStartPosition = position;
     }
 
     private void setVideoURI(Uri uri, Map<String, String> headers) {
@@ -253,6 +253,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         mCurrentState = STATE_IDLE;
         mCurrentBufferPosition = 0;
         mCurrentBufferPercentage = 0;
+        mStartPosition = 0;
         mAudioManager.abandonAudioFocus(null);
     }
 

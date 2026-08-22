@@ -50,7 +50,7 @@ public class ExoPlayerImpl implements IPlayer {
     @Override
     public void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, long position, boolean forceLive) {
         MediaItem item = ExoUtil.getMediaItem(headers, UrlUtil.uri(url), format, drm, subs, decode, forceLive);
-        player.setMediaItem(item, position);
+        player.setMediaItem(item, Math.max(position, 0));
         player.prepare();
     }
 

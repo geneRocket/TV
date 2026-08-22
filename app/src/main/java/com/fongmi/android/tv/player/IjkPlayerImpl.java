@@ -23,7 +23,7 @@ public class IjkPlayerImpl implements IPlayer {
 
     @Override
     public void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, long position, boolean forceLive) {
-        player.setMediaSource(IjkUtil.getSource(headers, url), position);
+        player.setMediaSource(IjkUtil.getSource(headers, url), Math.max(position, 0));
     }
 
     @Override

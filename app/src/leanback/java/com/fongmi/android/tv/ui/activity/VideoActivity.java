@@ -204,12 +204,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         private Flag flag;
         private Episode episode;
         private long position;
+        private long startPosition;
+        private boolean episodeChanged;
         private boolean skipOpening;
 
         void clear() {
             flag = null;
             episode = null;
             position = 0;
+            startPosition = 0;
+            episodeChanged = false;
             skipOpening = false;
         }
     }
@@ -264,7 +268,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setEpisodeSelectedPosition(host.getEpisodePosition());
             host.mContent.stopSearch();
             host.notifyItemChanged(host.getEpisodeView(), host.mEpisodeAdapter);
-            host.onRefresh();
+            host.onReset(!host.isSourceSwitching());
             host.clearSourceSwitch();
         }
 
@@ -389,6 +393,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         private void commitReady() {
             if (host.isBackground() || host.mPlayers.isBuffering()) return;
+            if (host.hasPendingHistoryUpdate() && !host.mPlaybackResultStarted) return;
             pendingSeek = false;
             host.mContent.stopSearch();
             host.clearPlaybackTimeout();
@@ -651,6 +656,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long mLastSavedHistoryDuration = -1;
     private boolean mHistorySessionModified;
     private boolean mShouldSkipOpening;
+    private boolean mPlaybackResultStarted;
     private long mPendingFlagSwitchPosition = C.TIME_UNSET;
     private Runnable mR1;
     private Runnable mR2;
@@ -1170,6 +1176,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void stopActivePlayback() {
         mPlaybackRequest.clear();
+        mPlaybackResultStarted = false;
         clearPendingHistoryUpdate();
         clearPlaybackTimeout();
         mPlaybackState.clear();
@@ -1189,12 +1196,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (!TextUtils.equals(mBinding.display.title.getText(), title)) mBinding.display.title.setText(title);
         String token = nextRequestToken("play");
         mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
+        mPlaybackResultStarted = false;
+        mPlayers.clear();
+        mPlayers.stop();
+        prepareHistoryUpdate(flag, episode, replay);
         schedulePlaybackTimeout();
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        prepareHistoryUpdate(flag, episode, replay);
-        mPlayers.clear();
-        mPlayers.stop();
         clearDanmakuView();
         showProgress();
         setMetadata();
@@ -1212,6 +1220,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         String token = mPlaybackRequest.getToken();
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
+        if (hasPendingHistoryUpdate()) mPlayers.setPosition(mHistoryUpdate.startPosition);
+        mPlaybackResultStarted = true;
         mPlayers.start(result, isUseParse(), getSite().getTimeout());
         if (!TextUtils.equals(token, mPlaybackRequest.getToken())) return;
         setVisibilityIfChanged(mBinding.control.parse, isUseParse() ? View.VISIBLE : View.GONE);
@@ -1762,7 +1772,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void saveHistoryNow() {
-        commitPendingHistoryUpdate();
+        if (hasPendingHistoryUpdate()) {
+            commitPendingHistoryUpdate();
+            return;
+        }
         if (mHistory == null) return;
         long position = mPlayers.getPosition();
         long duration = mPlayers.getDuration();
@@ -2205,13 +2218,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistoryUpdate.flag = flag;
         mHistoryUpdate.episode = item;
         mHistoryUpdate.position = continueSource ? mSourceSwitch.position : keepFlagSwitchPosition ? flagSwitchPosition : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
+        mHistoryUpdate.startPosition = Math.max(mHistory == null ? 0 : mHistory.getOpening(), mHistoryUpdate.position);
+        mHistoryUpdate.episodeChanged = !sameEpisode;
         mHistoryUpdate.skipOpening = replay;
-        mPlayers.setPosition(Math.max(mHistory == null ? 0 : mHistory.getOpening(), mHistoryUpdate.position));
+        mPlayers.setPosition(mHistoryUpdate.startPosition);
     }
 
     private void commitPendingHistoryUpdate() {
         if (mHistoryUpdate.flag == null || mHistoryUpdate.episode == null || mHistory == null) return;
         mHistory.setPosition(mHistoryUpdate.position);
+        if (mHistoryUpdate.episodeChanged) mHistory.setDuration(0);
         mShouldSkipOpening = mHistoryUpdate.skipOpening;
         mHistory.setEpisodeUrl(mHistoryUpdate.episode.getUrl());
         mHistory.setVodRemarks(mHistoryUpdate.episode.getName());
@@ -2228,7 +2244,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private boolean isSameHistoryEpisode(Episode item) {
         if (item == null || mHistory == null) return false;
-        if (item.equals(mHistory.getEpisode())) return true;
+        if (!TextUtils.isEmpty(mHistory.getEpisodeUrl())) return TextUtils.equals(item.getUrl(), mHistory.getEpisodeUrl());
         return item.getName() != null && item.getName().equalsIgnoreCase(mHistory.getVodRemarks());
     }
 

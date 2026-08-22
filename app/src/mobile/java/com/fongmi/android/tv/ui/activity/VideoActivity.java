@@ -1465,7 +1465,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private boolean isSameHistoryEpisode(Episode item) {
         if (item == null || mHistory == null) return false;
-        if (item.equals(mHistory.getEpisode())) return true;
+        if (!TextUtils.isEmpty(mHistory.getEpisodeUrl())) return TextUtils.equals(item.getUrl(), mHistory.getEpisodeUrl());
         return item.getName() != null && item.getName().equalsIgnoreCase(mHistory.getVodRemarks());
     }
 
