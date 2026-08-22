@@ -77,9 +77,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private String button;
     private int mHistoryRequestId;
     private int mKeepRequestId;
-    private int mOpenRequestId;
     private String mRecommendStyleKey;
-    private boolean mHasFuncRow;
     private Site getHome() {
         return VodConfig.get().getHome();
     }
@@ -141,12 +139,11 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     private void setAdapter() {
         ListRow funcRow = getFuncRow();
-        mHasFuncRow = funcRow != null;
         // Continue watching is the most likely action when opening the TV app.
         // Keep its placeholder ahead of shortcuts so a loaded history row is the
         // first playable row, while empty history still falls through to shortcuts.
         if (Setting.isHomeHistory()) mAdapter.add(R.string.home_history);
-        if (mHasFuncRow) mAdapter.add(funcRow);
+        if (funcRow != null) mAdapter.add(funcRow);
         mAdapter.add(R.string.home_keep);
         mAdapter.add(R.string.home_recommend);
         mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
@@ -228,8 +225,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         homeUI = Setting.getHomeUI();
         button = Setting.getHomeButtons(Button.getDefaultButtons());
         ListRow funcRow = getFuncRow();
-        mHasFuncRow = funcRow != null;
-        if (mHasFuncRow) mAdapter.add(getFuncInsertIndex(), funcRow);
+        if (funcRow != null) mAdapter.add(getFuncInsertIndex(), funcRow);
         setTitleNextFocus(funcRow);
     }
 
@@ -290,7 +286,6 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     private void openVodItem(int cid, String siteKey, String vodId, String vodName, String vodPic) {
-        mOpenRequestId++;
         if (VodConfig.get().hasSite(siteKey)) {
             VideoActivity.start(getActivity(), siteKey, vodId, vodName, vodPic);
             return;
@@ -384,18 +379,22 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     private void clearHistory() {
         mHistoryRequestId++;
+        int nextIndex = getHistoryHeaderIndex();
         removeHistorySection();
         App.execute(() -> HistoryRepository.get().deleteLoaded());
         mPresenter.setDelete(false);
         mHistoryAdapter.clear();
+        focusAfterSectionRemoved(nextIndex);
     }
 
     private void clearKeep() {
         mKeepRequestId++;
+        int nextIndex = getKeepHeaderIndex();
         removeKeepSection();
         App.execute(() -> KeepRepository.get().deleteAll());
         mKeepPresenter.setDelete(false);
         mKeepAdapter.clear();
+        focusAfterSectionRemoved(nextIndex);
     }
 
     private int getHistoryIndex() {
@@ -472,6 +471,29 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         return index >= 0 && index < mAdapter.size() && mAdapter.get(index) instanceof ListRow && ((ListRow) mAdapter.get(index)).getAdapter() == mKeepAdapter;
     }
 
+    private void focusAfterSectionRemoved(int removedHeaderIndex) {
+        if (!isActivityReady()) return;
+        int targetIndex = nearestRowIndex(removedHeaderIndex);
+        if (targetIndex < 0) {
+            getHomeActicity().mBinding.title.requestFocus();
+            return;
+        }
+        mBinding.recycler.setSelectedPosition(targetIndex, new ViewHolderTask() {
+            @Override
+            public void run(RecyclerView.ViewHolder holder) {
+                if (holder != null) holder.itemView.requestFocus();
+            }
+        });
+    }
+
+    private int nearestRowIndex(int fromIndex) {
+        if (mAdapter.size() == 0) return -1;
+        int start = Math.max(0, Math.min(fromIndex, mAdapter.size() - 1));
+        for (int i = start; i < mAdapter.size(); i++) if (mAdapter.get(i) instanceof ListRow) return i;
+        for (int i = start - 1; i >= 0; i--) if (mAdapter.get(i) instanceof ListRow) return i;
+        return -1;
+    }
+
     @Override
     public void onItemClick(Func item) {
         int resId = item.getResId();
@@ -511,6 +533,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         }
         removeHistorySection();
         mPresenter.setDelete(false);
+        focusAfterSectionRemoved(rowIndex - 1);
     }
 
     @Override
@@ -571,6 +594,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         }
         removeKeepSection();
         mKeepPresenter.setDelete(false);
+        focusAfterSectionRemoved(rowIndex - 1);
     }
 
     public boolean canBack() {
@@ -578,7 +602,12 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     public void goBack() {
-        mBinding.recycler.scrollToPosition(0);
+        mBinding.recycler.setSelectedPosition(0, new ViewHolderTask() {
+            @Override
+            public void run(RecyclerView.ViewHolder holder) {
+                if (holder != null) holder.itemView.requestFocus();
+            }
+        });
     }
 
 }
