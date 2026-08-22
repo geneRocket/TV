@@ -14,6 +14,9 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     private final PlayerEngine engine;
     private PlaybackState state = PlaybackState.IDLE;
     private long nextSessionId;
+    private long initialSeekSessionId;
+    private long initialSeekPosition;
+    private boolean initialSeekPending;
     private boolean released;
 
     public DefaultPlayerSession(PlayerEngine engine) {
@@ -26,6 +29,9 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         requireActive();
         if (item == null) throw new IllegalArgumentException("item must not be null");
         long sessionId = ++nextSessionId;
+        initialSeekSessionId = sessionId;
+        initialSeekPosition = item.getStartPosition();
+        initialSeekPending = initialSeekPosition > 0;
         publish(new PlaybackState(sessionId, PlaybackPhase.PREPARING, item, item.getStartPosition(), -1, null));
         try {
             engine.prepare(new EngineRequest(sessionId, item.getUrl(), item.getHeaders(), item.getFormat(), item.getDrm(), item.getSubtitles(), item.getStartPosition(), item.isForceLive()), this);
@@ -129,7 +135,31 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     @Override
     public synchronized void onEngineEvent(EngineEvent event) {
         if (released || event == null || event.getSessionId() != state.getSessionId()) return;
-        publish(new PlaybackState(event.getSessionId(), map(event.getPhase()), state.getItem(), event.getPosition(), event.getDuration(), event.getError()));
+        PlaybackPhase phase = map(event.getPhase());
+        long position = applyInitialSeekIfNeeded(event, phase);
+        publish(new PlaybackState(event.getSessionId(), phase, state.getItem(), position, event.getDuration(), event.getError()));
+    }
+
+    private long applyInitialSeekIfNeeded(EngineEvent event, PlaybackPhase phase) {
+        long position = event.getPosition();
+        if (!initialSeekPending || event.getSessionId() != initialSeekSessionId) return position;
+        if (position + 3000 >= initialSeekPosition) {
+            initialSeekPending = false;
+            return position;
+        }
+        if ((phase == PlaybackPhase.READY || phase == PlaybackPhase.PAUSED) && position < 10_000) {
+            try {
+                engine.seekTo(initialSeekPosition);
+                position = initialSeekPosition;
+            } catch (RuntimeException ignored) {
+            }
+            initialSeekPending = false;
+        } else if (phase == PlaybackPhase.READY || phase == PlaybackPhase.PAUSED) {
+            initialSeekPending = false;
+        } else if (phase == PlaybackPhase.STOPPED || phase == PlaybackPhase.ENDED || phase == PlaybackPhase.ERROR || phase == PlaybackPhase.RELEASED) {
+            initialSeekPending = false;
+        }
+        return position;
     }
 
     private PlaybackPhase map(EnginePhase phase) {

@@ -19,6 +19,7 @@ import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
+import com.orhanobut.logger.Logger;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -39,6 +40,7 @@ import java.util.regex.Pattern;
 @Entity
 public class History {
 
+    private static final String LOG_TAG = "HistoryProgress";
     private static final Map<String, History> CACHE = new ConcurrentHashMap<>();
     private static final int MAX_CACHE_SIZE = 512;
     private static final Map<String, PendingWrite> PENDING_WRITES = new ConcurrentHashMap<>();
@@ -332,8 +334,13 @@ public class History {
         if (item == null) return null;
         String key = cacheKey(item.getCid(), item.getKey());
         History old = CACHE.get(key);
-        if (old != null && old.getCreateTime() > item.getCreateTime()) return old;
+        if (old != null && old.getCreateTime() > item.getCreateTime()) {
+            log("cache_keep_newer", old);
+            log("cache_drop_older", item);
+            return old;
+        }
         CACHE.put(key, item);
+        log("cache_put", item);
         trimCache();
         return item;
     }
@@ -434,13 +441,16 @@ public class History {
 
     public static List<History> getLoaded() {
         List<Integer> cids = getLoadedCids();
+        Logger.t(LOG_TAG).d("getLoaded cids=%s", cids);
         if (cids.size() == 1) return get(cids.get(0));
         List<History> items = withCached(cids, cache(AppDatabase.get().getHistoryDao().find(cids)));
+        Logger.t(LOG_TAG).d("getLoaded merged=%s unique=%s", items.size(), unique(items, true).size());
         return copy(unique(items, true));
     }
 
     public static List<History> get(int cid) {
         List<History> items = withCached(Collections.singletonList(cid), cache(AppDatabase.get().getHistoryDao().find(cid)));
+        Logger.t(LOG_TAG).d("get cid=%s merged=%s unique=%s", cid, items.size(), unique(items, false).size());
         return copy(unique(items, false));
     }
 
@@ -451,7 +461,10 @@ public class History {
             if (!cids.contains(item.getCid())) continue;
             String key = cacheKey(item.getCid(), item.getKey());
             History old = merged.get(key);
-            if (old == null || item.getCreateTime() >= old.getCreateTime()) merged.put(key, item);
+            if (old == null || item.getCreateTime() >= old.getCreateTime()) {
+                Logger.t(LOG_TAG).d("withCached use cache key=%s cacheCreate=%s dbCreate=%s cachePos=%s dbPos=%s", key, item.getCreateTime(), old == null ? null : old.getCreateTime(), item.getPosition(), old == null ? null : old.getPosition());
+                merged.put(key, item);
+            }
         }
         return new ArrayList<>(merged.values());
     }
@@ -505,8 +518,13 @@ public class History {
     public static History find(String key) {
         int cid = keyCid(key);
         History item = CACHE.get(cacheKey(cid, key));
-        if (item != null) return copy(item);
-        return copy(cache(AppDatabase.get().getHistoryDao().find(cid, key)));
+        if (item != null) {
+            log("find_cache key=" + key, item);
+            return copy(item);
+        }
+        History db = cache(AppDatabase.get().getHistoryDao().find(cid, key));
+        log("find_db key=" + key, db);
+        return copy(db);
     }
 
     public static void delete(int cid) {
@@ -588,6 +606,7 @@ public class History {
         if (TextUtils.isEmpty(getKey())) return this;
         synchronized (WRITE_LOCK) {
             if (cancelPending) cancelWrite(getCid(), getKey());
+            log(cancelPending ? "save_sync" : "save_async_drain", this);
             AppDatabase.get().getHistoryDao().insertOrUpdate(this);
             return cache(this);
         }
@@ -601,6 +620,7 @@ public class History {
             cache(snapshot);
             long version = WRITE_VERSIONS.merge(key, 1L, Long::sum);
             PENDING_WRITES.put(key, new PendingWrite(snapshot, version));
+            Logger.t(LOG_TAG).d("saveAsync enqueue cacheKey=%s version=%s active=%s pending=%s %s", key, version, ACTIVE_WRITES.contains(key), PENDING_WRITES.size(), brief(snapshot));
             scheduleWrite(key);
         }
     }
@@ -616,8 +636,11 @@ public class History {
             while ((pending = PENDING_WRITES.remove(key)) != null) {
                 synchronized (WRITE_LOCK) {
                     if (pending.version == WRITE_VERSIONS.getOrDefault(key, 0L)) {
+                        Logger.t(LOG_TAG).d("saveAsync drain accept cacheKey=%s version=%s", key, pending.version);
                         pending.item.save(false);
                         notifyHistoryChangedLocked();
+                    } else {
+                        Logger.t(LOG_TAG).d("saveAsync drain skip cacheKey=%s pendingVersion=%s latestVersion=%s", key, pending.version, WRITE_VERSIONS.getOrDefault(key, 0L));
                     }
                 }
             }
@@ -676,6 +699,7 @@ public class History {
         String name = normalizedName(getVodName());
         List<Integer> cids = getLoadedCids();
         List<History> items = TextUtils.isEmpty(name) ? AppDatabase.get().getHistoryDao().findByName(cids, getVodName()) : findByNormalizedName(name, cids);
+        Logger.t(LOG_TAG).d("find_by_name current=%s normalized=%s cids=%s items=%s", brief(this), name, cids, items.size());
         Map<String, History> unique = new LinkedHashMap<>();
         for (History item : cache(items)) unique.put(item.getKey(), item);
         return copy(new ArrayList<>(unique.values()));
@@ -699,15 +723,41 @@ public class History {
         EpisodeMatch best = null;
         for (History item : find()) {
             EpisodeMatch match = findEpisode(flags, item.getVodFlag(), item.getVodRemarks());
+            Logger.t(LOG_TAG).d("findEpisode candidate item=%s match=%s sameFlag=%s", brief(item), match == null ? "null" : match.episode.getName(), match == null ? null : match.sameFlag);
             if (match == null) continue;
             if (isBetterMatch(best, match, item)) best = match.history(item);
         }
-        if (best == null) return;
+        if (best == null) {
+            Logger.t(LOG_TAG).d("findEpisode no_match current=%s flags=%s", brief(this), flags.size());
+            return;
+        }
         setVodFlag(best.flag.getFlag());
         setVodRemarks(best.episode.getName());
         setEpisodeUrl(best.episode.getUrl());
         checkParam(best.history);
         checkProgress(best.history);
+        Logger.t(LOG_TAG).d("findEpisode applied current=%s from=%s episodeUrl=%s", brief(this), brief(best.history), getEpisodeUrl());
+    }
+
+    public static String debug(History item) {
+        return brief(item);
+    }
+
+    private static void log(String event, History item) {
+        Logger.t(LOG_TAG).d("%s %s", event, brief(item));
+    }
+
+    private static String brief(History item) {
+        if (item == null) return "null";
+        return "cid=" + item.getCid()
+                + " key=" + item.getKey()
+                + " vodId=" + item.getVodId()
+                + " name=" + item.getVodName()
+                + " flag=" + item.getVodFlag()
+                + " remarks=" + item.getVodRemarks()
+                + " pos=" + item.getPosition()
+                + " dur=" + item.getDuration()
+                + " create=" + item.getCreateTime();
     }
 
     private boolean isBetterMatch(EpisodeMatch best, EpisodeMatch match, History item) {
