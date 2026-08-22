@@ -55,7 +55,6 @@ public final class TvVodPlaybackStateBinder {
         pendingSeek = true;
         lastSeekAt = System.currentTimeMillis();
         cancelReadyCommit();
-        port.showProgress();
     }
 
     public void clear() {
