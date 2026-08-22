@@ -1638,15 +1638,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void saveHistoryNow() {
-        if (mHistory == null) return;
+        if (mHistory == null || Setting.isIncognito()) return;
         long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
-        if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
-            mHistory.setPosition(position);
-            mHistory.setDuration(duration);
-            mLastHistorySaveAt = System.currentTimeMillis();
-            saveHistorySnapshot();
-        }
+        if (position <= 0) return;
+        mHistory.setPosition(position);
+        if (duration > 0) mHistory.setDuration(duration);
+        mHistory.setCreateTime(System.currentTimeMillis());
+        mLastHistorySaveAt = System.currentTimeMillis();
+        saveHistorySnapshot(false);
     }
 
     private void releaseForCastIfNeeded() {
@@ -2126,12 +2126,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         position = mPlayers.getPosition();
         if (position <= 0 && mHistory.getPosition() > 0) position = mHistory.getPosition();
         mHistory.setPosition(position);
-        mHistory.setDuration(duration = mPlayers.getDuration());
-        if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
+        duration = mPlayers.getDuration();
+        if (duration > 0) mHistory.setDuration(duration);
+        if (position > 0 && !Setting.isIncognito()) {
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
                 if (position != mLastSavedHistoryPosition || duration != mLastSavedHistoryDuration) {
+                    mHistory.setCreateTime(now);
                     saveHistorySnapshot();
                 }
             }
@@ -2194,6 +2196,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void renderPlayback(VodPlaybackState state) {
         if (!isCurrentPlayer() || isBackground()) return;
+        if (mHistory != null) {
+            if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
+            if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
+        }
         if (state.getEpisodeIndex() >= 0 && state.getEpisodeIndex() < mEpisodeAdapter.size()) {
             Episode episode = (Episode) mEpisodeAdapter.get(state.getEpisodeIndex());
             mSelection.selectEpisode(state.getEpisodeIndex(), mEpisodeAdapter.size());
@@ -2380,17 +2386,26 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private long getCurrentSwitchPosition() {
+        if (mPlaybackCoordinator != null) {
+            long position = mPlaybackCoordinator.state().getPosition();
+            if (position > 0) return position;
+        }
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
     }
 
     private void saveHistorySnapshot() {
+        saveHistorySnapshot(true);
+    }
+
+    private void saveHistorySnapshot(boolean async) {
         if (mHistory == null || Setting.isIncognito()) return;
         mHistorySessionModified = true;
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
-        mHistory.saveAsync();
+        if (async) mHistory.saveAsync();
+        else mHistory.save();
     }
 
     private String nextRequestToken(String prefix) {

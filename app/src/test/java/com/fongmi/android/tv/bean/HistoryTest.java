@@ -22,11 +22,11 @@ public class HistoryTest {
     }
 
     @Test
-    public void vodIdIsEmptyWhenHistoryKeyUsesNameFallback() {
+    public void vodIdUsesStableFallbackWhenHistoryKeyUsesNameFallback() {
         History history = new History();
         history.setKey(History.historyKey("siteA", "", "Movie Name", 7));
         history.setVodName("Movie Name");
 
-        assertEquals("", history.getVodId());
+        assertEquals("movie name", history.getVodId());
     }
 }

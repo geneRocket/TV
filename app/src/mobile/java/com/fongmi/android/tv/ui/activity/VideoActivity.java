@@ -536,6 +536,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
         mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
         mPlaybackCoordinator.observe(state -> {
+            if (mHistory != null) {
+                if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
+                if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
+            }
             if (state.getPhase() != VodPlaybackPhase.ERROR) return;
             if (mPlayers.session().state().getPhase() == com.fongmi.android.tv.player.session.PlaybackPhase.ERROR) return;
             Throwable error = state.getError();
@@ -1513,6 +1517,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private long getCurrentSwitchPosition() {
+        if (mPlaybackCoordinator != null) {
+            long position = mPlaybackCoordinator.state().getPosition();
+            if (position > 0) return position;
+        }
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
@@ -1589,11 +1597,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         position = mPlayers.getPosition();
         if (position <= 0 && mHistory.getPosition() > 0) position = mHistory.getPosition();
         mHistory.setPosition(position);
-        mHistory.setDuration(duration = mPlayers.getDuration());
-        if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
+        duration = mPlayers.getDuration();
+        if (duration > 0) mHistory.setDuration(duration);
+        if (position > 0 && !Setting.isIncognito()) {
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
+                mHistory.setCreateTime(now);
                 mHistory.saveAsync();
             }
         }
@@ -2301,11 +2311,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (mHistory == null || Setting.isIncognito()) return;
         long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
-        if (position < 0 || duration <= 0) return;
+        if (position <= 0) return;
         mHistory.setPosition(position);
-        mHistory.setDuration(duration);
+        if (duration > 0) mHistory.setDuration(duration);
+        mHistory.setCreateTime(System.currentTimeMillis());
         mLastHistorySaveAt = System.currentTimeMillis();
-        mHistory.saveAsync();
+        mHistory.save();
     }
 
 }
