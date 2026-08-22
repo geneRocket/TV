@@ -210,7 +210,6 @@ public class Action implements Process {
             @Override
             public void success() {
                 if (force) KeepRepository.get().deleteAll();
-                RefreshEvent.history();
                 RefreshEvent.config();
                 RefreshEvent.video();
                 KeepRepository.get().sync(configs, targets);

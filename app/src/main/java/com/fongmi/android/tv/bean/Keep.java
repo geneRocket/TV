@@ -244,11 +244,13 @@ public class Keep {
     public static void deleteAll() {
         AppDatabase.get().getKeepDao().delete();
         clearCache();
+        RefreshEvent.keep();
     }
 
     public static void delete(int cid) {
         AppDatabase.get().getKeepDao().delete(cid);
         for (String key : new ArrayList<>(VOD_CACHE.keySet())) if (key.startsWith(cid + "@")) VOD_CACHE.remove(key);
+        RefreshEvent.keep();
     }
 
     public static void deleteLoaded() {
@@ -268,13 +270,18 @@ public class Keep {
             if (VodConfig.getCid() > 0) delete(VodConfig.getCid());
             return;
         }
-        for (Integer cid : cids) delete(cid);
+        for (Integer cid : cids) {
+            AppDatabase.get().getKeepDao().delete(cid);
+            for (String key : new ArrayList<>(VOD_CACHE.keySet())) if (key.startsWith(cid + "@")) VOD_CACHE.remove(key);
+        }
+        RefreshEvent.keep();
     }
 
     public static void delete(String key) {
         AppDatabase.get().getKeepDao().delete(key);
         LIVE_CACHE.remove(key);
         cacheMiss(LIVE_MISSES, key);
+        RefreshEvent.keep();
     }
 
     public static List<Keep> getVod() {
@@ -310,6 +317,7 @@ public class Keep {
             VOD_CACHE.remove(key);
             cacheMiss(VOD_MISSES, key);
         }
+        RefreshEvent.keep();
         return this;
     }
 

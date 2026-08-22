@@ -1498,8 +1498,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void capturePlaybackPosition() {
-        long position = mPlayers.getPosition();
-        if (position < 0) return;
+        long position = getCurrentSwitchPosition();
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && !mEpisodeAdapter.isEmpty()) {
             Episode episode = getEpisode();
@@ -1512,6 +1511,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 mHistory.saveAsync();
             }
         }
+    }
+
+    private long getCurrentSwitchPosition() {
+        long position = mPlayers == null ? 0 : mPlayers.getPosition();
+        if (position > 0) return position;
+        return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
     }
 
     private void checkPlayImg(boolean playing) {

@@ -473,6 +473,7 @@ public class History {
             AppDatabase.get().getHistoryDao().delete(cid);
             removeCache(cid);
         }
+        RefreshEvent.history();
     }
 
     public static void deleteLoaded() {
@@ -487,6 +488,7 @@ public class History {
             AppDatabase.get().getHistoryDao().delete(cids);
             for (Integer cid : cids) removeCache(cid);
         }
+        RefreshEvent.history();
     }
 
     private void checkParam(History item) {
@@ -589,17 +591,22 @@ public class History {
     }
 
     public History delete() {
-        for (History item : find()) item.deleteSelf();
-        return deleteSelf();
+        for (History item : find()) item.deleteSelf(false);
+        return deleteSelf(true);
     }
 
     private History deleteSelf() {
+        return deleteSelf(true);
+    }
+
+    private History deleteSelf(boolean notify) {
         synchronized (WRITE_LOCK) {
             cancelWrite(getCid(), getKey());
             AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
             AppDatabase.get().getTrackDao().delete(getKey());
             removeCache(getCid(), getKey());
         }
+        if (notify) RefreshEvent.history();
         return this;
     }
 

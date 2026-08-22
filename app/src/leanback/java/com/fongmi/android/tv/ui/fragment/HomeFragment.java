@@ -223,12 +223,13 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
 
     private void refreshFuncRow() {
         if (homeUI == Setting.getHomeUI() && Setting.getHomeButtons(Button.getDefaultButtons()).equals(button)) return;
-        if (mHasFuncRow) mAdapter.removeItems(0, 1);
+        int oldIndex = getFuncRowIndex();
+        if (oldIndex >= 0) mAdapter.removeItems(oldIndex, 1);
         homeUI = Setting.getHomeUI();
         button = Setting.getHomeButtons(Button.getDefaultButtons());
         ListRow funcRow = getFuncRow();
         mHasFuncRow = funcRow != null;
-        if (mHasFuncRow) mAdapter.add(0, funcRow);
+        if (mHasFuncRow) mAdapter.add(getFuncInsertIndex(), funcRow);
         setTitleNextFocus(funcRow);
     }
 
@@ -338,6 +339,21 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         });
     }
 
+    private void focusRowItem(int rowIndex, int itemIndex, int itemCount) {
+        if (!isActivityReady() || rowIndex < 0 || itemIndex < 0 || itemCount <= 0) return;
+        int targetIndex = Math.min(itemIndex, itemCount - 1);
+        mBinding.recycler.setSelectedPosition(rowIndex, new ViewHolderTask() {
+            @Override
+            public void run(RecyclerView.ViewHolder holder) {
+                if (!(holder instanceof ItemBridgeAdapter.ViewHolder)) return;
+                Object viewHolder = ((ItemBridgeAdapter.ViewHolder) holder).getViewHolder();
+                if (!(viewHolder instanceof ListRowPresenter.ViewHolder)) return;
+                HorizontalGridView row = ((ListRowPresenter.ViewHolder) viewHolder).getGridView();
+                row.setSelectedPosition(targetIndex, child -> child.itemView.requestFocus());
+            }
+        });
+    }
+
     private void applyKeepItems(boolean renew, List<Keep> items) {
         if (items.isEmpty()) {
             removeKeepSection();
@@ -394,6 +410,26 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private int getKeepIndex() {
         for (int i = 0; i < mAdapter.size(); i++) if (mAdapter.get(i).equals(R.string.home_keep)) return i + 1;
         return -1;
+    }
+
+    private int getFuncRowIndex() {
+        for (int i = 0; i < mAdapter.size(); i++) {
+            if (!(mAdapter.get(i) instanceof ListRow)) continue;
+            ListRow row = (ListRow) mAdapter.get(i);
+            if (row.getAdapter().size() > 0 && row.getAdapter().get(0) instanceof Func) return i;
+        }
+        return -1;
+    }
+
+    private int getFuncInsertIndex() {
+        int historyIndex = getHistoryIndex();
+        if (isHistoryRow(historyIndex)) return historyIndex + 1;
+        int historyHeader = getHistoryHeaderIndex();
+        if (historyHeader >= 0) return historyHeader + 1;
+        int keepHeader = getKeepHeaderIndex();
+        if (keepHeader >= 0) return keepHeader;
+        int recommendHeader = getHeaderIndex(R.string.home_recommend);
+        return recommendHeader < 0 ? mAdapter.size() : recommendHeader;
     }
 
     private int getKeepHeaderIndex() {
@@ -465,9 +501,14 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     @Override
     public void onItemDelete(History item) {
         mHistoryRequestId++;
+        int rowIndex = getHistoryIndex();
+        int itemIndex = mHistoryAdapter.indexOf(item);
         mHistoryAdapter.remove(item);
         App.execute(() -> HistoryRepository.get().delete(item));
-        if (mHistoryAdapter.size() > 0) return;
+        if (mHistoryAdapter.size() > 0) {
+            focusRowItem(rowIndex, itemIndex, mHistoryAdapter.size());
+            return;
+        }
         removeHistorySection();
         mPresenter.setDelete(false);
     }
@@ -520,9 +561,14 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     @Override
     public void onItemDelete(Keep item) {
         mKeepRequestId++;
+        int rowIndex = getKeepIndex();
+        int itemIndex = mKeepAdapter.indexOf(item);
         mKeepAdapter.remove(item);
         App.execute(() -> KeepRepository.get().delete(item));
-        if (mKeepAdapter.size() > 0) return;
+        if (mKeepAdapter.size() > 0) {
+            focusRowItem(rowIndex, itemIndex, mKeepAdapter.size());
+            return;
+        }
         removeKeepSection();
         mKeepPresenter.setDelete(false);
     }
