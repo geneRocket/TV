@@ -74,9 +74,7 @@
             android:authorities="com.fongmi.quickjs.provider"
             android:exported="false" />
 
-        <activity
-            android:name=".ui.activity.CrashActivity"
-            android:process=":error_activity" />
+        <activity android:name=".ui.activity.CrashActivity" />
 
         <receiver
             android:name=".receiver.ActionReceiver"

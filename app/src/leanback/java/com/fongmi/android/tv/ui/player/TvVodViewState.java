@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.player;
 
+import com.fongmi.android.tv.player.session.PlaybackPhase;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 
 /** Immutable state rendered by the TV playback screen. */
@@ -29,6 +30,32 @@ public final class TvVodViewState {
     }
 
     public VodPlaybackPhase getPhase() { return phase; }
+    public PlaybackPhase getPlaybackPhase() {
+        switch (phase) {
+            case RESOLVING:
+                return PlaybackPhase.PREPARING;
+            case IDLE:
+                return PlaybackPhase.IDLE;
+            case PREPARING:
+                return PlaybackPhase.PREPARING;
+            case BUFFERING:
+                return PlaybackPhase.BUFFERING;
+            case READY:
+                return PlaybackPhase.READY;
+            case PAUSED:
+                return PlaybackPhase.PAUSED;
+            case ENDED:
+                return PlaybackPhase.ENDED;
+            case ERROR:
+                return PlaybackPhase.ERROR;
+            case STOPPED:
+                return PlaybackPhase.STOPPED;
+            case RELEASED:
+                return PlaybackPhase.RELEASED;
+            default:
+                throw new IllegalStateException("Unsupported VOD playback phase: " + phase);
+        }
+    }
     public int getEpisodeIndex() { return episodeIndex; }
     public String getEpisodeName() { return episodeName; }
     public long getPosition() { return position; }

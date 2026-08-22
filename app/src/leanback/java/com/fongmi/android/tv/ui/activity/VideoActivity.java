@@ -416,6 +416,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setPlainTextIfChanged(mBinding.control.opening, mHistory.getOpening() == 0 ? getString(R.string.play_op) : mPlayers.stringToTime(mHistory.getOpening()));
         setPlainTextIfChanged(mBinding.control.ending, mHistory.getEnding() == 0 ? getString(R.string.play_ed) : mPlayers.stringToTime(mHistory.getEnding()));
         mPlayers.setPlayer(getPlayer());
+        replacePlayerSession();
         setScale(getScale());
         setPlayerView();
         setDecodeView();
@@ -2198,7 +2199,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 saveHistorySnapshot();
             }
         }
-        onPlaybackState(new PlaybackState(0, com.fongmi.android.tv.player.session.PlaybackPhase.valueOf(state.getPhase().name()),
+        onPlaybackState(new PlaybackState(0, state.getPlaybackPhase(),
                 null, state.getPosition(), state.getDuration(), state.getError()));
     }
 
@@ -2222,6 +2223,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         int player = mPlayers.getPlayer();
         mPlayers.setSub(subtitle);
         if (player != mPlayers.getPlayer()) {
+            replacePlayerSession();
             setPlayerView();
             setDecodeView();
         }

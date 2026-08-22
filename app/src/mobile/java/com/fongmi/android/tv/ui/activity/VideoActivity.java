@@ -1674,6 +1674,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         int player = mPlayers.getPlayer();
         mPlayers.setSub(subtitle);
         if (player != mPlayers.getPlayer()) {
+            replacePlayerSession();
             setPlayerView();
             setDecodeView();
         }
