@@ -2,8 +2,6 @@ package com.fongmi.android.tv.player.vod;
 
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Track;
-import com.fongmi.android.tv.bean.PlaybackProgress;
-import com.fongmi.android.tv.player.progress.EpisodeProgressStore;
 import com.fongmi.android.tv.player.engine.EngineEvent;
 import com.fongmi.android.tv.player.engine.EnginePhase;
 import com.fongmi.android.tv.player.engine.EngineRequest;
@@ -50,23 +48,13 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    public void nextEpisodeUsesItsOwnSavedProgress() {
+    public void nextEpisodeStartsAtOpeningInsteadOfPreviousEpisodeProgress() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
         coordinator.setOpening(60_000);
 
-        coordinator.configureProgress("history", 1);
-        PlaybackProgress progress = new PlaybackProgress();
-        progress.setHistoryKey("history");
-        progress.setEpisodeId("episode-1");
-        progress.setPosition(600_000);
-        ((MemoryProgressStore) coordinatorProgressStore).save(progress);
-        PlaybackProgress nextProgress = new PlaybackProgress();
-        nextProgress.setHistoryKey("history");
-        nextProgress.setEpisodeId("episode-2");
-        nextProgress.setPosition(120_000);
-        ((MemoryProgressStore) coordinatorProgressStore).save(nextProgress);
+        coordinator.setResumePosition("episode-1", 600_000);
         coordinator.play(0, StartPolicy.RESUME_SAVED);
         resolver.resolve(resolver.lastRequestId);
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 600_000, 1_000_000));
@@ -74,25 +62,23 @@ public class VodPlaybackCoordinatorTest {
         resolver.resolve(resolver.lastRequestId);
 
         assertEquals("episode-2", engine.request.getUrl());
-        assertEquals(120_000, engine.request.getStartPosition());
+        assertEquals(60_000, engine.request.getStartPosition());
     }
 
     @Test
-    public void unplayedNextEpisodeUsesOpeningInsteadOfPreviousProgress() {
+    public void historyPositionResumesOnlyItsMatchingEpisode() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
-        coordinator.setOpening(60_000);
-        coordinator.configureProgress("history", 1);
+        coordinator.setResumePosition("episode-2", 480_000);
 
-        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
         resolver.resolve(resolver.lastRequestId);
-        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 600_000, 1_000_000));
-        assertTrue(coordinator.next());
-        resolver.resolve(resolver.lastRequestId);
+        assertEquals(0, engine.request.getStartPosition());
 
-        assertEquals("episode-2", engine.request.getUrl());
-        assertEquals(60_000, engine.request.getStartPosition());
+        coordinator.play(1, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(480_000, engine.request.getStartPosition());
     }
 
     @Test
@@ -105,21 +91,20 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    public void switchingEpisodeCheckpointsCurrentProgressBeforeResolve() {
+    public void updatedResumePositionSurvivesPlayerReplacement() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
-        coordinator.configureProgress("history", 7);
         coordinator.play(0, StartPolicy.FRESH);
         resolver.resolve(resolver.lastRequestId);
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 321_000, 900_000));
 
-        coordinator.play(1, StartPolicy.FRESH);
+        coordinator.setResumePosition("episode-1", 321_000);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.STOPPED, 0, -1));
+        coordinator.reload();
+        resolver.resolve(resolver.lastRequestId);
 
-        PlaybackProgress saved = coordinatorProgressStore.find("history", "episode-1");
-        assertEquals(321_000, saved.getPosition());
-        assertEquals(900_000, saved.getDuration());
-        assertEquals(7, saved.getCid());
+        assertEquals(321_000, engine.request.getStartPosition());
     }
 
     @Test
@@ -137,27 +122,14 @@ public class VodPlaybackCoordinatorTest {
         assertEquals(321_000, engine.request.getStartPosition());
     }
 
-    private EpisodeProgressStore coordinatorProgressStore;
-
     private VodPlaybackCoordinator coordinator(ManualResolver resolver, FakeEngine engine) {
-        coordinatorProgressStore = new MemoryProgressStore();
         VodPlaybackCoordinator coordinator = new VodPlaybackCoordinator(resolver,
                 (episode, result, position) -> new PlaybackItem(episode.getIdentity(), episode.getResolverUrl(), Collections.emptyMap(), null, null, Collections.emptyList(), position, false),
-                new DefaultPlayerSession(engine), coordinatorProgressStore);
+                new DefaultPlayerSession(engine));
         coordinator.setEpisodes(Arrays.asList(
                 new VodEpisode("episode-1", "site", "flag", "第1集", "episode-1"),
                 new VodEpisode("episode-2", "site", "flag", "第2集", "episode-2")), false);
         return coordinator;
-    }
-
-    private static final class MemoryProgressStore implements EpisodeProgressStore {
-
-        private final Map<String, PlaybackProgress> values = new LinkedHashMap<>();
-
-        @Override public PlaybackProgress find(String historyKey, String episodeId) { return values.get(historyKey + "|" + episodeId); }
-        @Override public void save(PlaybackProgress progress) { values.put(progress.getHistoryKey() + "|" + progress.getEpisodeId(), progress); }
-        @Override public void delete(String historyKey) { values.keySet().removeIf(key -> key.startsWith(historyKey + "|")); }
-        @Override public void deleteByConfig(int cid) { values.values().removeIf(value -> value.getCid() == cid); }
     }
 
     private static final class ManualResolver implements PlaybackResolver {

@@ -71,10 +71,8 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackMarkers;
-import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
-import com.fongmi.android.tv.player.progress.RoomEpisodeProgressStore;
 import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
 import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
 import com.fongmi.android.tv.player.vod.StartPolicy;
@@ -734,8 +732,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mVodResolver = new VodPlaybackResolver(ThreadPools.newSingle("vod-resolver"), App::post, new SpiderPlaybackGateway(),
                 this::prepareResolvedResult, result -> isUseParse());
         mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
-        mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, this::createPlaybackItem,
-                mPlayerSession, new RoomEpisodeProgressStore());
+        mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, this::createPlaybackItem, mPlayerSession);
         mPlaybackPresenter = new TvVodPlaybackPresenter(mPlaybackCoordinator, this::renderPlayback);
         mR1 = this::hideControl;
         mR2 = this::updateFocus;
@@ -1227,9 +1224,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mPlaybackCoordinator != null && mFlagAdapter != null && mFlagAdapter.size() > 0) {
             List<VodEpisode> episodes = new ArrayList<>(items.size());
             String flag = getFlag().getFlag();
-            for (Episode item : items) episodes.add(new VodEpisode(EpisodeProgressManager.get().identity(item), getKey(), flag, item.getName(), item.getUrl()));
+            for (Episode item : items) episodes.add(new VodEpisode(VodEpisode.identity(item.getName(), item.getUrl()), getKey(), flag, item.getName(), item.getUrl()));
             mPlaybackCoordinator.setEpisodes(episodes, false);
-            mPlaybackCoordinator.configureProgress(getHistoryKey(), getSiteCid());
+            String episodeId = mHistory == null ? "" : VodEpisode.identity(mHistory.getVodRemarks(), mHistory.getEpisodeUrl());
+            mPlaybackCoordinator.setResumePosition(episodeId, mHistory == null ? 0 : mHistory.getPosition());
             mPlaybackCoordinator.setOpening(mHistory == null ? 0 : mHistory.getOpening());
         }
         setEpisodeControlVisible(items.size() > 1);
@@ -1619,6 +1617,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void capturePlaybackPosition() {
         long position = getCurrentSwitchPosition();
         mPlayers.setPosition(position);
+        if (mPlaybackCoordinator != null && mEpisodeAdapter != null && mEpisodeAdapter.size() > 0) {
+            Episode episode = getEpisode();
+            mPlaybackCoordinator.setResumePosition(VodEpisode.identity(episode.getName(), episode.getUrl()), position);
+        }
         if (mHistory != null) {
             mHistory.setPosition(position);
             saveHistorySnapshot();
@@ -2376,8 +2378,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistorySessionModified = true;
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
-        Episode current = mEpisodeAdapter != null && mEpisodeAdapter.size() > 0 ? getEpisode() : null;
-        EpisodeProgressManager.get().checkpoint(getHistoryKey(), getSiteCid(), current, mHistory.getPosition(), mHistory.getDuration());
         mHistory.saveAsync();
     }
 
@@ -2753,6 +2753,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onPlayerClick(Integer item) {
+        capturePlaybackPosition();
         mPlayers.setPlayer(item);
         replacePlayerSession();
         setPlayerView();

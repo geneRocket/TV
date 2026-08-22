@@ -2,6 +2,12 @@ package com.fongmi.android.tv.player.vod;
 
 public final class VodEpisode {
 
+    public static String identity(String name, String resolverUrl) {
+        String url = resolverUrl == null ? "" : resolverUrl.trim();
+        if (!url.isEmpty()) return url;
+        return name == null ? "" : name.trim();
+    }
+
     private final String identity;
     private final String siteKey;
     private final String flag;

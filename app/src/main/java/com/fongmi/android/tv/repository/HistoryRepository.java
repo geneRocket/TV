@@ -2,7 +2,6 @@ package com.fongmi.android.tv.repository;
 
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Vod;
-import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
 
 import java.util.List;
 
@@ -43,9 +42,7 @@ public final class HistoryRepository {
     }
 
     public History delete(History history) {
-        History deleted = history.delete();
-        EpisodeProgressManager.get().delete(history.getKey());
-        return deleted;
+        return history.delete();
     }
 
     public History fromJson(String value) {
@@ -58,11 +55,9 @@ public final class HistoryRepository {
 
     public void delete(int cid) {
         History.delete(cid);
-        EpisodeProgressManager.get().deleteByConfig(cid);
     }
 
     public void deleteLoaded() {
-        for (History history : loaded()) EpisodeProgressManager.get().delete(history.getKey());
         History.deleteLoaded();
     }
 

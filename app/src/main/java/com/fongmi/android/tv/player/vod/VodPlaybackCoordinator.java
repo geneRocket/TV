@@ -1,7 +1,5 @@
 package com.fongmi.android.tv.player.vod;
 
-import com.fongmi.android.tv.bean.PlaybackProgress;
-import com.fongmi.android.tv.player.progress.EpisodeProgressStore;
 import com.fongmi.android.tv.player.resolver.PlaybackResolver;
 import com.fongmi.android.tv.player.resolver.ResolveFailure;
 import com.fongmi.android.tv.player.resolver.ResolveHandle;
@@ -23,7 +21,6 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private final PlaybackItemFactory itemFactory;
     private final PlaybackResolver resolver;
     private final PlayerSession session;
-    private final EpisodeProgressStore progressStore;
     private final Subscription sessionSubscription;
     private List<VodEpisode> episodes = new ArrayList<>();
     private ResolveHandle resolveHandle;
@@ -32,21 +29,20 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private long opening;
     private boolean reverse;
     private boolean closed;
-    private String historyKey = "";
-    private int cid;
+    private String resumeEpisodeId = "";
+    private long resumePosition;
 
-    public VodPlaybackCoordinator(PlaybackResolver resolver, PlaybackItemFactory itemFactory, PlayerSession session, EpisodeProgressStore progressStore) {
+    public VodPlaybackCoordinator(PlaybackResolver resolver, PlaybackItemFactory itemFactory, PlayerSession session) {
         this.resolver = resolver;
         this.itemFactory = itemFactory;
         this.session = session;
-        this.progressStore = progressStore;
         this.sessionSubscription = session.observe(this::onSessionState);
     }
 
-    public synchronized void configureProgress(String historyKey, int cid) {
+    public synchronized void setResumePosition(String episodeId, long position) {
         requireOpen();
-        this.historyKey = historyKey == null ? "" : historyKey;
-        this.cid = cid;
+        this.resumeEpisodeId = episodeId == null ? "" : episodeId;
+        this.resumePosition = Math.max(position, 0);
     }
 
     public synchronized void setEpisodes(List<VodEpisode> episodes, boolean reverse) {
@@ -62,10 +58,9 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     public synchronized void play(int index, StartPolicy policy) {
         requireOpen();
         if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
-        if (state.getEpisode() != null && state.getDuration() > 0) checkpoint(state.getPosition(), state.getDuration());
         cancelResolve();
         VodEpisode episode = episodes.get(index);
-        long startPosition = startPosition(policy, savedPosition(episode), state.getPosition());
+        long startPosition = startPosition(policy, resumePosition(episode), state.getPosition());
         long currentRequest = ++requestId;
         publish(new VodPlaybackState(VodPlaybackPhase.RESOLVING, episode, index, startPosition, -1, null));
         resolveHandle = resolver.resolve(new ResolveRequest(currentRequest, episode.getSiteKey(), episode.getFlag(), episode.getResolverUrl()), new PlaybackResolver.Callback() {
@@ -121,20 +116,6 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         session.stop();
     }
 
-    public synchronized void checkpoint(long position, long duration) {
-        if (closed || state.getEpisode() == null || historyKey.isEmpty() || duration <= 0) return;
-        PlaybackProgress progress = new PlaybackProgress();
-        progress.setHistoryKey(historyKey);
-        progress.setEpisodeId(state.getEpisode().getIdentity());
-        progress.setCid(cid);
-        progress.setEpisodeName(state.getEpisode().getName());
-        progress.setEpisodeUrl(state.getEpisode().getResolverUrl());
-        progress.setPosition(position);
-        progress.setDuration(duration);
-        progress.setUpdatedAt(System.currentTimeMillis());
-        progressStore.save(progress);
-    }
-
     public synchronized VodPlaybackState state() {
         return state;
     }
@@ -176,16 +157,14 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     private long startPosition(StartPolicy policy, long saved, long current) {
         switch (policy) {
-            case KEEP_CURRENT_POSITION: return Math.max(opening, Math.max(current, 0));
+            case KEEP_CURRENT_POSITION: return Math.max(opening, Math.max(Math.max(current, 0), Math.max(saved, 0)));
             case RESUME_SAVED: return Math.max(opening, Math.max(saved, 0));
             default: return opening;
         }
     }
 
-    private long savedPosition(VodEpisode episode) {
-        if (historyKey.isEmpty()) return 0;
-        PlaybackProgress progress = progressStore.find(historyKey, episode.getIdentity());
-        return progress == null ? 0 : progress.getPosition();
+    private long resumePosition(VodEpisode episode) {
+        return episode.getIdentity().equals(resumeEpisodeId) ? resumePosition : 0;
     }
 
     private void cancelResolve() {
