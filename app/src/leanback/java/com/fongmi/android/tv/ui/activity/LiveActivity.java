@@ -51,6 +51,7 @@ import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.server.Server;
@@ -117,6 +118,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private String mInfoLogoUrl;
     private CustomTarget<Drawable> mArtworkTarget;
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
+    private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private int count;
 
     public static void start(Context context) {
@@ -1041,17 +1043,17 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         fetch();
     }
 
-    private void seekTo(int time) {
-        mPlayers.seekTo(time);
+    private void seekTo(long position) {
+        mPlayers.seekTo(position);
         mKeyDown.resetTime();
-        showProgress();
         hideCenter();
     }
 
-    private void postSeekTo(int time) {
+    private void postSeekTo(int offset) {
+        if (offset == 0) return;
         if (mSeekRunnable != null) App.removeCallbacks(mSeekRunnable);
         mSeekRunnable = () -> {
-            seekTo(time);
+            seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), offset));
             mSeekRunnable = null;
         };
         App.post(mSeekRunnable, 250);
@@ -1131,8 +1133,12 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     public void onSeeking(int time) {
         if (!mPlayers.isVod()) return;
+        if (mSeekRunnable != null) {
+            App.removeCallbacks(mSeekRunnable);
+            mSeekRunnable = null;
+        }
         setTextIfChanged(mBinding.widget.exoDuration, mPlayers.getDurationTime());
-        setTextIfChanged(mBinding.widget.exoPosition, mPlayers.getPositionTime(time));
+        setTextIfChanged(mBinding.widget.exoPosition, mPlayers.stringToTime(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time)));
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         setVisibilityIfChanged(mBinding.widget.center, View.VISIBLE);
         hideProgress();
@@ -1218,6 +1224,9 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     @Override
     protected void onPause() {
+        if (mSeekRunnable != null) App.removeCallbacks(mSeekRunnable);
+        mSeekRunnable = null;
+        mSeekGesture.reset();
         super.onPause();
         mPlayers.pause();
         mClock.stop();

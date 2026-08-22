@@ -39,6 +39,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.server.Server;
@@ -74,6 +75,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private DIDLParser mParser;
     private PlaybackController mPlayers;
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
+    private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private Runnable mR1;
     private Runnable mR2;
     private Clock mClock;
@@ -525,11 +527,12 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public void onSeeking(int time) {
+        long target = mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time);
         mBinding.widget.exoDuration.setText(mPlayers.getDurationTime());
-        mBinding.widget.exoPosition.setText(mPlayers.getPositionTime(time));
+        mBinding.widget.exoPosition.setText(mPlayers.stringToTime(target));
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         mBinding.widget.center.setVisibility(View.VISIBLE);
-        mBinding.widget.seekBar.setPosition(mPlayers.getNewTime(time));
+        mBinding.widget.seekBar.setPosition(target);
         mBinding.widget.seekBar.setDuration(mPlayers.getDuration());
         hideProgress();
     }
@@ -537,8 +540,11 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     @Override
     public void onSeekTo(int time) {
         mKeyDown.resetTime();
-        mPlayers.seekTo(time);
-        showProgress();
+        if (time == 0) {
+            mSeekGesture.reset();
+            return;
+        }
+        mPlayers.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
         onPlay();
     }
 
@@ -606,6 +612,8 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     protected void onPause() {
+        mKeyDown.release();
+        mSeekGesture.reset();
         super.onPause();
         mPlayers.pause();
         mClock.stop();

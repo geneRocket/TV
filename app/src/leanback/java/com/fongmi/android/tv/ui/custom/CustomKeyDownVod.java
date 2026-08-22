@@ -79,6 +79,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
             App.removeCallbacks(seekRunnable);
             listener.onSeeking(addTime());
         } else if (event.getAction() == KeyEvent.ACTION_UP && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
+            if (holdSecond == 0) return;
             App.removeCallbacks(seekRunnable);
             App.post(seekRunnable, 250);
         } else if (event.getAction() == KeyEvent.ACTION_UP && KeyUtil.isUpKey(event)) {

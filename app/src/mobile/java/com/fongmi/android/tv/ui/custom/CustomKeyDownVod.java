@@ -44,7 +44,8 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
 
     public boolean onTouchEvent(MotionEvent e) {
         boolean finished = e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL;
-        if (changeTime && finished) onSeekEnd();
+        if (changeTime && e.getAction() == MotionEvent.ACTION_UP) onSeekEnd();
+        else if (changeTime && e.getAction() == MotionEvent.ACTION_CANCEL) cancelSeek();
         if (changeSpeed && finished) {
             listener.onSpeedEnd();
             changeSpeed = false;
@@ -59,6 +60,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     }
 
     public void release() {
+        if (changeTime) cancelSeek();
         if (changeSpeed) listener.onSpeedEnd();
         changeSpeed = false;
     }
@@ -117,6 +119,12 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         time = 0;
     }
 
+    private void cancelSeek() {
+        listener.onSeekCancel();
+        changeTime = false;
+        time = 0;
+    }
+
     private void checkFunc(float distanceX, float distanceY, MotionEvent e2) {
         changeTime = Math.abs(distanceX) >= Math.abs(distanceY);
         if (!changeTime) checkSide(e2);
@@ -168,6 +176,8 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         void onSeek(int time);
 
         void onSeekEnd(int time);
+
+        void onSeekCancel();
 
         void onSingleTap();
 

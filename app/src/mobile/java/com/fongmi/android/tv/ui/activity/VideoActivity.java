@@ -77,7 +77,7 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackMarkers;
-import com.fongmi.android.tv.player.PlaybackSeek;
+import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
 import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
 import com.fongmi.android.tv.player.session.PlaybackState;
@@ -191,6 +191,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private int mRecommendGeneration;
     private Runnable mRecommendRequest;
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
+    private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private long mLastHistorySaveAt;
     private boolean mPreservePositionOnNextPlay;
     private long requestTokenSeed;
@@ -2062,7 +2063,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onSeek(int time) {
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
-        mBinding.widget.time.setText(mPlayers.stringToTime(PlaybackSeek.target(mPlayers.getPosition(), mPlayers.getDuration(), time)));
+        mBinding.widget.time.setText(mPlayers.stringToTime(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time)));
         mBinding.widget.seek.setVisibility(View.VISIBLE);
         hideProgress();
     }
@@ -2070,8 +2071,18 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onSeekEnd(int time) {
         mBinding.widget.seek.setVisibility(View.GONE);
-        mPlaybackCoordinator.seekTo(PlaybackSeek.target(mPlayers.getPosition(), mPlayers.getDuration(), time));
+        if (time == 0) {
+            mSeekGesture.reset();
+            return;
+        }
+        mPlaybackCoordinator.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
         onPlay();
+    }
+
+    @Override
+    public void onSeekCancel() {
+        mBinding.widget.seek.setVisibility(View.GONE);
+        mSeekGesture.reset();
     }
 
     @Override
@@ -2186,6 +2197,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     protected void onPause() {
         mKeyDown.release();
+        mSeekGesture.reset();
         super.onPause();
         setForeground(false);
         App.removeCallbacks(mR0);

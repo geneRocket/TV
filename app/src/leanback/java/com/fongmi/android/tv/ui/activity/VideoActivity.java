@@ -71,7 +71,7 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackMarkers;
-import com.fongmi.android.tv.player.PlaybackSeek;
+import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
 import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
@@ -506,6 +506,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private final TvVodDetailController mDetail = new TvVodDetailController(new DetailPort());
     private final TvVodSourceSearch mSourceSearch = new TvVodSourceSearch(new SourceSearchPort());
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
+    private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private final TvVodRecoveryController mRecoveryController = new TvVodRecoveryController(new RecoveryPort());
     private final TvVodPlaybackNavigation mPlaybackNavigation = new TvVodPlaybackNavigation(new NavigationPort());
     private final TvVodPlaybackStateBinder mPlaybackState = new TvVodPlaybackStateBinder(new PlaybackStatePort());
@@ -2687,7 +2688,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onSeeking(int time) {
         setCenterAction(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
-        updateCenterProgress(PlaybackSeek.target(mPlayers.getPosition(), mPlayers.getDuration(), time), mPlayers.getDuration());
+        updateCenterProgress(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time), mPlayers.getDuration());
         setCenterVisible(true);
         hideProgress();
     }
@@ -2695,7 +2696,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onSeekTo(int time) {
         mPlaybackState.onSeek();
-        mPlaybackPresenter.seekTo(PlaybackSeek.target(mPlayers.getPosition(), mPlayers.getDuration(), time));
+        mPlaybackPresenter.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
         mKeyDown.resetTime();
         onPlay();
     }
@@ -2804,6 +2805,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     protected void onPause() {
         mKeyDown.release();
+        mSeekGesture.reset();
         super.onPause();
         setBackground(true);
         saveHistoryNow();

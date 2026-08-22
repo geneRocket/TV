@@ -49,6 +49,7 @@ import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.server.Server;
@@ -111,6 +112,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private boolean stop;
     private boolean lock;
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
+    private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private int passCount;
     private PiP mPiP;
 
@@ -1127,7 +1129,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     public void onSeek(int time) {
         if (!mPlayers.isVod()) return;
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
-        mBinding.widget.time.setText(mPlayers.getPositionTime(time));
+        mBinding.widget.time.setText(mPlayers.stringToTime(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time)));
         mBinding.widget.seek.setVisibility(View.VISIBLE);
         hideProgress();
     }
@@ -1136,8 +1138,11 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     public void onSeekEnd(int time) {
         if (!mPlayers.isVod()) return;
         mBinding.widget.seek.setVisibility(View.GONE);
-        mPlayers.seekTo(time);
-        showProgress();
+        if (time == 0) {
+            mSeekGesture.reset();
+            return;
+        }
+        mPlayers.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
         onPlay();
     }
 
@@ -1231,6 +1236,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     protected void onPause() {
+        mSeekGesture.reset();
         super.onPause();
         setForeground(false);
         App.removeCallbacks(mR0);
