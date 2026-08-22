@@ -47,6 +47,8 @@ public class History {
     private static final Map<String, Long> WRITE_VERSIONS = new ConcurrentHashMap<>();
     private static final ExecutorService WRITE_EXECUTOR = ThreadPools.newSingle("history-write");
     private static final Object WRITE_LOCK = new Object();
+    private static final long REFRESH_THROTTLE_MS = 1000;
+    private static long lastRefreshAt;
     private static final Pattern PATTERN_END = Pattern.compile("(?i)[\\s\\p{P}\\p{S}]+$");
     private static final Pattern PATTERN_VERSION = Pattern.compile("(?i)(?:粤语版|国语版|普通话版|粤语中字|国语中字|国粤双语|双语版|中英双字|中文字幕|中字|粤语|国语|普通话|高清版|hd中字|hd|bd|正片|全集|4k|2160p|1080p|720p|x264|x265|h264|h265|mp4|mkv|m3u8|mp3|avi|flv|wmv|ts|mov)$");
     private static final Pattern PATTERN_ALL = Pattern.compile("[\\s\\p{P}\\p{S}]+");
@@ -547,6 +549,7 @@ public class History {
         History snapshot = copy(this);
         String key = cacheKey(snapshot.getCid(), snapshot.getKey());
         synchronized (WRITE_LOCK) {
+            cache(snapshot);
             long version = WRITE_VERSIONS.merge(key, 1L, Long::sum);
             PENDING_WRITES.put(key, new PendingWrite(snapshot, version));
             scheduleWrite(key);
@@ -563,7 +566,10 @@ public class History {
             PendingWrite pending;
             while ((pending = PENDING_WRITES.remove(key)) != null) {
                 synchronized (WRITE_LOCK) {
-                    if (pending.version == WRITE_VERSIONS.getOrDefault(key, 0L)) pending.item.save();
+                    if (pending.version == WRITE_VERSIONS.getOrDefault(key, 0L)) {
+                        pending.item.save();
+                        notifyHistoryChangedLocked();
+                    }
                 }
             }
         } finally {
@@ -573,6 +579,13 @@ public class History {
                 else WRITE_VERSIONS.remove(key);
             }
         }
+    }
+
+    private static void notifyHistoryChangedLocked() {
+        long now = System.currentTimeMillis();
+        if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return;
+        lastRefreshAt = now;
+        RefreshEvent.history();
     }
 
     public History delete() {

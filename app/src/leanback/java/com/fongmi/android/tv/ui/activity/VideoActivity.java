@@ -1642,9 +1642,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mHistory == null) return;
         long position = mPlayers.getPosition();
         long duration = mPlayers.getDuration();
-        mHistory.setPosition(position);
-        mHistory.setDuration(duration);
         if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
+            mHistory.setPosition(position);
+            mHistory.setDuration(duration);
             mLastHistorySaveAt = System.currentTimeMillis();
             saveHistorySnapshot();
         }
