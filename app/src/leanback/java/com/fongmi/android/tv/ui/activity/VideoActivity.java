@@ -70,12 +70,20 @@ import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.EpisodePlaybackPlan;
 import com.fongmi.android.tv.player.EpisodeNavigator;
 import com.fongmi.android.tv.player.exo.ExoUtil;
-import com.fongmi.android.tv.player.PlaybackRequest;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PendingEpisodePlayback;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
 import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.ControllerPlayerSession;
+import com.fongmi.android.tv.player.progress.RoomEpisodeProgressStore;
+import com.fongmi.android.tv.player.resolver.AsyncPlaybackResolver;
+import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
+import com.fongmi.android.tv.player.vod.DirectPlaybackItemFactory;
+import com.fongmi.android.tv.player.vod.StartPolicy;
+import com.fongmi.android.tv.player.vod.VodEpisode;
+import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
+import com.fongmi.android.tv.player.vod.VodPlaybackState;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.player.danmu.Parser;
@@ -621,6 +629,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private final Set<String> mBroken = new HashSet<>();
     private History mHistory;
     private PlaybackController mPlayers;
+    private AsyncPlaybackResolver mVodResolver;
+    private VodPlaybackCoordinator mPlaybackCoordinator;
     private boolean background;
     private boolean fullscreen;
     private boolean initTrack;
@@ -664,7 +674,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private String mArtworkUrl;
     private long requestTokenSeed;
     private String pendingDetailToken;
-    private final PlaybackRequest mPlaybackRequest = new PlaybackRequest();
     private int mEpisodeNumColumns;
     private int mEpisodeColumnWidth;
     private int mArraySize = -1;
@@ -864,7 +873,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mClock = Clock.create(mBinding.display.clock);
         mDanmakuContext = DanmakuContext.create();
         mPlayers = PlaybackController.create(this);
-        mPlayers.observe(this::onPlaybackState);
+        mVodResolver = new AsyncPlaybackResolver(ThreadPools.newSingle("vod-resolver"), App::post, new SpiderPlaybackGateway());
+        mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, this::createPlaybackItem,
+                new ControllerPlayerSession(mPlayers, getSite().getTimeout()), new RoomEpisodeProgressStore());
+        mPlaybackCoordinator.observe(this::onVodPlaybackState);
         mR1 = this::hideControl;
         mR2 = this::updateFocus;
         mR3 = this::setTraffic;
@@ -1098,7 +1110,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mSiteSearch = new SiteSearchSession(mViewModel, "video-search", SOURCE_SEARCH_CONCURRENCY);
         mViewModel.result().observe(this, mContent::setDetail);
-        mViewModel.player().observe(this, this::applyPlayerResult);
         mViewModel.search().observe(this, mContent::setSearch);
     }
 
@@ -1161,7 +1172,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void stopActivePlayback() {
-        mPlaybackRequest.clear();
         mPlaybackResultStarted = false;
         clearPendingHistoryUpdate();
         clearPlaybackTimeout();
@@ -1180,15 +1190,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         CharSequence title = getString(R.string.detail_title, mBinding.name.getText(), episode.getName());
         if (!TextUtils.equals(mBinding.widget.title.getText(), title)) mBinding.widget.title.setText(title);
         if (!TextUtils.equals(mBinding.display.title.getText(), title)) mBinding.display.title.setText(title);
-        String token = nextRequestToken("play");
-        mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
         mPlaybackResultStarted = false;
         checkpointCurrentEpisode();
         mPlayers.clear();
         mPlayers.stop();
+        StartPolicy policy = replay ? StartPolicy.FRESH : (isSourceSwitching() || mPendingFlagSwitchPosition != C.TIME_UNSET
+                ? StartPolicy.KEEP_CURRENT_POSITION : StartPolicy.RESUME_SAVED);
         prepareHistoryUpdate(flag, episode, replay);
         schedulePlaybackTimeout();
-        mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
+        int index = flag.getEpisodes().indexOf(episode);
+        mPlaybackCoordinator.play(Math.max(index, 0), policy);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         clearDanmakuView();
         showProgress();
@@ -1202,19 +1213,15 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         requestPlayback(getFlag(), getEpisode(), replay);
     }
 
-    private void applyPlayerResult(Result result) {
-        if (!isCurrentPlayerResult(result)) return;
-        String token = mPlaybackRequest.getToken();
+    private com.fongmi.android.tv.player.session.PlaybackItem createPlaybackItem(VodEpisode episode, Result result, long position) {
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
-        if (hasPendingHistoryUpdate()) mPlayers.setPosition(mPendingEpisodePlayback.getStartPosition());
         mPlaybackResultStarted = true;
-        mPlayers.start(result, isUseParse(), getSite().getTimeout());
-        if (!TextUtils.equals(token, mPlaybackRequest.getToken())) return;
         setVisibilityIfChanged(mBinding.control.parse, isUseParse() ? View.VISIBLE : View.GONE);
         setQualityVisible(result.getUrl().isMulti());
         setDanmakus(result.getDanmakus());
         mQualityAdapter.addAll(result);
+        return new com.fongmi.android.tv.player.session.PlaybackItem(episode.getIdentity(), result.getRealUrl(), result.getHeaders(), result.getFormat(), result.getDrm(), result.getSubs(), position, false, result);
     }
 
     private void checkDanmu(String danmu) {
@@ -1365,6 +1372,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (getEpisodeView().getVisibility() != visibility) getEpisodeView().setVisibility(visibility);
         if (isVisible(mBinding.episodeVert)) setEpisodeView(items);
         mEpisodeAdapter.setItems(items, null);
+        if (mPlaybackCoordinator != null && mFlagAdapter != null && mFlagAdapter.size() > 0) {
+            List<VodEpisode> episodes = new ArrayList<>(items.size());
+            String flag = getFlag().getFlag();
+            for (Episode item : items) episodes.add(new VodEpisode(EpisodeProgressManager.get().identity(item), getKey(), flag, item.getName(), item.getUrl()));
+            mPlaybackCoordinator.setEpisodes(episodes, false);
+            mPlaybackCoordinator.configureProgress(getHistoryKey(), getSiteCid());
+            mPlaybackCoordinator.setOpening(mHistory == null ? 0 : mHistory.getOpening());
+        }
         setEpisodeControlVisible(items.size() > 1);
         mSelectedEpisodePosition = findActivatedEpisodePosition(items);
         setArrayAdapter(items.size());
@@ -2368,6 +2383,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
     }
 
+    private void onVodPlaybackState(VodPlaybackState state) {
+        if (!isCurrentPlayer() || isBackground()) return;
+        if (state.getEpisodeIndex() >= 0) mSelectedEpisodePosition = state.getEpisodeIndex();
+        onPlaybackState(new PlaybackState(0, com.fongmi.android.tv.player.session.PlaybackPhase.valueOf(state.getPhase().name()),
+                null, state.getPosition(), state.getDuration(), state.getError()));
+    }
+
     private void checkEnded() {
         if (mBinding.control.loop.isActivated()) {
             onReset(true);
@@ -2654,10 +2676,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 && TextUtils.equals(result.getKey(), getKey())
                 && TextUtils.equals(result.getRequestId(), getId())
                 && TextUtils.equals(result.getRequestToken(), pendingDetailToken);
-    }
-
-    private boolean isCurrentPlayerResult(Result result) {
-        return mPlaybackRequest.matches(result);
     }
 
     private String getSourceSwitchKeyword() {
@@ -3064,7 +3082,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlaybackState.release();
         mContent.stopSearch();
         mClock.release();
-        mPlayers.release();
+        if (mPlaybackCoordinator != null) mPlaybackCoordinator.close();
+        if (mVodResolver != null) mVodResolver.close();
         clearArtworkTarget();
         Source.get().stop();
         RefreshEvent.history();

@@ -7,8 +7,9 @@ public final class DirectPlaybackItemFactory implements PlaybackItemFactory {
 
     @Override
     public PlaybackItem create(VodEpisode episode, Result result, long startPosition) {
+        if (result.hasMsg()) throw new IllegalArgumentException(result.getMsg());
         String url = result.getRealUrl();
         if (url == null || url.isEmpty()) throw new IllegalArgumentException("resolved playback URL is empty");
-        return new PlaybackItem(episode.getIdentity(), url, result.getHeaders(), result.getFormat(), result.getDrm(), result.getSubs(), startPosition, false);
+        return new PlaybackItem(episode.getIdentity(), url, result.getHeaders(), result.getFormat(), result.getDrm(), result.getSubs(), startPosition, false, result);
     }
 }

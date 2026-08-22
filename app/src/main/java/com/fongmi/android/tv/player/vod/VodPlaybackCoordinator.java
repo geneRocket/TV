@@ -62,6 +62,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     public synchronized void play(int index, StartPolicy policy) {
         requireOpen();
         if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
+        if (state.getEpisode() != null && state.getDuration() > 0) checkpoint(state.getPosition(), state.getDuration());
         cancelResolve();
         VodEpisode episode = episodes.get(index);
         long startPosition = startPosition(policy, savedPosition(episode), state.getPosition());
@@ -89,6 +90,18 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized void replay() {
         if (state.getEpisodeIndex() >= 0) play(state.getEpisodeIndex(), StartPolicy.FRESH);
+    }
+
+    public synchronized void play() { session.play(); }
+
+    public synchronized void pause() { session.pause(); }
+
+    public synchronized void seekTo(long position) { session.seekTo(position); }
+
+    public synchronized void stop() {
+        cancelResolve();
+        requestId++;
+        session.stop();
     }
 
     public synchronized void checkpoint(long position, long duration) {
