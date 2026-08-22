@@ -25,7 +25,7 @@ import com.bumptech.glide.request.transition.Transition;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.event.ActionEvent;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.receiver.ActionReceiver;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -51,10 +51,10 @@ public class PlaybackService extends Service {
     };
     private final Set<String> loadingArtwork = Collections.synchronizedSet(new HashSet<>());
     private final Set<CustomTarget<Bitmap>> artworkTargets = Collections.synchronizedSet(new HashSet<>());
-    private static volatile Players player;
+    private static volatile PlaybackController player;
     private volatile boolean destroyed;
 
-    public static void start(Players player) {
+    public static void start(PlaybackController player) {
         PlaybackService.player = player;
         ContextCompat.startForegroundService(App.get(), new Intent(App.get(), PlaybackService.class));
     }

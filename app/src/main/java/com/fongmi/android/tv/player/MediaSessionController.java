@@ -16,7 +16,7 @@ final class MediaSessionController {
 
     private MediaSessionCompat session;
 
-    MediaSessionController(Activity activity, Players players) {
+    MediaSessionController(Activity activity, PlaybackController players) {
         session = new MediaSessionCompat(activity, "TV");
         session.setCallback(SessionCallback.create(players));
         session.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);

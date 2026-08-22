@@ -1,6 +1,6 @@
 package com.fongmi.android.tv.server;
 
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
 import com.github.catvod.Proxy;
 import com.github.catvod.utils.Util;
 
@@ -8,7 +8,7 @@ public class Server {
 
     // The local HTTP server reads this from its worker threads while playback
     // activities replace it on the main thread.
-    private volatile Players player;
+    private volatile PlaybackController player;
     private Nano nano;
     private int port;
 
@@ -28,11 +28,11 @@ public class Server {
         return port;
     }
 
-    public Players getPlayer() {
+    public PlaybackController getPlayer() {
         return player;
     }
 
-    public void setPlayer(Players player) {
+    public void setPlayer(PlaybackController player) {
         this.player = player;
     }
 

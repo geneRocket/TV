@@ -136,7 +136,11 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         if (mCurrentPlayer == type) return;
         if (mPlayer != null) release();
         mCurrentPlayer = type;
-        switch (type) {
+        createPlayer();
+    }
+
+    private void createPlayer() {
+        switch (mCurrentPlayer) {
             case PLAYER_SYS:
                 mPlayer = new AndroidMediaPlayer().setListener(this);
                 break;
@@ -210,7 +214,9 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     private void openVideo(Uri uri, Map<String, String> headers) {
         try {
-            mPlayer.reset();
+            if (mPlayer != null) mPlayer.release();
+            createPlayer();
+            if (mPlayer == null) throw new IllegalStateException("player type is not configured");
             setOptions(uri);
             setRenderView(mCurrentRender);
             mAudioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
@@ -503,6 +509,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     @Override
     public void onPrepared(IMediaPlayer mp) {
+        if (mp != mPlayer) return;
         setPreferredTextLanguage();
         mCurrentState = STATE_PREPARED;
         updateForCurrentTrackSelections();
@@ -516,6 +523,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     @Override
     public void onCompletion(IMediaPlayer mp) {
+        if (mp != mPlayer) return;
         mCurrentState = STATE_ENDED;
         mTargetState = STATE_ENDED;
         mListener.onCompletion(mPlayer);
@@ -523,12 +531,14 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     @Override
     public void onInfo(IMediaPlayer mp, int what, int extra) {
+        if (mp != mPlayer) return;
         if (what == IMediaPlayer.MEDIA_INFO_VIDEO_ROTATION_CHANGED && mRenderView != null) mRenderView.setVideoRotation(extra);
         mListener.onInfo(mp, what, extra);
     }
 
     @Override
     public boolean onError(IMediaPlayer mp, int what, int extra) {
+        if (mp != mPlayer) return true;
         mCurrentState = STATE_ERROR;
         mTargetState = STATE_ERROR;
         return mListener.onError(mPlayer, what, extra);
@@ -536,23 +546,27 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     @Override
     public void onTimedText(IMediaPlayer mp, IjkTimedText text) {
+        if (mp != mPlayer) return;
         mSubtitleView.setCues(SubtitleParser.parse(text.getText()));
     }
 
     @Override
     public void onBufferingUpdate(IMediaPlayer mp, int percent) {
+        if (mp != mPlayer) return;
         mListener.onBufferingUpdate(mp, percent);
         mCurrentBufferPercentage = percent;
     }
 
     @Override
     public void onBufferingUpdate(IMediaPlayer mp, long position) {
+        if (mp != mPlayer) return;
         mListener.onBufferingUpdate(mp, position);
         mCurrentBufferPosition = position;
     }
 
     @Override
     public void onVideoSizeChanged(IMediaPlayer mp, int width, int height, int sar_num, int sar_den) {
+        if (mp != mPlayer) return;
         mVideoWidth = mp.getVideoWidth();
         mVideoHeight = mp.getVideoHeight();
         if (mVideoWidth != 0 && mVideoHeight != 0 && mRenderView != null) {

@@ -20,7 +20,7 @@ import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Subtitle;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.DialogTrackBinding;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.custom.TrackNameProvider;
 import com.fongmi.android.tv.ui.adapter.TrackAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -40,7 +40,7 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
     private DialogTrackBinding binding;
     private Listener listener;
     private ChooserListener cListener;
-    private Players player;
+    private PlaybackController player;
     private String name;
     private boolean vod;
     private int type;
@@ -59,7 +59,7 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
         return this;
     }
 
-    public TrackDialog player(Players player) {
+    public TrackDialog player(PlaybackController player) {
         this.player = player;
         return this;
     }

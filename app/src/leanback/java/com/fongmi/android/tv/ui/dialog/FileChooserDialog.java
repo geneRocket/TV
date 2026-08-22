@@ -4,7 +4,7 @@ import android.app.Activity;
 
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
 import com.github.catvod.utils.Path;
 import com.obsez.android.lib.filechooser.ChooserDialog;
 
@@ -17,14 +17,14 @@ public class FileChooserDialog {
 
     private ChooserDialog dialog;
     private TrackDialog trackDialog;
-    private Players player;
+    private PlaybackController player;
     private int mode = MODE_SUBTITLE;
 
     public static FileChooserDialog create() {
         return new FileChooserDialog();
     }
 
-    public FileChooserDialog player(Players player) {
+    public FileChooserDialog player(PlaybackController player) {
         this.player = player;
         return this;
     }

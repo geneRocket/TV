@@ -12,7 +12,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.video.VideoRendererEventListener;
 
 import com.fongmi.android.tv.player.DynamicVolumeRenderersFactory;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.DecodeMode;
 
 import java.util.ArrayList;
 
@@ -28,7 +28,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
         super(context);
         this.decode = decode;
         setEnableDecoderFallback(true);
-        setExtensionRendererMode(decode == Players.SOFT ? EXTENSION_RENDERER_MODE_PREFER : EXTENSION_RENDERER_MODE_ON);
+        setExtensionRendererMode(decode == DecodeMode.SOFTWARE ? EXTENSION_RENDERER_MODE_PREFER : EXTENSION_RENDERER_MODE_ON);
     }
 
     @Override
@@ -40,7 +40,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
         // 列表末尾意味着优先级最低 (Fallback)。
         try {
             Renderer renderer = new FfmpegAudioRenderer(eventHandler, eventListener, audioSink);
-            out.add(decode == Players.SOFT ? 0 : out.size(), renderer);
+            out.add(decode == DecodeMode.SOFTWARE ? 0 : out.size(), renderer);
             Log.i(TAG, "Loaded FfmpegAudioRenderer.");
         } catch (RuntimeException | LinkageError e) {
             Log.e(TAG, "Error instantiating Ffmpeg extension", e);
@@ -54,7 +54,7 @@ public class NextRenderersFactory extends DynamicVolumeRenderersFactory {
 
         try {
             Renderer renderer = new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY);
-            out.add(decode == Players.SOFT ? 0 : out.size(), renderer);
+            out.add(decode == DecodeMode.SOFTWARE ? 0 : out.size(), renderer);
             Log.i(TAG, "Loaded FfmpegVideoRenderer.");
         } catch (RuntimeException | LinkageError e) {
             Log.e(TAG, "Error instantiating Ffmpeg extension", e);

@@ -12,7 +12,7 @@ import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.databinding.ActivitySettingPlayerBinding;
 import com.fongmi.android.tv.impl.BufferCallback;
 import com.fongmi.android.tv.impl.UaCallback;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlayerType;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.BufferDialog;
 import com.fongmi.android.tv.ui.dialog.UaDialog;
@@ -89,9 +89,9 @@ public class SettingPlayerActivity extends BaseActivity implements UaCallback, B
 
     private void setVisible() {
         mBinding.caption.setVisibility(Setting.hasCaption() ? View.VISIBLE : View.GONE);
-        mBinding.http.setVisibility(Players.isExo(Setting.getPlayer()) ? View.VISIBLE : View.GONE);
-        mBinding.buffer.setVisibility(Players.isExo(Setting.getPlayer()) ? View.VISIBLE : View.GONE);
-        mBinding.tunnel.setVisibility(Players.isExo(Setting.getPlayer()) ? View.VISIBLE : View.GONE);
+        mBinding.http.setVisibility(PlayerType.isExo(Setting.getPlayer()) ? View.VISIBLE : View.GONE);
+        mBinding.buffer.setVisibility(PlayerType.isExo(Setting.getPlayer()) ? View.VISIBLE : View.GONE);
+        mBinding.tunnel.setVisibility(PlayerType.isExo(Setting.getPlayer()) ? View.VISIBLE : View.GONE);
     }
 
     private void onUa(View view) {

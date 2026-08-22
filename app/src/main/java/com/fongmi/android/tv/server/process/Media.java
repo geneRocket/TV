@@ -5,7 +5,7 @@ import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.text.TextUtils;
 
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.Server;
 import com.google.gson.JsonObject;
@@ -22,7 +22,7 @@ public class Media implements Process {
 
     @Override
     public NanoHTTPD.Response doResponse(NanoHTTPD.IHTTPSession session, String path, Map<String, String> files) {
-        Players player = Server.get().getPlayer();
+        PlaybackController player = Server.get().getPlayer();
         if (player == null) return Nano.success("{}");
         MediaSessionCompat mediaSession = player.getSession();
         if (mediaSession == null) return Nano.success("{}");
@@ -40,7 +40,7 @@ public class Media implements Process {
         return Nano.success(result.toString());
     }
 
-    private String getUrl(Players player) {
+    private String getUrl(PlaybackController player) {
         String url = player.getUrl();
         return TextUtils.isEmpty(url) ? "" : url;
     }

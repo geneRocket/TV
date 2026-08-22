@@ -26,7 +26,7 @@ public class IjkUtil {
 
     public static MediaSource getSource(Map<String, String> headers, String url) {
         Uri uri = UrlUtil.uri(url);
-        return new MediaSource(Players.checkUa(headers), uri);
+        return new MediaSource(PlaybackHeaders.applyUserAgent(headers), uri);
     }
 
     public static void setSubtitleView(IjkVideoView ijk) {

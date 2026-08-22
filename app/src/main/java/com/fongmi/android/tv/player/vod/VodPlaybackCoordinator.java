@@ -1,0 +1,184 @@
+package com.fongmi.android.tv.player.vod;
+
+import com.fongmi.android.tv.bean.PlaybackProgress;
+import com.fongmi.android.tv.player.progress.EpisodeProgressStore;
+import com.fongmi.android.tv.player.resolver.PlaybackResolver;
+import com.fongmi.android.tv.player.resolver.ResolveFailure;
+import com.fongmi.android.tv.player.resolver.ResolveHandle;
+import com.fongmi.android.tv.player.resolver.ResolveRequest;
+import com.fongmi.android.tv.player.resolver.ResolveResult;
+import com.fongmi.android.tv.player.session.PlaybackPhase;
+import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.PlayerSession;
+import com.fongmi.android.tv.player.session.Subscription;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+public final class VodPlaybackCoordinator implements AutoCloseable {
+
+    private final Set<VodPlaybackObserver> observers = new LinkedHashSet<>();
+    private final PlaybackItemFactory itemFactory;
+    private final PlaybackResolver resolver;
+    private final PlayerSession session;
+    private final EpisodeProgressStore progressStore;
+    private final Subscription sessionSubscription;
+    private List<VodEpisode> episodes = new ArrayList<>();
+    private ResolveHandle resolveHandle;
+    private VodPlaybackState state = VodPlaybackState.IDLE;
+    private long requestId;
+    private long opening;
+    private boolean reverse;
+    private boolean closed;
+    private String historyKey = "";
+    private int cid;
+
+    public VodPlaybackCoordinator(PlaybackResolver resolver, PlaybackItemFactory itemFactory, PlayerSession session, EpisodeProgressStore progressStore) {
+        this.resolver = resolver;
+        this.itemFactory = itemFactory;
+        this.session = session;
+        this.progressStore = progressStore;
+        this.sessionSubscription = session.observe(this::onSessionState);
+    }
+
+    public synchronized void configureProgress(String historyKey, int cid) {
+        requireOpen();
+        this.historyKey = historyKey == null ? "" : historyKey;
+        this.cid = cid;
+    }
+
+    public synchronized void setEpisodes(List<VodEpisode> episodes, boolean reverse) {
+        requireOpen();
+        this.episodes = new ArrayList<>(episodes == null ? new ArrayList<>() : episodes);
+        this.reverse = reverse;
+    }
+
+    public synchronized void setOpening(long opening) {
+        this.opening = Math.max(opening, 0);
+    }
+
+    public synchronized void play(int index, StartPolicy policy) {
+        requireOpen();
+        if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
+        cancelResolve();
+        VodEpisode episode = episodes.get(index);
+        long startPosition = startPosition(policy, savedPosition(episode), state.getPosition());
+        long currentRequest = ++requestId;
+        publish(new VodPlaybackState(VodPlaybackPhase.RESOLVING, episode, index, startPosition, -1, null));
+        resolveHandle = resolver.resolve(new ResolveRequest(currentRequest, episode.getSiteKey(), episode.getFlag(), episode.getResolverUrl()), new PlaybackResolver.Callback() {
+            @Override public void onResolved(ResolveResult result) { applyResolved(currentRequest, episode, index, startPosition, result); }
+            @Override public void onFailure(ResolveFailure failure) { applyFailure(currentRequest, episode, index, failure); }
+        });
+    }
+
+    public synchronized boolean next() {
+        int target = state.getEpisodeIndex() + (reverse ? -1 : 1);
+        if (target < 0 || target >= episodes.size()) return false;
+        play(target, StartPolicy.RESUME_SAVED);
+        return true;
+    }
+
+    public synchronized boolean previous() {
+        int target = state.getEpisodeIndex() + (reverse ? 1 : -1);
+        if (target < 0 || target >= episodes.size()) return false;
+        play(target, StartPolicy.RESUME_SAVED);
+        return true;
+    }
+
+    public synchronized void replay() {
+        if (state.getEpisodeIndex() >= 0) play(state.getEpisodeIndex(), StartPolicy.FRESH);
+    }
+
+    public synchronized void checkpoint(long position, long duration) {
+        if (closed || state.getEpisode() == null || historyKey.isEmpty() || duration <= 0) return;
+        PlaybackProgress progress = new PlaybackProgress();
+        progress.setHistoryKey(historyKey);
+        progress.setEpisodeId(state.getEpisode().getIdentity());
+        progress.setCid(cid);
+        progress.setEpisodeName(state.getEpisode().getName());
+        progress.setEpisodeUrl(state.getEpisode().getResolverUrl());
+        progress.setPosition(position);
+        progress.setDuration(duration);
+        progress.setUpdatedAt(System.currentTimeMillis());
+        progressStore.save(progress);
+    }
+
+    public synchronized VodPlaybackState state() {
+        return state;
+    }
+
+    public synchronized Subscription observe(VodPlaybackObserver observer) {
+        requireOpen();
+        observers.add(observer);
+        observer.onVodPlaybackState(state);
+        return () -> removeObserver(observer);
+    }
+
+    private synchronized void removeObserver(VodPlaybackObserver observer) {
+        observers.remove(observer);
+    }
+
+    private synchronized void applyResolved(long expectedRequest, VodEpisode episode, int index, long startPosition, ResolveResult resolved) {
+        if (closed || expectedRequest != requestId || resolved.getRequestId() != requestId) return;
+        try {
+            session.prepare(itemFactory.create(episode, resolved.getResult(), startPosition));
+        } catch (Throwable error) {
+            publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, error));
+        }
+    }
+
+    private synchronized void applyFailure(long expectedRequest, VodEpisode episode, int index, ResolveFailure failure) {
+        if (closed || expectedRequest != requestId || failure.getRequestId() != requestId) return;
+        publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, state.getPosition(), state.getDuration(), failure.getCause()));
+    }
+
+    private synchronized void onSessionState(PlaybackState playback) {
+        if (closed || playback.getItem() == null || state.getEpisode() == null) return;
+        if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return;
+        publish(new VodPlaybackState(map(playback.getPhase()), state.getEpisode(), state.getEpisodeIndex(), playback.getPosition(), playback.getDuration(), playback.getError()));
+    }
+
+    private VodPlaybackPhase map(PlaybackPhase phase) {
+        return VodPlaybackPhase.valueOf(phase.name());
+    }
+
+    private long startPosition(StartPolicy policy, long saved, long current) {
+        switch (policy) {
+            case KEEP_CURRENT_POSITION: return Math.max(opening, Math.max(current, 0));
+            case RESUME_SAVED: return Math.max(opening, Math.max(saved, 0));
+            default: return opening;
+        }
+    }
+
+    private long savedPosition(VodEpisode episode) {
+        if (historyKey.isEmpty()) return 0;
+        PlaybackProgress progress = progressStore.find(historyKey, episode.getIdentity());
+        return progress == null ? 0 : progress.getPosition();
+    }
+
+    private void cancelResolve() {
+        if (resolveHandle != null) resolveHandle.cancel();
+        resolveHandle = null;
+    }
+
+    private void publish(VodPlaybackState next) {
+        state = next;
+        for (VodPlaybackObserver observer : new LinkedHashSet<>(observers)) observer.onVodPlaybackState(next);
+    }
+
+    private void requireOpen() {
+        if (closed) throw new IllegalStateException("coordinator is closed");
+    }
+
+    @Override
+    public synchronized void close() {
+        if (closed) return;
+        closed = true;
+        cancelResolve();
+        sessionSubscription.cancel();
+        session.release();
+        observers.clear();
+    }
+}

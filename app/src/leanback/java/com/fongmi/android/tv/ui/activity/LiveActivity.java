@@ -43,7 +43,6 @@ import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.ActivityLiveBinding;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
-import com.fongmi.android.tv.event.PlayerEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.LiveCallback;
@@ -51,7 +50,8 @@ import com.fongmi.android.tv.impl.PassCallback;
 import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -97,7 +97,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private CustomKeyDownLive mKeyDown;
     private LiveViewModel mViewModel;
     private List<Group> mHides;
-    private Players mPlayers;
+    private PlaybackController mPlayers;
     private Channel mChannel;
     private View mOldView;
     private Group mGroup;
@@ -161,7 +161,8 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     protected void initView() {
         mClock = Clock.create(Arrays.asList(mBinding.widget.clock, mBinding.display.clock));
         mKeyDown = CustomKeyDownLive.create(this);
-        mPlayers = Players.create(this);
+        mPlayers = PlaybackController.create(this);
+        mPlayers.observe(this::onPlaybackState);
         mHides = new ArrayList<>();
         mR0 = this::setActivated;
         mR1 = this::hideControl;
@@ -910,20 +911,20 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         }
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onPlayerEvent(PlayerEvent event) {
-        if (!isCurrentPlayer() || !mPlayers.isCurrentSession(event.getSessionId())) return;
-        switch (event.getState()) {
-            case 0:
+    private void onPlaybackState(PlaybackState state) {
+        if (!isCurrentPlayer()) return;
+        switch (state.getPhase()) {
+            case PREPARING:
                 setTrackVisible(false);
                 mClock.setCallback(this);
                 break;
-            case Player.STATE_IDLE:
+            case IDLE:
+            case STOPPED:
                 break;
-            case Player.STATE_BUFFERING:
+            case BUFFERING:
                 showProgress();
                 break;
-            case Player.STATE_READY:
+            case READY:
                 mRecovery.reset();
                 setMetadata();
                 hideProgress();
@@ -933,8 +934,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
                 setTextIfChanged(mBinding.widget.size, sizeText);
                 setTextIfChanged(mBinding.display.size, sizeText);
                 break;
-            case Player.STATE_ENDED:
+            case ENDED:
                 nextEpg();
+                break;
+            default:
                 break;
         }
     }

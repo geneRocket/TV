@@ -4,7 +4,8 @@ import android.content.SharedPreferences;
 import android.content.Intent;
 import android.provider.Settings;
 
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.DecodeMode;
+import com.fongmi.android.tv.player.PlayerType;
 import com.fongmi.android.tv.utils.LanguageUtil;
 import com.github.catvod.utils.Prefers;
 
@@ -69,7 +70,7 @@ public class Setting {
     // region Player Settings
 
     public static int getPlayer() {
-        return Math.min(Math.max(getPref().getInt("player", Players.EXO), Players.SYS), Players.EXO);
+        return Math.min(Math.max(getPref().getInt("player", PlayerType.EXO), PlayerType.SYSTEM), PlayerType.EXO);
     }
 
     public static void putPlayer(int player) {
@@ -77,7 +78,7 @@ public class Setting {
     }
 
     public static int getLivePlayer() {
-        return Math.min(Math.max(getPref().getInt("player_live", getPlayer()), Players.SYS), Players.EXO);
+        return Math.min(Math.max(getPref().getInt("player_live", getPlayer()), PlayerType.SYSTEM), PlayerType.EXO);
     }
 
     public static void putLivePlayer(int player) {
@@ -85,7 +86,7 @@ public class Setting {
     }
 
     public static int getDecode(int player) {
-        return Math.min(Math.max(getPref().getInt("decode_" + player, Players.HARD), Players.SOFT), Players.HARD);
+        return Math.min(Math.max(getPref().getInt("decode_" + player, DecodeMode.HARDWARE), DecodeMode.SOFTWARE), DecodeMode.HARDWARE);
     }
 
     public static void putDecode(int player, int decode) {

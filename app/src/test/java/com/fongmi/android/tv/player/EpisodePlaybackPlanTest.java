@@ -10,11 +10,20 @@ public class EpisodePlaybackPlanTest {
 
     @Test
     public void newEpisodeStartsAtOpeningAndClearsHistoryProgress() {
-        EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve("episode-1", "第1集", "episode-2", "第2集", 900_000, 60_000, false, false, 0);
+        EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve("episode-1", "第1集", "episode-2", "第2集", 0, 60_000, false, false, 0);
         assertEquals(0, plan.getHistoryPosition());
         assertEquals(60_000, plan.getStartPosition());
         assertTrue(plan.isEpisodeChanged());
         assertTrue(plan.shouldSkipOpening());
+    }
+
+    @Test
+    public void differentEpisodeResumesItsOwnSavedPosition() {
+        EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve("episode-1", "正片", "episode-2", "正片", 240_000, 60_000, false, false, 0);
+        assertEquals(240_000, plan.getHistoryPosition());
+        assertEquals(240_000, plan.getStartPosition());
+        assertTrue(plan.isEpisodeChanged());
+        assertFalse(plan.shouldSkipOpening());
     }
 
     @Test

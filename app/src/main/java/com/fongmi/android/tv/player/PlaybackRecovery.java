@@ -19,7 +19,7 @@ public final class PlaybackRecovery {
     private int errors;
     private int playerSwitches;
 
-    public Action next(ErrorEvent error, Players players, boolean hasPlayableItem) {
+    public Action next(ErrorEvent error, PlaybackController players, boolean hasPlayableItem) {
         if (++errors > MAX_ERRORS) {
             reset();
             return Action.STOP;
@@ -33,7 +33,7 @@ public final class PlaybackRecovery {
                 && error.isUrl()
                 && error.getRetry() > 0
                 && playerSwitches < MAX_PLAYER_SWITCHES
-                && players.getPlayer() != Players.SYS) {
+                && players.getPlayer() != PlayerType.SYSTEM) {
             playerSwitches++;
             return Action.SWITCH_PLAYER;
         }

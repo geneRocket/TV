@@ -18,7 +18,7 @@ import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.databinding.DialogControlBinding;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.utils.Timer;
 import com.fongmi.android.tv.ui.adapter.ParseAdapter;
 import com.fongmi.android.tv.ui.base.ViewType;
@@ -39,7 +39,7 @@ public class ControlDialog extends BaseDialog implements ParseAdapter.OnClickLis
     private final String[] scale;
     private Listener listener;
     private History history;
-    private Players player;
+    private PlaybackController player;
     private boolean parse;
 
     public static ControlDialog create() {
@@ -60,7 +60,7 @@ public class ControlDialog extends BaseDialog implements ParseAdapter.OnClickLis
         return this;
     }
 
-    public ControlDialog player(Players player) {
+    public ControlDialog player(PlaybackController player) {
         this.player = player;
         return this;
     }

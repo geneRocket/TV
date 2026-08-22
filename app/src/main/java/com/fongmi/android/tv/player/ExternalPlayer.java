@@ -21,9 +21,9 @@ final class ExternalPlayer {
 
     private static final int REQUEST_CODE = 1001;
 
-    private final Players players;
+    private final PlaybackController players;
 
-    ExternalPlayer(Players players) {
+    ExternalPlayer(PlaybackController players) {
         this.players = players;
     }
 

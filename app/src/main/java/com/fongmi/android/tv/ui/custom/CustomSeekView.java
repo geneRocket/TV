@@ -13,12 +13,10 @@ import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.TimeBar;
 
 import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.event.PlayerEvent;
-import com.fongmi.android.tv.player.Players;
-
-import org.greenrobot.eventbus.EventBus;
-import org.greenrobot.eventbus.Subscribe;
-import org.greenrobot.eventbus.ThreadMode;
+import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.session.PlaybackPhase;
+import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.Subscription;
 
 import java.util.concurrent.TimeUnit;
 
@@ -32,7 +30,8 @@ public class CustomSeekView extends FrameLayout implements TimeBar.OnScrubListen
     private DefaultTimeBar timeBar;
 
     private Runnable refresh;
-    private Players player;
+    private PlaybackController player;
+    private Subscription subscription;
 
     private long currentDuration;
     private long currentPosition;
@@ -62,9 +61,20 @@ public class CustomSeekView extends FrameLayout implements TimeBar.OnScrubListen
         refresh = this::refresh;
     }
 
-    public void setListener(Players player) {
+    public void setListener(PlaybackController player) {
+        cancelSubscription();
         this.player = player;
-        if (attached) startRefresh();
+        if (attached) subscribe();
+    }
+
+    private void subscribe() {
+        if (player == null || subscription != null) return;
+        subscription = player.observe(this::onPlaybackState);
+    }
+
+    private void cancelSubscription() {
+        if (subscription != null) subscription.cancel();
+        subscription = null;
     }
 
     private void startRefresh() {
@@ -104,7 +114,7 @@ public class CustomSeekView extends FrameLayout implements TimeBar.OnScrubListen
         }
         if (player.isEmpty()) {
             positionView.setText("00:00");
-            durationView.setText("00:00");
+            durationView.setText(player.stringToTime(0));
             timeBar.setPosition(currentDuration = 0);
             timeBar.setDuration(currentDuration = 0);
         }
@@ -151,26 +161,30 @@ public class CustomSeekView extends FrameLayout implements TimeBar.OnScrubListen
         super.onDetachedFromWindow();
         attached = false;
         stopRefresh();
-        if (EventBus.getDefault().isRegistered(this)) EventBus.getDefault().unregister(this);
+        cancelSubscription();
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         attached = true;
-        if (!EventBus.getDefault().isRegistered(this)) EventBus.getDefault().register(this);
-        if (player != null && !player.isRelease()) startRefresh();
+        subscribe();
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onPlayerEvent(PlayerEvent event) {
-        if (!attached || player == null || !player.isCurrentSession(event.getSessionId())) return;
-        int state = event.getState();
-        if (state == 0) {
-            startRefresh();
-            return;
+    private void onPlaybackState(PlaybackState state) {
+        if (!attached || player == null) return;
+        PlaybackPhase phase = state.getPhase();
+        if (phase == PlaybackPhase.PREPARING) {
+            currentPosition = state.getPosition();
+            currentBuffered = state.getPosition();
+            currentDuration = -1;
+            timeBar.setPosition(currentPosition);
+            timeBar.setBufferedPosition(currentBuffered);
+            timeBar.setDuration(0);
+            positionView.setText(player.stringToTime(currentPosition));
+            durationView.setText("00:00");
         }
-        if (state == androidx.media3.common.Player.STATE_ENDED || state == androidx.media3.common.Player.STATE_IDLE) {
+        if (phase == PlaybackPhase.ENDED || phase == PlaybackPhase.IDLE || phase == PlaybackPhase.STOPPED || phase == PlaybackPhase.RELEASED) {
             stopRefresh();
         } else {
             startRefresh();

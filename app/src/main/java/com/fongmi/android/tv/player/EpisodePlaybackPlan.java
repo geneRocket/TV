@@ -18,12 +18,12 @@ public final class EpisodePlaybackPlan {
 
     public static EpisodePlaybackPlan resolve(String historyUrl, String historyName, String targetUrl, String targetName, long savedPosition, long opening, boolean replay, boolean preservePosition, long preservedPosition) {
         boolean sameEpisode = preservePosition || sameEpisode(historyUrl, historyName, targetUrl, targetName);
-        boolean startFresh = replay || !sameEpisode;
-        long position = preservePosition ? Math.max(preservedPosition, 0) : startFresh ? 0 : Math.max(savedPosition, 0);
-        return new EpisodePlaybackPlan(position, Math.max(Math.max(opening, 0), position), !sameEpisode, startFresh);
+        long position = preservePosition ? Math.max(preservedPosition, 0) : replay ? 0 : Math.max(savedPosition, 0);
+        boolean skipOpening = replay || !sameEpisode && position == 0;
+        return new EpisodePlaybackPlan(position, Math.max(Math.max(opening, 0), position), !sameEpisode, skipOpening);
     }
 
-    static boolean sameEpisode(String historyUrl, String historyName, String targetUrl, String targetName) {
+    public static boolean sameEpisode(String historyUrl, String historyName, String targetUrl, String targetName) {
         if (historyUrl != null && !historyUrl.isEmpty()) return Objects.equals(historyUrl, targetUrl);
         return historyName != null && targetName != null && historyName.equalsIgnoreCase(targetName);
     }

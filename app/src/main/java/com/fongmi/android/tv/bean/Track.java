@@ -6,7 +6,7 @@ import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
 import com.fongmi.android.tv.db.AppDatabase;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlayerType;
 
 import java.util.List;
 
@@ -102,11 +102,11 @@ public class Track {
     }
 
     public boolean isExo(int player) {
-        return getPlayer() == player && player == Players.EXO;
+        return getPlayer() == player && player == PlayerType.EXO;
     }
 
     public boolean isIjk(int player) {
-        return getPlayer() == player && (player == Players.IJK || player == Players.SYS);
+        return getPlayer() == player && (player == PlayerType.IJK || player == PlayerType.SYSTEM);
     }
 
     public Track toggle() {

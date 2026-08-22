@@ -62,7 +62,6 @@ import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
-import com.fongmi.android.tv.event.PlayerEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.model.SiteViewModel;
@@ -74,7 +73,9 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRequest;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PendingEpisodePlayback;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
+import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.player.danmu.Parser;
@@ -252,7 +253,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             host.setEpisodeSelectedPosition(host.getEpisodePosition());
             host.mContent.stopSearch();
             host.notifyItemChanged(host.getEpisodeView(), host.mEpisodeAdapter);
-            host.onReset(!host.isSourceSwitching());
+            host.onReset(false);
             host.clearSourceSwitch();
         }
 
@@ -619,7 +620,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private List<Danmaku> mDanmakus;
     private final Set<String> mBroken = new HashSet<>();
     private History mHistory;
-    private Players mPlayers;
+    private PlaybackController mPlayers;
     private boolean background;
     private boolean fullscreen;
     private boolean initTrack;
@@ -862,7 +863,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mFrameParams = mBinding.video.getLayoutParams();
         mClock = Clock.create(mBinding.display.clock);
         mDanmakuContext = DanmakuContext.create();
-        mPlayers = Players.create(this);
+        mPlayers = PlaybackController.create(this);
+        mPlayers.observe(this::onPlaybackState);
         mR1 = this::hideControl;
         mR2 = this::updateFocus;
         mR3 = this::setTraffic;
@@ -1181,6 +1183,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         String token = nextRequestToken("play");
         mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
         mPlaybackResultStarted = false;
+        checkpointCurrentEpisode();
         mPlayers.clear();
         mPlayers.stop();
         prepareHistoryUpdate(flag, episode, replay);
@@ -2199,15 +2202,24 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean keepFlagSwitchPosition = flagSwitchPosition != C.TIME_UNSET;
         boolean preservePosition = continueSource || keepFlagSwitchPosition;
         long preservedPosition = continueSource ? mSourceSwitch.position : flagSwitchPosition;
+        boolean sameEpisode = mHistory != null && EpisodePlaybackPlan.sameEpisode(mHistory.getEpisodeUrl(), mHistory.getVodRemarks(), item.getUrl(), item.getName());
+        long savedPosition = EpisodeProgressManager.get().position(getHistoryKey(), item, sameEpisode && mHistory != null ? mHistory.getPosition() : 0);
         EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve(
                 mHistory == null ? null : mHistory.getEpisodeUrl(),
                 mHistory == null ? null : mHistory.getVodRemarks(),
                 item.getUrl(), item.getName(),
-                mHistory == null ? 0 : mHistory.getPosition(),
+                savedPosition,
                 mHistory == null ? 0 : mHistory.getOpening(),
                 replay, preservePosition, preservedPosition);
         mPendingEpisodePlayback = new PendingEpisodePlayback(flag, item, plan);
-        mPlayers.beginSession(plan.getStartPosition());
+        mPlayers.setNextStartPosition(plan.getStartPosition());
+    }
+
+    private void checkpointCurrentEpisode() {
+        if (Setting.isIncognito() || mHistory == null || TextUtils.isEmpty(mHistory.getEpisodeUrl())) return;
+        String name = TextUtils.isEmpty(mHistory.getVodRemarks()) ? mHistory.getEpisodeUrl() : mHistory.getVodRemarks();
+        Episode previous = Episode.create(name, mHistory.getEpisodeUrl());
+        EpisodeProgressManager.get().checkpoint(getHistoryKey(), getSiteCid(), previous, mPlayers.getPosition(), mPlayers.getDuration());
     }
 
     private void commitPendingHistoryUpdate() {
@@ -2332,24 +2344,26 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) setSubtitle(Sub.from(event.getPath()));
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onPlayerEvent(PlayerEvent event) {
-        if (!isCurrentPlayer() || !mPlayers.isCurrentSession(event.getSessionId()) || isBackground()) return;
-        switch (event.getState()) {
-            case 0:
+    private void onPlaybackState(PlaybackState state) {
+        if (!isCurrentPlayer() || isBackground()) return;
+        switch (state.getPhase()) {
+            case PREPARING:
                 setPlayerView();
                 mPlaybackState.onPreparing();
                 break;
-            case Player.STATE_IDLE:
+            case IDLE:
+            case STOPPED:
                 break;
-            case Player.STATE_BUFFERING:
+            case BUFFERING:
                 mPlaybackState.onBuffering();
                 break;
-            case Player.STATE_READY:
+            case READY:
                 mPlaybackState.onReady();
                 break;
-            case Player.STATE_ENDED:
+            case ENDED:
                 checkEnded();
+                break;
+            default:
                 break;
         }
     }
@@ -2578,6 +2592,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistorySessionModified = true;
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
+        Episode current = mEpisodeAdapter != null && mEpisodeAdapter.size() > 0 ? getEpisode() : null;
+        EpisodeProgressManager.get().checkpoint(getHistoryKey(), getSiteCid(), current, mHistory.getPosition(), mHistory.getDuration());
         mHistory.saveAsync();
     }
 

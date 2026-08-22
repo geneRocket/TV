@@ -67,7 +67,6 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
-import com.fongmi.android.tv.event.PlayerEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SiteSearchSession;
@@ -80,7 +79,9 @@ import com.fongmi.android.tv.utils.Downloader;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRequest;
 import com.fongmi.android.tv.player.PlaybackRecovery;
-import com.fongmi.android.tv.player.Players;
+import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
+import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.player.danmu.Parser;
 import com.fongmi.android.tv.utils.Timer;
@@ -173,7 +174,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private List<Danmaku> mDanmakus;
     private Set<String> mBroken;
     private History mHistory;
-    private Players mPlayers;
+    private PlaybackController mPlayers;
     private float mSpeedBeforeLongPress = Float.NaN;
     private boolean foreground;
     private boolean fullscreen;
@@ -376,7 +377,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mObservePlayer = this::setPlayer;
         mObserveDownload = this::setDownload;
         mObserveSearch = this::setSearch;
-        mPlayers = Players.create(this);
+        mPlayers = PlaybackController.create(this);
+        mPlayers.observe(this::onPlaybackState);
         TaskScheduler scheduler = new TaskScheduler() {
             @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
             @Override public void remove(Runnable task) { App.removeCallbacks(task); }
@@ -702,6 +704,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.display.title.setText(mBinding.control.title.getText());
         String token = nextRequestToken("play");
         mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
+        checkpointCurrentEpisode();
         mPlayers.clear();
         mPlayers.stop();
         updateHistory(episode, replay);
@@ -1442,13 +1445,22 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         long flagSwitchPosition = mPendingFlagSwitchPosition;
         mPendingFlagSwitchPosition = C.TIME_UNSET;
         boolean keepFlagSwitchPosition = flagSwitchPosition != C.TIME_UNSET;
+        boolean sameEpisode = EpisodePlaybackPlan.sameEpisode(mHistory.getEpisodeUrl(), mHistory.getVodRemarks(), item.getUrl(), item.getName());
+        long savedPosition = EpisodeProgressManager.get().position(getHistoryKey(), item, sameEpisode ? mHistory.getPosition() : 0);
         EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve(
                 mHistory.getEpisodeUrl(), mHistory.getVodRemarks(),
                 item.getUrl(), item.getName(),
-                mHistory.getPosition(), mHistory.getOpening(),
+                savedPosition, mHistory.getOpening(),
                 replay, keepFlagSwitchPosition, flagSwitchPosition);
         EpisodeProgress.apply(mHistory, getFlag(), item, plan, System.currentTimeMillis());
-        mPlayers.beginSession(plan.getStartPosition());
+        mPlayers.setNextStartPosition(plan.getStartPosition());
+    }
+
+    private void checkpointCurrentEpisode() {
+        if (Setting.isIncognito() || mHistory == null || TextUtils.isEmpty(mHistory.getEpisodeUrl())) return;
+        String name = TextUtils.isEmpty(mHistory.getVodRemarks()) ? mHistory.getEpisodeUrl() : mHistory.getVodRemarks();
+        Episode previous = Episode.create(name, mHistory.getEpisodeUrl());
+        EpisodeProgressManager.get().checkpoint(getHistoryKey(), getSiteCid(), previous, mPlayers.getPosition(), mPlayers.getDuration());
     }
 
     private void capturePlaybackPosition() {
@@ -1538,6 +1550,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
+                EpisodeProgressManager.get().checkpoint(getHistoryKey(), getSiteCid(), getEpisode(), position, duration);
                 mHistory.saveAsync();
             }
         }
@@ -1583,22 +1596,22 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) setSubtitle(Sub.from(event.getPath()));
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onPlayerEvent(PlayerEvent event) {
-        if (!isCurrentPlayer() || !mPlayers.isCurrentSession(event.getSessionId()) || isRedirect()) return;
-        switch (event.getState()) {
-            case 0:
+    private void onPlaybackState(PlaybackState state) {
+        if (!isCurrentPlayer() || isRedirect()) return;
+        switch (state.getPhase()) {
+            case PREPARING:
                 setPlayerView();
                 setInitTrack(true);
                 setTrackVisible(false);
                 mClock.setCallback(this);
                 break;
-            case Player.STATE_IDLE:
+            case IDLE:
+            case STOPPED:
                 break;
-            case Player.STATE_BUFFERING:
+            case BUFFERING:
                 showProgress();
                 break;
-            case Player.STATE_READY:
+            case READY:
                 clearPlaybackTimeout();
                 stopSearch();
                 mBroken.clear();
@@ -1616,8 +1629,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 mBinding.display.size.setText(mPlayers.getSizeText());
                 if (isVisible(mBinding.control.getRoot())) showControl();
                 break;
-            case Player.STATE_ENDED:
+            case ENDED:
                 checkEnded();
+                break;
+            default:
                 break;
         }
     }
