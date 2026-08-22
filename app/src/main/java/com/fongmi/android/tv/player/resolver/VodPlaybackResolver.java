@@ -3,6 +3,8 @@ package com.fongmi.android.tv.player.resolver;
 import com.fongmi.android.tv.bean.Result;
 import com.github.catvod.utils.Json;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
@@ -17,6 +19,7 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     private final PlaybackGateway gateway;
     private final ExecutorService executor;
     private final PlaybackSourceResolver sourceResolver = new PlaybackSourceResolver();
+    private final Set<Task> tasks = new LinkedHashSet<>();
     private volatile Task activeMediaTask;
     private volatile boolean closed;
 
@@ -35,12 +38,12 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     }
 
     @Override public ResolveHandle resolve(ResolveRequest request, Callback callback) {
-        if (closed) throw new IllegalStateException("resolver is closed");
         if (request == null) throw new IllegalArgumentException("request must not be null");
         if (callback == null) throw new IllegalArgumentException("callback must not be null");
         Task task = new Task(request.getRequestId());
+        register(task);
         try {
-            task.future = executor.submit(() -> {
+            Future<?> future = executor.submit(() -> {
                 try {
                     Result result = gateway.resolve(request.getSiteKey(), request.getFlag(), request.getEpisodeUrl());
                     dispatcher.accept(() -> resolveMedia(task, result, callback));
@@ -48,6 +51,7 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
                     dispatchFailure(task, callback, error);
                 }
             });
+            task.setFuture(future);
         } catch (Throwable error) {
             finish(task);
             fail(task, callback, error);
@@ -56,14 +60,20 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     }
 
     private void resolveMedia(Task task, Result result, Callback callback) {
-        if (task.cancelled) return;
+        if (closed || task.cancelled) {
+            finish(task);
+            return;
+        }
         try {
             if (result == null) throw new IllegalStateException("playback gateway returned null");
             resultPrepared.accept(result);
-            activeMediaTask = task;
+            if (!activate(task)) return;
             sourceResolver.resolve(result, useParse.test(result), false, new PlaybackSourceResolver.Callback() {
                 @Override public void onResolved(ResolvedMedia media) {
-                    if (task.cancelled) return;
+                    if (closed || task.cancelled) {
+                        finish(task);
+                        return;
+                    }
                     finish(task);
                     Result direct = Result.empty();
                     direct.setUrl(media.getUrl());
@@ -74,7 +84,7 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
                     direct.setFlag(result.getFlag());
                     direct.setDanmaku(result.getDanmaku());
                     direct.setParse(0);
-                    notifyResolved(callback, new ResolveResult(task.requestId, direct));
+                    notifyResolved(task, callback, new ResolveResult(task.requestId, direct));
                 }
 
                 @Override public void onFailure() {
@@ -90,8 +100,12 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
 
     private void dispatchFailure(Task task, Callback callback, Throwable error) {
         try {
-            dispatcher.accept(() -> fail(task, callback, error));
+            dispatcher.accept(() -> {
+                finish(task);
+                fail(task, callback, error);
+            });
         } catch (Throwable dispatchError) {
+            finish(task);
             fail(task, callback, dispatchError);
         }
     }
@@ -105,8 +119,8 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
         }
     }
 
-    private void notifyResolved(Callback callback, ResolveResult result) {
-        if (closed) return;
+    private void notifyResolved(Task task, Callback callback, ResolveResult result) {
+        if (closed || task.cancelled) return;
         try {
             callback.onResolved(result);
         } catch (RuntimeException ignored) {
@@ -114,11 +128,19 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     }
 
     private synchronized void finish(Task task) {
+        tasks.remove(task);
         if (activeMediaTask == task) activeMediaTask = null;
+    }
+
+    private synchronized boolean activate(Task task) {
+        if (closed || task.cancelled || !tasks.contains(task)) return false;
+        activeMediaTask = task;
+        return true;
     }
 
     private synchronized void cancel(Task task) {
         task.cancelled = true;
+        tasks.remove(task);
         if (task.future != null) task.future.cancel(true);
         if (activeMediaTask == task) {
             activeMediaTask = null;
@@ -129,10 +151,14 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     @Override public synchronized void close() {
         if (closed) return;
         closed = true;
-        Task active = activeMediaTask;
-        if (active != null) cancel(active);
+        for (Task task : new LinkedHashSet<>(tasks)) cancel(task);
         sourceResolver.close();
         executor.shutdownNow();
+    }
+
+    private synchronized void register(Task task) {
+        if (closed) throw new IllegalStateException("resolver is closed");
+        tasks.add(task);
     }
 
     private final class Task implements ResolveHandle {
@@ -140,6 +166,10 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
         private volatile boolean cancelled;
         private volatile Future<?> future;
         private Task(long requestId) { this.requestId = requestId; }
+        private void setFuture(Future<?> future) {
+            this.future = future;
+            if (cancelled) future.cancel(true);
+        }
         @Override public long getRequestId() { return requestId; }
         @Override public void cancel() { VodPlaybackResolver.this.cancel(this); }
     }

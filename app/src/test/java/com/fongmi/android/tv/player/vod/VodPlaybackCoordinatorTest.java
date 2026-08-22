@@ -160,7 +160,7 @@ public class VodPlaybackCoordinatorTest {
         resolver.resolve(resolver.lastRequestId);
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 321_000, 900_000));
 
-        coordinator.setResumePosition("episode-1", 321_000);
+        coordinator.preservePosition("episode-1", 321_000);
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.STOPPED, 0, -1));
         coordinator.reload();
         resolver.resolve(resolver.lastRequestId);
@@ -196,6 +196,35 @@ public class VodPlaybackCoordinatorTest {
         coordinator.replaceMedia(Result.empty());
 
         assertEquals(480_000, engine.request.getStartPosition());
+    }
+
+    @Test
+    public void keepCurrentPositionDoesNotJumpForwardToOlderHistory() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 600_000);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 120_000, 900_000));
+
+        coordinator.reload();
+        resolver.resolve(resolver.lastRequestId);
+
+        assertEquals(120_000, engine.request.getStartPosition());
+    }
+
+    @Test
+    public void mismatchedResolveHandleBecomesError() {
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator((request, callback) -> new ResolveHandle() {
+            @Override public long getRequestId() { return request.getRequestId() + 1; }
+            @Override public void cancel() {}
+        }, engine);
+
+        coordinator.play(0, StartPolicy.FRESH);
+
+        assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
     }
 
     private VodPlaybackCoordinator coordinator(ManualResolver resolver, FakeEngine engine) {

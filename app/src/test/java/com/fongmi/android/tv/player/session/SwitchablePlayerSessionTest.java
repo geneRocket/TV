@@ -92,12 +92,67 @@ public class SwitchablePlayerSessionTest {
         assertEquals(PlaybackPhase.READY, phases.get(1));
     }
 
+    @Test
+    public void lateCallbackFromReplacedDelegateIsIgnored() {
+        FakeSession first = new FakeSession();
+        first.keepObserverAfterCancel = true;
+        FakeSession second = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(first);
+
+        session.replace(second);
+        first.emit(PlaybackPhase.ERROR);
+
+        assertEquals(PlaybackPhase.IDLE, session.state().getPhase());
+    }
+
+    @Test
+    public void failedReplacementLeavesPreviousDelegateUsable() {
+        FakeSession first = new FakeSession();
+        FakeSession broken = new FakeSession();
+        broken.observeError = new IllegalStateException("subscribe failed");
+        SwitchablePlayerSession session = new SwitchablePlayerSession(first);
+
+        try {
+            session.replace(broken);
+        } catch (IllegalStateException expected) {
+            assertEquals("subscribe failed", expected.getMessage());
+        }
+        session.play();
+
+        assertEquals(1, first.playCount);
+        assertTrue(!first.released);
+        assertTrue(broken.released);
+    }
+
+    @Test
+    public void missingReplacementSubscriptionLeavesPreviousDelegateUsable() {
+        FakeSession first = new FakeSession();
+        FakeSession broken = new FakeSession();
+        broken.returnNullSubscription = true;
+        SwitchablePlayerSession session = new SwitchablePlayerSession(first);
+
+        try {
+            session.replace(broken);
+            throw new AssertionError("Expected missing subscription to fail");
+        } catch (IllegalStateException expected) {
+            assertEquals("delegate returned no subscription", expected.getMessage());
+        }
+        session.play();
+
+        assertEquals(1, first.playCount);
+        assertTrue(!first.released);
+        assertTrue(broken.released);
+    }
+
     private static final class FakeSession implements PlayerSession {
         private PlaybackObserver observer;
         private PlaybackState state = PlaybackState.IDLE;
         private int playCount;
         private long seekPosition;
         private boolean released;
+        private boolean keepObserverAfterCancel;
+        private boolean returnNullSubscription;
+        private RuntimeException observeError;
 
         void emit(PlaybackPhase phase) {
             state = new PlaybackState(1, phase, null, 0, -1, null);
@@ -114,9 +169,11 @@ public class SwitchablePlayerSessionTest {
         @Override public void stop() {}
         @Override public PlaybackState state() { return state; }
         @Override public Subscription observe(PlaybackObserver observer) {
+            if (observeError != null) throw observeError;
             this.observer = observer;
             observer.onPlaybackState(state);
-            return () -> { if (this.observer == observer) this.observer = null; };
+            if (returnNullSubscription) return null;
+            return () -> { if (!keepObserverAfterCancel && this.observer == observer) this.observer = null; };
         }
         @Override public void release() { released = true; }
     }

@@ -7,6 +7,7 @@ import org.junit.Test;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertNotNull;
@@ -42,6 +43,51 @@ public class VodPlaybackResolverTest {
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage().contains("closed"));
         }
+    }
+
+    @Test
+    public void queuedMediaPreparationIsDiscardedAfterClose() throws Exception {
+        AtomicReference<Runnable> queued = new AtomicReference<>();
+        AtomicBoolean prepared = new AtomicBoolean();
+        CountDownLatch dispatched = new CountDownLatch(1);
+        VodPlaybackResolver resolver = new VodPlaybackResolver(Executors.newSingleThreadExecutor(), task -> {
+            queued.set(task);
+            dispatched.countDown();
+        }, (site, flag, url) -> Result.empty(), result -> prepared.set(true), result -> false);
+
+        resolver.resolve(new ResolveRequest(1, "site", "flag", "episode"), new PlaybackResolver.Callback() {
+            @Override public void onResolved(ResolveResult result) {}
+            @Override public void onFailure(ResolveFailure failure) {}
+        });
+        assertTrue(dispatched.await(3, TimeUnit.SECONDS));
+        resolver.close();
+        queued.get().run();
+
+        assertTrue(!prepared.get());
+    }
+
+    @Test
+    public void closeDuringResultPreparationDoesNotStartMediaResolution() throws Exception {
+        AtomicReference<VodPlaybackResolver> reference = new AtomicReference<>();
+        AtomicBoolean mediaResolutionStarted = new AtomicBoolean();
+        CountDownLatch prepared = new CountDownLatch(1);
+        VodPlaybackResolver resolver = new VodPlaybackResolver(Executors.newSingleThreadExecutor(), Runnable::run,
+                (site, flag, url) -> Result.empty(), result -> {
+                    reference.get().close();
+                    prepared.countDown();
+                }, result -> {
+                    mediaResolutionStarted.set(true);
+                    return false;
+                });
+        reference.set(resolver);
+
+        resolver.resolve(new ResolveRequest(1, "site", "flag", "episode"), new PlaybackResolver.Callback() {
+            @Override public void onResolved(ResolveResult result) {}
+            @Override public void onFailure(ResolveFailure failure) {}
+        });
+
+        assertTrue(prepared.await(3, TimeUnit.SECONDS));
+        assertTrue(!mediaResolutionStarted.get());
     }
 
     private void assertFailure(PlaybackGateway gateway, java.util.function.Consumer<Result> prepare,

@@ -23,16 +23,43 @@ public final class SwitchablePlayerSession implements PlayerSession {
         if (next == delegate) return;
         PlayerSession previous = delegate;
         Subscription previousSubscription = delegateSubscription;
-        if (previousSubscription != null) previousSubscription.cancel();
+        PlaybackState[] initial = new PlaybackState[1];
+        boolean[] installed = {false};
+        Subscription nextSubscription;
+        try {
+            nextSubscription = next.observe(value -> {
+                synchronized (SwitchablePlayerSession.this) {
+                    if (!installed[0]) {
+                        initial[0] = value;
+                        return;
+                    }
+                    accept(next, value);
+                }
+            });
+            if (nextSubscription == null) throw new IllegalStateException("delegate returned no subscription");
+        } catch (RuntimeException error) {
+            try {
+                next.release();
+            } catch (RuntimeException ignored) {
+            }
+            throw error;
+        }
+        if (previousSubscription != null) {
+            try {
+                previousSubscription.cancel();
+            } catch (RuntimeException ignored) {
+            }
+        }
         delegate = next;
-        delegateSubscription = next.observe(value -> {
-            // A freshly created engine always emits an empty IDLE snapshot. The
-            // wrapper has stable identity, so that bootstrap event must not make
-            // controls flicker back to idle while replacing player/decode mode.
-            if (value.getPhase() == PlaybackPhase.IDLE && value.getItem() == null) return;
-            publish(value);
-        });
-        if (previous != null) previous.release();
+        delegateSubscription = nextSubscription;
+        installed[0] = true;
+        accept(next, initial[0]);
+        if (previous != null) {
+            try {
+                previous.release();
+            } catch (RuntimeException ignored) {
+            }
+        }
     }
 
     @Override public synchronized long prepare(PlaybackItem item) { requireActive(); return delegate.prepare(item); }
@@ -57,6 +84,14 @@ public final class SwitchablePlayerSession implements PlayerSession {
     }
 
     private synchronized void remove(PlaybackObserver observer) { observers.remove(observer); }
+    private void accept(PlayerSession source, PlaybackState value) {
+        if (source != delegate || value == null) return;
+        // A freshly created engine always emits an empty IDLE snapshot. The
+        // wrapper has stable identity, so replacement must not flicker to idle.
+        if (value.getPhase() == PlaybackPhase.IDLE && value.getItem() == null) return;
+        publish(value);
+    }
+
     private synchronized void publish(PlaybackState next) {
         if (released || next == null) return;
         state = next;
@@ -72,8 +107,14 @@ public final class SwitchablePlayerSession implements PlayerSession {
     @Override public synchronized void release() {
         if (released) return;
         released = true;
-        if (delegateSubscription != null) delegateSubscription.cancel();
-        delegate.release();
+        try {
+            if (delegateSubscription != null) delegateSubscription.cancel();
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            delegate.release();
+        } catch (RuntimeException ignored) {
+        }
         state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
         for (PlaybackObserver observer : new LinkedHashSet<>(observers)) {
             try {

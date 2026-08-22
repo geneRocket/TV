@@ -9,8 +9,9 @@ public final class ResolveResult {
 
     public ResolveResult(long requestId, Result result) {
         if (requestId <= 0) throw new IllegalArgumentException("requestId must be positive");
+        if (result == null) throw new IllegalArgumentException("result must not be null");
         this.requestId = requestId;
-        this.result = result == null ? Result.empty() : result;
+        this.result = result;
     }
 
     public long getRequestId() { return requestId; }

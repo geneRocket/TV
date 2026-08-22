@@ -83,6 +83,7 @@ import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
 import com.fongmi.android.tv.player.vod.StartPolicy;
+import com.fongmi.android.tv.player.vod.DefaultPlaybackItemFactory;
 import com.fongmi.android.tv.player.vod.VodEpisode;
 import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
@@ -361,6 +362,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         super.onNewIntent(intent);
         String id = Objects.toString(intent.getStringExtra("id"), "");
         if (TextUtils.isEmpty(id) || id.equals(getId())) return;
+        saveHistoryNow();
+        clearPlaybackTimeout();
+        if (mPlaybackCoordinator != null) mPlaybackCoordinator.stop();
+        mPlayers.reset();
+        mPlayers.clear();
+        clearDanmakuView();
         mBinding.swipeLayout.setRefreshing(true);
         getIntent().putExtras(intent);
         stopSearch();
@@ -518,7 +525,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mVodResolver = new VodPlaybackResolver(ThreadPools.newSingle("vod-resolver"), App::post,
                 new SpiderPlaybackGateway(), this::prepareResolvedResult, result -> isUseParse());
         mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
-        mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, this::createPlaybackItem, mPlayerSession);
+        mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
         mPlaybackCoordinator.observe(state -> {
             if (state.getPhase() != VodPlaybackPhase.ERROR) return;
             if (mPlayers.session().state().getPhase() == com.fongmi.android.tv.player.session.PlaybackPhase.ERROR) return;
@@ -612,7 +619,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.scroll.scrollTo(0, 0);
         mClock.setCallback(null);
         mPlayers.reset();
-        mPlayers.stop();
+        if (mPlaybackCoordinator != null) mPlaybackCoordinator.stop();
+        else mPlayers.stop();
         clearDanmakuView();
         getDetail();
     }
@@ -715,6 +723,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             ErrorEvent.url(0);
             return;
         }
+        int index = flag.getEpisodes().indexOf(episode);
+        if (index < 0) {
+            showError(getString(R.string.error_play_timeout));
+            return;
+        }
         mBinding.control.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
         mBinding.display.title.setText(mBinding.control.title.getText());
         mPlayers.clear();
@@ -724,8 +737,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPreservePositionOnNextPlay = false;
         updateHistory(episode);
         schedulePlaybackTimeout();
-        int index = flag.getEpisodes().indexOf(episode);
-        mPlaybackCoordinator.play(Math.max(index, 0), policy);
+        mPlaybackCoordinator.play(index, policy);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         clearDanmakuView();
         showProgress();
@@ -742,10 +754,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.swipeLayout.setRefreshing(false);
         setDanmakus(result.getDanmakus());
         mQualityAdapter.addAll(result);
-    }
-
-    private com.fongmi.android.tv.player.session.PlaybackItem createPlaybackItem(VodEpisode episode, Result result, long position) {
-        return new com.fongmi.android.tv.player.session.PlaybackItem(episode.getIdentity(), result.getRealUrl(), result.getHeaders(), result.getFormat(), result.getDrm(), result.getSubs(), position, false);
     }
 
     private void setDownload(Result result) {
@@ -1474,11 +1482,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void capturePlaybackPosition() {
         long position = mPlayers.getPosition();
-        if (position <= 0) return;
+        if (position < 0) return;
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && !mEpisodeAdapter.isEmpty()) {
             Episode episode = getEpisode();
-            mPlaybackCoordinator.setResumePosition(VodEpisode.identity(episode.getName(), episode.getUrl()), position);
+            mPlaybackCoordinator.preservePosition(VodEpisode.identity(episode.getName(), episode.getUrl()), position);
         }
         if (mHistory != null) {
             mHistory.setPosition(position);
@@ -1748,7 +1756,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         capturePlaybackPosition();
         mClock.setCallback(null);
         mPlayers.reset();
-        mPlayers.stop();
+        if (mPlaybackCoordinator != null) mPlaybackCoordinator.stop();
+        else mPlayers.stop();
         clearDanmakuView();
     }
 

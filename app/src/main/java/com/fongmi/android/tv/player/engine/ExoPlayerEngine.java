@@ -62,16 +62,23 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
 
     @Override public void play() { requireActive(); player.play(); }
 
-    @Override public void pause() { requireActive(); player.pause(); phase = EnginePhase.PAUSED; emit(null); }
+    @Override public void pause() {
+        requireActive();
+        player.pause();
+        if (phase != EnginePhase.PAUSED) {
+            phase = EnginePhase.PAUSED;
+            emit(null);
+        }
+    }
 
     @Override public void seekTo(long position) { requireActive(); player.seekTo(Math.max(position, 0)); }
 
     @Override
     public void stop() {
         if (released) return;
+        phase = EnginePhase.STOPPED;
         player.stop();
         player.clearMediaItems();
-        phase = EnginePhase.STOPPED;
         emit(null);
     }
 
@@ -108,7 +115,10 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
     @Override
     public void onPlaybackStateChanged(int state) {
         switch (state) {
-            case Player.STATE_IDLE: phase = EnginePhase.IDLE; break;
+            case Player.STATE_IDLE:
+                if (phase == EnginePhase.PREPARING || phase == EnginePhase.STOPPED) return;
+                phase = EnginePhase.IDLE;
+                break;
             case Player.STATE_BUFFERING: phase = EnginePhase.BUFFERING; break;
             case Player.STATE_READY: phase = player.isPlaying() ? EnginePhase.READY : EnginePhase.PAUSED; break;
             case Player.STATE_ENDED: phase = EnginePhase.ENDED; break;

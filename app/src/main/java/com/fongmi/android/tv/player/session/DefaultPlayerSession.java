@@ -27,7 +27,14 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         if (item == null) throw new IllegalArgumentException("item must not be null");
         long sessionId = ++nextSessionId;
         publish(new PlaybackState(sessionId, PlaybackPhase.PREPARING, item, item.getStartPosition(), -1, null));
-        engine.prepare(new EngineRequest(sessionId, item.getUrl(), item.getHeaders(), item.getFormat(), item.getDrm(), item.getSubtitles(), item.getStartPosition(), item.isForceLive()), this);
+        try {
+            engine.prepare(new EngineRequest(sessionId, item.getUrl(), item.getHeaders(), item.getFormat(), item.getDrm(), item.getSubtitles(), item.getStartPosition(), item.isForceLive()), this);
+        } catch (RuntimeException error) {
+            if (state.getPhase() != PlaybackPhase.ERROR || state.getError() != error) {
+                publish(new PlaybackState(sessionId, PlaybackPhase.ERROR, item, item.getStartPosition(), -1, error));
+            }
+            throw error;
+        }
         return sessionId;
     }
 
@@ -72,7 +79,9 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     public synchronized void stop() {
         if (released) return;
         engine.stop();
-        publish(new PlaybackState(state.getSessionId(), PlaybackPhase.STOPPED, state.getItem(), state.getPosition(), state.getDuration(), null));
+        if (state.getPhase() != PlaybackPhase.STOPPED) {
+            publish(new PlaybackState(state.getSessionId(), PlaybackPhase.STOPPED, state.getItem(), state.getPosition(), state.getDuration(), null));
+        }
     }
 
     @Override
@@ -100,7 +109,10 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     public synchronized void release() {
         if (released) return;
         released = true;
-        engine.release();
+        try {
+            engine.release();
+        } catch (RuntimeException ignored) {
+        }
         state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
         for (PlaybackObserver observer : snapshotObservers()) {
             try {

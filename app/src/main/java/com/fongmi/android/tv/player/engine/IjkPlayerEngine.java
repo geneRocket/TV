@@ -35,17 +35,31 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), request.getStartPosition());
     }
 
-    @Override public void play() { requireActive(); player.start(); }
+    @Override public void play() {
+        requireActive();
+        player.start();
+        if (player.isPlaying() && phase != EnginePhase.READY) {
+            phase = EnginePhase.READY;
+            emit(null);
+        }
+    }
 
-    @Override public void pause() { requireActive(); player.pause(); phase = EnginePhase.PAUSED; emit(null); }
+    @Override public void pause() {
+        requireActive();
+        player.pause();
+        if (phase != EnginePhase.PAUSED) {
+            phase = EnginePhase.PAUSED;
+            emit(null);
+        }
+    }
 
     @Override public void seekTo(long position) { requireActive(); player.seekTo(Math.max(position, 0)); }
 
     @Override
     public void stop() {
         if (released) return;
-        player.stop();
         phase = EnginePhase.STOPPED;
+        player.stop();
         emit(null);
     }
 
@@ -99,7 +113,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
             case IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_VIDEO_SEEK_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_AUDIO_SEEK_RENDERING_START:
-                phase = EnginePhase.READY;
+                phase = player.isPlaying() ? EnginePhase.READY : EnginePhase.PAUSED;
                 emit(null);
                 break;
         }

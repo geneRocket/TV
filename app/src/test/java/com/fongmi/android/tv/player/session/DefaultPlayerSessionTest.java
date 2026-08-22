@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 public class DefaultPlayerSessionTest {
 
@@ -73,6 +74,49 @@ public class DefaultPlayerSessionTest {
         assertEquals(1, engine.releaseCount);
     }
 
+    @Test
+    public void prepareFailurePublishesErrorInsteadOfLeavingPreparing() {
+        FakeEngine engine = new FakeEngine();
+        engine.prepareError = new IllegalStateException("prepare failed");
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+
+        try {
+            session.prepare(item("episode-1", 0));
+            fail("Expected prepare failure");
+        } catch (IllegalStateException expected) {
+            assertEquals("prepare failed", expected.getMessage());
+        }
+
+        assertEquals(PlaybackPhase.ERROR, session.state().getPhase());
+        assertEquals("prepare failed", session.state().getError().getMessage());
+    }
+
+    @Test
+    public void engineStopEventIsNotPublishedTwice() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        List<PlaybackPhase> phases = new ArrayList<>();
+        session.observe(state -> phases.add(state.getPhase()));
+        long id = session.prepare(item("episode-1", 0));
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 10, 100));
+        engine.emitStop = true;
+
+        session.stop();
+
+        assertEquals(1, phases.stream().filter(phase -> phase == PlaybackPhase.STOPPED).count());
+    }
+
+    @Test
+    public void releaseFailureStillPublishesTerminalState() {
+        FakeEngine engine = new FakeEngine();
+        engine.releaseError = new IllegalStateException("release failed");
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+
+        session.release();
+
+        assertEquals(PlaybackPhase.RELEASED, session.state().getPhase());
+    }
+
     private PlaybackItem item(String identity, long position) {
         return new PlaybackItem(identity, "https://example.com/video.m3u8", Collections.emptyMap(), "m3u8", null, Collections.emptyList(), position, false);
     }
@@ -83,11 +127,15 @@ public class DefaultPlayerSessionTest {
         private Listener listener;
         private int releaseCount;
         private long seekPosition;
+        private RuntimeException prepareError;
+        private RuntimeException releaseError;
+        private boolean emitStop;
 
         @Override
         public void prepare(EngineRequest request, Listener listener) {
             this.request = request;
             this.listener = listener;
+            if (prepareError != null) throw prepareError;
         }
 
         void emit(EngineEvent event) {
@@ -97,10 +145,12 @@ public class DefaultPlayerSessionTest {
         @Override public void play() {}
         @Override public void pause() {}
         @Override public void seekTo(long position) { seekPosition = position; }
-        @Override public void stop() {}
+        @Override public void stop() {
+            if (emitStop) listener.onEngineEvent(EngineEvent.state(request.getSessionId(), EnginePhase.STOPPED, 0, -1));
+        }
         @Override public void setSpeed(float speed) {}
         @Override public void setTrack(Track track) {}
         @Override public EngineSnapshot snapshot() { return EngineSnapshot.EMPTY; }
-        @Override public void release() { releaseCount++; }
+        @Override public void release() { releaseCount++; if (releaseError != null) throw releaseError; }
     }
 }

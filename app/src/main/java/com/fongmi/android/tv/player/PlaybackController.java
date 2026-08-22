@@ -211,12 +211,17 @@ public class PlaybackController {
 
     public void setSub(Sub sub) {
         if (isSameSub(sub)) return;
+        String identity = currentIdentity();
         this.sub = sub;
         if (TextUtils.isEmpty(url)) return;
         long current = getPosition();
         if (isIjk()) setPlayer(PlayerType.EXO);
         setPosition(current);
-        setMediaSource();
+        reloadMediaSource(identity);
+    }
+
+    public Sub getSub() {
+        return sub;
     }
 
     private boolean isSameSub(Sub target) {
@@ -589,8 +594,12 @@ public class PlaybackController {
     }
 
     public void setMediaSource() {
+        reloadMediaSource(currentIdentity());
+    }
+
+    private void reloadMediaSource(String identity) {
         if (TextUtils.isEmpty(url)) return;
-        setMediaSource(headers, url, format, drm, subs, timeout, this.forceLive);
+        setMediaSource(identity, headers, url, format, drm, subs, timeout, this.forceLive);
     }
 
     public void setMediaSource(String url) {
@@ -620,6 +629,10 @@ public class PlaybackController {
     }
 
     private void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
+        setMediaSource("", headers, url, format, drm, subs, timeout, forceLive);
+    }
+
+    private void setMediaSource(String identity, Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
         stopParse();
         this.headers = PlaybackHeaders.applyUserAgent(mergeInlineHeaders(headers, url));
         this.url = UrlUtil.stripTag(UrlUtil.normalize(url, ""));
@@ -636,7 +649,8 @@ public class PlaybackController {
             if (playbackSession == null) throw new IllegalStateException("player session is not initialized");
             long startPosition = position == C.TIME_UNSET ? 0 : Math.max(position, 0);
             position = C.TIME_UNSET;
-            activeSessionId = playbackSession.prepare(new PlaybackItem(this.url, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive));
+            String itemIdentity = TextUtils.isEmpty(identity) ? this.url : identity;
+            activeSessionId = playbackSession.prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive));
         } catch (RuntimeException e) {
             removeTimeoutCheck();
             ThreadPools.log(e, "Player media source setup failed.");
@@ -798,8 +812,18 @@ public class PlaybackController {
     public Subscription observe(com.fongmi.android.tv.player.session.PlaybackObserver observer) {
         if (observer == null) throw new IllegalArgumentException("observer must not be null");
         observers.add(observer);
-        observer.onPlaybackState(playbackSession == null ? PlaybackState.IDLE : playbackSession.state());
+        try {
+            observer.onPlaybackState(playbackSession == null ? PlaybackState.IDLE : playbackSession.state());
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Playback observer failed.");
+        }
         return () -> observers.remove(observer);
+    }
+
+    private String currentIdentity() {
+        if (playbackSession == null) return "";
+        PlaybackItem item = playbackSession.state().getItem();
+        return item == null ? "" : item.getIdentity();
     }
 
     private boolean isLikelyLive(String url, String format) {
