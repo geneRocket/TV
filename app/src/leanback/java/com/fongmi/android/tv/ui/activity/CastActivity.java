@@ -39,6 +39,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.StableDLNARendererService;
@@ -72,6 +73,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private CastAction mAction;
     private DIDLParser mParser;
     private PlaybackController mPlayers;
+    private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private Runnable mR1;
     private Runnable mR2;
     private Clock mClock;
@@ -360,6 +362,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
                 setMetadata();
                 hideProgress();
                 mPlayers.reset();
+                mRecovery.reset();
                 setTrackVisible(true);
                 setState(mPlayers.isPlaying() ? RenderState.PLAYING : RenderState.PAUSED);
                 mBinding.widget.size.setText(mPlayers.getSizeText());
@@ -387,10 +390,18 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
         if (!isCurrentPlayer()) return;
-        if (mPlayers.addRetry() > event.getRetry()) onError(event);
-        else if (event.isDecode() && mPlayers.canToggleDecode()) onDecode(false);
-        else if (event.isExo() && mPlayers.isExo()) onExoCheck(event);
-        else onReset();
+        switch (mRecovery.next(event, mPlayers, true)) {
+            case RETRY: onReset(); break;
+            case TOGGLE_DECODE: onDecode(false); break;
+            case RELOAD_EXO: onExoCheck(event); break;
+            case SWITCH_PLAYER:
+                mPlayers.nextPlayer();
+                setPlayerView();
+                onReset();
+                break;
+            case ADVANCE: onError(event); break;
+            case STOP: onError(event); break;
+        }
     }
 
     private boolean isCurrentPlayer() {

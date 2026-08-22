@@ -80,6 +80,7 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRequest;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackMarkers;
 import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.Source;
@@ -737,10 +738,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mDownloader.result(result).start(this);
     }
 
-    private void checkDanmu(String danmu) {
-        setDanmakus(Danmaku.arrayFrom(danmu));
-    }
-
     private void setDanmakus(List<Danmaku> items) {
         clearDanmakuView();
         mPlayers.setDanmakus(items);
@@ -1128,10 +1125,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void onEnding() {
         if (mHistory == null) return;
-        long current = mPlayers.getPosition();
-        long duration = mPlayers.getDuration();
-        if (current < 0 || current < duration / 2) return;
-        mHistory.setEnding(duration - current);
+        long ending = PlaybackMarkers.endingAt(mPlayers.getPosition(), mPlayers.getDuration());
+        if (ending == PlaybackMarkers.INVALID) return;
+        mHistory.setEnding(ending);
         mBinding.control.action.ending.setText(mPlayers.stringToTime(mHistory.getEnding()));
         setR1Callback();
     }
@@ -1146,10 +1142,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void onOpening() {
         if (mHistory == null) return;
-        long current = mPlayers.getPosition();
-        long duration = mPlayers.getDuration();
-        if (current < 0 || current > duration / 2) return;
-        mHistory.setOpening(current);
+        long opening = PlaybackMarkers.openingAt(mPlayers.getPosition(), mPlayers.getDuration());
+        if (opening == PlaybackMarkers.INVALID) return;
+        mHistory.setOpening(opening);
         mBinding.control.action.opening.setText(mPlayers.stringToTime(mHistory.getOpening()));
         setR1Callback();
     }

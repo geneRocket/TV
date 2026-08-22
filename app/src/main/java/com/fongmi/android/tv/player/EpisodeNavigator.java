@@ -15,6 +15,7 @@ public final class EpisodeNavigator {
 
     private static int move(int current, int size, int delta) {
         if (size <= 0) return -1;
+        if (current < 0) return delta > 0 ? 0 : size - 1;
         int safeCurrent = Math.max(0, Math.min(current, size - 1));
         return Math.max(0, Math.min(safeCurrent + delta, size - 1));
     }

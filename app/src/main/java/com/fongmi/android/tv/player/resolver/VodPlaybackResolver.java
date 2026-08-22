@@ -63,7 +63,7 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     }
 
     private void fail(Task task, Callback callback, Throwable error) {
-        if (!task.cancelled) callback.onFailure(new ResolveFailure(task.requestId, ResolveFailure.Kind.EXTRACT, error));
+        if (!task.cancelled) callback.onFailure(new ResolveFailure(task.requestId, error));
     }
 
     @Override public void close() {

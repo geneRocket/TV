@@ -17,32 +17,47 @@ public final class PlaybackRecovery {
     }
 
     private int errors;
+    private int retryAttempts;
     private int playerSwitches;
+    private boolean decodeToggled;
 
     public Action next(ErrorEvent error, PlaybackController players, boolean hasPlayableItem) {
+        return next(error, players.isExo(), players.getPlayer(), hasPlayableItem);
+    }
+
+    Action next(ErrorEvent error, boolean exo, int player, boolean hasPlayableItem) {
         if (++errors > MAX_ERRORS) {
             reset();
             return Action.STOP;
         }
-        if (!players.exceedRetry(error.getRetry())) {
-            if (error.isDecode() && players.canToggleDecode()) return Action.TOGGLE_DECODE;
-            if (error.isExo() && players.isExo()) return Action.RELOAD_EXO;
+        if (++retryAttempts <= Math.max(error.getRetry(), 0)) {
+            if (error.isDecode() && exo && !decodeToggled) {
+                decodeToggled = true;
+                return Action.TOGGLE_DECODE;
+            }
+            if (error.isExo() && exo) return Action.RELOAD_EXO;
             return Action.RETRY;
         }
         if (hasPlayableItem
                 && error.isUrl()
                 && error.getRetry() > 0
                 && playerSwitches < MAX_PLAYER_SWITCHES
-                && players.getPlayer() != PlayerType.SYSTEM) {
+                && player != PlayerType.SYSTEM) {
             playerSwitches++;
+            retryAttempts = 0;
+            decodeToggled = false;
             return Action.SWITCH_PLAYER;
         }
+        retryAttempts = 0;
+        decodeToggled = false;
         playerSwitches = 0;
         return Action.ADVANCE;
     }
 
     public void reset() {
         errors = 0;
+        retryAttempts = 0;
         playerSwitches = 0;
+        decodeToggled = false;
     }
 }

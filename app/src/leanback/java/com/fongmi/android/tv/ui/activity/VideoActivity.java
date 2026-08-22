@@ -70,6 +70,7 @@ import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackMarkers;
 import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
@@ -1078,10 +1079,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         return new com.fongmi.android.tv.player.session.PlaybackItem(episode.getIdentity(), result.getRealUrl(), result.getHeaders(), result.getFormat(), result.getDrm(), result.getSubs(), position, false);
     }
 
-    private void checkDanmu(String danmu) {
-        setDanmakus(Danmaku.arrayFrom(danmu));
-    }
-
     private void setDanmakus(List<Danmaku> items) {
         mPlayers.setDanmakus(items);
         mDanmakus = mPlayers.getDanmakus();
@@ -1667,10 +1664,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onOpening() {
-        long current = mPlayers.getPosition();
-        long duration = mPlayers.getDuration();
-        if (current < 0 || current > duration / 2) return;
-        setOpening(current);
+        long opening = PlaybackMarkers.openingAt(mPlayers.getPosition(), mPlayers.getDuration());
+        if (opening != PlaybackMarkers.INVALID) setOpening(opening);
     }
 
     private boolean onOpeningAdd() {
@@ -1699,10 +1694,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onEnding() {
-        long current = mPlayers.getPosition();
-        long duration = mPlayers.getDuration();
-        if (current < 0 || current < duration / 2) return;
-        setEnding(duration - current);
+        long ending = PlaybackMarkers.endingAt(mPlayers.getPosition(), mPlayers.getDuration());
+        if (ending != PlaybackMarkers.INVALID) setEnding(ending);
     }
 
     private boolean onEndingAdd() {

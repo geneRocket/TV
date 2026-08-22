@@ -48,8 +48,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
     }
 
     public int getPosition() {
-        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).isActivated()) return i;
-        return 0;
+        return Math.max(findActivatedPosition(), 0);
     }
 
     public int getPosition(Episode item) {
@@ -57,18 +56,23 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
     }
 
     public Episode getActivated() {
-        if (mItems.isEmpty()) return null;
-        return mItems.get(getPosition());
+        int position = findActivatedPosition();
+        return position < 0 ? null : mItems.get(position);
     }
 
     public Episode getNext() {
         if (mItems.isEmpty()) return null;
-        return mItems.get(EpisodeNavigator.next(getPosition(), getItemCount()));
+        return mItems.get(EpisodeNavigator.next(findActivatedPosition(), getItemCount()));
     }
 
     public Episode getPrev() {
         if (mItems.isEmpty()) return null;
-        return mItems.get(EpisodeNavigator.previous(getPosition(), getItemCount()));
+        return mItems.get(EpisodeNavigator.previous(findActivatedPosition(), getItemCount()));
+    }
+
+    private int findActivatedPosition() {
+        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).isActivated()) return i;
+        return -1;
     }
 
     public List<Episode> getItems() {

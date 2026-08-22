@@ -14,4 +14,10 @@ public class EpisodeNavigatorTest {
         assertEquals(1, EpisodeNavigator.previous(2, 3));
         assertEquals(-1, EpisodeNavigator.next(0, 0));
     }
+
+    @Test
+    public void navigationFromNoSelectionStartsAtNearestBoundary() {
+        assertEquals(0, EpisodeNavigator.next(-1, 3));
+        assertEquals(2, EpisodeNavigator.previous(-1, 3));
+    }
 }

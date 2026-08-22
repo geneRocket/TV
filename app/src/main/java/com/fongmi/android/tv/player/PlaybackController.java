@@ -87,10 +87,8 @@ public class PlaybackController {
 
     private long position;
     private int decode;
-    private int count;
     private int player;
     private int playerState;
-    private int retry;
 
     private static final Pattern PATTERN_VOD = Pattern.compile(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
 
@@ -104,10 +102,6 @@ public class PlaybackController {
 
     public boolean isHard() {
         return decode == DecodeMode.HARDWARE;
-    }
-
-    public boolean isSoft() {
-        return decode == DecodeMode.SOFTWARE;
     }
 
     public boolean isExo() {
@@ -297,16 +291,10 @@ public class PlaybackController {
         if (position == C.TIME_UNSET) position = 0;
     }
 
-    public boolean canToggleDecode() {
-        return isExo() && ++count <= 1;
-    }
-
     public void reset() {
         position = C.TIME_UNSET;
         removeTimeoutCheck();
         stopParse();
-        count = 0;
-        retry = 0;
     }
 
     public void clear() {
@@ -318,14 +306,6 @@ public class PlaybackController {
         drm = null;
         url = null;
         forceLive = false;
-    }
-
-    public int addRetry() {
-        return ++retry;
-    }
-
-    public boolean exceedRetry(int retryLimit) {
-        return addRetry() > retryLimit;
     }
 
     public String stringToTime(long time) {
@@ -459,10 +439,6 @@ public class PlaybackController {
         float speed = getSpeed();
         speed = speed == 1 ? 3f : 1f;
         return setSpeed(speed);
-    }
-
-    public void togglePlayer() {
-        setPlayer(isExo() ? PlayerType.SYSTEM : ++player);
     }
 
     public void nextPlayer() {
@@ -883,7 +859,4 @@ public class PlaybackController {
         danmaku.updatePlayingState(isPlaying(), isBuffering(), getPosition(), getSpeed());
     }
 
-    public void applyDanmuSpeed() {
-        danmaku.applySpeed(getSpeed());
-    }
 }
