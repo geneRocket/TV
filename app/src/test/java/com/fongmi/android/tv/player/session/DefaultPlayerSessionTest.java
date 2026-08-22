@@ -11,6 +11,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -126,6 +127,14 @@ public class DefaultPlayerSessionTest {
         session.release();
 
         assertEquals(PlaybackPhase.RELEASED, session.state().getPhase());
+    }
+
+    @Test
+    public void playbackItemDropsNullSubtitlesAtBoundary() {
+        PlaybackItem item = new PlaybackItem("episode-1", "https://example.com/video.m3u8", Collections.emptyMap(),
+                "m3u8", null, Arrays.asList(null, null), 0, false);
+
+        assertEquals(Collections.emptyList(), item.getSubtitles());
     }
 
     private PlaybackItem item(String identity, long position) {

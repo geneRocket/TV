@@ -28,7 +28,7 @@ public final class PlaybackItem {
         this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers == null ? Collections.emptyMap() : headers));
         this.format = format;
         this.drm = drm;
-        this.subtitles = Collections.unmodifiableList(new ArrayList<>(subtitles == null ? Collections.emptyList() : subtitles));
+        this.subtitles = Collections.unmodifiableList(nonNullSubtitles(subtitles));
         this.startPosition = Math.max(startPosition, 0);
         this.forceLive = forceLive;
     }
@@ -49,4 +49,10 @@ public final class PlaybackItem {
 
     public boolean isForceLive() { return forceLive; }
 
+    private static List<Sub> nonNullSubtitles(List<Sub> subtitles) {
+        if (subtitles == null || subtitles.isEmpty()) return Collections.emptyList();
+        List<Sub> result = new ArrayList<>(subtitles.size());
+        for (Sub subtitle : subtitles) if (subtitle != null) result.add(subtitle);
+        return result;
+    }
 }

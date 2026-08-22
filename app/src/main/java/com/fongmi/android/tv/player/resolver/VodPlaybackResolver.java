@@ -134,12 +134,17 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
 
     private synchronized boolean activate(Task task) {
         if (closed || task.cancelled || !tasks.contains(task)) return false;
-        if (activeMediaTask != null && activeMediaTask != task) sourceResolver.cancel();
+        if (activeMediaTask != null && activeMediaTask != task) cancelLocked(activeMediaTask);
         activeMediaTask = task;
         return true;
     }
 
     private synchronized void cancel(Task task) {
+        cancelLocked(task);
+    }
+
+    private void cancelLocked(Task task) {
+        if (task == null) return;
         task.cancelled = true;
         tasks.remove(task);
         if (task.future != null) task.future.cancel(true);
