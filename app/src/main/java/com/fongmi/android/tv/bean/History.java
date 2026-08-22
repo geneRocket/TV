@@ -135,6 +135,33 @@ public class History {
         return prepared;
     }
 
+    public static String historyKey(String siteKey, String vodId, String vodName, int cid) {
+        String rawSiteKey = rawSiteKey(siteKey);
+        String stableId = isEmpty(vodId) ? normalizeKeyName(vodName) : vodId;
+        return rawSiteKey.concat(AppDatabase.SYMBOL).concat(stableId).concat(AppDatabase.SYMBOL) + cid;
+    }
+
+    private static String rawSiteKey(String key) {
+        if (!isScopedSiteKey(key)) return key == null ? "" : key;
+        return key.substring(key.indexOf('@') + 1);
+    }
+
+    private static boolean isScopedSiteKey(String key) {
+        if (isEmpty(key)) return false;
+        int index = key.indexOf('@');
+        if (index <= 0) return false;
+        for (int i = 0; i < index; i++) if (!Character.isDigit(key.charAt(i))) return false;
+        return true;
+    }
+
+    private static String normalizeKeyName(String name) {
+        return isEmpty(name) ? "" : name.toLowerCase(Locale.ROOT).replaceAll("[\\p{Punct}\\s]+", " ").trim();
+    }
+
+    private static boolean isEmpty(String value) {
+        return value == null || value.length() == 0;
+    }
+
     @NonNull
     public String getKey() {
         return key;
@@ -286,7 +313,8 @@ public class History {
     }
 
     public String getVodId() {
-        return getKeyPart(1);
+        String id = getKeyPart(1);
+        return id.equals(normalizeKeyName(vodName)) ? "" : id;
     }
 
     private String getKeyPart(int index) {

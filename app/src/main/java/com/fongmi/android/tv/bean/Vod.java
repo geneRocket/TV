@@ -301,18 +301,27 @@ public class Vod implements Parcelable {
     }
 
     public void setVodFlags() {
-        String[] playFlags = getVodPlayFrom().split("\\$\\$\\$");
-        String[] playUrls = getVodPlayUrl().split("\\$\\$\\$");
-        for (int i = 0; i < playFlags.length; i++) {
-            if (playFlags[i].isEmpty() || i >= playUrls.length) continue;
-            Flag item = Flag.create(playFlags[i].trim());
+        String[] playFlags = empty(vodPlayFrom).split("\\$\\$\\$");
+        String[] playUrls = empty(vodPlayUrl).split("\\$\\$\\$");
+        for (int i = 0; i < playUrls.length; i++) {
+            if (isBlank(playUrls[i])) continue;
+            String flag = i < playFlags.length ? playFlags[i].trim() : "";
+            Flag item = Flag.create(flag.isEmpty() ? "play" + (i + 1) : flag);
             item.createEpisode(playUrls[i]);
-            getVodFlags().add(item);
+            if (!item.getEpisodes().isEmpty()) getVodFlags().add(item);
         }
         for (Flag item : getVodFlags()) {
             if (item.getUrls() == null) continue;
             item.createEpisode(item.getUrls());
         }
+    }
+
+    private static String empty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     @Override

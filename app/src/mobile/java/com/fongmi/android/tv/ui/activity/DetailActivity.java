@@ -21,7 +21,6 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityDetailBinding;
-import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
@@ -85,7 +84,7 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     }
 
     private String getHistoryKey() {
-        return VodConfig.rawSiteKey(getKey()).concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + getSiteCid();
+        return History.historyKey(getKey(), getId(), getName(), getSiteCid());
     }
 
     private Site getSite() {

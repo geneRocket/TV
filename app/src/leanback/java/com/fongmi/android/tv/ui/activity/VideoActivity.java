@@ -59,7 +59,6 @@ import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.repository.TrackRepository;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
-import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -639,7 +638,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private String getHistoryKey() {
-        return VodConfig.rawSiteKey(getKey()).concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + getSiteCid();
+        return History.historyKey(getKey(), getId(), getName(), getSiteCid());
     }
 
     private Site getSite() {
@@ -1235,9 +1234,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mPlaybackCoordinator != null && mFlagAdapter != null && mFlagAdapter.size() > 0) {
             List<VodEpisode> episodes = new ArrayList<>(items.size());
             String flag = getFlag().getFlag();
-            for (Episode item : items) episodes.add(new VodEpisode(VodEpisode.identity(getKey(), flag, item.getName(), item.getUrl()), getKey(), flag, item.getName(), item.getUrl()));
+            for (Episode item : items) episodes.add(new VodEpisode(VodEpisode.resumeIdentity(getKey(), flag, item.getName()), getKey(), flag, item.getName(), item.getUrl()));
             mPlaybackCoordinator.setEpisodes(episodes);
-            String episodeId = mHistory == null ? "" : VodEpisode.identity(getKey(), mHistory.getVodFlag(), mHistory.getVodRemarks(), mHistory.getEpisodeUrl());
+            String episodeId = mHistory == null ? "" : VodEpisode.resumeIdentity(getKey(), mHistory.getVodFlag(), mHistory.getVodRemarks());
             mPlaybackCoordinator.setResumePosition(episodeId, mHistory == null ? 0 : mHistory.getPosition());
             mPlaybackCoordinator.setOpening(mHistory == null ? 0 : mHistory.getOpening());
         }
@@ -1630,7 +1629,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && mEpisodeAdapter.size() > 0) {
             Episode episode = getEpisode();
-            mPlaybackCoordinator.preservePosition(VodEpisode.identity(getKey(), getFlag().getFlag(), episode.getName(), episode.getUrl()), position);
+            mPlaybackCoordinator.preservePosition(VodEpisode.resumeIdentity(getKey(), getFlag().getFlag(), episode.getName()), position);
         }
         if (mHistory != null) {
             mHistory.setPosition(position);
@@ -1640,7 +1639,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void saveHistoryNow() {
         if (mHistory == null) return;
-        long position = mPlayers.getPosition();
+        long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
         if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
             mHistory.setPosition(position);
@@ -2124,7 +2123,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         onTimeChangeDisplaySpeed();
         if (mHistory == null) return;
         long position, duration;
-        mHistory.setPosition(position = mPlayers.getPosition());
+        position = mPlayers.getPosition();
+        if (position <= 0 && mHistory.getPosition() > 0) position = mHistory.getPosition();
+        mHistory.setPosition(position);
         mHistory.setDuration(duration = mPlayers.getDuration());
         if (position >= 0 && duration > 0 && !Setting.isIncognito()) {
             long now = System.currentTimeMillis();

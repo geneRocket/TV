@@ -6,6 +6,10 @@ public final class VodEpisode {
         return value(siteKey) + '\u001f' + value(flag) + '\u001f' + value(name) + '\u001f' + value(resolverUrl);
     }
 
+    public static String resumeIdentity(String siteKey, String flag, String name) {
+        return value(siteKey) + '\u001f' + value(flag) + '\u001f' + value(name);
+    }
+
     private static String value(String value) {
         return value == null ? "" : value.trim();
     }
