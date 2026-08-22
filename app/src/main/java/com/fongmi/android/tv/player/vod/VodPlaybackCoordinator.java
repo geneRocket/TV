@@ -147,6 +147,10 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         return state;
     }
 
+    public synchronized long currentPosition() {
+        return state.getPosition();
+    }
+
     public synchronized Subscription observe(VodPlaybackObserver observer) {
         requireOpen();
         if (observer == null) throw new IllegalArgumentException("observer must not be null");

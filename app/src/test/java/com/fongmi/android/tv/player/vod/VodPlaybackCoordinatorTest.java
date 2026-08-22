@@ -229,6 +229,22 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    public void currentPositionComesFromCoordinatorStateOnly() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 42_680);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+
+        assertEquals(42_680, coordinator.currentPosition());
+
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 43_000, 7_174_333));
+
+        assertEquals(43_000, coordinator.currentPosition());
+    }
+
+    @Test
     public void mismatchedResolveHandleBecomesError() {
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator((request, callback) -> new ResolveHandle() {

@@ -1508,7 +1508,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void capturePlaybackPosition() {
         long position = getCurrentSwitchPosition();
-        logHistory("mobile_capturePlaybackPosition position=" + position + " player=" + (mPlayers == null ? -1 : mPlayers.getPosition()) + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.state().getPosition()) + " history=" + History.debug(mHistory));
+        logHistory("mobile_capturePlaybackPosition position=" + position + " player=" + (mPlayers == null ? -1 : mPlayers.getPosition()) + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " history=" + History.debug(mHistory));
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && !mEpisodeAdapter.isEmpty()) {
             Episode episode = getEpisode();
@@ -1525,10 +1525,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private long getCurrentSwitchPosition() {
-        if (mPlaybackCoordinator != null) {
-            long position = mPlaybackCoordinator.state().getPosition();
-            if (position > 0) return position;
-        }
+        if (mPlaybackCoordinator != null) return mPlaybackCoordinator.currentPosition();
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
@@ -2322,7 +2319,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }
         long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
-        logHistory("mobile_saveHistoryNow_before position=" + position + " player=" + mPlayers.getPosition() + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.state().getPosition()) + " duration=" + duration + " history=" + History.debug(mHistory));
+        logHistory("mobile_saveHistoryNow_before position=" + position + " player=" + mPlayers.getPosition() + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " duration=" + duration + " history=" + History.debug(mHistory));
         if (position <= 0) {
             logHistory("mobile_saveHistoryNow_skip_non_positive " + History.debug(mHistory));
             return;

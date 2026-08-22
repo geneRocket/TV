@@ -1631,7 +1631,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void capturePlaybackPosition() {
         long position = getCurrentSwitchPosition();
-        logHistory("tv_capturePlaybackPosition position=" + position + " player=" + (mPlayers == null ? -1 : mPlayers.getPosition()) + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.state().getPosition()) + " history=" + History.debug(mHistory));
+        logHistory("tv_capturePlaybackPosition position=" + position + " player=" + (mPlayers == null ? -1 : mPlayers.getPosition()) + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " history=" + History.debug(mHistory));
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && mEpisodeAdapter.size() > 0) {
             Episode episode = getEpisode();
@@ -1650,7 +1650,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
         long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
-        logHistory("tv_saveHistoryNow_before position=" + position + " player=" + mPlayers.getPosition() + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.state().getPosition()) + " duration=" + duration + " history=" + History.debug(mHistory));
+        logHistory("tv_saveHistoryNow_before position=" + position + " player=" + mPlayers.getPosition() + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " duration=" + duration + " history=" + History.debug(mHistory));
         if (position <= 0) {
             logHistory("tv_saveHistoryNow_skip_non_positive " + History.debug(mHistory));
             return;
@@ -2400,10 +2400,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private long getCurrentSwitchPosition() {
-        if (mPlaybackCoordinator != null) {
-            long position = mPlaybackCoordinator.state().getPosition();
-            if (position > 0) return position;
-        }
+        if (mPlaybackCoordinator != null) return mPlaybackCoordinator.currentPosition();
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
