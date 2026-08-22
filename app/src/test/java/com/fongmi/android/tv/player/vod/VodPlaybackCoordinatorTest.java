@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -226,6 +227,24 @@ public class VodPlaybackCoordinatorTest {
         coordinator.play(0, StartPolicy.FRESH);
 
         assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
+    }
+
+    @Test
+    public void synchronousResolveDoesNotCancelCompletedHandle() {
+        FakeEngine engine = new FakeEngine();
+        AtomicBoolean cancelled = new AtomicBoolean();
+        VodPlaybackCoordinator coordinator = coordinator((request, callback) -> {
+            callback.onResolved(new ResolveResult(request.getRequestId(), Result.empty()));
+            return new ResolveHandle() {
+                @Override public long getRequestId() { return request.getRequestId(); }
+                @Override public void cancel() { cancelled.set(true); }
+            };
+        }, engine);
+
+        coordinator.play(0, StartPolicy.FRESH);
+
+        assertFalse(cancelled.get());
+        assertEquals(VodPlaybackPhase.PREPARING, coordinator.state().getPhase());
     }
 
     private VodPlaybackCoordinator coordinator(ManualResolver resolver, FakeEngine engine) {

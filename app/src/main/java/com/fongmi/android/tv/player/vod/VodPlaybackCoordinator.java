@@ -92,8 +92,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
                 handle.cancel();
                 throw new IllegalStateException("resolver returned a handle for another request");
             }
-            if (requestId == currentRequest && state.getPhase() == VodPlaybackPhase.RESOLVING) resolveHandle = handle;
-            else handle.cancel();
+            if (requestId != currentRequest) handle.cancel();
+            else if (state.getPhase() == VodPlaybackPhase.RESOLVING) resolveHandle = handle;
         } catch (Throwable error) {
             if (requestId == currentRequest && state.getPhase() == VodPlaybackPhase.RESOLVING) {
                 publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, error));

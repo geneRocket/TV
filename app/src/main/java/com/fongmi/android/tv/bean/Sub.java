@@ -1,8 +1,6 @@
 package com.fongmi.android.tv.bean;
 
 import android.net.Uri;
-import android.text.TextUtils;
-
 import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -28,7 +26,7 @@ public class Sub {
     private int flag;
 
     public static Sub from(String path) {
-        if (TextUtils.isEmpty(path)) return new Sub();
+        if (isEmpty(path)) return new Sub();
         if (path.startsWith("http")) {
             return http(path);
         } else {
@@ -56,19 +54,19 @@ public class Sub {
     }
 
     public String getUrl() {
-        return TextUtils.isEmpty(url) ? "" : url;
+        return isEmpty(url) ? "" : url;
     }
 
     public String getName() {
-        return TextUtils.isEmpty(name) ? "" : name;
+        return isEmpty(name) ? "" : name;
     }
 
     public String getLang() {
-        return TextUtils.isEmpty(lang) ? "" : lang;
+        return isEmpty(lang) ? "" : lang;
     }
 
     public String getFormat() {
-        return TextUtils.isEmpty(format) ? "" : format;
+        return isEmpty(format) ? "" : format;
     }
 
     public int getFlag() {
@@ -90,5 +88,9 @@ public class Sub {
         if (!(obj instanceof Sub)) return false;
         Sub it = (Sub) obj;
         return getUrl().equals(it.getUrl());
+    }
+
+    private static boolean isEmpty(CharSequence value) {
+        return value == null || value.length() == 0;
     }
 }
