@@ -164,7 +164,7 @@ public class CustomSeekView extends FrameLayout implements TimeBar.OnScrubListen
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
-        if (!attached) return;
+        if (!attached || player == null || !player.isCurrentSession(event.getSessionId())) return;
         int state = event.getState();
         if (state == 0) {
             startRefresh();

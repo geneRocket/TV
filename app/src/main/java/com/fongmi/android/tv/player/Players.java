@@ -70,6 +70,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private final ExternalPlayer externalPlayer;
     private final DanmakuController danmaku;
     private final MediaSessionController mediaSession;
+    private final PlaybackSession session;
 
     private IPlayer engine;
     private PlayerView exoView;
@@ -139,6 +140,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         playerState = Player.STATE_IDLE;
         timeout = Constant.TIMEOUT_PLAY;
         mediaSession = new MediaSessionController(activity, this);
+        session = new PlaybackSession();
     }
 
     public void init(PlayerView exo, IjkVideoView ijk) {
@@ -283,6 +285,23 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
 
     public void setPosition(long position) {
         this.position = position;
+    }
+
+    public long beginSession(long startPosition) {
+        position = Math.max(startPosition, 0);
+        return session.begin();
+    }
+
+    public long getSessionId() {
+        return session.getId();
+    }
+
+    public boolean isCurrentSession(long sessionId) {
+        return session.isCurrent(sessionId);
+    }
+
+    private void ensureSession() {
+        session.ensure();
     }
 
     public boolean canToggleDecode() {
@@ -551,6 +570,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void start(Channel channel, int timeout) {
+        ensureSession();
         setPlayer(Setting.getLivePlayer());
         String url = getChannelUrl(channel);
         boolean forceLive = isLikelyLive(url, channel.getFormat());
@@ -568,6 +588,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     }
 
     public void start(Result result, boolean useParse, int timeout) {
+        ensureSession();
         this.timeout = timeout;
         this.forceLive = false;
         if (result.hasMsg()) {
@@ -642,7 +663,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         // Wait for an actual render/play signal before reporting READY.
         this.pendingReady = true;
         try {
-            if (engine != null) engine.setMediaSource(this.headers, this.url, this.format, this.drm, this.subs, position, this.forceLive);
+            if (engine != null) engine.setMediaSource(new PlayerMediaSource(this.headers, this.url, this.format, this.drm, this.subs, position, this.forceLive));
         } catch (RuntimeException e) {
             pendingReady = false;
             removeTimeoutCheck();
@@ -652,7 +673,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
         }
         removeTimeoutCheck();
         App.post(runnable, timeout);
-        PlayerEvent.prepare();
+        PlayerEvent.prepare(session.getId());
         Logger.t(TAG).d(url);
     }
 
@@ -674,7 +695,7 @@ public class Players implements Player.Listener, IMediaPlayer.Listener, ParseCal
     private void setPlayerState(int state) {
         if (playerState == state) return;
         playerState = state;
-        PlayerEvent.state(state);
+        PlayerEvent.state(state, session.getId());
     }
 
     private void dispatchReadyState() {

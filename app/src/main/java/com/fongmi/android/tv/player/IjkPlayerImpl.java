@@ -1,12 +1,7 @@
 package com.fongmi.android.tv.player;
 
-import com.fongmi.android.tv.bean.Drm;
-import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.Setting;
-
-import java.util.List;
-import java.util.Map;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
@@ -22,8 +17,8 @@ public class IjkPlayerImpl implements IPlayer {
     }
 
     @Override
-    public void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, long position, boolean forceLive) {
-        player.setMediaSource(IjkUtil.getSource(headers, url), Math.max(position, 0));
+    public void setMediaSource(PlayerMediaSource source) {
+        player.setMediaSource(IjkUtil.getSource(source.getHeaders(), source.getUrl()), source.getStartPosition());
     }
 
     @Override

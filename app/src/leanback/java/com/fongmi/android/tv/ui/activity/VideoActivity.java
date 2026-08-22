@@ -68,9 +68,12 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
+import com.fongmi.android.tv.player.EpisodePlaybackPlan;
+import com.fongmi.android.tv.player.EpisodeNavigator;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRequest;
 import com.fongmi.android.tv.player.PlaybackRecovery;
+import com.fongmi.android.tv.player.PendingEpisodePlayback;
 import com.fongmi.android.tv.player.Players;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
@@ -199,25 +202,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
     }
 
-    private static class HistoryUpdate {
-
-        private Flag flag;
-        private Episode episode;
-        private long position;
-        private long startPosition;
-        private boolean episodeChanged;
-        private boolean skipOpening;
-
-        void clear() {
-            flag = null;
-            episode = null;
-            position = 0;
-            startPosition = 0;
-            episodeChanged = false;
-            skipOpening = false;
-        }
-    }
-
     private static class PlaybackNavigationController {
 
         private final VideoActivity host;
@@ -319,12 +303,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         public void playNext() {
-            int target = Math.min(host.getEpisodePosition() + 1, host.mEpisodeAdapter.size() - 1);
+            int target = EpisodeNavigator.next(host.getEpisodePosition(), host.mEpisodeAdapter.size());
             switchEpisodeByIndex(target, host.mHistory != null && host.mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
         }
 
         public void playPrev() {
-            int target = Math.max(host.getEpisodePosition() - 1, 0);
+            int target = EpisodeNavigator.previous(host.getEpisodePosition(), host.mEpisodeAdapter.size());
             switchEpisodeByIndex(target, host.mHistory != null && host.mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
         }
 
@@ -689,7 +673,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean mProgressTrafficPolling;
     private float mSpeedBeforeLongPress = Float.NaN;
     private final SourceSwitchState mSourceSwitch = new SourceSwitchState();
-    private final HistoryUpdate mHistoryUpdate = new HistoryUpdate();
+    private PendingEpisodePlayback mPendingEpisodePlayback;
     private CustomTarget<Drawable> mArtworkTarget;
     private final StringBuilder mEpisodeInput = new StringBuilder();
     private final Runnable mEpisodeInputCommit = this::playNumberedEpisode;
@@ -1220,7 +1204,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         String token = mPlaybackRequest.getToken();
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
-        if (hasPendingHistoryUpdate()) mPlayers.setPosition(mHistoryUpdate.startPosition);
+        if (hasPendingHistoryUpdate()) mPlayers.setPosition(mPendingEpisodePlayback.getStartPosition());
         mPlaybackResultStarted = true;
         mPlayers.start(result, isUseParse(), getSite().getTimeout());
         if (!TextUtils.equals(token, mPlaybackRequest.getToken())) return;
@@ -2213,39 +2197,30 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         long flagSwitchPosition = mPendingFlagSwitchPosition;
         mPendingFlagSwitchPosition = C.TIME_UNSET;
         boolean keepFlagSwitchPosition = flagSwitchPosition != C.TIME_UNSET;
-        boolean sameEpisode = continueSource || keepFlagSwitchPosition || isSameHistoryEpisode(item);
-        replay = replay || !sameEpisode;
-        mHistoryUpdate.flag = flag;
-        mHistoryUpdate.episode = item;
-        mHistoryUpdate.position = continueSource ? mSourceSwitch.position : keepFlagSwitchPosition ? flagSwitchPosition : replay ? 0 : (mHistory == null ? 0 : mHistory.getPosition());
-        mHistoryUpdate.startPosition = Math.max(mHistory == null ? 0 : mHistory.getOpening(), mHistoryUpdate.position);
-        mHistoryUpdate.episodeChanged = !sameEpisode;
-        mHistoryUpdate.skipOpening = replay;
-        mPlayers.setPosition(mHistoryUpdate.startPosition);
+        boolean preservePosition = continueSource || keepFlagSwitchPosition;
+        long preservedPosition = continueSource ? mSourceSwitch.position : flagSwitchPosition;
+        EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve(
+                mHistory == null ? null : mHistory.getEpisodeUrl(),
+                mHistory == null ? null : mHistory.getVodRemarks(),
+                item.getUrl(), item.getName(),
+                mHistory == null ? 0 : mHistory.getPosition(),
+                mHistory == null ? 0 : mHistory.getOpening(),
+                replay, preservePosition, preservedPosition);
+        mPendingEpisodePlayback = new PendingEpisodePlayback(flag, item, plan);
+        mPlayers.beginSession(plan.getStartPosition());
     }
 
     private void commitPendingHistoryUpdate() {
-        if (mHistoryUpdate.flag == null || mHistoryUpdate.episode == null || mHistory == null) return;
-        mHistory.setPosition(mHistoryUpdate.position);
-        if (mHistoryUpdate.episodeChanged) mHistory.setDuration(0);
-        mShouldSkipOpening = mHistoryUpdate.skipOpening;
-        mHistory.setEpisodeUrl(mHistoryUpdate.episode.getUrl());
-        mHistory.setVodRemarks(mHistoryUpdate.episode.getName());
-        mHistory.setVodFlag(mHistoryUpdate.flag.getFlag());
-        mHistory.setCreateTime(System.currentTimeMillis());
+        if (mPendingEpisodePlayback == null || mHistory == null) return;
+        mPendingEpisodePlayback.commit(mHistory, System.currentTimeMillis());
+        mShouldSkipOpening = mPendingEpisodePlayback.shouldSkipOpening();
         mLastHistorySaveAt = System.currentTimeMillis();
         saveHistorySnapshot();
         clearPendingHistoryUpdate();
     }
 
     private void clearPendingHistoryUpdate() {
-        mHistoryUpdate.clear();
-    }
-
-    private boolean isSameHistoryEpisode(Episode item) {
-        if (item == null || mHistory == null) return false;
-        if (!TextUtils.isEmpty(mHistory.getEpisodeUrl())) return TextUtils.equals(item.getUrl(), mHistory.getEpisodeUrl());
-        return item.getName() != null && item.getName().equalsIgnoreCase(mHistory.getVodRemarks());
+        mPendingEpisodePlayback = null;
     }
 
     private void checkKeep() {
@@ -2331,7 +2306,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean hasPendingHistoryUpdate() {
-        return mHistoryUpdate.episode != null;
+        return mPendingEpisodePlayback != null;
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -2359,7 +2334,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
-        if (!isCurrentPlayer() || isBackground()) return;
+        if (!isCurrentPlayer() || !mPlayers.isCurrentSession(event.getSessionId()) || isBackground()) return;
         switch (event.getState()) {
             case 0:
                 setPlayerView();
@@ -2594,7 +2569,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long getCurrentSwitchPosition() {
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
-        if (mHistoryUpdate.episode != null && mHistoryUpdate.position > 0) return mHistoryUpdate.position;
+        if (mPendingEpisodePlayback != null && mPendingEpisodePlayback.getHistoryPosition() > 0) return mPendingEpisodePlayback.getHistoryPosition();
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
     }
 

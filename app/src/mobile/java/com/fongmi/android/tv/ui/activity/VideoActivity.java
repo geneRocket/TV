@@ -72,6 +72,8 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
+import com.fongmi.android.tv.player.EpisodePlaybackPlan;
+import com.fongmi.android.tv.player.EpisodeProgress;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.utils.Downloader;
@@ -700,12 +702,12 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.display.title.setText(mBinding.control.title.getText());
         String token = nextRequestToken("play");
         mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
+        mPlayers.clear();
+        mPlayers.stop();
+        updateHistory(episode, replay);
         schedulePlaybackTimeout();
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        updateHistory(episode, replay);
-        mPlayers.clear();
-        mPlayers.stop();
         clearDanmakuView();
         showProgress();
         setMetadata();
@@ -1440,14 +1442,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         long flagSwitchPosition = mPendingFlagSwitchPosition;
         mPendingFlagSwitchPosition = C.TIME_UNSET;
         boolean keepFlagSwitchPosition = flagSwitchPosition != C.TIME_UNSET;
-        replay = replay || !(keepFlagSwitchPosition || isSameHistoryEpisode(item));
-        long position = keepFlagSwitchPosition ? flagSwitchPosition : replay ? 0 : mHistory.getPosition();
-        mHistory.setPosition(position);
-        mHistory.setEpisodeUrl(item.getUrl());
-        mHistory.setVodRemarks(item.getName());
-        mHistory.setVodFlag(getFlag().getFlag());
-        mHistory.setCreateTime(System.currentTimeMillis());
-        mPlayers.setPosition(Math.max(mHistory.getOpening(), mHistory.getPosition()));
+        EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve(
+                mHistory.getEpisodeUrl(), mHistory.getVodRemarks(),
+                item.getUrl(), item.getName(),
+                mHistory.getPosition(), mHistory.getOpening(),
+                replay, keepFlagSwitchPosition, flagSwitchPosition);
+        EpisodeProgress.apply(mHistory, getFlag(), item, plan, System.currentTimeMillis());
+        mPlayers.beginSession(plan.getStartPosition());
     }
 
     private void capturePlaybackPosition() {
@@ -1461,12 +1462,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 mHistory.saveAsync();
             }
         }
-    }
-
-    private boolean isSameHistoryEpisode(Episode item) {
-        if (item == null || mHistory == null) return false;
-        if (!TextUtils.isEmpty(mHistory.getEpisodeUrl())) return TextUtils.equals(item.getUrl(), mHistory.getEpisodeUrl());
-        return item.getName() != null && item.getName().equalsIgnoreCase(mHistory.getVodRemarks());
     }
 
     private void checkPlayImg(boolean playing) {
@@ -1590,7 +1585,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
-        if (!isCurrentPlayer() || isRedirect()) return;
+        if (!isCurrentPlayer() || !mPlayers.isCurrentSession(event.getSessionId()) || isRedirect()) return;
         switch (event.getState()) {
             case 0:
                 setPlayerView();

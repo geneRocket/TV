@@ -912,7 +912,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlayerEvent(PlayerEvent event) {
-        if (!isCurrentPlayer()) return;
+        if (!isCurrentPlayer() || !mPlayers.isCurrentSession(event.getSessionId())) return;
         switch (event.getState()) {
             case 0:
                 setTrackVisible(false);

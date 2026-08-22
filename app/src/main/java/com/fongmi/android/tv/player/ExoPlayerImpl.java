@@ -9,14 +9,9 @@ import androidx.media3.ui.PlayerView;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
-import com.fongmi.android.tv.bean.Drm;
-import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
-
-import java.util.List;
-import java.util.Map;
 
 public class ExoPlayerImpl implements IPlayer {
 
@@ -48,9 +43,9 @@ public class ExoPlayerImpl implements IPlayer {
     }
 
     @Override
-    public void setMediaSource(Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, long position, boolean forceLive) {
-        MediaItem item = ExoUtil.getMediaItem(headers, UrlUtil.uri(url), format, drm, subs, decode, forceLive);
-        player.setMediaItem(item, Math.max(position, 0));
+    public void setMediaSource(PlayerMediaSource source) {
+        MediaItem item = ExoUtil.getMediaItem(source.getHeaders(), UrlUtil.uri(source.getUrl()), source.getFormat(), source.getDrm(), source.getSubtitles(), decode, source.isForceLive());
+        player.setMediaItem(item, source.getStartPosition());
         player.prepare();
     }
 

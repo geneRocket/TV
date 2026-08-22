@@ -10,6 +10,7 @@ import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.databinding.AdapterEpisodeGridBinding;
 import com.fongmi.android.tv.databinding.AdapterEpisodeHoriBinding;
 import com.fongmi.android.tv.databinding.AdapterEpisodeVertBinding;
+import com.fongmi.android.tv.player.EpisodeNavigator;
 import com.fongmi.android.tv.ui.base.BaseEpisodeHolder;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.holder.EpisodeGridHolder;
@@ -62,17 +63,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
 
     public Episode getNext() {
         if (mItems.isEmpty()) return null;
-        int current = getPosition();
-        int max = getItemCount() - 1;
-        current = ++current > max ? max : current;
-        return mItems.get(current);
+        return mItems.get(EpisodeNavigator.next(getPosition(), getItemCount()));
     }
 
     public Episode getPrev() {
         if (mItems.isEmpty()) return null;
-        int current = getPosition();
-        current = --current < 0 ? 0 : current;
-        return mItems.get(current);
+        return mItems.get(EpisodeNavigator.previous(getPosition(), getItemCount()));
     }
 
     public List<Episode> getItems() {
