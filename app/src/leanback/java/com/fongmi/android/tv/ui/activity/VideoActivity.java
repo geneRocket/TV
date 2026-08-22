@@ -2136,8 +2136,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         onTimeChangeDisplaySpeed();
         if (mHistory == null) return;
         long position, duration;
-        position = mPlayers.getPosition();
-        if (position <= 0 && mHistory.getPosition() > 0) position = mHistory.getPosition();
+        position = getCurrentSwitchPosition();
         mHistory.setPosition(position);
         duration = mPlayers.getDuration();
         if (duration > 0) mHistory.setDuration(duration);

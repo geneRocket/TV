@@ -24,6 +24,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
     private long sessionId;
     private long requestedStartPosition;
     private EnginePhase phase = EnginePhase.IDLE;
+    private boolean pendingStartSeek;
     private boolean released;
 
     public ExoPlayerEngine(PlayerView view, int decode, boolean playWithOthers, boolean tunnel) {
@@ -55,9 +56,11 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
         this.requestedStartPosition = request.getStartPosition();
         this.listener = listener;
         this.phase = EnginePhase.PREPARING;
+        this.pendingStartSeek = requestedStartPosition > 0;
         MediaItem item = ExoUtil.getMediaItem(request.getHeaders(), UrlUtil.uri(request.getUrl()), request.getFormat(), request.getDrm(), request.getSubtitles(), decode, request.isForceLive());
         player.setPlayWhenReady(true);
         player.setMediaItem(item, request.getStartPosition());
+        if (requestedStartPosition > 0) player.seekTo(requestedStartPosition);
         player.prepare();
     }
 
@@ -72,11 +75,16 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
         }
     }
 
-    @Override public void seekTo(long position) { requireActive(); player.seekTo(Math.max(position, 0)); }
+    @Override public void seekTo(long position) {
+        requireActive();
+        pendingStartSeek = false;
+        player.seekTo(Math.max(position, 0));
+    }
 
     @Override
     public void stop() {
         if (released) return;
+        pendingStartSeek = false;
         phase = EnginePhase.STOPPED;
         player.stop();
         player.clearMediaItems();
@@ -121,7 +129,10 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
                 phase = EnginePhase.IDLE;
                 break;
             case Player.STATE_BUFFERING: phase = EnginePhase.BUFFERING; break;
-            case Player.STATE_READY: phase = player.isPlaying() ? EnginePhase.READY : EnginePhase.PAUSED; break;
+            case Player.STATE_READY:
+                ensureStartPositionApplied();
+                phase = player.isPlaying() ? EnginePhase.READY : EnginePhase.PAUSED;
+                break;
             case Player.STATE_ENDED: phase = EnginePhase.ENDED; break;
             default: return;
         }
@@ -148,6 +159,12 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
         listener.onEngineEvent(error == null
                 ? EngineEvent.state(sessionId, phase, snapshot.getPosition(), snapshot.getDuration())
                 : EngineEvent.error(sessionId, error, snapshot.getPosition(), snapshot.getDuration()));
+    }
+
+    private void ensureStartPositionApplied() {
+        if (!pendingStartSeek) return;
+        pendingStartSeek = false;
+        player.seekTo(requestedStartPosition);
     }
 
     private void requireActive() {

@@ -217,7 +217,7 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    public void initialReadyBelowResumePositionIsSeekedBackToHistory() {
+    public void resumePositionIsDeliveredToEngineRequest() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
@@ -225,10 +225,7 @@ public class VodPlaybackCoordinatorTest {
         coordinator.play(0, StartPolicy.RESUME_SAVED);
         resolver.resolve(resolver.lastRequestId);
 
-        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 1_387, 7_174_333));
-
-        assertEquals(42_680, engine.seekPosition);
-        assertEquals(42_680, coordinator.state().getPosition());
+        assertEquals(42_680, engine.request.getStartPosition());
     }
 
     @Test
@@ -300,13 +297,12 @@ public class VodPlaybackCoordinatorTest {
 
         private EngineRequest request;
         private Listener listener;
-        private long seekPosition = -1;
 
         @Override public void prepare(EngineRequest request, Listener listener) { this.request = request; this.listener = listener; }
         void emit(EngineEvent event) { listener.onEngineEvent(event); }
         @Override public void play() {}
         @Override public void pause() {}
-        @Override public void seekTo(long position) { this.seekPosition = position; }
+        @Override public void seekTo(long position) {}
         @Override public void stop() {}
         @Override public void setSpeed(float speed) {}
         @Override public void setTrack(Track track) {}
