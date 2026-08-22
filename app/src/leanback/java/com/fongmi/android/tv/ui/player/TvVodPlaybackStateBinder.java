@@ -1,12 +1,14 @@
 package com.fongmi.android.tv.ui.player;
 
-import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.utils.AppTaskScheduler;
+import com.fongmi.android.tv.utils.TaskScheduler;
 
 /** Maps playback phases to TV presentation effects without depending on an Activity or ViewBinding. */
 public final class TvVodPlaybackStateBinder {
 
     private static final long READY_STABLE_MS = 300;
     private static final long SEEK_BOUNCE_WINDOW_MS = 1500;
+    private static final long SEEK_BUFFERING_GRACE_MS = 300;
 
     public interface Port {
         boolean isBackground();
@@ -27,15 +29,26 @@ public final class TvVodPlaybackStateBinder {
     }
 
     private final Runnable readyCommit = this::commitReady;
+    private final Runnable bufferingCommit = this::commitBuffering;
     private final Port port;
+    private final TaskScheduler scheduler;
     private long lastSeekAt;
+    private boolean bufferingScheduled;
     private boolean pendingSeek;
 
     public TvVodPlaybackStateBinder(Port port) {
+        this(port, AppTaskScheduler.get());
+    }
+
+    TvVodPlaybackStateBinder(Port port, TaskScheduler scheduler) {
+        if (port == null) throw new IllegalArgumentException("port must not be null");
+        if (scheduler == null) throw new IllegalArgumentException("scheduler must not be null");
         this.port = port;
+        this.scheduler = scheduler;
     }
 
     public void onPreparing() {
+        cancelBufferingCommit();
         cancelReadyCommit();
         port.beginPreparing();
         port.showProgress();
@@ -43,22 +56,32 @@ public final class TvVodPlaybackStateBinder {
 
     public void onBuffering() {
         cancelReadyCommit();
+        if (pendingSeek) {
+            if (!bufferingScheduled) {
+                bufferingScheduled = true;
+                scheduler.post(bufferingCommit, SEEK_BUFFERING_GRACE_MS);
+            }
+            return;
+        }
         port.showProgress();
     }
 
     public void onReady() {
+        cancelBufferingCommit();
         if (!pendingSeek || System.currentTimeMillis() - lastSeekAt >= SEEK_BOUNCE_WINDOW_MS) commitReady();
-        else App.post(readyCommit, READY_STABLE_MS);
+        else scheduler.post(readyCommit, READY_STABLE_MS);
     }
 
     public void onSeek() {
         pendingSeek = true;
         lastSeekAt = System.currentTimeMillis();
+        cancelBufferingCommit();
         cancelReadyCommit();
     }
 
     public void clear() {
         pendingSeek = false;
+        cancelBufferingCommit();
         cancelReadyCommit();
     }
 
@@ -82,7 +105,17 @@ public final class TvVodPlaybackStateBinder {
         port.updateVideoSize();
     }
 
+    private void commitBuffering() {
+        bufferingScheduled = false;
+        if (!port.isBackground() && port.isBuffering()) port.showProgress();
+    }
+
+    private void cancelBufferingCommit() {
+        scheduler.remove(bufferingCommit);
+        bufferingScheduled = false;
+    }
+
     private void cancelReadyCommit() {
-        App.removeCallbacks(readyCommit);
+        scheduler.remove(readyCommit);
     }
 }

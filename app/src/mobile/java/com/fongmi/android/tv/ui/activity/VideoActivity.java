@@ -2071,7 +2071,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onSeekEnd(int time) {
         mBinding.widget.seek.setVisibility(View.GONE);
         mPlaybackCoordinator.seekTo(PlaybackSeek.target(mPlayers.getPosition(), mPlayers.getDuration(), time));
-        showProgress();
         onPlay();
     }
 
