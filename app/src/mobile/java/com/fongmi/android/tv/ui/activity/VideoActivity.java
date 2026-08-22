@@ -28,7 +28,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
 import androidx.media3.common.Player;
@@ -71,18 +70,23 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
-import com.fongmi.android.tv.player.EpisodePlaybackPlan;
-import com.fongmi.android.tv.player.EpisodeProgress;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.utils.Downloader;
 import com.fongmi.android.tv.player.exo.ExoUtil;
-import com.fongmi.android.tv.player.PlaybackRequest;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackMarkers;
 import com.fongmi.android.tv.player.progress.EpisodeProgressManager;
+import com.fongmi.android.tv.player.progress.RoomEpisodeProgressStore;
+import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
+import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
 import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
+import com.fongmi.android.tv.player.vod.StartPolicy;
+import com.fongmi.android.tv.player.vod.VodEpisode;
+import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
+import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.player.danmu.Parser;
 import com.fongmi.android.tv.utils.Timer;
@@ -154,10 +158,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private ActivityVideoBinding mBinding;
     private ViewGroup.LayoutParams mFrameParams;
-    private Observer<Result> mObserveDetail;
-    private Observer<Result> mObservePlayer;
-    private Observer<Result> mObserveSearch;
-    private Observer<Result> mObserveDownload;
     private DanmakuContext mDanmakuContext;
     private EpisodeAdapter mEpisodeAdapter;
     private QualityAdapter mQualityAdapter;
@@ -176,6 +176,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private Set<String> mBroken;
     private History mHistory;
     private PlaybackController mPlayers;
+    private VodPlaybackResolver mVodResolver;
+    private VodPlaybackCoordinator mPlaybackCoordinator;
+    private SwitchablePlayerSession mPlayerSession;
     private float mSpeedBeforeLongPress = Float.NaN;
     private boolean foreground;
     private boolean fullscreen;
@@ -190,10 +193,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private Runnable mRecommendRequest;
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private long mLastHistorySaveAt;
-    private long mPendingFlagSwitchPosition = C.TIME_UNSET;
+    private boolean mPreservePositionOnNextPlay;
     private long requestTokenSeed;
     private String pendingDetailToken;
-    private final PlaybackRequest mPlaybackRequest = new PlaybackRequest();
     private final Object mHistoryLock = new Object();
     private History mPreloadedHistory;
     private String mPreloadedHistoryKey;
@@ -374,10 +376,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mDanmakuContext = DanmakuContext.create();
         mBinding.progressLayout.showProgress();
         mBinding.swipeLayout.setEnabled(false);
-        mObserveDetail = this::setDetail;
-        mObservePlayer = this::setPlayer;
-        mObserveDownload = this::setDownload;
-        mObserveSearch = this::setSearch;
         mPlayers = PlaybackController.create(this);
         mPlayers.observe(this::onPlaybackState);
         TaskScheduler scheduler = new TaskScheduler() {
@@ -398,6 +396,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         setForeground(true);
         setRecyclerView();
         setVideoView();
+        setPlaybackCoordinator();
         setDisplayView();
         setDanmuView();
         setViewModel();
@@ -515,6 +514,24 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.video.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> mPiP.update(getActivity(), view));
     }
 
+    private void setPlaybackCoordinator() {
+        mVodResolver = new VodPlaybackResolver(ThreadPools.newSingle("vod-resolver"), App::post,
+                new SpiderPlaybackGateway(), this::prepareResolvedResult, result -> isUseParse());
+        mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
+        mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, this::createPlaybackItem,
+                mPlayerSession, new RoomEpisodeProgressStore());
+        mPlaybackCoordinator.observe(state -> {
+            if (state.getPhase() != VodPlaybackPhase.ERROR) return;
+            if (mPlayers.session().state().getPhase() == com.fongmi.android.tv.player.session.PlaybackPhase.ERROR) return;
+            Throwable error = state.getError();
+            ErrorEvent.extract(error == null ? getString(R.string.error_play_timeout) : error.getMessage());
+        });
+    }
+
+    private void replacePlayerSession() {
+        if (mPlayerSession != null) mPlayerSession.replace(mPlayers.session());
+    }
+
     private void setVideoView(boolean isInPictureInPictureMode) {
         if (isInPictureInPictureMode) {
             mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
@@ -559,10 +576,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mSiteSearch = new SiteSearchSession(mViewModel, "video-search", Math.min(6, ThreadPools.searchConcurrency()));
-        mViewModel.result().observe(this, mObserveDetail);
-        mViewModel.player().observe(this, mObservePlayer);
-        mViewModel.search().observe(this, mObserveSearch);
-        mViewModel.downloadResult().observe(this, mObserveDownload);
+        mViewModel.result().observe(this, this::setDetail);
+        mViewModel.search().observe(this, this::setSearch);
+        mViewModel.downloadResult().observe(this, this::setDownload);
         mViewModel.episode().observe(this, episode -> {
             onItemClick(episode);
             hideSheet();
@@ -581,7 +597,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void getDetail() {
-        mPlaybackRequest.clear();
         clearPlaybackTimeout();
         String token = nextRequestToken("detail");
         setPendingDetailRequest(token);
@@ -703,14 +718,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }
         mBinding.control.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
         mBinding.display.title.setText(mBinding.control.title.getText());
-        String token = nextRequestToken("play");
-        mPlaybackRequest.set(getKey(), flag.getFlag(), episode.getUrl(), token);
-        checkpointCurrentEpisode();
         mPlayers.clear();
         mPlayers.stop();
-        updateHistory(episode, replay);
+        StartPolicy policy = replay ? StartPolicy.FRESH : mPreservePositionOnNextPlay
+                ? StartPolicy.KEEP_CURRENT_POSITION : StartPolicy.RESUME_SAVED;
+        mPreservePositionOnNextPlay = false;
+        updateHistory(episode);
         schedulePlaybackTimeout();
-        mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), token);
+        int index = flag.getEpisodes().indexOf(episode);
+        mPlaybackCoordinator.play(Math.max(index, 0), policy);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         clearDanmakuView();
         showProgress();
@@ -718,20 +734,19 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         hidePreview();
     }
 
-    private void setPlayer(Result result) {
-        if (!isCurrentPlayerResult(result)) return;
-        clearPlaybackTimeout();
-        String token = mPlaybackRequest.getToken();
+    private void prepareResolvedResult(Result result) {
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.setParseVisible(isUseParse());
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);
-        mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
-        if (!TextUtils.equals(token, mPlaybackRequest.getToken())) return;
         setQualityVisible(result.getUrl().isMulti());
         mBinding.swipeLayout.setRefreshing(false);
         setDanmakus(result.getDanmakus());
         mQualityAdapter.addAll(result);
+    }
+
+    private com.fongmi.android.tv.player.session.PlaybackItem createPlaybackItem(VodEpisode episode, Result result, long position) {
+        return new com.fongmi.android.tv.player.session.PlaybackItem(episode.getIdentity(), result.getRealUrl(), result.getHeaders(), result.getFormat(), result.getDrm(), result.getSubs(), position, false);
     }
 
     private void setDownload(Result result) {
@@ -835,7 +850,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Episode episode = item.find(name, !TextUtils.isEmpty(name));
         if (episode == null && episodePosition >= 0 && episodePosition < item.getEpisodes().size()) episode = item.getEpisodes().get(episodePosition);
         if (episode == null) episode = item.getEpisodes().get(0);
-        mPendingFlagSwitchPosition = mHistory == null ? C.TIME_UNSET : Math.max(mHistory.getPosition(), 0);
+        mPreservePositionOnNextPlay = true;
         onItemClick(episode);
         hidePreview();
     }
@@ -860,7 +875,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onItemClick(Result result) {
         try {
             showProgress();
-            mPlayers.start(result, isUseParse(), getSite().isChangeable() ? getSite().getTimeout() : -1);
+            prepareResolvedResult(result);
+            mPlaybackCoordinator.replaceMedia(result);
             mBinding.danmaku.hide();
         } catch (Exception e) {
             ThreadPools.log(e, "Quality switch failed.");
@@ -903,6 +919,14 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.reverse.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
         mBinding.more.setVisibility(items.size() < 3 ? View.GONE : View.VISIBLE);
         mEpisodeAdapter.addAll(items);
+        if (mPlaybackCoordinator != null && !mFlagAdapter.isEmpty()) {
+            List<VodEpisode> episodes = new ArrayList<>(items.size());
+            String flag = getFlag().getFlag();
+            for (Episode item : items) episodes.add(new VodEpisode(EpisodeProgressManager.get().identity(item), getKey(), flag, item.getName(), item.getUrl()));
+            mPlaybackCoordinator.setEpisodes(episodes, false);
+            mPlaybackCoordinator.configureProgress(getHistoryKey(), getSiteCid());
+            mPlaybackCoordinator.setOpening(mHistory == null ? 0 : mHistory.getOpening());
+        }
     }
 
     private void setQualityVisible(boolean visible) {
@@ -1118,7 +1142,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         capturePlaybackPosition();
         mPlayers.toggleDecode(save);
         mPlayers.init(getExo(), getIjk());
-        mPlayers.setMediaSource();
+        replacePlayerSession();
+        retryPlayback();
         setDecodeView();
         setR1Callback();
     }
@@ -1430,32 +1455,21 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.action.opening.setText(mHistory.getOpening() == 0 ? getString(R.string.play_op) : mPlayers.stringToTime(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() == 0 ? getString(R.string.play_ed) : mPlayers.stringToTime(mHistory.getEnding()));
         mPlayers.setPlayer(getPlayer());
+        replacePlayerSession();
         setScale(getScale());
         setPlayerView();
         setDecodeView();
     }
 
-    private void updateHistory(Episode item, boolean replay) {
+    private void updateHistory(Episode item) {
         if (mHistory == null || item == null || getFlag() == null) return;
-        long flagSwitchPosition = mPendingFlagSwitchPosition;
-        mPendingFlagSwitchPosition = C.TIME_UNSET;
-        boolean keepFlagSwitchPosition = flagSwitchPosition != C.TIME_UNSET;
-        boolean sameEpisode = EpisodePlaybackPlan.sameEpisode(mHistory.getEpisodeUrl(), mHistory.getVodRemarks(), item.getUrl(), item.getName());
-        long savedPosition = EpisodeProgressManager.get().position(getHistoryKey(), item, sameEpisode ? mHistory.getPosition() : 0);
-        EpisodePlaybackPlan plan = EpisodePlaybackPlan.resolve(
-                mHistory.getEpisodeUrl(), mHistory.getVodRemarks(),
-                item.getUrl(), item.getName(),
-                savedPosition, mHistory.getOpening(),
-                replay, keepFlagSwitchPosition, flagSwitchPosition);
-        EpisodeProgress.apply(mHistory, getFlag(), item, plan, System.currentTimeMillis());
-        mPlayers.setNextStartPosition(plan.getStartPosition());
-    }
-
-    private void checkpointCurrentEpisode() {
-        if (Setting.isIncognito() || mHistory == null || TextUtils.isEmpty(mHistory.getEpisodeUrl())) return;
-        String name = TextUtils.isEmpty(mHistory.getVodRemarks()) ? mHistory.getEpisodeUrl() : mHistory.getVodRemarks();
-        Episode previous = Episode.create(name, mHistory.getEpisodeUrl());
-        EpisodeProgressManager.get().checkpoint(getHistoryKey(), getSiteCid(), previous, mPlayers.getPosition(), mPlayers.getDuration());
+        boolean changed = !TextUtils.equals(mHistory.getEpisodeUrl(), item.getUrl())
+                || !TextUtils.equals(mHistory.getVodRemarks(), item.getName());
+        if (changed) mHistory.setDuration(0);
+        mHistory.setEpisodeUrl(item.getUrl());
+        mHistory.setVodRemarks(item.getName());
+        mHistory.setVodFlag(getFlag().getFlag());
+        mHistory.setCreateTime(System.currentTimeMillis());
     }
 
     private void capturePlaybackPosition() {
@@ -1713,6 +1727,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void nextPlayer() {
         capturePlaybackPosition();
         mPlayers.nextPlayer();
+        replacePlayerSession();
         setPlayerView();
         setDecodeView();
         retryPlayback();
@@ -1903,10 +1918,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 && TextUtils.equals(result.getRequestToken(), pendingDetailToken);
     }
 
-    private boolean isCurrentPlayerResult(Result result) {
-        return mPlaybackRequest.matches(result);
-    }
-
     private boolean isFullscreen() {
         return fullscreen;
     }
@@ -2089,6 +2100,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onPlayerClick(Integer item) {
         mPlayers.setPlayer(item);
+        replacePlayerSession();
         setPlayerView();
         setDecodeView();
         setR1Callback();
@@ -2209,6 +2221,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         clearPlaybackTimeout();
         mHistoryRequests.close();
         mClock.release();
+        if (mPlaybackCoordinator != null) mPlaybackCoordinator.close();
+        if (mVodResolver != null) mVodResolver.close();
         mPlayers.release();
         Timer.get().reset();
         App.post(mR0, 1000);

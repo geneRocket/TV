@@ -283,10 +283,6 @@ public class PlaybackController {
         this.position = position;
     }
 
-    public void setNextStartPosition(long startPosition) {
-        position = Math.max(startPosition, 0);
-    }
-
     private void ensureSession() {
         if (position == C.TIME_UNSET) position = 0;
     }

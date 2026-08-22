@@ -31,16 +31,14 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     private final MutableLiveData<Episode> ep;
     private final MutableLiveData<Episode> episode;
-    private final MutableLiveData<Result> player;
     private final MutableLiveData<Result> search;
     private final MutableLiveData<Result> action;
     private final MutableLiveData<Danmu> danmaku;
     private final MutableLiveData<Result> download;
-    private final TaskScope playbackRequests;
+    private final TaskScope downloadRequests;
     private final ConcurrentHashMap<String, Set<Call>> activeSearchCalls = new ConcurrentHashMap<>();
     private final Set<String> cancelledSearchTokens = ConcurrentHashMap.newKeySet();
 
-    private static final String REQUEST_PLAYER = "player";
     private static final String REQUEST_DOWNLOAD = "download";
     private static final String REQUEST_ACTION = "action";
 
@@ -48,12 +46,11 @@ public class SiteViewModel extends BaseSiteViewModel {
         super();
         this.ep = new MutableLiveData<>();
         this.episode = new MutableLiveData<>();
-        this.player = new MutableLiveData<>();
         this.search = new MutableLiveData<>();
         this.action = new MutableLiveData<>();
         this.danmaku = new MutableLiveData<>();
         this.download = new MutableLiveData<>();
-        this.playbackRequests = new TaskScope(ThreadPools.newSingle("site-playback"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Playback request failed."));
+        this.downloadRequests = new TaskScope(ThreadPools.newSingle("site-download"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Download request failed."));
     }
 
     public void setEpisode(Episode value) {
@@ -63,8 +60,6 @@ public class SiteViewModel extends BaseSiteViewModel {
     public LiveData<Episode> ep() { return ep; }
 
     public LiveData<Episode> episode() { return episode; }
-
-    public LiveData<Result> player() { return player; }
 
     public LiveData<Result> search() { return search; }
 
@@ -110,16 +105,8 @@ public class SiteViewModel extends BaseSiteViewModel {
                 this::requestRequestFallback);
     }
 
-    public void playerContent(String key, String flag, String id) {
-        playerContent(key, flag, id, "");
-    }
-
-    public void playerContent(String key, String flag, String id, String token) {
-        submitPlaybackRequest(REQUEST_PLAYER, player, key, flag, id, token);
-    }
-
     public void download(String key, String flag, String id) {
-        submitPlaybackRequest(REQUEST_DOWNLOAD, download, key, flag, id, "");
+        submitDownloadRequest(key, flag, id);
     }
 
     public void action(String key, String action) {
@@ -190,10 +177,10 @@ public class SiteViewModel extends BaseSiteViewModel {
         });
     }
 
-    private void submitPlaybackRequest(String requestKey, MutableLiveData<Result> target, String key, String flag, String id, String token) {
+    private void submitDownloadRequest(String key, String flag, String id) {
         Callable<Result> request = () -> SpiderRepository.get().playerContent(key, flag, id);
-        playbackRequests.submit(requestKey, request, Constant.TIMEOUT_PLAY,
-                data -> target.postValue(withRequest(data, key, id, flag, token)),
+        downloadRequests.submit(REQUEST_DOWNLOAD, request, Constant.TIMEOUT_PLAY,
+                data -> download.postValue(withRequest(data, key, id, flag, "")),
                 this::requestRequestFallback,
                 Source.get()::stop);
     }
@@ -263,7 +250,7 @@ public class SiteViewModel extends BaseSiteViewModel {
         for (String token : activeSearchCalls.keySet()) cancelSearch(token);
         activeSearchCalls.clear();
         cancelledSearchTokens.clear();
-        playbackRequests.close();
+        downloadRequests.close();
         super.onCleared();
     }
 }

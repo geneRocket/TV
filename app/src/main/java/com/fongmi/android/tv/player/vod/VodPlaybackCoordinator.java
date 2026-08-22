@@ -96,6 +96,19 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         if (state.getEpisodeIndex() >= 0) play(state.getEpisodeIndex(), StartPolicy.KEEP_CURRENT_POSITION);
     }
 
+    public synchronized void replaceMedia(com.fongmi.android.tv.bean.Result result) {
+        requireOpen();
+        if (state.getEpisode() == null || result == null) return;
+        cancelResolve();
+        requestId++;
+        long position = Math.max(state.getPosition(), 0);
+        try {
+            session.prepare(itemFactory.create(state.getEpisode(), result, position));
+        } catch (Throwable error) {
+            publish(new VodPlaybackState(VodPlaybackPhase.ERROR, state.getEpisode(), state.getEpisodeIndex(), position, state.getDuration(), error));
+        }
+    }
+
     public synchronized void play() { session.play(); }
 
     public synchronized void pause() { session.pause(); }

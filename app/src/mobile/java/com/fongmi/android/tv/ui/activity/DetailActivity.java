@@ -8,7 +8,6 @@ import android.text.TextUtils;
 import android.view.View;
 import android.widget.TextView;
 
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.viewbinding.ViewBinding;
 
@@ -135,12 +134,6 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.result().observe(this, this::setDetail);
-        mViewModel.player().observe(this, new Observer<Result>() {
-            @Override
-            public void onChanged(Result result) {
-
-            }
-        });
     }
 
     private void getDetail() {
