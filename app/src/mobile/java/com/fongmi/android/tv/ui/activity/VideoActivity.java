@@ -77,6 +77,7 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackMarkers;
+import com.fongmi.android.tv.player.PlaybackSeek;
 import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
 import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
 import com.fongmi.android.tv.player.session.PlaybackState;
@@ -2061,7 +2062,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onSeek(int time) {
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
-        mBinding.widget.time.setText(mPlayers.getPositionTime(time));
+        mBinding.widget.time.setText(mPlayers.stringToTime(PlaybackSeek.target(mPlayers.getPosition(), mPlayers.getDuration(), time)));
         mBinding.widget.seek.setVisibility(View.VISIBLE);
         hideProgress();
     }
@@ -2069,7 +2070,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onSeekEnd(int time) {
         mBinding.widget.seek.setVisibility(View.GONE);
-        mPlayers.seekTo(time);
+        mPlaybackCoordinator.seekTo(PlaybackSeek.target(mPlayers.getPosition(), mPlayers.getDuration(), time));
         showProgress();
         onPlay();
     }
