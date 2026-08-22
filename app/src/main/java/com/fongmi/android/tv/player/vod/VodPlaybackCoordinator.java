@@ -33,6 +33,9 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private long resumePosition;
 
     public VodPlaybackCoordinator(PlaybackResolver resolver, PlaybackItemFactory itemFactory, PlayerSession session) {
+        if (resolver == null) throw new IllegalArgumentException("resolver must not be null");
+        if (itemFactory == null) throw new IllegalArgumentException("itemFactory must not be null");
+        if (session == null) throw new IllegalArgumentException("session must not be null");
         this.resolver = resolver;
         this.itemFactory = itemFactory;
         this.session = session;
@@ -47,26 +50,35 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized void setEpisodes(List<VodEpisode> episodes, boolean reverse) {
         requireOpen();
-        this.episodes = new ArrayList<>(episodes == null ? new ArrayList<>() : episodes);
+        List<VodEpisode> copy = new ArrayList<>(episodes == null ? new ArrayList<>() : episodes);
+        if (copy.contains(null)) throw new IllegalArgumentException("episodes must not contain null");
+        this.episodes = copy;
         this.reverse = reverse;
     }
 
     public synchronized void setOpening(long opening) {
+        requireOpen();
         this.opening = Math.max(opening, 0);
     }
 
     public synchronized void play(int index, StartPolicy policy) {
         requireOpen();
+        if (policy == null) throw new IllegalArgumentException("policy must not be null");
         if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
         cancelResolve();
         VodEpisode episode = episodes.get(index);
         long startPosition = startPosition(policy, resumePosition(episode), state.getPosition());
         long currentRequest = ++requestId;
         publish(new VodPlaybackState(VodPlaybackPhase.RESOLVING, episode, index, startPosition, -1, null));
-        resolveHandle = resolver.resolve(new ResolveRequest(currentRequest, episode.getSiteKey(), episode.getFlag(), episode.getResolverUrl()), new PlaybackResolver.Callback() {
-            @Override public void onResolved(ResolveResult result) { applyResolved(currentRequest, episode, index, startPosition, result); }
-            @Override public void onFailure(ResolveFailure failure) { applyFailure(currentRequest, episode, index, failure); }
-        });
+        try {
+            resolveHandle = resolver.resolve(new ResolveRequest(currentRequest, episode.getSiteKey(), episode.getFlag(), episode.getResolverUrl()), new PlaybackResolver.Callback() {
+                @Override public void onResolved(ResolveResult result) { applyResolved(currentRequest, episode, index, startPosition, result); }
+                @Override public void onFailure(ResolveFailure failure) { applyFailure(currentRequest, episode, index, failure); }
+            });
+            if (resolveHandle == null) throw new IllegalStateException("resolver returned no handle");
+        } catch (Throwable error) {
+            publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, error));
+        }
     }
 
     public synchronized boolean next() {
@@ -104,13 +116,14 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         }
     }
 
-    public synchronized void play() { session.play(); }
+    public synchronized void play() { requireOpen(); session.play(); }
 
-    public synchronized void pause() { session.pause(); }
+    public synchronized void pause() { requireOpen(); session.pause(); }
 
-    public synchronized void seekTo(long position) { session.seekTo(position); }
+    public synchronized void seekTo(long position) { requireOpen(); session.seekTo(position); }
 
     public synchronized void stop() {
+        requireOpen();
         cancelResolve();
         requestId++;
         session.stop();
@@ -122,8 +135,12 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized Subscription observe(VodPlaybackObserver observer) {
         requireOpen();
+        if (observer == null) throw new IllegalArgumentException("observer must not be null");
         observers.add(observer);
-        observer.onVodPlaybackState(state);
+        try {
+            observer.onVodPlaybackState(state);
+        } catch (RuntimeException ignored) {
+        }
         return () -> removeObserver(observer);
     }
 
@@ -132,7 +149,11 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private synchronized void applyResolved(long expectedRequest, VodEpisode episode, int index, long startPosition, ResolveResult resolved) {
-        if (closed || expectedRequest != requestId || resolved.getRequestId() != requestId) return;
+        if (closed || expectedRequest != requestId) return;
+        if (resolved == null || resolved.getRequestId() != requestId) {
+            publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, new IllegalStateException("resolver returned an invalid result")));
+            return;
+        }
         try {
             session.prepare(itemFactory.create(episode, resolved.getResult(), startPosition));
         } catch (Throwable error) {
@@ -141,7 +162,11 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private synchronized void applyFailure(long expectedRequest, VodEpisode episode, int index, ResolveFailure failure) {
-        if (closed || expectedRequest != requestId || failure.getRequestId() != requestId) return;
+        if (closed || expectedRequest != requestId) return;
+        if (failure == null || failure.getRequestId() != requestId) {
+            publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, state.getPosition(), state.getDuration(), new IllegalStateException("resolver returned an invalid failure")));
+            return;
+        }
         publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, state.getPosition(), state.getDuration(), failure.getCause()));
     }
 
@@ -152,7 +177,18 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private VodPlaybackPhase map(PlaybackPhase phase) {
-        return VodPlaybackPhase.valueOf(phase.name());
+        switch (phase) {
+            case IDLE: return VodPlaybackPhase.IDLE;
+            case PREPARING: return VodPlaybackPhase.PREPARING;
+            case BUFFERING: return VodPlaybackPhase.BUFFERING;
+            case READY: return VodPlaybackPhase.READY;
+            case PAUSED: return VodPlaybackPhase.PAUSED;
+            case ENDED: return VodPlaybackPhase.ENDED;
+            case ERROR: return VodPlaybackPhase.ERROR;
+            case STOPPED: return VodPlaybackPhase.STOPPED;
+            case RELEASED: return VodPlaybackPhase.RELEASED;
+            default: throw new IllegalStateException("Unsupported playback phase: " + phase);
+        }
     }
 
     private long startPosition(StartPolicy policy, long saved, long current) {
@@ -174,7 +210,14 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     private void publish(VodPlaybackState next) {
         state = next;
-        for (VodPlaybackObserver observer : new LinkedHashSet<>(observers)) observer.onVodPlaybackState(next);
+        for (VodPlaybackObserver observer : new LinkedHashSet<>(observers)) {
+            try {
+                observer.onVodPlaybackState(next);
+            } catch (RuntimeException ignored) {
+                // State remains authoritative; one presentation observer cannot
+                // interrupt resolver/session callbacks or other observers.
+            }
+        }
     }
 
     private void requireOpen() {
@@ -188,6 +231,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         cancelResolve();
         sessionSubscription.cancel();
         session.release();
+        publish(new VodPlaybackState(VodPlaybackPhase.RELEASED, state.getEpisode(), state.getEpisodeIndex(), state.getPosition(), state.getDuration(), null));
         observers.clear();
     }
 }

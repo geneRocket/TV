@@ -18,6 +18,7 @@ import com.fongmi.android.tv.player.session.PlaybackItem;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -45,6 +46,66 @@ public class VodPlaybackCoordinatorTest {
 
         resolver.resolve(current);
         assertEquals("episode-2", engine.request.getUrl());
+    }
+
+    @Test
+    public void brokenObserverDoesNotInterruptPlaybackOrOtherObservers() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        java.util.List<VodPlaybackPhase> phases = new ArrayList<>();
+        coordinator.observe(state -> { if (state.getPhase() != VodPlaybackPhase.IDLE) throw new IllegalStateException("broken UI"); });
+        coordinator.observe(state -> phases.add(state.getPhase()));
+
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+
+        assertEquals(3, phases.size());
+        assertEquals(VodPlaybackPhase.PREPARING, phases.get(2));
+        assertEquals("episode-1", engine.request.getUrl());
+    }
+
+    @Test
+    public void synchronousResolverFailureBecomesErrorState() {
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator((request, callback) -> {
+            throw new IllegalStateException("resolver unavailable");
+        }, engine);
+
+        coordinator.play(0, StartPolicy.FRESH);
+
+        assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
+        assertEquals("resolver unavailable", coordinator.state().getError().getMessage());
+    }
+
+    @Test
+    public void nullResolveCallbackValueBecomesErrorState() {
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator((request, callback) -> {
+            callback.onResolved(null);
+            return new ResolveHandle() {
+                @Override public long getRequestId() { return request.getRequestId(); }
+                @Override public void cancel() {}
+            };
+        }, engine);
+
+        coordinator.play(0, StartPolicy.FRESH);
+
+        assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
+    }
+
+    @Test
+    public void closePublishesTerminalState() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        java.util.List<VodPlaybackPhase> phases = new ArrayList<>();
+        coordinator.observe(state -> phases.add(state.getPhase()));
+
+        coordinator.close();
+
+        assertEquals(VodPlaybackPhase.RELEASED, coordinator.state().getPhase());
+        assertEquals(VodPlaybackPhase.RELEASED, phases.get(phases.size() - 1));
     }
 
     @Test
@@ -122,7 +183,26 @@ public class VodPlaybackCoordinatorTest {
         assertEquals(321_000, engine.request.getStartPosition());
     }
 
+    @Test
+    public void qualityReplacementUsesLatestSeekPositionWithoutEngineCallback() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 120_000, 900_000));
+
+        coordinator.seekTo(480_000);
+        coordinator.replaceMedia(Result.empty());
+
+        assertEquals(480_000, engine.request.getStartPosition());
+    }
+
     private VodPlaybackCoordinator coordinator(ManualResolver resolver, FakeEngine engine) {
+        return coordinator((PlaybackResolver) resolver, engine);
+    }
+
+    private VodPlaybackCoordinator coordinator(PlaybackResolver resolver, FakeEngine engine) {
         VodPlaybackCoordinator coordinator = new VodPlaybackCoordinator(resolver,
                 (episode, result, position) -> new PlaybackItem(episode.getIdentity(), episode.getResolverUrl(), Collections.emptyMap(), null, null, Collections.emptyList(), position, false),
                 new DefaultPlayerSession(engine));

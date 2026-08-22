@@ -15,6 +15,8 @@ public final class EngineSnapshot {
     private final int videoHeight;
 
     public EngineSnapshot(long sessionId, EnginePhase phase, long position, long duration, long bufferedPosition, boolean playing, float speed, int videoWidth, int videoHeight) {
+        if (sessionId < 0) throw new IllegalArgumentException("sessionId must not be negative");
+        if (phase == null) throw new IllegalArgumentException("phase must not be null");
         this.sessionId = sessionId;
         this.phase = phase;
         this.position = Math.max(position, 0);

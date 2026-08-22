@@ -49,6 +49,20 @@ public class DefaultPlayerSessionTest {
     }
 
     @Test
+    public void seekUpdatesAuthoritativePositionWithoutWaitingForEngineCallback() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long id = session.prepare(item("episode-1", 0));
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 120_000, 900_000));
+
+        session.seekTo(480_000);
+
+        assertEquals(480_000, engine.seekPosition);
+        assertEquals(480_000, session.state().getPosition());
+        assertEquals(PlaybackPhase.READY, session.state().getPhase());
+    }
+
+    @Test
     public void releaseIsTerminal() {
         FakeEngine engine = new FakeEngine();
         DefaultPlayerSession session = new DefaultPlayerSession(engine);
@@ -68,6 +82,7 @@ public class DefaultPlayerSessionTest {
         private EngineRequest request;
         private Listener listener;
         private int releaseCount;
+        private long seekPosition;
 
         @Override
         public void prepare(EngineRequest request, Listener listener) {
@@ -81,7 +96,7 @@ public class DefaultPlayerSessionTest {
 
         @Override public void play() {}
         @Override public void pause() {}
-        @Override public void seekTo(long position) {}
+        @Override public void seekTo(long position) { seekPosition = position; }
         @Override public void stop() {}
         @Override public void setSpeed(float speed) {}
         @Override public void setTrack(Track track) {}

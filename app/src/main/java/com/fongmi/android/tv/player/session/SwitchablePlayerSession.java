@@ -35,21 +35,24 @@ public final class SwitchablePlayerSession implements PlayerSession {
         if (previous != null) previous.release();
     }
 
-    @Override public long prepare(PlaybackItem item) { return delegate.prepare(item); }
-    @Override public void play() { delegate.play(); }
-    @Override public void pause() { delegate.pause(); }
-    @Override public void seekTo(long position) { delegate.seekTo(position); }
-    @Override public void setSpeed(float speed) { delegate.setSpeed(speed); }
-    @Override public void setTrack(Track track) { delegate.setTrack(track); }
-    @Override public EngineSnapshot snapshot() { return delegate.snapshot(); }
-    @Override public void stop() { delegate.stop(); }
+    @Override public synchronized long prepare(PlaybackItem item) { requireActive(); return delegate.prepare(item); }
+    @Override public synchronized void play() { requireActive(); delegate.play(); }
+    @Override public synchronized void pause() { requireActive(); delegate.pause(); }
+    @Override public synchronized void seekTo(long position) { requireActive(); delegate.seekTo(position); }
+    @Override public synchronized void setSpeed(float speed) { requireActive(); delegate.setSpeed(speed); }
+    @Override public synchronized void setTrack(Track track) { requireActive(); delegate.setTrack(track); }
+    @Override public synchronized EngineSnapshot snapshot() { requireActive(); return delegate.snapshot(); }
+    @Override public synchronized void stop() { if (!released) delegate.stop(); }
     @Override public synchronized PlaybackState state() { return state; }
 
     @Override public synchronized Subscription observe(PlaybackObserver observer) {
         requireActive();
         if (observer == null) throw new IllegalArgumentException("observer must not be null");
         observers.add(observer);
-        observer.onPlaybackState(state);
+        try {
+            observer.onPlaybackState(state);
+        } catch (RuntimeException ignored) {
+        }
         return () -> remove(observer);
     }
 
@@ -71,6 +74,13 @@ public final class SwitchablePlayerSession implements PlayerSession {
         released = true;
         if (delegateSubscription != null) delegateSubscription.cancel();
         delegate.release();
+        state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
+        for (PlaybackObserver observer : new LinkedHashSet<>(observers)) {
+            try {
+                observer.onPlaybackState(state);
+            } catch (RuntimeException ignored) {
+            }
+        }
         observers.clear();
     }
 

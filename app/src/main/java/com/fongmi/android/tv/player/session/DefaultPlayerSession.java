@@ -46,7 +46,9 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     @Override
     public synchronized void seekTo(long position) {
         requireActive();
-        engine.seekTo(Math.max(position, 0));
+        long target = Math.max(position, 0);
+        engine.seekTo(target);
+        publish(new PlaybackState(state.getSessionId(), state.getPhase(), state.getItem(), target, state.getDuration(), state.getError()));
     }
 
     @Override
@@ -83,7 +85,10 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         requireActive();
         if (observer == null) throw new IllegalArgumentException("observer must not be null");
         observers.add(observer);
-        observer.onPlaybackState(state);
+        try {
+            observer.onPlaybackState(state);
+        } catch (RuntimeException ignored) {
+        }
         return () -> removeObserver(observer);
     }
 
@@ -97,7 +102,12 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         released = true;
         engine.release();
         state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
-        for (PlaybackObserver observer : snapshotObservers()) observer.onPlaybackState(state);
+        for (PlaybackObserver observer : snapshotObservers()) {
+            try {
+                observer.onPlaybackState(state);
+            } catch (RuntimeException ignored) {
+            }
+        }
         observers.clear();
     }
 
@@ -108,7 +118,18 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     }
 
     private PlaybackPhase map(EnginePhase phase) {
-        return PlaybackPhase.valueOf(phase.name());
+        switch (phase) {
+            case IDLE: return PlaybackPhase.IDLE;
+            case PREPARING: return PlaybackPhase.PREPARING;
+            case BUFFERING: return PlaybackPhase.BUFFERING;
+            case READY: return PlaybackPhase.READY;
+            case PAUSED: return PlaybackPhase.PAUSED;
+            case ENDED: return PlaybackPhase.ENDED;
+            case ERROR: return PlaybackPhase.ERROR;
+            case STOPPED: return PlaybackPhase.STOPPED;
+            case RELEASED: return PlaybackPhase.RELEASED;
+            default: throw new IllegalStateException("Unsupported engine phase: " + phase);
+        }
     }
 
     private void publish(PlaybackState next) {

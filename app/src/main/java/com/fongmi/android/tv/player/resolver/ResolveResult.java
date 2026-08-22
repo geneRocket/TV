@@ -8,6 +8,7 @@ public final class ResolveResult {
     private final Result result;
 
     public ResolveResult(long requestId, Result result) {
+        if (requestId <= 0) throw new IllegalArgumentException("requestId must be positive");
         this.requestId = requestId;
         this.result = result == null ? Result.empty() : result;
     }

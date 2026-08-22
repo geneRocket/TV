@@ -9,6 +9,8 @@ public final class EngineEvent {
     private final Throwable error;
 
     private EngineEvent(long sessionId, EnginePhase phase, long position, long duration, Throwable error) {
+        if (sessionId <= 0) throw new IllegalArgumentException("sessionId must be positive");
+        if (phase == null) throw new IllegalArgumentException("phase must not be null");
         this.sessionId = sessionId;
         this.phase = phase;
         this.position = position;
@@ -21,7 +23,8 @@ public final class EngineEvent {
     }
 
     public static EngineEvent error(long sessionId, Throwable error, long position, long duration) {
-        return new EngineEvent(sessionId, EnginePhase.ERROR, Math.max(position, 0), duration, error);
+        return new EngineEvent(sessionId, EnginePhase.ERROR, Math.max(position, 0), duration,
+                error == null ? new IllegalStateException("player engine failed") : error);
     }
 
     public long getSessionId() { return sessionId; }

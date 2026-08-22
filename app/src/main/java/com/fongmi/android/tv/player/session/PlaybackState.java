@@ -12,6 +12,8 @@ public final class PlaybackState {
     private final Throwable error;
 
     public PlaybackState(long sessionId, PlaybackPhase phase, PlaybackItem item, long position, long duration, Throwable error) {
+        if (sessionId < 0) throw new IllegalArgumentException("sessionId must not be negative");
+        if (phase == null) throw new IllegalArgumentException("phase must not be null");
         this.sessionId = sessionId;
         this.phase = phase;
         this.item = item;

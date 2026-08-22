@@ -15,12 +15,14 @@ public final class VodEpisode {
     private final String resolverUrl;
 
     public VodEpisode(String identity, String siteKey, String flag, String name, String resolverUrl) {
-        if (identity == null || identity.isEmpty()) throw new IllegalArgumentException("identity must not be empty");
-        this.identity = identity;
-        this.siteKey = siteKey;
+        if (identity == null || identity.trim().isEmpty()) throw new IllegalArgumentException("identity must not be empty");
+        if (siteKey == null || siteKey.trim().isEmpty()) throw new IllegalArgumentException("siteKey must not be empty");
+        if (resolverUrl == null || resolverUrl.trim().isEmpty()) throw new IllegalArgumentException("resolverUrl must not be empty");
+        this.identity = identity.trim();
+        this.siteKey = siteKey.trim();
         this.flag = flag == null ? "" : flag;
         this.name = name == null ? "" : name;
-        this.resolverUrl = resolverUrl;
+        this.resolverUrl = resolverUrl.trim();
     }
 
     public String getIdentity() { return identity; }

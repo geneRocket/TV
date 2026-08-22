@@ -64,6 +64,20 @@ public class SwitchablePlayerSessionTest {
     }
 
     @Test
+    public void releasePublishesTerminalState() {
+        FakeSession delegate = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(delegate);
+        List<PlaybackPhase> phases = new ArrayList<>();
+        session.observe(state -> phases.add(state.getPhase()));
+        delegate.emit(PlaybackPhase.READY);
+
+        session.release();
+
+        assertEquals(PlaybackPhase.RELEASED, session.state().getPhase());
+        assertEquals(PlaybackPhase.RELEASED, phases.get(phases.size() - 1));
+    }
+
+    @Test
     public void brokenObserverDoesNotBlockOtherObservers() {
         FakeSession delegate = new FakeSession();
         SwitchablePlayerSession session = new SwitchablePlayerSession(delegate);

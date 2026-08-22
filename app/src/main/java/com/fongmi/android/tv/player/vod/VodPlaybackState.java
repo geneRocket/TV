@@ -12,6 +12,8 @@ public final class VodPlaybackState {
     private final Throwable error;
 
     public VodPlaybackState(VodPlaybackPhase phase, VodEpisode episode, int episodeIndex, long position, long duration, Throwable error) {
+        if (phase == null) throw new IllegalArgumentException("phase must not be null");
+        if (episodeIndex < -1) throw new IllegalArgumentException("episodeIndex must be at least -1");
         this.phase = phase;
         this.episode = episode;
         this.episodeIndex = episodeIndex;

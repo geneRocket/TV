@@ -60,7 +60,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     @Override
     public EngineSnapshot snapshot() {
-        boolean starting = phase == EnginePhase.PREPARING || phase == EnginePhase.BUFFERING;
+        boolean starting = phase == EnginePhase.PREPARING;
         long position = starting ? requestedStartPosition : player.getCurrentPosition();
         long buffered = starting ? requestedStartPosition : player.getBufferedPosition();
         return new EngineSnapshot(sessionId, phase, position, player.getDuration(), buffered, player.isPlaying(), player.getSpeed(), player.getVideoWidth(), player.getVideoHeight());
