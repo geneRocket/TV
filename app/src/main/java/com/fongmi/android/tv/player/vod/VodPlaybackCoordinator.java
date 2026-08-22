@@ -92,6 +92,10 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         if (state.getEpisodeIndex() >= 0) play(state.getEpisodeIndex(), StartPolicy.FRESH);
     }
 
+    public synchronized void reload() {
+        if (state.getEpisodeIndex() >= 0) play(state.getEpisodeIndex(), StartPolicy.KEEP_CURRENT_POSITION);
+    }
+
     public synchronized void play() { session.play(); }
 
     public synchronized void pause() { session.pause(); }

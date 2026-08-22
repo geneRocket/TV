@@ -104,6 +104,24 @@ public class VodPlaybackCoordinatorTest {
         assertFalse(coordinator.next());
     }
 
+    @Test
+    public void switchingEpisodeCheckpointsCurrentProgressBeforeResolve() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.configureProgress("history", 7);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 321_000, 900_000));
+
+        coordinator.play(1, StartPolicy.FRESH);
+
+        PlaybackProgress saved = coordinatorProgressStore.find("history", "episode-1");
+        assertEquals(321_000, saved.getPosition());
+        assertEquals(900_000, saved.getDuration());
+        assertEquals(7, saved.getCid());
+    }
+
     private EpisodeProgressStore coordinatorProgressStore;
 
     private VodPlaybackCoordinator coordinator(ManualResolver resolver, FakeEngine engine) {

@@ -1,7 +1,6 @@
 package com.fongmi.android.tv.player.session;
 
 import com.fongmi.android.tv.bean.Drm;
-import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
 
 import java.util.ArrayList;
@@ -20,13 +19,8 @@ public final class PlaybackItem {
     private final List<Sub> subtitles;
     private final long startPosition;
     private final boolean forceLive;
-    private final Result sourceResult;
 
     public PlaybackItem(String identity, String url, Map<String, String> headers, String format, Drm drm, List<Sub> subtitles, long startPosition, boolean forceLive) {
-        this(identity, url, headers, format, drm, subtitles, startPosition, forceLive, null);
-    }
-
-    public PlaybackItem(String identity, String url, Map<String, String> headers, String format, Drm drm, List<Sub> subtitles, long startPosition, boolean forceLive, Result sourceResult) {
         if (identity == null || identity.isEmpty()) throw new IllegalArgumentException("identity must not be empty");
         if (url == null || url.trim().isEmpty()) throw new IllegalArgumentException("url must not be empty");
         this.identity = identity;
@@ -37,7 +31,6 @@ public final class PlaybackItem {
         this.subtitles = Collections.unmodifiableList(new ArrayList<>(subtitles == null ? Collections.emptyList() : subtitles));
         this.startPosition = Math.max(startPosition, 0);
         this.forceLive = forceLive;
-        this.sourceResult = sourceResult;
     }
 
     public String getIdentity() { return identity; }
@@ -56,5 +49,4 @@ public final class PlaybackItem {
 
     public boolean isForceLive() { return forceLive; }
 
-    public Result getSourceResult() { return sourceResult; }
 }

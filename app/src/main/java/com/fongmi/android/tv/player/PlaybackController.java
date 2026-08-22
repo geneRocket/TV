@@ -140,6 +140,11 @@ public class PlaybackController {
         setupEngine();
     }
 
+    public PlayerSession session() {
+        ensureSession();
+        return playbackSession;
+    }
+
     private void setupEngine() {
         releaseEngine();
         if (exoView == null || ijkView == null) return;
@@ -766,6 +771,15 @@ public class PlaybackController {
     }
 
     private void onPlaybackState(PlaybackState state) {
+        if (state.getItem() != null) {
+            PlaybackItem item = state.getItem();
+            url = item.getUrl();
+            headers = item.getHeaders();
+            format = item.getFormat();
+            drm = item.getDrm();
+            subs = item.getSubtitles();
+            forceLive = item.isForceLive();
+        }
         if (state.getSessionId() != 0) activeSessionId = state.getSessionId();
         for (com.fongmi.android.tv.player.session.PlaybackObserver observer : new LinkedHashSet<>(observers)) {
             try {

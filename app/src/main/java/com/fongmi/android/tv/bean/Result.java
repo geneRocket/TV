@@ -215,6 +215,10 @@ public class Result implements Parcelable {
         return subs == null ? new ArrayList<>() : subs;
     }
 
+    public void setSubs(List<Sub> subs) {
+        this.subs = subs == null ? new ArrayList<>() : new ArrayList<>(subs);
+    }
+
     public JsonElement getHeader() {
         return header;
     }

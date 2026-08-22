@@ -1,0 +1,81 @@
+package com.fongmi.android.tv.player.session;
+
+import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.player.engine.EngineSnapshot;
+
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class SwitchablePlayerSessionTest {
+
+    @Test
+    public void replacementKeepsObserversAndDetachesOldDelegate() {
+        FakeSession first = new FakeSession();
+        FakeSession second = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(first);
+        List<PlaybackPhase> phases = new ArrayList<>();
+        session.observe(state -> phases.add(state.getPhase()));
+
+        first.emit(PlaybackPhase.READY);
+        session.replace(second);
+        first.emit(PlaybackPhase.ERROR);
+        second.emit(PlaybackPhase.PAUSED);
+
+        assertEquals(PlaybackPhase.PAUSED, session.state().getPhase());
+        assertEquals(3, phases.size());
+        assertEquals(PlaybackPhase.IDLE, phases.get(0));
+        assertEquals(PlaybackPhase.READY, phases.get(1));
+        assertEquals(PlaybackPhase.PAUSED, phases.get(2));
+    }
+
+    @Test
+    public void commandsAlwaysReachCurrentDelegateAndReleaseOnlyCurrentDelegate() {
+        FakeSession first = new FakeSession();
+        FakeSession second = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(first);
+
+        session.replace(second);
+        session.play();
+        session.seekTo(42);
+        session.release();
+
+        assertEquals(0, first.playCount);
+        assertEquals(1, second.playCount);
+        assertEquals(42, second.seekPosition);
+        assertTrue(second.released);
+    }
+
+    private static final class FakeSession implements PlayerSession {
+        private PlaybackObserver observer;
+        private PlaybackState state = PlaybackState.IDLE;
+        private int playCount;
+        private long seekPosition;
+        private boolean released;
+
+        void emit(PlaybackPhase phase) {
+            state = new PlaybackState(1, phase, null, 0, -1, null);
+            if (observer != null) observer.onPlaybackState(state);
+        }
+
+        @Override public long prepare(PlaybackItem item) { return 1; }
+        @Override public void play() { playCount++; }
+        @Override public void pause() {}
+        @Override public void seekTo(long position) { seekPosition = position; }
+        @Override public void setSpeed(float speed) {}
+        @Override public void setTrack(Track track) {}
+        @Override public EngineSnapshot snapshot() { return EngineSnapshot.EMPTY; }
+        @Override public void stop() {}
+        @Override public PlaybackState state() { return state; }
+        @Override public Subscription observe(PlaybackObserver observer) {
+            this.observer = observer;
+            observer.onPlaybackState(state);
+            return () -> { if (this.observer == observer) this.observer = null; };
+        }
+        @Override public void release() { released = true; }
+    }
+}
