@@ -78,7 +78,10 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     @Override
     public synchronized void stop() {
         if (released) return;
-        engine.stop();
+        try {
+            engine.stop();
+        } catch (RuntimeException ignored) {
+        }
         if (state.getPhase() != PlaybackPhase.STOPPED) {
             publish(new PlaybackState(state.getSessionId(), PlaybackPhase.STOPPED, state.getItem(), state.getPosition(), state.getDuration(), null));
         }

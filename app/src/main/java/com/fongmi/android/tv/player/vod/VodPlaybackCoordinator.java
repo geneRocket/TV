@@ -27,7 +27,6 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private VodPlaybackState state = VodPlaybackState.IDLE;
     private long requestId;
     private long opening;
-    private boolean reverse;
     private boolean closed;
     private String resumeEpisodeId = "";
     private long resumePosition;
@@ -60,12 +59,11 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         this.hasPreservedPosition = !this.preservedEpisodeId.isEmpty();
     }
 
-    public synchronized void setEpisodes(List<VodEpisode> episodes, boolean reverse) {
+    public synchronized void setEpisodes(List<VodEpisode> episodes) {
         requireOpen();
         List<VodEpisode> copy = new ArrayList<>(episodes == null ? new ArrayList<>() : episodes);
         if (copy.contains(null)) throw new IllegalArgumentException("episodes must not contain null");
         this.episodes = copy;
-        this.reverse = reverse;
     }
 
     public synchronized void setOpening(long opening) {
@@ -104,14 +102,14 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     public synchronized boolean next() {
-        int target = state.getEpisodeIndex() + (reverse ? -1 : 1);
+        int target = state.getEpisodeIndex() + 1;
         if (target < 0 || target >= episodes.size()) return false;
         play(target, StartPolicy.RESUME_SAVED);
         return true;
     }
 
     public synchronized boolean previous() {
-        int target = state.getEpisodeIndex() + (reverse ? 1 : -1);
+        int target = state.getEpisodeIndex() - 1;
         if (target < 0 || target >= episodes.size()) return false;
         play(target, StartPolicy.RESUME_SAVED);
         return true;
@@ -125,19 +123,6 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         if (state.getEpisodeIndex() >= 0) play(state.getEpisodeIndex(), StartPolicy.KEEP_CURRENT_POSITION);
     }
 
-    public synchronized void replaceMedia(com.fongmi.android.tv.bean.Result result) {
-        requireOpen();
-        if (state.getEpisode() == null || result == null) return;
-        cancelResolve();
-        requestId++;
-        long position = Math.max(state.getPosition(), 0);
-        try {
-            session.prepare(itemFactory.create(state.getEpisode(), result, position));
-        } catch (Throwable error) {
-            publishPrepareErrorIfNeeded(state.getEpisode(), state.getEpisodeIndex(), position, error);
-        }
-    }
-
     public synchronized void play() { requireOpen(); session.play(); }
 
     public synchronized void pause() { requireOpen(); session.pause(); }
@@ -148,7 +133,14 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         requireOpen();
         cancelResolve();
         requestId++;
-        session.stop();
+        clearPreservedPosition();
+        try {
+            session.stop();
+        } catch (RuntimeException ignored) {
+        }
+        if (state.getPhase() != VodPlaybackPhase.STOPPED) {
+            publish(new VodPlaybackState(VodPlaybackPhase.STOPPED, state.getEpisode(), state.getEpisodeIndex(), state.getPosition(), state.getDuration(), null));
+        }
     }
 
     public synchronized VodPlaybackState state() {
@@ -202,6 +194,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private synchronized void onSessionState(PlaybackState playback) {
         if (closed || playback.getItem() == null || state.getEpisode() == null) return;
         if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return;
+        if (state.getPhase() == VodPlaybackPhase.RESOLVING && playback.getPhase() != PlaybackPhase.PREPARING) return;
         publish(new VodPlaybackState(map(playback.getPhase()), state.getEpisode(), state.getEpisodeIndex(), playback.getPosition(), playback.getDuration(), playback.getError()));
     }
 

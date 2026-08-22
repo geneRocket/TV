@@ -152,6 +152,37 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    public void stopWhileResolvingPublishesStoppedAndRejectsLateResult() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        long request = resolver.lastRequestId;
+
+        coordinator.stop();
+        resolver.resolve(request);
+
+        assertEquals(VodPlaybackPhase.STOPPED, coordinator.state().getPhase());
+        assertTrue(engine.request == null);
+    }
+
+    @Test
+    public void oldSessionTerminalEventDoesNotReplaceResolvingState() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        long oldSession = engine.request.getSessionId();
+        engine.emit(EngineEvent.state(oldSession, EnginePhase.READY, 120_000, 900_000));
+
+        coordinator.reload();
+        engine.emit(EngineEvent.state(oldSession, EnginePhase.STOPPED, 120_000, 900_000));
+
+        assertEquals(VodPlaybackPhase.RESOLVING, coordinator.state().getPhase());
+    }
+
+    @Test
     public void updatedResumePositionSurvivesPlayerReplacement() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
@@ -166,36 +197,6 @@ public class VodPlaybackCoordinatorTest {
         resolver.resolve(resolver.lastRequestId);
 
         assertEquals(321_000, engine.request.getStartPosition());
-    }
-
-    @Test
-    public void replacingQualityKeepsCurrentEpisodeAndPosition() {
-        ManualResolver resolver = new ManualResolver();
-        FakeEngine engine = new FakeEngine();
-        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
-        coordinator.play(0, StartPolicy.FRESH);
-        resolver.resolve(resolver.lastRequestId);
-        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 321_000, 900_000));
-
-        coordinator.replaceMedia(Result.empty());
-
-        assertEquals("episode-1", coordinator.state().getEpisode().getIdentity());
-        assertEquals(321_000, engine.request.getStartPosition());
-    }
-
-    @Test
-    public void qualityReplacementUsesLatestSeekPositionWithoutEngineCallback() {
-        ManualResolver resolver = new ManualResolver();
-        FakeEngine engine = new FakeEngine();
-        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
-        coordinator.play(0, StartPolicy.FRESH);
-        resolver.resolve(resolver.lastRequestId);
-        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 120_000, 900_000));
-
-        coordinator.seekTo(480_000);
-        coordinator.replaceMedia(Result.empty());
-
-        assertEquals(480_000, engine.request.getStartPosition());
     }
 
     @Test
@@ -237,7 +238,7 @@ public class VodPlaybackCoordinatorTest {
                 new DefaultPlayerSession(engine));
         coordinator.setEpisodes(Arrays.asList(
                 new VodEpisode("episode-1", "site", "flag", "第1集", "episode-1"),
-                new VodEpisode("episode-2", "site", "flag", "第2集", "episode-2")), false);
+                new VodEpisode("episode-2", "site", "flag", "第2集", "episode-2")));
         return coordinator;
     }
 

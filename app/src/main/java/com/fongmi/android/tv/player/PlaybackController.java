@@ -152,6 +152,7 @@ public class PlaybackController {
                 player = PlayerType.IJK;
                 decode = getDecode(player);
                 setupEngine();
+                return;
             }
         } else {
             exoView.setVisibility(View.GONE);
@@ -166,6 +167,10 @@ public class PlaybackController {
         if (playbackSession == null && engine == null) return;
         try {
             if (playbackSubscription != null) playbackSubscription.cancel();
+        } catch (RuntimeException e) {
+            ThreadPools.log(e, "Player subscription release failed.");
+        }
+        try {
             if (playbackSession != null) playbackSession.release();
             else engine.release();
         } catch (RuntimeException e) {
@@ -274,6 +279,12 @@ public class PlaybackController {
         this.player = player;
         this.decode = getDecode(player);
         if (changed || engine == null) setupEngine();
+    }
+
+    public boolean ensureCompatiblePlayer(Drm drm) {
+        if (drm == null || !isIjk()) return false;
+        setPlayer(PlayerType.EXO);
+        return true;
     }
 
     public int getDecode(int player) {
@@ -514,9 +525,17 @@ public class PlaybackController {
     public void release() {
         boolean current = Server.get().getPlayer() == this;
         stopParse();
-        mediaSession.release();
+        try {
+            mediaSession.release();
+        } catch (RuntimeException e) {
+            ThreadPools.log(e, "Media session release failed.");
+        }
         releaseEngine();
-        danmaku.release();
+        try {
+            danmaku.release();
+        } catch (RuntimeException e) {
+            ThreadPools.log(e, "Danmaku release failed.");
+        }
         observers.clear();
         clear();
         removeTimeoutCheck();
@@ -644,7 +663,7 @@ public class PlaybackController {
             failIllegalUrl();
             return;
         }
-        if (this.drm != null && isIjk()) setPlayer(PlayerType.EXO);
+        ensureCompatiblePlayer(this.drm);
         try {
             if (playbackSession == null) throw new IllegalStateException("player session is not initialized");
             long startPosition = position == C.TIME_UNSET ? 0 : Math.max(position, 0);

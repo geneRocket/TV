@@ -21,55 +21,67 @@ public final class PlaybackSourceResolver implements AutoCloseable {
     private long generation;
     private boolean closed;
 
-    public synchronized void resolve(Result result, boolean useParse, boolean forceLive, Callback callback) {
-        if (closed) throw new IllegalStateException("resolver is closed");
+    public void resolve(Result result, boolean useParse, boolean forceLive, Callback callback) {
         if (result == null) throw new IllegalArgumentException("result must not be null");
         if (callback == null) throw new IllegalArgumentException("callback must not be null");
-        cancel();
-        this.input = result;
-        this.forceLive = forceLive;
-        this.callback = callback;
-        if (result.getParse(1) == 1 || result.getJx() == 1) {
-            long requestGeneration = generation;
-            job = ParseJob.create(new ParseCallback() {
-                @Override public void onParseSuccess(Map<String, String> headers, String url, String from) {
-                    PlaybackSourceResolver.this.onParseSuccess(requestGeneration, headers, url, from);
-                }
+        Callback directCallback = null;
+        ResolvedMedia directMedia = null;
+        synchronized (this) {
+            if (closed) throw new IllegalStateException("resolver is closed");
+            clearLocked(true);
+            this.input = result;
+            this.forceLive = forceLive;
+            this.callback = callback;
+            if (result.getParse(1) == 1 || result.getJx() == 1) {
+                long requestGeneration = generation;
+                job = ParseJob.create(new ParseCallback() {
+                    @Override public void onParseSuccess(Map<String, String> headers, String url, String from) {
+                        PlaybackSourceResolver.this.onParseSuccess(requestGeneration, headers, url, from);
+                    }
 
-                @Override public void onParseError() {
-                    PlaybackSourceResolver.this.onParseError(requestGeneration);
-                }
-            }).start(result, useParse);
-        } else {
-            deliver(new ResolvedMedia(result.getHeaders(), result.getRealUrl(), result.getFormat(), result.getDrm(), result.getSubs(), forceLive, ""));
+                    @Override public void onParseError() {
+                        PlaybackSourceResolver.this.onParseError(requestGeneration);
+                    }
+                }).start(result, useParse);
+            } else {
+                directMedia = new ResolvedMedia(result.getHeaders(), result.getRealUrl(), result.getFormat(), result.getDrm(), result.getSubs(), forceLive, "");
+                directCallback = detach();
+            }
         }
+        if (directCallback != null) directCallback.onResolved(directMedia);
     }
 
-    private synchronized void onParseSuccess(long requestGeneration, Map<String, String> headers, String url, String from) {
-        if (requestGeneration != generation) return;
-        Result result = input;
-        if (result == null) return;
-        deliver(new ResolvedMedia(headers, url, result.getFormat(), result.getDrm(), result.getSubs(), forceLive, from));
-    }
-
-    private synchronized void onParseError(long requestGeneration) {
-        if (requestGeneration != generation) return;
-        Callback target = callback;
-        clear(false);
-        if (target != null) target.onFailure();
-    }
-
-    private synchronized void deliver(ResolvedMedia media) {
-        Callback target = callback;
-        clear(false);
+    private void onParseSuccess(long requestGeneration, Map<String, String> headers, String url, String from) {
+        Callback target;
+        ResolvedMedia media;
+        synchronized (this) {
+            if (requestGeneration != generation || input == null) return;
+            media = new ResolvedMedia(headers, url, input.getFormat(), input.getDrm(), input.getSubs(), forceLive, from);
+            target = detach();
+        }
         if (target != null) target.onResolved(media);
     }
 
-    public synchronized void cancel() {
-        clear(true);
+    private void onParseError(long requestGeneration) {
+        Callback target;
+        synchronized (this) {
+            if (requestGeneration != generation) return;
+            target = detach();
+        }
+        if (target != null) target.onFailure();
     }
 
-    private synchronized void clear(boolean stop) {
+    private Callback detach() {
+        Callback target = callback;
+        clearLocked(false);
+        return target;
+    }
+
+    public synchronized void cancel() {
+        clearLocked(true);
+    }
+
+    private void clearLocked(boolean stop) {
         generation++;
         ParseJob current = job;
         job = null;

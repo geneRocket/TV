@@ -361,15 +361,25 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         String id = Objects.toString(intent.getStringExtra("id"), "");
-        if (TextUtils.isEmpty(id) || id.equals(getId())) return;
+        String key = Objects.toString(intent.getStringExtra("key"), "");
+        if (TextUtils.isEmpty(id)) return;
+        if (id.equals(getId()) && key.equals(getKey())) {
+            setIntent(intent);
+            return;
+        }
         saveHistoryNow();
         clearPlaybackTimeout();
         if (mPlaybackCoordinator != null) mPlaybackCoordinator.stop();
         mPlayers.reset();
         mPlayers.clear();
         clearDanmakuView();
+        mHistory = null;
+        mFlagAdapter.addAll(new ArrayList<>());
+        setEpisodeAdapter(new ArrayList<>());
+        mQualityAdapter.addAll(Result.empty());
+        mPlaybackCoordinator.setEpisodes(new ArrayList<>());
         mBinding.swipeLayout.setRefreshing(true);
-        getIntent().putExtras(intent);
+        setIntent(intent);
         stopSearch();
         setOrient();
         checkId();
@@ -746,6 +756,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void prepareResolvedResult(Result result) {
+        ensureCompatiblePlayer(result);
         result.getUrl().set(mQualityAdapter.getPosition());
         setUseParse(VodConfig.hasParse() && ((result.getPlayUrl().isEmpty() && VodConfig.get().getFlags().contains(result.getFlag())) || result.getJx() == 1));
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.setParseVisible(isUseParse());
@@ -754,6 +765,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.swipeLayout.setRefreshing(false);
         setDanmakus(result.getDanmakus());
         mQualityAdapter.addAll(result);
+    }
+
+    private void ensureCompatiblePlayer(Result result) {
+        if (!mPlayers.ensureCompatiblePlayer(result.getDrm())) return;
+        replacePlayerSession();
+        setPlayerView();
+        setDecodeView();
     }
 
     private void setDownload(Result result) {
@@ -882,8 +900,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onItemClick(Result result) {
         try {
             showProgress();
-            prepareResolvedResult(result);
-            mPlaybackCoordinator.replaceMedia(result);
+            mPlaybackCoordinator.reload();
             mBinding.danmaku.hide();
         } catch (Exception e) {
             ThreadPools.log(e, "Quality switch failed.");
@@ -929,9 +946,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (mPlaybackCoordinator != null && !mFlagAdapter.isEmpty()) {
             List<VodEpisode> episodes = new ArrayList<>(items.size());
             String flag = getFlag().getFlag();
-            for (Episode item : items) episodes.add(new VodEpisode(VodEpisode.identity(item.getName(), item.getUrl()), getKey(), flag, item.getName(), item.getUrl()));
-            mPlaybackCoordinator.setEpisodes(episodes, false);
-            String episodeId = mHistory == null ? "" : VodEpisode.identity(mHistory.getVodRemarks(), mHistory.getEpisodeUrl());
+            for (Episode item : items) episodes.add(new VodEpisode(VodEpisode.identity(getKey(), flag, item.getName(), item.getUrl()), getKey(), flag, item.getName(), item.getUrl()));
+            mPlaybackCoordinator.setEpisodes(episodes);
+            String episodeId = mHistory == null ? "" : VodEpisode.identity(getKey(), mHistory.getVodFlag(), mHistory.getVodRemarks(), mHistory.getEpisodeUrl());
             mPlaybackCoordinator.setResumePosition(episodeId, mHistory == null ? 0 : mHistory.getPosition());
             mPlaybackCoordinator.setOpening(mHistory == null ? 0 : mHistory.getOpening());
         }
@@ -1486,7 +1503,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && !mEpisodeAdapter.isEmpty()) {
             Episode episode = getEpisode();
-            mPlaybackCoordinator.preservePosition(VodEpisode.identity(episode.getName(), episode.getUrl()), position);
+            mPlaybackCoordinator.preservePosition(VodEpisode.identity(getKey(), getFlag().getFlag(), episode.getName(), episode.getUrl()), position);
         }
         if (mHistory != null) {
             mHistory.setPosition(position);

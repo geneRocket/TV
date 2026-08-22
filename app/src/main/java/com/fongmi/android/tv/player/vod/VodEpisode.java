@@ -2,10 +2,12 @@ package com.fongmi.android.tv.player.vod;
 
 public final class VodEpisode {
 
-    public static String identity(String name, String resolverUrl) {
-        String url = resolverUrl == null ? "" : resolverUrl.trim();
-        if (!url.isEmpty()) return url;
-        return name == null ? "" : name.trim();
+    public static String identity(String siteKey, String flag, String name, String resolverUrl) {
+        return value(siteKey) + '\u001f' + value(flag) + '\u001f' + value(name) + '\u001f' + value(resolverUrl);
+    }
+
+    private static String value(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private final String identity;
@@ -20,8 +22,8 @@ public final class VodEpisode {
         if (resolverUrl == null || resolverUrl.trim().isEmpty()) throw new IllegalArgumentException("resolverUrl must not be empty");
         this.identity = identity.trim();
         this.siteKey = siteKey.trim();
-        this.flag = flag == null ? "" : flag;
-        this.name = name == null ? "" : name;
+        this.flag = value(flag);
+        this.name = value(name);
         this.resolverUrl = resolverUrl.trim();
     }
 

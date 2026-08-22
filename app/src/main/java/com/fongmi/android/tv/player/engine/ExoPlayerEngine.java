@@ -56,6 +56,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
         this.listener = listener;
         this.phase = EnginePhase.PREPARING;
         MediaItem item = ExoUtil.getMediaItem(request.getHeaders(), UrlUtil.uri(request.getUrl()), request.getFormat(), request.getDrm(), request.getSubtitles(), decode, request.isForceLive());
+        player.setPlayWhenReady(true);
         player.setMediaItem(item, request.getStartPosition());
         player.prepare();
     }
@@ -136,6 +137,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
 
     @Override
     public void onPlayerError(@NonNull PlaybackException error) {
+        if (released || phase == EnginePhase.STOPPED) return;
         phase = EnginePhase.ERROR;
         emit(error);
     }

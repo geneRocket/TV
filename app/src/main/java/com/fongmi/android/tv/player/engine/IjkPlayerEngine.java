@@ -13,6 +13,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     private long sessionId;
     private long requestedStartPosition;
     private EnginePhase phase = EnginePhase.IDLE;
+    private boolean playWhenReady;
     private boolean released;
 
     public IjkPlayerEngine(IjkVideoView view, int playerType, int render, int decode) {
@@ -32,11 +33,14 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         this.requestedStartPosition = request.getStartPosition();
         this.listener = listener;
         this.phase = EnginePhase.PREPARING;
+        this.playWhenReady = true;
         player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), request.getStartPosition());
+        if (phase == EnginePhase.PREPARING) player.start();
     }
 
     @Override public void play() {
         requireActive();
+        playWhenReady = true;
         player.start();
         if (player.isPlaying() && phase != EnginePhase.READY) {
             phase = EnginePhase.READY;
@@ -46,6 +50,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     @Override public void pause() {
         requireActive();
+        playWhenReady = false;
         player.pause();
         if (phase != EnginePhase.PAUSED) {
             phase = EnginePhase.PAUSED;
@@ -58,8 +63,10 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     @Override
     public void stop() {
         if (released) return;
+        playWhenReady = false;
         phase = EnginePhase.STOPPED;
-        player.stop();
+        int state = player.getPlaybackState();
+        if (state != IjkVideoView.STATE_IDLE && state != IjkVideoView.STATE_ERROR) player.stop();
         emit(null);
     }
 
@@ -91,18 +98,24 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     @Override
     public void onPrepared(IMediaPlayer mp) {
-        phase = EnginePhase.READY;
+        if (released || phase == EnginePhase.STOPPED) return;
+        if (playWhenReady) player.start();
+        else player.pause();
+        phase = playWhenReady ? EnginePhase.READY : EnginePhase.PAUSED;
         emit(null);
     }
 
     @Override
     public void onCompletion(IMediaPlayer mp) {
+        if (released || phase == EnginePhase.STOPPED) return;
+        playWhenReady = false;
         phase = EnginePhase.ENDED;
         emit(null);
     }
 
     @Override
     public void onInfo(IMediaPlayer mp, int what, int extra) {
+        if (released || phase == EnginePhase.STOPPED) return;
         switch (what) {
             case IMediaPlayer.MEDIA_INFO_BUFFERING_START:
                 phase = EnginePhase.BUFFERING;
@@ -121,6 +134,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     @Override
     public boolean onError(IMediaPlayer mp, int what, int extra) {
+        if (released || phase == EnginePhase.STOPPED) return true;
+        playWhenReady = false;
         phase = EnginePhase.ERROR;
         emit(new IjkPlaybackException(what, extra));
         return true;

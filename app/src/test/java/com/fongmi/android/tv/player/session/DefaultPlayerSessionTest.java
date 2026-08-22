@@ -107,6 +107,17 @@ public class DefaultPlayerSessionTest {
     }
 
     @Test
+    public void stopFailureStillPublishesStopped() {
+        FakeEngine engine = new FakeEngine();
+        engine.stopError = new IllegalStateException("already idle");
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+
+        session.stop();
+
+        assertEquals(PlaybackPhase.STOPPED, session.state().getPhase());
+    }
+
+    @Test
     public void releaseFailureStillPublishesTerminalState() {
         FakeEngine engine = new FakeEngine();
         engine.releaseError = new IllegalStateException("release failed");
@@ -129,6 +140,7 @@ public class DefaultPlayerSessionTest {
         private long seekPosition;
         private RuntimeException prepareError;
         private RuntimeException releaseError;
+        private RuntimeException stopError;
         private boolean emitStop;
 
         @Override
@@ -146,6 +158,7 @@ public class DefaultPlayerSessionTest {
         @Override public void pause() {}
         @Override public void seekTo(long position) { seekPosition = position; }
         @Override public void stop() {
+            if (stopError != null) throw stopError;
             if (emitStop) listener.onEngineEvent(EngineEvent.state(request.getSessionId(), EnginePhase.STOPPED, 0, -1));
         }
         @Override public void setSpeed(float speed) {}
