@@ -103,11 +103,15 @@ public final class SearchSorter {
 
     public static String key(Vod item) {
         if (item == null) return "";
-        String site = item.getSiteKey();
-        String id = item.getVodId();
-        String name = Util.normalize(item.getVodName());
-        if (TextUtils.isEmpty(site)) return "";
-        return site + "@" + (TextUtils.isEmpty(id) ? name : id);
+        return key(item.getSiteKey(), item.getVodId(), item.getVodName());
+    }
+
+    public static String key(String site, String id, String name) {
+        if (site == null || site.isEmpty()) return "";
+        String normalizedName = Util.normalize(name);
+        boolean hasId = id != null && !id.isEmpty();
+        if (!hasId && normalizedName.isEmpty()) return "";
+        return site + "@" + (hasId ? id : normalizedName);
     }
 
     public static void prepare(Vod item, String keyword) {

@@ -1874,13 +1874,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private String getBrokenKey(Vod item) {
-        if (item == null) return "";
-        String id = item.getVodId();
-        return item.getSiteKey() + "@" + (id.isEmpty() ? Util.normalize(item.getVodName()) : id);
+        return SearchSorter.key(item);
     }
 
     private String getBrokenKey() {
-        return getKey() + "@" + (getId().isEmpty() ? Util.normalize(mBinding.name.getText().toString()) : getId());
+        return SearchSorter.key(getKey(), getId(), mBinding.name.getText().toString());
     }
 
     private void nextParse(int position) {
@@ -1896,7 +1894,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void nextSite() {
-        Vod item = mQuickAdapter.poll(mBroken, getKey(), getId());
+        Vod item = mQuickAdapter.poll(mBroken, getBrokenKey());
         if (item == null) {
             if (!mSiteSearch.isActive() || !mSiteSearch.hasPending()) showEmpty();
             return;

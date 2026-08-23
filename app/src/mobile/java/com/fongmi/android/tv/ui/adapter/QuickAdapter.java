@@ -9,8 +9,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterQuickBinding;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.SearchSorter;
 import com.fongmi.android.tv.utils.SortedLists;
-import com.fongmi.android.tv.utils.Util;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,14 +56,15 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
         return mItems.get(position);
     }
 
-    public Vod poll(Set<String> broken, String currentKey, String currentId) {
+    public Vod poll(Set<String> broken, String currentSourceKey) {
         while (!mItems.isEmpty()) {
             Vod item = mItems.remove(0);
-            mKeys.remove(key(item));
+            String key = key(item);
+            mKeys.remove(key);
             notifyItemRemoved(0);
             if (item == null) continue;
-            if (item.getSiteKey().equals(currentKey) && item.getVodId().equals(currentId)) continue;
-            if (broken != null && broken.contains(key(item))) continue;
+            if (key.equals(currentSourceKey)) continue;
+            if (broken != null && broken.contains(key)) continue;
             return item;
         }
         return null;
@@ -89,11 +90,7 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     }
 
     private String key(Vod item) {
-        if (item == null) return "";
-        String site = item.getSiteKey();
-        String id = item.getVodId();
-        String name = item.getVodName();
-        return site + "@" + (id.isEmpty() ? Util.normalize(name) : id);
+        return SearchSorter.key(item);
     }
 
     @Override

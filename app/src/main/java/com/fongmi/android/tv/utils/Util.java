@@ -219,7 +219,7 @@ public class Util {
     }
 
     public static String normalize(String text) {
-        return TextUtils.isEmpty(text) ? "" : text.toLowerCase(Locale.ROOT).replaceAll("[\\p{Punct}\\s]+", " ").trim();
+        return text == null || text.isEmpty() ? "" : text.toLowerCase(Locale.ROOT).replaceAll("[\\p{Punct}\\s]+", " ").trim();
     }
 
     public static double similarity(String s1, String s2) {

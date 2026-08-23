@@ -2503,14 +2503,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private String getSourceKey(Vod item) {
-        return item == null ? "" : getSourceKey(item.getSiteKey(), item.getVodId(), item.getVodName());
+        return SearchSorter.key(item);
     }
 
     private String getSourceKey(String siteKey, String vodId, String vodName) {
-        if (TextUtils.isEmpty(siteKey)) return "";
-        if (!TextUtils.isEmpty(vodId)) return siteKey + "@" + vodId;
-        String name = Util.normalize(vodName);
-        return TextUtils.isEmpty(name) ? "" : siteKey + "@" + name;
+        return SearchSorter.key(siteKey, vodId, vodName);
     }
 
     private String getCurrentSourceName() {

@@ -2,6 +2,7 @@ package com.fongmi.android.tv.utils;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -24,5 +25,13 @@ public class SearchSorterTest {
         assertFalse(SearchSorter.matchesTitle("Blade Runner", "Blade Runner 2049"));
         assertFalse(SearchSorter.matchesTitle("", "群体"));
         assertFalse(SearchSorter.matchesTitle(null, "群体"));
+    }
+
+    @Test
+    public void key_usesSiteAndIdOrNormalizedName() {
+        assertEquals("site@123", SearchSorter.key("site", "123", "影片名"));
+        assertEquals("site@影 片 名", SearchSorter.key("site", "", " 影 片 名 "));
+        assertEquals("", SearchSorter.key("", "123", "影片名"));
+        assertEquals("", SearchSorter.key("site", "", ""));
     }
 }
