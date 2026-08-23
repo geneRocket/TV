@@ -10,7 +10,6 @@ import com.fongmi.android.tv.utils.SearchSorter;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -52,15 +51,16 @@ public final class TvVodSourceSearch {
         if (!port.accepts(result) || !TextUtils.equals(result.getKeyword(), port.expectedKeyword())) return;
         List<Vod> items = result.getList();
         if (items.isEmpty()) return;
-        Iterator<Vod> iterator = items.iterator();
+        List<Vod> accepted = new ArrayList<>();
         String keyword = port.sourceSwitchKeyword();
-        while (iterator.hasNext()) {
-            Vod item = iterator.next();
+        for (Vod item : items) {
+            if (item == null) continue;
             SearchSorter.prepare(item, keyword);
-            if (item.getScore() < MIN_SCORE || !candidateKeys.add(port.sourceKey(item))) iterator.remove();
+            String sourceKey = port.sourceKey(item);
+            if (item.getScore() >= MIN_SCORE && !TextUtils.isEmpty(sourceKey) && candidateKeys.add(sourceKey)) accepted.add(item);
         }
-        if (items.isEmpty()) return;
-        port.mergeCandidates(items, result.getRequestToken());
+        if (accepted.isEmpty()) return;
+        port.mergeCandidates(accepted, result.getRequestToken());
         port.cancelEmptyFallback();
     }
 

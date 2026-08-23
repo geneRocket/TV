@@ -8,7 +8,6 @@ public final class TvVodSourceSwitchState {
     private Phase phase = Phase.IDLE;
     private String episode = "";
 
-    public Phase getPhase() { return phase; }
     public String getEpisode() { return episode; }
     public boolean isActive() { return phase != Phase.IDLE; }
     public boolean isLoading() { return phase == Phase.LOADING; }

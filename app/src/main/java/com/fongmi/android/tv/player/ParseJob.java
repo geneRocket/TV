@@ -49,8 +49,8 @@ public class ParseJob implements ParseCallback {
     private Future<?> task;
     private final Set<Call> activeCalls;
     private volatile boolean callsCancelled;
-    private Runnable timeout;
-    private Runnable delivery;
+    private volatile Runnable timeout;
+    private volatile Runnable delivery;
     private ParseCallback callback;
     private Parse parse;
     private volatile boolean stopped;

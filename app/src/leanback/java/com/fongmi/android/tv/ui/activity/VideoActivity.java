@@ -2385,7 +2385,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private long getCurrentSwitchPosition() {
-        if (mPlaybackCoordinator != null) return mPlaybackCoordinator.currentPosition();
+        long coordinatorPosition = mPlaybackCoordinator == null ? 0 : mPlaybackCoordinator.currentPosition();
+        if (coordinatorPosition > 0) return coordinatorPosition;
         long position = mPlayers == null ? 0 : mPlayers.getPosition();
         if (position > 0) return position;
         return mHistory == null ? 0 : Math.max(mHistory.getPosition(), 0);
