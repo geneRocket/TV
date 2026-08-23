@@ -64,13 +64,14 @@ public final class TvVodPlaybackNavigation {
         return true;
     }
 
-    public void nextSite() {
+    public boolean nextSite() {
         Vod next = port.nextPlayableSite();
-        if (next == null) return;
+        if (next == null) return false;
         port.beginSourceSwitch();
         port.markCurrentSourceBroken();
         port.startSourceLoading();
         port.markSourceSelected();
         port.openDetail(next, true);
+        return true;
     }
 }

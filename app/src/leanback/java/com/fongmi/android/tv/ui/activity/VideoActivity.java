@@ -325,7 +325,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         @Override public void startSourceLoading() { VideoActivity.this.startSourceLoading(); }
         @Override public void openDetail(Vod vod) { mPlaybackNavigation.showDetail(vod, false); }
         @Override public int candidateCount() { return mQuickAdapter.size(); }
-        @Override public void selectNextCandidate() { mPlaybackNavigation.nextSite(); }
+        @Override public void selectNextCandidate() { advanceSourceSwitchCandidate(); }
         @Override public void cancelSearch() { if (mSiteSearch != null) mSiteSearch.cancel(); }
 
         @Override public void clearCandidates() {
@@ -2361,11 +2361,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void continueSourceSwitch() {
         if (!isSourceSwitching()) return;
-        if (mQuickAdapter.size() > 0) {
-            mPlaybackNavigation.nextSite();
-        } else if (!mSiteSearch.hasPending()) {
-            clearSourceSwitch();
-        }
+        if (mQuickAdapter.size() > 0 && advanceSourceSwitchCandidate()) return;
+        if (!mSiteSearch.hasPending()) clearSourceSwitch();
+    }
+
+    private boolean advanceSourceSwitchCandidate() {
+        return mPlaybackNavigation.nextSite();
     }
 
     private boolean canAdvancePendingSourceSwitch() {
@@ -2473,8 +2474,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (isSourceLoading() || mSiteSearch.hasPending()) return;
         flushQuickItems();
         if (mSiteSearch.shouldSelectFirst() && mQuickAdapter.size() > 0) {
-            mSiteSearch.markSelected();
-            mPlaybackNavigation.nextSite();
+            if (!advanceSourceSwitchCandidate()) continueSourceSwitch();
         } else if (isSourceSwitching() && mQuickAdapter.size() == 0) {
             clearSourceSwitch();
         } else if (!mSiteSearch.isAutomatic()) {
@@ -2533,12 +2533,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mSiteSearch.shouldSelectFirst()) {
             if (!mSiteSearch.hasPending() || mQuickQueue.size() >= 10) {
                 flushQuickItems();
-                mSiteSearch.markSelected();
-                mPlaybackNavigation.nextSite();
+                if (!advanceSourceSwitchCandidate()) continueSourceSwitch();
             }
         } else if (isSourceSwitching() && !isSourceLoading() && !mQuickQueue.isEmpty()) {
             flushQuickItems();
-            if (canAdvancePendingSourceSwitch()) mPlaybackNavigation.nextSite();
+            if (canAdvancePendingSourceSwitch() && !advanceSourceSwitchCandidate()) continueSourceSwitch();
         }
     }
 
