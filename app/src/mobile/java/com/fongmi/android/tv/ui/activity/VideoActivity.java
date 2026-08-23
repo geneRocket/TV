@@ -85,6 +85,7 @@ import com.fongmi.android.tv.player.vod.StartPolicy;
 import com.fongmi.android.tv.player.vod.DefaultPlaybackItemFactory;
 import com.fongmi.android.tv.player.vod.VodEpisode;
 import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
+import com.fongmi.android.tv.player.vod.VodPlaybackIntent;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.player.danmu.Parser;
@@ -177,6 +178,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private PlaybackController mPlayers;
     private VodPlaybackResolver mVodResolver;
     private VodPlaybackCoordinator mPlaybackCoordinator;
+    private final VodPlaybackIntent mPlaybackIntent = new VodPlaybackIntent();
     private SwitchablePlayerSession mPlayerSession;
     private float mSpeedBeforeLongPress = Float.NaN;
     private boolean foreground;
@@ -193,7 +195,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private long mLastHistorySaveAt;
-    private boolean mPreservePositionOnNextPlay;
     private long requestTokenSeed;
     private String pendingDetailToken;
     private final Object mHistoryLock = new Object();
@@ -745,9 +746,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.display.title.setText(mBinding.control.title.getText());
         mPlayers.clear();
         mPlayers.stop();
-        StartPolicy policy = replay ? StartPolicy.FRESH : mPreservePositionOnNextPlay
-                ? StartPolicy.KEEP_CURRENT_POSITION : StartPolicy.RESUME_SAVED;
-        mPreservePositionOnNextPlay = false;
+        StartPolicy policy = mPlaybackIntent.consumeStartPolicy(replay, false);
         updateHistory(episode);
         schedulePlaybackTimeout();
         mPlaybackCoordinator.play(index, policy);
@@ -878,7 +877,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Episode episode = item.find(name, !TextUtils.isEmpty(name));
         if (episode == null && episodePosition >= 0 && episodePosition < item.getEpisodes().size()) episode = item.getEpisodes().get(episodePosition);
         if (episode == null) episode = item.getEpisodes().get(0);
-        mPreservePositionOnNextPlay = true;
+        mPlaybackIntent.keepCurrentPositionOnNextPlay();
         onItemClick(episode);
         hidePreview();
     }
@@ -1471,12 +1470,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             if (Setting.isIncognito() && history.getKey().equals(historyKey)) HistoryRepository.get().delete(history);
             return history;
         }, Constant.TIMEOUT_VOD, result -> {
-            App.post(() -> {
-                if (isFinishing() || isDestroyed() || !TextUtils.equals(historyKey, getHistoryKey())) return;
-                applyHistory(result);
-                checkFlag(item);
-                checkKeepImg();
-            });
+            if (isFinishing() || isDestroyed() || !TextUtils.equals(historyKey, getHistoryKey())) return;
+            applyHistory(result);
+            checkFlag(item);
+            checkKeepImg();
         }, error -> HistoryRepository.get().prepare(null, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark()), null);
     }
 

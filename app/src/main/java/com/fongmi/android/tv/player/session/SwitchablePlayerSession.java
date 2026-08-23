@@ -2,6 +2,7 @@ package com.fongmi.android.tv.player.session;
 
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.player.engine.EngineSnapshot;
+import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -40,14 +41,16 @@ public final class SwitchablePlayerSession implements PlayerSession {
         } catch (RuntimeException error) {
             try {
                 next.release();
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException releaseError) {
+                ThreadPools.log(releaseError, "Replacement player session release failed after observe error.");
             }
             throw error;
         }
         if (previousSubscription != null) {
             try {
                 previousSubscription.cancel();
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException error) {
+                ThreadPools.log(error, "Previous player session subscription cancel failed.");
             }
         }
         delegate = next;
@@ -57,7 +60,8 @@ public final class SwitchablePlayerSession implements PlayerSession {
         if (previous != null) {
             try {
                 previous.release();
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException error) {
+                ThreadPools.log(error, "Previous player session release failed.");
             }
         }
     }
@@ -109,11 +113,13 @@ public final class SwitchablePlayerSession implements PlayerSession {
         released = true;
         try {
             if (delegateSubscription != null) delegateSubscription.cancel();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Player session subscription cancel failed.");
         }
         try {
             delegate.release();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Player session release failed.");
         }
         state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
         for (PlaybackObserver observer : new LinkedHashSet<>(observers)) {

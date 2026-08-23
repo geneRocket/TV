@@ -4,11 +4,11 @@ import android.net.Uri;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
-import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Core;
 import com.fongmi.android.tv.exception.ExtractException;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.google.gson.JsonObject;
 import com.tvbus.engine.Listener;
 import com.tvbus.engine.TVCore;
@@ -40,8 +40,10 @@ public class TVBus implements Source.Extractor, Listener {
 
     @Override
     public String fetch(String url) throws Exception {
-        if (core != null && !core.equals(LiveConfig.get().getHome().getCore())) change();
-        if (tvcore == null) init(core = LiveConfig.get().getHome().getCore());
+        Core nextCore = LiveConfig.get().getHome().getCore();
+        if (nextCore == null) throw new ExtractException("TVBus core is not configured");
+        if (core != null && !core.equals(nextCore)) reset();
+        if (tvcore == null) init(core = nextCore);
         hls = null;
         latch = new CountDownLatch(1);
         tvcore.start(url);
@@ -63,9 +65,21 @@ public class TVBus implements Source.Extractor, Listener {
         if (latch != null) latch.countDown();
     }
 
-    private void change() {
-        Setting.putBootLive(true);
-        App.post(() -> System.exit(0), 250);
+    private void reset() {
+        try {
+            if (tvcore != null) tvcore.stop();
+        } catch (Throwable error) {
+            ThreadPools.log(error, "TVBus stop failed while switching core.");
+        }
+        try {
+            if (tvcore != null) tvcore.quit();
+        } catch (Throwable error) {
+            ThreadPools.log(error, "TVBus quit failed while switching core.");
+        }
+        tvcore = null;
+        core = null;
+        hls = null;
+        latch = null;
     }
 
     @Override

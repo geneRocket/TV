@@ -53,8 +53,11 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     private final FormBody.Builder body;
     private final OkHttpClient client;
     private final TypedArray mode;
+    private final Runnable refreshDevices = this::onRefresh;
     private DialogDeviceBinding binding;
     private DeviceAdapter adapter;
+    private ScanTask scanTask;
+    private Call activeCall;
     private String type;
 
     public static SyncDialog create() {
@@ -100,6 +103,7 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     protected void initView() {
         binding.mode.setVisibility(View.VISIBLE);
         EventBus.getDefault().register(this);
+        scanTask = ScanTask.create(this);
         setRecyclerView();
         getDevice();
         setMode();
@@ -119,7 +123,7 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
 
     private void getDevice() {
         adapter.addAll(DeviceRepository.get().all());
-        if (adapter.getItemCount() == 0) App.post(this::onRefresh, 1000);
+        if (adapter.getItemCount() == 0) App.post(refreshDevices, 1000);
     }
 
     private void setMode() {
@@ -140,7 +144,8 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void onRefresh() {
-        ScanTask.create(this).start(adapter.getIps());
+        if (binding == null || adapter == null) return;
+        if (scanTask != null) scanTask.start(adapter.getIps());
         adapter.clear();
     }
 
@@ -150,17 +155,17 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onScanEvent(ScanEvent event) {
-        ScanTask.create(this).start(event.getAddress());
+        if (scanTask != null) scanTask.start(event.getAddress());
     }
 
     @Override
     public void onFind(List<Device> devices) {
-        if (devices.size() > 0) adapter.addAll(devices);
+        if (binding != null && devices.size() > 0) adapter.addAll(devices);
     }
 
     @Override
     public void onItemClick(Device item) {
-        OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s", item.getIp(), binding.mode.getTag().toString(), type), body.build()).enqueue(getCallback());
+        enqueue(OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s", item.getIp(), binding.mode.getTag().toString(), type), body.build()));
     }
 
     @Override
@@ -169,20 +174,29 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
         if (mode.equals("0")) return false;
         if (mode.equals("2") && type.equals("keep")) KeepRepository.get().deleteAll();
         if (mode.equals("2") && type.equals("history")) HistoryRepository.get().deleteLoaded();
-        OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s&force=true", item.getIp(), binding.mode.getTag().toString(), type), body.build()).enqueue(getCallback());
+        enqueue(OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s&force=true", item.getIp(), binding.mode.getTag().toString(), type), body.build()));
         return true;
     }
 
-    private Callback getCallback() {
+    private void enqueue(Call call) {
+        Call previous = activeCall;
+        if (previous != null) previous.cancel();
+        activeCall = call;
+        call.enqueue(getCallback(call));
+    }
+
+    private Callback getCallback(Call request) {
         return new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) {
-                App.post(() -> onSuccess());
+                try (Response ignored = response) {
+                    App.post(() -> { if (binding != null && activeCall == request) onSuccess(); });
+                }
             }
 
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                App.post(() -> Notify.show(e.getMessage()));
+                App.post(() -> { if (binding != null && activeCall == request) Notify.show(e.getMessage()); });
             }
         };
     }
@@ -190,6 +204,13 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        if (scanTask != null) scanTask.stop();
+        scanTask = null;
+        Call call = activeCall;
+        activeCall = null;
+        if (call != null) call.cancel();
+        App.removeCallbacks(refreshDevices);
+        binding = null;
         EventBus.getDefault().unregister(this);
     }
 }

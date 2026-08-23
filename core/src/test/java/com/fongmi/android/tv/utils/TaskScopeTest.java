@@ -51,22 +51,26 @@ public class TaskScopeTest {
         }, 1_000, values::add, error -> false, null);
 
         assertEquals(1, scheduler.size());
-        scheduler.runLast();
+        scheduler.runAll();
         releaseBlocker.countDown();
         assertFalse(queuedStarted.await(100, TimeUnit.MILLISECONDS));
+        scheduler.runLast();
         assertEquals(List.of(false), values);
         scope.close();
     }
 
     @Test
     public void oneScopeCoordinatesDifferentResultTypes() throws Exception {
-        TaskScope scope = new TaskScope(Executors.newFixedThreadPool(2), new Scheduler(), error -> { });
+        Scheduler scheduler = new Scheduler();
+        TaskScope scope = new TaskScope(Executors.newFixedThreadPool(2), scheduler, error -> { });
         CountDownLatch completed = new CountDownLatch(2);
         List<Object> values = Collections.synchronizedList(new ArrayList<>());
 
         scope.submit("name", () -> "video", 0, value -> { values.add(value); completed.countDown(); }, error -> "", null);
         scope.submit("count", () -> 3, 0, value -> { values.add(value); completed.countDown(); }, error -> 0, null);
 
+        assertTrue(scheduler.awaitSize(2, 1, TimeUnit.SECONDS));
+        scheduler.runAll();
         assertTrue(completed.await(1, TimeUnit.SECONDS));
         assertTrue(values.contains("video"));
         assertTrue(values.contains(3));
@@ -75,7 +79,8 @@ public class TaskScopeTest {
 
     @Test
     public void latestModeSuppressesReplacedResult() throws Exception {
-        TaskScope scope = new TaskScope(Executors.newFixedThreadPool(2), new Scheduler(), error -> { });
+        Scheduler scheduler = new Scheduler();
+        TaskScope scope = new TaskScope(Executors.newFixedThreadPool(2), scheduler, error -> { });
         CountDownLatch oldStarted = new CountDownLatch(1);
         CountDownLatch releaseOld = new CountDownLatch(1);
         CountDownLatch newerDone = new CountDownLatch(1);
@@ -87,6 +92,8 @@ public class TaskScopeTest {
         scope.submit("home", () -> "new", 0, value -> { values.add(value); newerDone.countDown(); }, error -> "error", null);
         releaseOld.countDown();
 
+        assertTrue(scheduler.awaitSize(1, 1, TimeUnit.SECONDS));
+        scheduler.runAll();
         assertTrue(newerDone.await(1, TimeUnit.SECONDS));
         assertEquals(0, cancelled.getCount());
         assertEquals(List.of("new"), values);
@@ -116,6 +123,7 @@ public class TaskScopeTest {
         scheduler.runLast();
 
         assertTrue(interrupted.await(1, TimeUnit.SECONDS));
+        scheduler.runLast();
         assertEquals(0, cancelled.getCount());
         assertEquals(List.of("timeout"), values);
         scope.close();
@@ -138,11 +146,60 @@ public class TaskScopeTest {
         assertEquals(0, cancelled.getCount());
     }
 
+    @Test
+    public void closeSuppressesCompletedButUndeliveredCallback() throws Exception {
+        Scheduler scheduler = new Scheduler();
+        TaskScope scope = new TaskScope(Executors.newSingleThreadExecutor(), scheduler, error -> { });
+        CountDownLatch delivered = new CountDownLatch(1);
+
+        scope.submit("history", () -> "done", 0, value -> delivered.countDown(), error -> "error", null);
+        assertTrue(scheduler.awaitSize(1, 1, TimeUnit.SECONDS));
+        scope.close();
+        scheduler.runAll();
+
+        assertEquals(1, delivered.getCount());
+    }
+
+    @Test
+    public void replacementSuppressesCompletedButUndeliveredCallback() throws Exception {
+        Scheduler scheduler = new Scheduler();
+        TaskScope scope = new TaskScope(Executors.newSingleThreadExecutor(), scheduler, error -> { });
+        List<String> values = Collections.synchronizedList(new ArrayList<>());
+
+        scope.submit("history", () -> "old", 0, values::add, error -> "error", null);
+        assertTrue(scheduler.awaitSize(1, 1, TimeUnit.SECONDS));
+        scope.submit("history", () -> "new", 0, values::add, error -> "error", null);
+        assertTrue(scheduler.awaitSize(1, 1, TimeUnit.SECONDS));
+        scheduler.runAll();
+
+        assertEquals(List.of("new"), values);
+        scope.close();
+    }
+
     private static final class Scheduler implements TaskScheduler {
         private final List<Runnable> tasks = new ArrayList<>();
-        @Override public synchronized void post(Runnable task, long delayMillis) { tasks.add(task); }
+        @Override public synchronized void post(Runnable task, long delayMillis) {
+            tasks.add(task);
+            notifyAll();
+        }
         @Override public synchronized void remove(Runnable task) { tasks.remove(task); }
         synchronized int size() { return tasks.size(); }
-        synchronized void runLast() { tasks.get(tasks.size() - 1).run(); }
+        synchronized boolean awaitSize(int expected, long timeout, TimeUnit unit) throws InterruptedException {
+            long deadline = System.nanoTime() + unit.toNanos(timeout);
+            while (tasks.size() < expected) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) return false;
+                TimeUnit.NANOSECONDS.timedWait(this, remaining);
+            }
+            return true;
+        }
+        void runLast() {
+            Runnable task;
+            synchronized (this) { task = tasks.remove(tasks.size() - 1); }
+            task.run();
+        }
+        void runAll() {
+            while (size() > 0) runLast();
+        }
     }
 }

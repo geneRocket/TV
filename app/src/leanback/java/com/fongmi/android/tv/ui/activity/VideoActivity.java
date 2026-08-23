@@ -78,6 +78,7 @@ import com.fongmi.android.tv.player.vod.StartPolicy;
 import com.fongmi.android.tv.player.vod.DefaultPlaybackItemFactory;
 import com.fongmi.android.tv.player.vod.VodEpisode;
 import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
+import com.fongmi.android.tv.player.vod.VodPlaybackIntent;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 import com.fongmi.android.tv.player.vod.VodPlaybackState;
 import com.fongmi.android.tv.player.Source;
@@ -103,7 +104,6 @@ import com.fongmi.android.tv.ui.presenter.QuickPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.ui.player.TvVodPlaybackStateBinder;
 import com.fongmi.android.tv.ui.player.TvVodPlaybackNavigation;
-import com.fongmi.android.tv.ui.player.TvVodHistorySession;
 import com.fongmi.android.tv.ui.player.TvVodDetailController;
 import com.fongmi.android.tv.ui.player.TvVodRecoveryController;
 import com.fongmi.android.tv.ui.player.TvVodSourceSwitchState;
@@ -233,8 +233,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         @Override public int currentEpisodeIndex() { return getEpisodePosition(); }
         @Override public void capturePosition() { capturePlaybackPosition(); }
         @Override public boolean isSourceSwitching() { return VideoActivity.this.isSourceSwitching(); }
-        @Override public long currentPosition() { return getCurrentSwitchPosition(); }
-        @Override public void rememberFlagSwitchPosition(long position) { mHistorySession.preserveFlagPosition(position); }
+        @Override public void keepCurrentPositionOnNextPlay() { mPlaybackIntent.keepCurrentPositionOnNextPlay(); }
         @Override public void playFlag(Flag flag, int episode) { VideoActivity.this.playFlag(flag, episode); }
 
         @Override public boolean selectFlag(Flag item, boolean notify) {
@@ -512,8 +511,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private long mLastHistorySaveAt;
     private long mLastSavedHistoryPosition = -1;
     private long mLastSavedHistoryDuration = -1;
-    private boolean mHistorySessionModified;
-    private final TvVodHistorySession mHistorySession = new TvVodHistorySession();
+    private boolean mHistoryMutatedDuringLoad;
+    private final VodPlaybackIntent mPlaybackIntent = new VodPlaybackIntent();
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
@@ -998,11 +997,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         final int siteCid = getSiteCid();
         final String mark = getMark();
         mHistory = HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark);
-        mHistorySessionModified = false;
+        mHistoryMutatedDuringLoad = false;
         mHistoryTasks.submit(TASK_HISTORY,
                 () -> HistoryRepository.get().prepareBestMatch(historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
                 HISTORY_LOAD_TIMEOUT_MS,
-                history -> App.post(() -> applyHistory(history, item, historyKey, detailToken)),
+                history -> applyHistory(history, item, historyKey, detailToken),
                 error -> HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
                 null);
     }
@@ -1010,7 +1009,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void applyHistory(History history, Vod item, String historyKey, String detailToken) {
         if (isFinishing() || isDestroyed()) return;
         if (!TextUtils.equals(detailToken, pendingDetailToken) || !TextUtils.equals(historyKey, getHistoryKey())) return;
-        if (!mHistorySessionModified) mHistory = history;
+        if (!mHistoryMutatedDuringLoad) mHistory = history;
         applyDetailHistory();
         checkDetailFlags(item);
         checkKeep();
@@ -1052,9 +1051,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (!TextUtils.equals(mBinding.display.title.getText(), title)) mBinding.display.title.setText(title);
         mPlayers.clear();
         mPlayers.stop();
-        StartPolicy policy = replay ? StartPolicy.FRESH : (isSourceSwitching() || mHistorySession.hasPreservedFlagPosition()
-                ? StartPolicy.KEEP_CURRENT_POSITION : StartPolicy.RESUME_SAVED);
-        mHistorySession.consumeFlagPosition();
+        StartPolicy policy = mPlaybackIntent.consumeStartPolicy(replay, isSourceSwitching());
         schedulePlaybackTimeout();
         mPlaybackCoordinator.play(index, policy);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -2352,7 +2349,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void beginSourceSwitch() {
         if (isSourceSwitching()) return;
-        mSourceSwitch.search(getCurrentSwitchEpisode(), getCurrentSwitchPosition());
+        capturePlaybackPosition();
+        mPlaybackIntent.keepCurrentPositionOnNextPlay();
+        mSourceSwitch.search(getCurrentSwitchEpisode());
     }
 
     private void clearSourceSwitch() {
@@ -2398,7 +2397,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void saveHistorySnapshot(boolean async) {
         if (mHistory == null || Setting.isIncognito()) return;
-        mHistorySessionModified = true;
+        mHistoryMutatedDuringLoad = true;
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
         if (async) mHistory.saveAsync();

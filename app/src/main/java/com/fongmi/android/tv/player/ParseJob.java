@@ -50,6 +50,7 @@ public class ParseJob implements ParseCallback {
     private final Set<Call> activeCalls;
     private volatile boolean callsCancelled;
     private Runnable timeout;
+    private Runnable delivery;
     private ParseCallback callback;
     private Parse parse;
     private volatile boolean stopped;
@@ -286,22 +287,24 @@ public class ParseJob implements ParseCallback {
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
         if (!completed.compareAndSet(false, true)) return;
         clearTimeout();
-        App.post(() -> {
+        delivery = () -> {
             if (stopped) return;
             if (callback != null) callback.onParseSuccess(headers, url, from);
             stop();
-        });
+        };
+        App.post(delivery);
     }
 
     @Override
     public void onParseError() {
         if (!completed.compareAndSet(false, true)) return;
         clearTimeout();
-        App.post(() -> {
+        delivery = () -> {
             if (stopped) return;
             if (callback != null) callback.onParseError();
             stop();
-        });
+        };
+        App.post(delivery);
     }
 
     private void clearTimeout() {
@@ -324,13 +327,18 @@ public class ParseJob implements ParseCallback {
     }
 
     public void stop() {
+        if (stopped && executor == null && infinite == null) return;
         stopped = true;
         completed.set(true);
         clearTimeout();
+        if (delivery != null) App.removeCallbacks(delivery);
+        delivery = null;
         if (task != null) task.cancel(true);
         cancelActiveCalls();
-        ThreadPools.shutdown(executor);
-        for (Future<?> task : parseTasks) ThreadPools.cancel(infinite, task);
+        ExecutorService currentExecutor = executor;
+        ExecutorService currentInfinite = infinite;
+        ThreadPools.shutdown(currentExecutor);
+        for (Future<?> task : parseTasks) ThreadPools.cancel(currentInfinite, task);
         parseTasks.clear();
         infinite = null;
         this.task = null;

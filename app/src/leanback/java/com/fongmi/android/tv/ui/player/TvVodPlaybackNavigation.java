@@ -13,8 +13,7 @@ public final class TvVodPlaybackNavigation {
         void capturePosition();
         boolean selectFlag(Flag flag, boolean notify);
         boolean isSourceSwitching();
-        long currentPosition();
-        void rememberFlagSwitchPosition(long position);
+        void keepCurrentPositionOnNextPlay();
         void playFlag(Flag flag, int preferredEpisode);
         void selectEpisode(Episode episode);
         boolean selectParse(Parse parse, boolean notify);
@@ -39,7 +38,7 @@ public final class TvVodPlaybackNavigation {
         int episode = port.currentEpisodeIndex();
         port.capturePosition();
         if (!port.selectFlag(flag, notify)) return;
-        if (!port.isSourceSwitching()) port.rememberFlagSwitchPosition(port.currentPosition());
+        if (!port.isSourceSwitching()) port.keepCurrentPositionOnNextPlay();
         port.playFlag(flag, episode);
     }
 

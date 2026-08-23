@@ -4,6 +4,7 @@ import com.fongmi.android.tv.player.engine.EngineEvent;
 import com.fongmi.android.tv.player.engine.EnginePhase;
 import com.fongmi.android.tv.player.engine.EngineRequest;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
+import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -80,7 +81,8 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         if (released) return;
         try {
             engine.stop();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Player engine stop failed.");
         }
         if (state.getPhase() != PlaybackPhase.STOPPED) {
             publish(new PlaybackState(state.getSessionId(), PlaybackPhase.STOPPED, state.getItem(), state.getPosition(), state.getDuration(), null));
@@ -114,7 +116,8 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         released = true;
         try {
             engine.release();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Player engine release failed.");
         }
         state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
         for (PlaybackObserver observer : snapshotObservers()) {

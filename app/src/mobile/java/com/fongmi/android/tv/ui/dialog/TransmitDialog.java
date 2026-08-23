@@ -45,8 +45,11 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
 
     private RequestBody requestBody;
     private final OkHttpClient client;
+    private final Runnable refreshDevices = this::onRefresh;
     private DialogDeviceBinding binding;
     private DeviceAdapter adapter;
+    private ScanTask scanTask;
+    private Call activeCall;
     private String type;
 
     public static TransmitDialog create() {
@@ -126,6 +129,7 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
     @Override
     protected void initView() {
         EventBus.getDefault().register(this);
+        scanTask = ScanTask.create(this);
         setRecyclerView();
         getDevice();
     }
@@ -143,11 +147,12 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
 
     private void getDevice() {
         adapter.addAll(DeviceRepository.get().all());
-        if (adapter.getItemCount() == 0) App.post(this::onRefresh, 1000);
+        if (adapter.getItemCount() == 0) App.post(refreshDevices, 1000);
     }
 
     private void onRefresh() {
-        ScanTask.create(this).start(adapter.getIps());
+        if (binding == null || adapter == null) return;
+        if (scanTask != null) scanTask.start(adapter.getIps());
         adapter.clear();
     }
 
@@ -167,37 +172,46 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onScanEvent(ScanEvent event) {
-        ScanTask.create(this).start(event.getAddress());
+        if (scanTask != null) scanTask.start(event.getAddress());
     }
 
     @Override
     public void onFind(List<Device> devices) {
-        if (devices.size() > 0) adapter.addAll(devices);
+        if (binding != null && devices.size() > 0) adapter.addAll(devices);
     }
 
     @Override
     public void onItemClick(Device item) {
         Notify.progress(getContext());
-        OkHttp.newCall(client, item.getIp().concat("/action?do=transmit&type=").concat(type), requestBody).enqueue(getCallback());
+        enqueue(OkHttp.newCall(client, item.getIp().concat("/action?do=transmit&type=").concat(type), requestBody));
     }
 
     @Override
     public boolean onLongClick(Device item) {
         Notify.progress(getContext());
-        OkHttp.newCall(client, item.getIp().concat("/action?do=transmit&type=").concat(type), requestBody).enqueue(getCallback());
+        enqueue(OkHttp.newCall(client, item.getIp().concat("/action?do=transmit&type=").concat(type), requestBody));
         return true;
     }
 
-    private Callback getCallback() {
+    private void enqueue(Call call) {
+        Call previous = activeCall;
+        if (previous != null) previous.cancel();
+        activeCall = call;
+        call.enqueue(getCallback(call));
+    }
+
+    private Callback getCallback(Call request) {
         return new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) {
-                App.post(() -> onSuccess());
+                try (Response ignored = response) {
+                    App.post(() -> { if (binding != null && activeCall == request) onSuccess(); });
+                }
             }
 
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                App.post(() -> onError(e));
+                App.post(() -> { if (binding != null && activeCall == request) onError(e); });
             }
         };
     }
@@ -205,6 +219,13 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        if (scanTask != null) scanTask.stop();
+        scanTask = null;
+        Call call = activeCall;
+        activeCall = null;
+        if (call != null) call.cancel();
+        App.removeCallbacks(refreshDevices);
+        binding = null;
         EventBus.getDefault().unregister(this);
     }
 }

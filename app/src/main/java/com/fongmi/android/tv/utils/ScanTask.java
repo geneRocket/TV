@@ -1,6 +1,5 @@
 package com.fongmi.android.tv.utils;
 
-import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.server.Server;
@@ -21,7 +20,9 @@ public class ScanTask {
 
     private final Listener listener;
     private final OkHttpClient client;
+    private final TaskScheduler scheduler;
     private volatile ExecutorService executor;
+    private volatile Runnable completion;
     private volatile long generation;
 
     public static ScanTask create(Listener listener) {
@@ -31,6 +32,7 @@ public class ScanTask {
     public ScanTask(Listener listener) {
         this.listener = listener;
         this.client = OkHttp.client(1000);
+        this.scheduler = AppTaskScheduler.get();
     }
 
     public synchronized void start(List<String> ips) {
@@ -43,6 +45,8 @@ public class ScanTask {
 
     public synchronized void stop() {
         generation++;
+        if (completion != null) scheduler.remove(completion);
+        completion = null;
         if (executor != null) executor.shutdownNow();
         executor = null;
     }
@@ -70,10 +74,24 @@ public class ScanTask {
                     executor = null;
                 }
             }
-            if (current) App.post(() -> {
-                if (generation == currentGeneration) listener.onFind(new ArrayList<>(devices));
-            });
+            if (current) scheduleComplete(currentGeneration, devices);
         }
+    }
+
+    private synchronized void scheduleComplete(long currentGeneration, List<Device> devices) {
+        if (generation != currentGeneration) return;
+        Runnable delivery = () -> complete(currentGeneration, devices);
+        completion = delivery;
+        scheduler.post(delivery, 0);
+    }
+
+    private void complete(long currentGeneration, List<Device> devices) {
+        synchronized (this) {
+            if (generation != currentGeneration) return;
+            if (completion != null) scheduler.remove(completion);
+            completion = null;
+        }
+        listener.onFind(new ArrayList<>(devices));
     }
 
     private void getDevice(List<String> urls, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) throws Exception {
@@ -93,7 +111,7 @@ public class ScanTask {
     }
 
     private List<String> getUrl(List<String> ips) {
-        LinkedHashSet<String> urls = new LinkedHashSet<>(ips);
+        LinkedHashSet<String> urls = new LinkedHashSet<>(ips == null ? Collections.emptyList() : ips);
         String local = Server.get().getAddress();
         String base = local.substring(0, local.lastIndexOf(".") + 1);
         for (int i = 1; i < 256; i++) urls.add(base + i + ":9978");

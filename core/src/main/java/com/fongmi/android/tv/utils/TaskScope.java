@@ -81,10 +81,10 @@ public final class TaskScope implements AutoCloseable {
     }
 
     private <T> void run(Entry<T> entry) {
-        if (entry.done.get()) return;
+        if (entry.cancelled.get()) return;
         try {
             T value = entry.callable.call();
-            if (complete(entry)) publish(entry, value);
+            if (completeWork(entry)) dispatch(entry, value);
         } catch (Throwable error) {
             if (error instanceof InterruptedException) Thread.currentThread().interrupt();
             finishWithError(entry, error);
@@ -92,9 +92,9 @@ public final class TaskScope implements AutoCloseable {
     }
 
     private <T> void finishWithError(Entry<T> entry, Throwable error) {
-        if (!complete(entry)) return;
+        if (!completeWork(entry)) return;
         try {
-            publish(entry, entry.fallback.apply(error));
+            dispatch(entry, entry.fallback.apply(error));
         } catch (Throwable fallbackError) {
             logger.accept(fallbackError);
         }
@@ -102,11 +102,11 @@ public final class TaskScope implements AutoCloseable {
     }
 
     private <T> void timeout(Entry<T> entry) {
-        if (!complete(entry)) return;
+        if (!completeWork(entry)) return;
         cancelFuture(entry.future);
         if (entry.cancelHook != null) runHook(entry.cancelHook);
         try {
-            publish(entry, entry.fallback.apply(new TimeoutException()));
+            dispatch(entry, entry.fallback.apply(new TimeoutException()));
         } catch (Throwable error) {
             logger.accept(error);
         }
@@ -120,20 +120,40 @@ public final class TaskScope implements AutoCloseable {
         }
     }
 
-    private boolean complete(Entry<?> entry) {
+    private <T> void dispatch(Entry<T> entry, T value) {
+        Runnable delivery = () -> {
+            if (!completeDelivery(entry)) return;
+            publish(entry, value);
+        };
+        synchronized (lock) {
+            if (closed || active.get(entry.key) != entry) return;
+            entry.delivery = delivery;
+        }
+        scheduler.post(delivery, 0);
+    }
+
+    private boolean completeWork(Entry<?> entry) {
         if (!entry.done.compareAndSet(false, true)) return false;
         synchronized (lock) {
             if (active.get(entry.key) != entry) return false;
-            active.remove(entry.key);
         }
         if (entry.timeout != null) scheduler.remove(entry.timeout);
         return true;
     }
 
+    private boolean completeDelivery(Entry<?> entry) {
+        synchronized (lock) {
+            if (active.get(entry.key) != entry || entry.cancelled.get()) return false;
+            active.remove(entry.key);
+        }
+        return true;
+    }
+
     private Entry<?> cancelLocked(String key) {
         Entry<?> entry = active.remove(key);
-        if (entry == null || !entry.done.compareAndSet(false, true)) return null;
+        if (entry == null || !entry.cancelled.compareAndSet(false, true)) return null;
         if (entry.timeout != null) scheduler.remove(entry.timeout);
+        if (entry.delivery != null) scheduler.remove(entry.delivery);
         cancelFuture(entry.future);
         return entry;
     }
@@ -165,8 +185,10 @@ public final class TaskScope implements AutoCloseable {
         private final Function<Throwable, T> fallback;
         private final Runnable cancelHook;
         private final AtomicBoolean done = new AtomicBoolean();
+        private final AtomicBoolean cancelled = new AtomicBoolean();
         private volatile Future<?> future;
         private volatile Runnable timeout;
+        private volatile Runnable delivery;
 
         private Entry(String key, Callable<T> callable, Consumer<T> success,
                 Function<Throwable, T> fallback, Runnable cancelHook) {

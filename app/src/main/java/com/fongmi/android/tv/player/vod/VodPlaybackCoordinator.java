@@ -9,6 +9,7 @@ import com.fongmi.android.tv.player.session.PlaybackPhase;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.PlayerSession;
 import com.fongmi.android.tv.player.session.Subscription;
+import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -136,7 +137,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         clearPreservedPosition();
         try {
             session.stop();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Vod playback session stop failed.");
         }
         if (state.getPhase() != VodPlaybackPhase.STOPPED) {
             publish(new VodPlaybackState(VodPlaybackPhase.STOPPED, state.getEpisode(), state.getEpisodeIndex(), state.getPosition(), state.getDuration(), null));
@@ -247,7 +249,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private void cancelResolve() {
         try {
             if (resolveHandle != null) resolveHandle.cancel();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Vod playback resolve cancel failed.");
         }
         resolveHandle = null;
     }
@@ -275,11 +278,13 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         cancelResolve();
         try {
             sessionSubscription.cancel();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Vod playback session subscription cancel failed.");
         }
         try {
             session.release();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Vod playback session release failed.");
         }
         publish(new VodPlaybackState(VodPlaybackPhase.RELEASED, state.getEpisode(), state.getEpisodeIndex(), state.getPosition(), state.getDuration(), null));
         observers.clear();

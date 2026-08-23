@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.player.resolver;
 
 import com.fongmi.android.tv.bean.Result;
+import com.fongmi.android.tv.utils.ThreadPools;
 import com.github.catvod.utils.Json;
 
 import java.util.LinkedHashSet;
@@ -114,7 +115,8 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
         if (!closed && !task.cancelled) {
             try {
                 callback.onFailure(new ResolveFailure(task.requestId, error));
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException callbackError) {
+                ThreadPools.log(callbackError, "Vod playback failure callback failed.");
             }
         }
     }
@@ -123,7 +125,8 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
         if (closed || task.cancelled) return;
         try {
             callback.onResolved(result);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException callbackError) {
+            ThreadPools.log(callbackError, "Vod playback resolved callback failed.");
         }
     }
 

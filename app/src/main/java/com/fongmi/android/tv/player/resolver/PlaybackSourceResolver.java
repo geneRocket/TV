@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player.resolver;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.player.ParseJob;
+import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.Map;
 
@@ -48,7 +49,7 @@ public final class PlaybackSourceResolver implements AutoCloseable {
                 directCallback = detach();
             }
         }
-        if (directCallback != null) directCallback.onResolved(directMedia);
+        notifyResolved(directCallback, directMedia);
     }
 
     private void onParseSuccess(long requestGeneration, Map<String, String> headers, String url, String from) {
@@ -59,7 +60,7 @@ public final class PlaybackSourceResolver implements AutoCloseable {
             media = new ResolvedMedia(headers, url, input.getFormat(), input.getDrm(), input.getSubs(), forceLive, from);
             target = detach();
         }
-        if (target != null) target.onResolved(media);
+        notifyResolved(target, media);
     }
 
     private void onParseError(long requestGeneration) {
@@ -68,7 +69,25 @@ public final class PlaybackSourceResolver implements AutoCloseable {
             if (requestGeneration != generation) return;
             target = detach();
         }
-        if (target != null) target.onFailure();
+        notifyFailure(target);
+    }
+
+    private void notifyResolved(Callback target, ResolvedMedia media) {
+        if (target == null) return;
+        try {
+            target.onResolved(media);
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Playback source resolved callback failed.");
+        }
+    }
+
+    private void notifyFailure(Callback target) {
+        if (target == null) return;
+        try {
+            target.onFailure();
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Playback source failure callback failed.");
+        }
     }
 
     private Callback detach() {
