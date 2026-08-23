@@ -470,7 +470,7 @@ public class History {
         return new ArrayList<>(unique.values());
     }
 
-    private static boolean isNewerOrBetterSameVersion(History item, History old) {
+    public static boolean isNewerOrBetterSameVersion(History item, History old) {
         if (old == null) return true;
         if (item.getCreateTime() != old.getCreateTime()) return item.getCreateTime() > old.getCreateTime();
         if (old.getPosition() <= 0 && item.getPosition() > 0) return true;
@@ -700,7 +700,10 @@ public class History {
         List<Integer> cids = getLoadedCids();
         List<History> items = TextUtils.isEmpty(name) ? AppDatabase.get().getHistoryDao().findByName(cids, getVodName()) : findByNormalizedName(name, cids);
         Map<String, History> unique = new LinkedHashMap<>();
-        for (History item : cache(items)) unique.put(item.getKey(), item);
+        for (History item : cache(items)) {
+            History old = unique.get(item.getKey());
+            if (isNewerOrBetterSameVersion(item, old)) unique.put(item.getKey(), item);
+        }
         return copy(new ArrayList<>(unique.values()));
     }
 
