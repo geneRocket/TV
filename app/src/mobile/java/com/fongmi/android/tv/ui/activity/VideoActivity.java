@@ -79,6 +79,7 @@ import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
 import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
 import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
 import com.fongmi.android.tv.player.vod.StartPolicy;
 import com.fongmi.android.tv.player.vod.DefaultPlaybackItemFactory;
@@ -177,6 +178,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private PlaybackController mPlayers;
     private VodPlaybackResolver mVodResolver;
     private VodPlaybackCoordinator mPlaybackCoordinator;
+    private Subscription mPlayerSubscription;
+    private Subscription mPlaybackSubscription;
     private final VodPlaybackIntent mPlaybackIntent = new VodPlaybackIntent();
     private SwitchablePlayerSession mPlayerSession;
     private float mSpeedBeforeLongPress = Float.NaN;
@@ -393,7 +396,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.progressLayout.showProgress();
         mBinding.swipeLayout.setEnabled(false);
         mPlayers = PlaybackController.create(this);
-        mPlayers.observe(this::onPlaybackState);
+        mPlayerSubscription = mPlayers.observe(this::onPlaybackState);
         TaskScheduler scheduler = new TaskScheduler() {
             @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
             @Override public void remove(Runnable task) { App.removeCallbacks(task); }
@@ -535,7 +538,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 new SpiderPlaybackGateway(), this::prepareResolvedResult, result -> isUseParse());
         mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
         mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
-        mPlaybackCoordinator.observe(state -> {
+        mPlaybackSubscription = mPlaybackCoordinator.observe(state -> {
             if (mHistory != null) {
                 if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
                 if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
@@ -2273,6 +2276,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         clearPlaybackTimeout();
         mHistoryRequests.close();
         mClock.release();
+        if (mPlaybackSubscription != null) mPlaybackSubscription.cancel();
+        if (mPlayerSubscription != null) mPlayerSubscription.cancel();
         if (mPlaybackCoordinator != null) mPlaybackCoordinator.close();
         if (mVodResolver != null) mVodResolver.close();
         mPlayers.release();

@@ -51,6 +51,7 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.PlaybackService;
@@ -97,6 +98,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private GroupAdapter mGroupAdapter;
     private Observer<Epg> mObserveEpg;
     private LiveViewModel mViewModel;
+    private Subscription mPlaybackSubscription;
     private List<Group> mHides;
     private PlaybackController mPlayers;
     private Channel mChannel;
@@ -168,7 +170,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         setPadding(mBinding.widget.epg, true);
         setPadding(mBinding.recycler, true);
         mPlayers = PlaybackController.create(this);
-        mPlayers.observe(this::onPlaybackState);
+        mPlaybackSubscription = mPlayers.observe(this::onPlaybackState);
         mObserveEpg = this::setEpg;
         mObserveUrl = this::start;
         mHides = new ArrayList<>();
@@ -1272,6 +1274,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     protected void onDestroy() {
         super.onDestroy();
         mClock.release();
+        if (mPlaybackSubscription != null) mPlaybackSubscription.cancel();
         mPlayers.release();
         App.post(mR0, 1000);
         App.removeCallbacks(mR1, mR2, mR3);

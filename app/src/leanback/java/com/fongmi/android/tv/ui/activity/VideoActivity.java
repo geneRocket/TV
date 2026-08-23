@@ -72,6 +72,7 @@ import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackMarkers;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
+import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.player.resolver.VodPlaybackResolver;
 import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
 import com.fongmi.android.tv.player.vod.StartPolicy;
@@ -489,6 +490,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private PlaybackController mPlayers;
     private VodPlaybackResolver mVodResolver;
     private VodPlaybackCoordinator mPlaybackCoordinator;
+    private Subscription mPlaybackSubscription;
     private SwitchablePlayerSession mPlayerSession;
     private boolean background;
     private boolean fullscreen;
@@ -731,7 +733,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 this::prepareResolvedResult, result -> isUseParse());
         mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
         mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
-        mPlaybackCoordinator.observe(this::renderPlayback);
+        mPlaybackSubscription = mPlaybackCoordinator.observe(this::renderPlayback);
         mR1 = this::hideControl;
         mR2 = this::updateFocus;
         mR3 = this::setTraffic;
@@ -2865,6 +2867,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlaybackState.release();
         mSourceSearch.stop();
         mClock.release();
+        if (mPlaybackSubscription != null) mPlaybackSubscription.cancel();
         if (mPlaybackCoordinator != null) mPlaybackCoordinator.close();
         if (mVodResolver != null) mVodResolver.close();
         mPlayers.release();

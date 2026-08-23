@@ -53,6 +53,7 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -97,6 +98,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private ArrayObjectAdapter mGroupAdapter;
     private CustomKeyDownLive mKeyDown;
     private LiveViewModel mViewModel;
+    private Subscription mPlaybackSubscription;
     private List<Group> mHides;
     private PlaybackController mPlayers;
     private Channel mChannel;
@@ -164,7 +166,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mClock = Clock.create(Arrays.asList(mBinding.widget.clock, mBinding.display.clock));
         mKeyDown = CustomKeyDownLive.create(this);
         mPlayers = PlaybackController.create(this);
-        mPlayers.observe(this::onPlaybackState);
+        mPlaybackSubscription = mPlayers.observe(this::onPlaybackState);
         mHides = new ArrayList<>();
         mR0 = this::setActivated;
         mR1 = this::hideControl;
@@ -1251,6 +1253,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (mPlaybackSubscription != null) mPlaybackSubscription.cancel();
         mPlayers.release();
         mKeyDown.release();
         clearArtworkTarget();

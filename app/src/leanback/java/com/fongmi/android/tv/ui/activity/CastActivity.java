@@ -42,6 +42,7 @@ import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.service.StableDLNARendererService;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownCast;
@@ -73,6 +74,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private CastAction mAction;
     private DIDLParser mParser;
     private PlaybackController mPlayers;
+    private Subscription mPlaybackSubscription;
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private Runnable mR1;
@@ -110,7 +112,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownCast.create(this);
         mPlayers = PlaybackController.create(this);
-        mPlayers.observe(this::onPlaybackState);
+        mPlaybackSubscription = mPlayers.observe(this::onPlaybackState);
         mParser = new DIDLParser();
         mR1 = this::hideControl;
         mR2 = this::setTraffic;
@@ -638,6 +640,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         }
         super.onDestroy();
         mClock.release();
+        if (mPlaybackSubscription != null) mPlaybackSubscription.cancel();
         mPlayers.release();
         mKeyDown.release();
         mService = null;
