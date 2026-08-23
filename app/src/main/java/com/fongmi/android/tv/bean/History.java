@@ -127,7 +127,10 @@ public class History {
     }
 
     public static History prepare(History history, String key, int cid, Vod vod, float speed, String mark) {
-        History prepared = history == null ? create(key, cid, vod, speed) : history;
+        History prepared = history == null ? create(key, cid, vod, speed) : history.copy();
+        prepared.setKey(key);
+        prepared.setCid(cid);
+        prepared.setVodName(vod.getVodName());
         if (!TextUtils.isEmpty(mark)) prepared.setVodRemarks(mark);
         prepared.findEpisode(vod.getVodFlags());
         prepared.setVodPic(vod.getVodPic());
@@ -452,8 +455,7 @@ public class History {
             if (!cids.contains(item.getCid())) continue;
             String key = cacheKey(item.getCid(), item.getKey());
             History old = merged.get(key);
-            if (old != null && item.getCreateTime() == old.getCreateTime() && old.getPosition() > 0 && item.getPosition() <= 0) continue;
-            if (old == null || item.getCreateTime() >= old.getCreateTime()) merged.put(key, item);
+            if (isNewerOrBetterSameVersion(item, old)) merged.put(key, item);
         }
         return new ArrayList<>(merged.values());
     }
@@ -463,9 +465,16 @@ public class History {
         for (History item : items) {
             String key = uniqueKey(item, crossCid);
             History old = unique.get(key);
-            if (old == null || item.getCreateTime() > old.getCreateTime()) unique.put(key, item);
+            if (isNewerOrBetterSameVersion(item, old)) unique.put(key, item);
         }
         return new ArrayList<>(unique.values());
+    }
+
+    private static boolean isNewerOrBetterSameVersion(History item, History old) {
+        if (old == null) return true;
+        if (item.getCreateTime() != old.getCreateTime()) return item.getCreateTime() > old.getCreateTime();
+        if (old.getPosition() <= 0 && item.getPosition() > 0) return true;
+        return old.getDuration() <= 0 && item.getDuration() > 0;
     }
 
     private static String uniqueKey(History item, boolean crossCid) {
@@ -545,6 +554,7 @@ public class History {
     private void checkProgress(History item) {
         if (item == null) return;
         if (item.getCreateTime() < getCreateTime()) return;
+        if (item.getCreateTime() == getCreateTime() && getPosition() > 0 && item.getPosition() <= 0) return;
         setPosition(item.getPosition());
         if (item.getDuration() > 0) setDuration(item.getDuration());
         if (item.getCreateTime() > getCreateTime()) setCreateTime(item.getCreateTime());
@@ -692,6 +702,16 @@ public class History {
         Map<String, History> unique = new LinkedHashMap<>();
         for (History item : cache(items)) unique.put(item.getKey(), item);
         return copy(new ArrayList<>(unique.values()));
+    }
+
+    public History findBestMatch() {
+        History best = null;
+        for (History item : find()) {
+            if (item.getCid() != getCid()) continue;
+            if (!Objects.equals(rawSiteKey(item.getSiteKey()), rawSiteKey(getSiteKey()))) continue;
+            if (best == null || isNewerOrBetterSameVersion(item, best)) best = item;
+        }
+        return copy(best);
     }
 
     private List<History> findByNormalizedName(String name, List<Integer> cids) {

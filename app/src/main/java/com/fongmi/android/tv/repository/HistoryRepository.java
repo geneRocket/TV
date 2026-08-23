@@ -37,6 +37,13 @@ public final class HistoryRepository {
         return History.prepare(history, key, cid, vod, speed, mark);
     }
 
+    public History prepareBestMatch(String key, int cid, Vod vod, float speed, String mark) {
+        History prepared = History.prepare(find(key), key, cid, vod, speed, mark);
+        if (prepared.getPosition() > 0) return prepared;
+        History matched = prepared.findBestMatch();
+        return History.prepare(matched, key, cid, vod, speed, mark);
+    }
+
     public History save(History history) {
         return history.save();
     }

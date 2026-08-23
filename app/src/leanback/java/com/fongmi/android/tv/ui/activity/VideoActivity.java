@@ -1000,7 +1000,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistory = HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark);
         mHistorySessionModified = false;
         mHistoryTasks.submit(TASK_HISTORY,
-                () -> HistoryRepository.get().prepare(HistoryRepository.get().find(historyKey), historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
+                () -> HistoryRepository.get().prepareBestMatch(historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
                 HISTORY_LOAD_TIMEOUT_MS,
                 history -> App.post(() -> applyHistory(history, item, historyKey, detailToken)),
                 error -> HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark),

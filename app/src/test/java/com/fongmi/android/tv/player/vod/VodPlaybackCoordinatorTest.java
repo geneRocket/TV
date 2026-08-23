@@ -217,6 +217,19 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    public void keepCurrentPositionFallsBackToSavedHistoryBeforePlaybackStarts() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 2_718_382);
+
+        coordinator.play(0, StartPolicy.KEEP_CURRENT_POSITION);
+        resolver.resolve(resolver.lastRequestId);
+
+        assertEquals(2_718_382, engine.request.getStartPosition());
+    }
+
+    @Test
     public void resumePositionIsDeliveredToEngineRequest() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();

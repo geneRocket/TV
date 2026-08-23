@@ -219,10 +219,15 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     private long startPosition(StartPolicy policy, long saved, long current, long preserved) {
         switch (policy) {
-            case KEEP_CURRENT_POSITION: return Math.max(opening, preserved >= 0 ? preserved : Math.max(current, 0));
+            case KEEP_CURRENT_POSITION: return Math.max(opening, firstPositive(preserved, current, saved));
             case RESUME_SAVED: return Math.max(opening, Math.max(saved, 0));
             default: return opening;
         }
+    }
+
+    private long firstPositive(long... values) {
+        for (long value : values) if (value > 0) return value;
+        return 0;
     }
 
     private long resumePosition(VodEpisode episode) {

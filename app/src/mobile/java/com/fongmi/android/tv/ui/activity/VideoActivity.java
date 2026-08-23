@@ -1465,7 +1465,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         String historyKey = getHistoryKey();
         History preloaded = takePreloadedHistory(historyKey);
         mHistoryRequests.submit("history", () -> {
-            History history = HistoryRepository.get().prepare(preloaded == null ? HistoryRepository.get().find(historyKey) : preloaded, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark());
+            History history = preloaded == null
+                    ? HistoryRepository.get().prepareBestMatch(historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark())
+                    : HistoryRepository.get().prepare(preloaded, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark());
             if (Setting.isIncognito() && history.getKey().equals(historyKey)) HistoryRepository.get().delete(history);
             return history;
         }, Constant.TIMEOUT_VOD, result -> {
