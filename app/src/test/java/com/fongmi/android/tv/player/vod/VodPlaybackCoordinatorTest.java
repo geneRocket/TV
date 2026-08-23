@@ -242,7 +242,7 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    public void currentPositionComesFromCoordinatorStateOnly() {
+    public void currentPositionUsesCoordinatorStateAndMatchingEngineSnapshot() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
@@ -255,6 +255,33 @@ public class VodPlaybackCoordinatorTest {
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 43_000, 7_174_333));
 
         assertEquals(43_000, coordinator.currentPosition());
+    }
+
+    @Test
+    public void currentPositionUsesFreshEngineSnapshotBeforeStateEventArrives() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+
+        engine.snapshot = new EngineSnapshot(engine.request.getSessionId(), EnginePhase.READY, 88_000, 900_000, 120_000, true, 1.0f, 1920, 1080);
+
+        assertEquals(88_000, coordinator.currentPosition());
+    }
+
+    @Test
+    public void currentPositionIgnoresSnapshotFromDifferentSession() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 42_000);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+
+        engine.snapshot = new EngineSnapshot(engine.request.getSessionId() + 1, EnginePhase.READY, 88_000, 900_000, 120_000, true, 1.0f, 1920, 1080);
+
+        assertEquals(42_000, coordinator.currentPosition());
     }
 
     @Test
@@ -326,16 +353,20 @@ public class VodPlaybackCoordinatorTest {
 
         private EngineRequest request;
         private Listener listener;
+        private EngineSnapshot snapshot = EngineSnapshot.EMPTY;
 
         @Override public void prepare(EngineRequest request, Listener listener) { this.request = request; this.listener = listener; }
-        void emit(EngineEvent event) { listener.onEngineEvent(event); }
+        void emit(EngineEvent event) {
+            snapshot = new EngineSnapshot(event.getSessionId(), event.getPhase(), event.getPosition(), event.getDuration(), 0, event.getPhase() == EnginePhase.READY, 1.0f, 0, 0);
+            listener.onEngineEvent(event);
+        }
         @Override public void play() {}
         @Override public void pause() {}
         @Override public void seekTo(long position) {}
         @Override public void stop() {}
         @Override public void setSpeed(float speed) {}
         @Override public void setTrack(Track track) {}
-        @Override public EngineSnapshot snapshot() { return EngineSnapshot.EMPTY; }
+        @Override public EngineSnapshot snapshot() { return snapshot; }
         @Override public void release() {}
     }
 }

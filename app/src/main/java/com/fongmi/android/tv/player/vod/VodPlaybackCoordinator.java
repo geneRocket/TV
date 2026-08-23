@@ -5,6 +5,7 @@ import com.fongmi.android.tv.player.resolver.ResolveFailure;
 import com.fongmi.android.tv.player.resolver.ResolveHandle;
 import com.fongmi.android.tv.player.resolver.ResolveRequest;
 import com.fongmi.android.tv.player.resolver.ResolveResult;
+import com.fongmi.android.tv.player.engine.EngineSnapshot;
 import com.fongmi.android.tv.player.session.PlaybackPhase;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.PlayerSession;
@@ -150,7 +151,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     public synchronized long currentPosition() {
-        return state.getPosition();
+        if (closed) return state.getPosition();
+        return firstPositive(sessionSnapshotPosition(), state.getPosition());
     }
 
     public synchronized Subscription observe(VodPlaybackObserver observer) {
@@ -230,6 +232,15 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private long firstPositive(long... values) {
         for (long value : values) if (value > 0) return value;
         return 0;
+    }
+
+    private long sessionSnapshotPosition() {
+        PlaybackState playback = session.state();
+        if (playback == null || playback.getItem() == null || state.getEpisode() == null) return 0;
+        if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return 0;
+        EngineSnapshot snapshot = session.snapshot();
+        if (snapshot == null || snapshot.getSessionId() != playback.getSessionId()) return 0;
+        return snapshot.getPosition();
     }
 
     private long resumePosition(VodEpisode episode) {
