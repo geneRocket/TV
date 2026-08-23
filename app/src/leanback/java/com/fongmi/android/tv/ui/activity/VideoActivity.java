@@ -1324,7 +1324,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setQualityActivated(Result result) {
         try {
-            showProgress();
             mPlaybackCoordinator.reload();
             mBinding.danmaku.hide();
         } catch (Exception e) {

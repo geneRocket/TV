@@ -168,6 +168,42 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    public void reloadWithoutCurrentEpisodeDoesNotPublishLoadingState() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+
+        assertFalse(coordinator.reload());
+        assertEquals(VodPlaybackPhase.IDLE, coordinator.state().getPhase());
+        assertEquals(0, resolver.lastRequestId);
+    }
+
+    @Test
+    public void reloadWithCurrentEpisodePublishesResolvingState() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+
+        assertTrue(coordinator.reload());
+
+        assertEquals(VodPlaybackPhase.RESOLVING, coordinator.state().getPhase());
+        assertEquals("episode-1", coordinator.state().getEpisode().getIdentity());
+    }
+
+    @Test
+    public void replayWithoutCurrentEpisodeDoesNotPublishLoadingState() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+
+        assertFalse(coordinator.replay());
+        assertEquals(VodPlaybackPhase.IDLE, coordinator.state().getPhase());
+        assertEquals(0, resolver.lastRequestId);
+    }
+
+    @Test
     public void oldSessionTerminalEventDoesNotReplaceResolvingState() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
