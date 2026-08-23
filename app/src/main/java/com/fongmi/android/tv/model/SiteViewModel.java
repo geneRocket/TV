@@ -167,6 +167,11 @@ public class SiteViewModel extends BaseSiteViewModel {
         for (Call call : calls) call.cancel();
     }
 
+    public void finishSearch(String token) {
+        if (token == null) return;
+        activeSearchCalls.remove(token);
+    }
+
     private void post(Site site, Result result, String keyword, String token) {
         if (result.getList().isEmpty() || cancelledSearchTokens.contains(token)) return;
         result.setKey(site.getKey());

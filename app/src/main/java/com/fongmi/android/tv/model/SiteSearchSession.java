@@ -141,11 +141,14 @@ public final class SiteSearchSession implements AutoCloseable {
     }
 
     private void complete(int generation, Runnable callback) {
+        String completedToken;
         synchronized (this) {
             if (!active || this.generation != generation || pending > 0) return;
             if (completion != null) scheduler.remove(completion);
             completion = null;
+            completedToken = token;
         }
+        viewModel.finishSearch(completedToken);
         callback.run();
     }
 }
