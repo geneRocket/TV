@@ -107,11 +107,12 @@ public final class SearchSorter {
     }
 
     public static String key(String site, String id, String name) {
-        if (site == null || site.isEmpty()) return "";
+        String normalizedSite = site == null ? "" : site.trim();
+        String normalizedId = id == null ? "" : id.trim();
+        if (normalizedSite.isEmpty()) return "";
         String normalizedName = Util.normalize(name);
-        boolean hasId = id != null && !id.isEmpty();
-        if (!hasId && normalizedName.isEmpty()) return "";
-        return site + "@" + (hasId ? id : normalizedName);
+        if (normalizedId.isEmpty() && normalizedName.isEmpty()) return "";
+        return normalizedSite + "@" + (normalizedId.isEmpty() ? normalizedName : normalizedId);
     }
 
     public static void prepare(Vod item, String keyword) {

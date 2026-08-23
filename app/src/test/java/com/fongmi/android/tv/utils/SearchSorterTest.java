@@ -30,8 +30,9 @@ public class SearchSorterTest {
     @Test
     public void key_usesSiteAndIdOrNormalizedName() {
         assertEquals("site@123", SearchSorter.key("site", "123", "影片名"));
+        assertEquals("site@123", SearchSorter.key(" site ", " 123 ", "影片名"));
         assertEquals("site@影 片 名", SearchSorter.key("site", "", " 影 片 名 "));
         assertEquals("", SearchSorter.key("", "123", "影片名"));
-        assertEquals("", SearchSorter.key("site", "", ""));
+        assertEquals("", SearchSorter.key("site", "   ", ""));
     }
 }
