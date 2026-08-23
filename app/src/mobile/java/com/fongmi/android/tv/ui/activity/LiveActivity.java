@@ -1228,6 +1228,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     protected void onResume() {
         super.onResume();
         if (isForeground()) return;
+        mPlayers.activate();
         if (isRedirect()) onPlay();
         App.post(mR0, 1000);
         setForeground(true);

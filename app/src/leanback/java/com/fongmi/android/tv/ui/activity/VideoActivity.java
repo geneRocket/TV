@@ -2803,6 +2803,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     protected void onResume() {
         super.onResume();
         setBackground(false);
+        mPlayers.activate();
         mClock.start();
         boolean needInit = mPlayers.isRelease()
                 || (mPlayers.isExo() && mPlayers.exo() == null)

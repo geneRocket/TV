@@ -134,6 +134,10 @@ public class PlaybackController {
         setupEngine();
     }
 
+    public void activate() {
+        Server.get().setPlayer(this);
+    }
+
     public PlayerSession session() {
         ensureSession();
         return playbackSession;

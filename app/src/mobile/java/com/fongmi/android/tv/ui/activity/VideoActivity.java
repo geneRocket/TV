@@ -2225,6 +2225,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     protected void onResume() {
         super.onResume();
         if (isForeground()) return;
+        mPlayers.activate();
         if (isRedirect()) onPlay();
         App.post(mR0, 1000);
         setForeground(true);
