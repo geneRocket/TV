@@ -1006,7 +1006,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private boolean isCurrentPlayer() {
-        return Server.get().getPlayer() == mPlayers;
+        return mPlayers.isCurrent();
     }
 
     public void setForeground(boolean foreground) {
@@ -1228,7 +1228,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     protected void onResume() {
         super.onResume();
         if (isForeground()) return;
-        mPlayers.activate();
+        mPlayers.activateAsCurrentPlayer();
         if (isRedirect()) onPlay();
         App.post(mR0, 1000);
         setForeground(true);

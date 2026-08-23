@@ -42,7 +42,6 @@ import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.PlaybackRecovery;
 import com.fongmi.android.tv.player.session.PlaybackState;
-import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.StableDLNARendererService;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownCast;
@@ -407,7 +406,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private boolean isCurrentPlayer() {
-        return Server.get().getPlayer() == mPlayers;
+        return mPlayers.isCurrent();
     }
 
     private void onExoCheck(ErrorEvent event) {

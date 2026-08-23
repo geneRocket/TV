@@ -48,7 +48,6 @@ import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
-import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.repository.DoubanRecommendRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.repository.KeepRepository;
@@ -1923,7 +1922,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private boolean isCurrentPlayer() {
-        return Server.get().getPlayer() == mPlayers;
+        return mPlayers.isCurrent();
     }
 
     public void setForeground(boolean foreground) {
@@ -2225,7 +2224,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     protected void onResume() {
         super.onResume();
         if (isForeground()) return;
-        mPlayers.activate();
+        mPlayers.activateAsCurrentPlayer();
         if (isRedirect()) onPlay();
         App.post(mR0, 1000);
         setForeground(true);

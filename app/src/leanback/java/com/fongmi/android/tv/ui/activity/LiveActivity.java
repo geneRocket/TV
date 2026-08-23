@@ -973,7 +973,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private boolean isCurrentPlayer() {
-        return Server.get().getPlayer() == mPlayers;
+        return mPlayers.isCurrent();
     }
 
     private void nextPlayer() {
@@ -1206,7 +1206,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     protected void onResume() {
         super.onResume();
-        mPlayers.activate();
+        mPlayers.activateAsCurrentPlayer();
         boolean needInit = mPlayers.isRelease()
                 || (mPlayers.isExo() && mPlayers.exo() == null)
                 || (mPlayers.isIjk() && mPlayers.ijk() == null);

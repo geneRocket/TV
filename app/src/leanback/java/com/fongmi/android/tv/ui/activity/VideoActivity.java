@@ -82,7 +82,6 @@ import com.fongmi.android.tv.player.vod.VodPlaybackIntent;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 import com.fongmi.android.tv.player.vod.VodPlaybackState;
 import com.fongmi.android.tv.player.Source;
-import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.player.danmu.Parser;
 import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -2305,7 +2304,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean isCurrentPlayer() {
-        return Server.get().getPlayer() == mPlayers;
+        return mPlayers.isCurrent();
     }
 
     public void setBackground(boolean background) {
@@ -2803,7 +2802,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     protected void onResume() {
         super.onResume();
         setBackground(false);
-        mPlayers.activate();
+        mPlayers.activateAsCurrentPlayer();
         mClock.start();
         boolean needInit = mPlayers.isRelease()
                 || (mPlayers.isExo() && mPlayers.exo() == null)

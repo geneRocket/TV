@@ -134,8 +134,12 @@ public class PlaybackController {
         setupEngine();
     }
 
-    public void activate() {
+    public void activateAsCurrentPlayer() {
         Server.get().setPlayer(this);
+    }
+
+    public boolean isCurrent() {
+        return Server.get().getPlayer() == this;
     }
 
     public PlayerSession session() {
@@ -527,7 +531,7 @@ public class PlaybackController {
     }
 
     public void release() {
-        boolean current = Server.get().getPlayer() == this;
+        boolean current = isCurrent();
         stopParse();
         try {
             mediaSession.release();
