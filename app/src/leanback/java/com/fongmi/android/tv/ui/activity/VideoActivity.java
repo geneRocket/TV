@@ -128,7 +128,6 @@ import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
-import com.orhanobut.logger.Logger;
 import com.permissionx.guolindev.PermissionX;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -161,7 +160,6 @@ import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
 public class VideoActivity extends BaseActivity implements CustomKeyDownVod.Listener, TrackDialog.Listener, TrackDialog.ChooserListener, PlayerDialog.Listener, ArrayPresenter.OnClickListener, Clock.Callback {
 
-    private static final String HISTORY_LOG_TAG = "HistoryProgress";
     private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 5000;
     private static final long HISTORY_LOAD_TIMEOUT_MS = 5000;
     private static final int QUICK_RESULT_LIMIT = 50;
@@ -999,9 +997,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         final String historyKey = getHistoryKey();
         final int siteCid = getSiteCid();
         final String mark = getMark();
-        logHistory("tv_loadHistory_start key=" + historyKey + " siteCid=" + siteCid + " mark=" + mark + " vod=" + item.getVodName());
         mHistory = HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark);
-        logHistory("tv_loadHistory_immediate " + History.debug(mHistory));
         mHistorySessionModified = false;
         mHistoryTasks.submit(TASK_HISTORY,
                 () -> HistoryRepository.get().prepare(HistoryRepository.get().find(historyKey), historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
@@ -1014,7 +1010,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void applyHistory(History history, Vod item, String historyKey, String detailToken) {
         if (isFinishing() || isDestroyed()) return;
         if (!TextUtils.equals(detailToken, pendingDetailToken) || !TextUtils.equals(historyKey, getHistoryKey())) return;
-        logHistory("tv_applyHistory sessionModified=" + mHistorySessionModified + " loaded=" + History.debug(history) + " current=" + History.debug(mHistory));
         if (!mHistorySessionModified) mHistory = history;
         applyDetailHistory();
         checkDetailFlags(item);
@@ -1631,7 +1626,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void capturePlaybackPosition() {
         long position = getCurrentSwitchPosition();
-        logHistory("tv_capturePlaybackPosition position=" + position + " player=" + (mPlayers == null ? -1 : mPlayers.getPosition()) + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " history=" + History.debug(mHistory));
+        if (position <= 0) return;
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && mEpisodeAdapter.size() > 0) {
             Episode episode = getEpisode();
@@ -1644,17 +1639,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void saveHistoryNow() {
-        if (mHistory == null || Setting.isIncognito()) {
-            logHistory("tv_saveHistoryNow_skip history=" + History.debug(mHistory) + " incognito=" + Setting.isIncognito());
-            return;
-        }
+        if (mHistory == null || Setting.isIncognito()) return;
         long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
-        logHistory("tv_saveHistoryNow_before position=" + position + " player=" + mPlayers.getPosition() + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " duration=" + duration + " history=" + History.debug(mHistory));
-        if (position <= 0) {
-            logHistory("tv_saveHistoryNow_skip_non_positive " + History.debug(mHistory));
-            return;
-        }
+        if (position <= 0) return;
         mHistory.setPosition(position);
         if (duration > 0) mHistory.setDuration(duration);
         mHistory.setCreateTime(System.currentTimeMillis());
@@ -2146,7 +2134,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 mLastHistorySaveAt = now;
                 if (position != mLastSavedHistoryPosition || duration != mLastSavedHistoryDuration) {
                     mHistory.setCreateTime(now);
-                    logHistory("tv_onTimeChanged_save position=" + position + " duration=" + duration + " history=" + History.debug(mHistory));
                     saveHistorySnapshot();
                 }
             }
@@ -2212,7 +2199,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mHistory != null) {
             if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
             if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
-            if (state.getPosition() > 0) logHistory("tv_renderPlayback_state phase=" + state.getPhase() + " pos=" + state.getPosition() + " dur=" + state.getDuration() + " history=" + History.debug(mHistory));
         }
         if (state.getEpisodeIndex() >= 0 && state.getEpisodeIndex() < mEpisodeAdapter.size()) {
             Episode episode = (Episode) mEpisodeAdapter.get(state.getEpisodeIndex());
@@ -2415,13 +2401,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mHistorySessionModified = true;
         mLastSavedHistoryPosition = mHistory.getPosition();
         mLastSavedHistoryDuration = mHistory.getDuration();
-        logHistory("tv_saveHistorySnapshot async=" + async + " " + History.debug(mHistory));
         if (async) mHistory.saveAsync();
         else mHistory.save();
-    }
-
-    private void logHistory(String message) {
-        Logger.t(HISTORY_LOG_TAG).d(message);
     }
 
     private String nextRequestToken(String prefix) {

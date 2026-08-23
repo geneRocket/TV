@@ -127,7 +127,6 @@ import com.fongmi.android.tv.utils.Util;
 import com.github.bassaer.library.MDColor;
 import com.github.catvod.utils.Trans;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
-import com.orhanobut.logger.Logger;
 import com.permissionx.guolindev.PermissionX;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -154,7 +153,6 @@ import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 public class VideoActivity extends BaseActivity implements Clock.Callback, CustomKeyDownVod.Listener, TrackDialog.Listener, PlayerDialog.Listener, ControlDialog.Listener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener {
 
     private static final int REQUEST_DANMAKU_FILE = 9998;
-    private static final String HISTORY_LOG_TAG = "HistoryProgress";
     private static final double SOURCE_MIN_SCORE = 0.5;
 
     private ActivityVideoBinding mBinding;
@@ -541,7 +539,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             if (mHistory != null) {
                 if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
                 if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
-                if (state.getPosition() > 0) logHistory("mobile_playback_state phase=" + state.getPhase() + " pos=" + state.getPosition() + " dur=" + state.getDuration() + " history=" + History.debug(mHistory));
             }
             if (state.getPhase() != VodPlaybackPhase.ERROR) return;
             if (mPlayers.session().state().getPhase() == com.fongmi.android.tv.player.session.PlaybackPhase.ERROR) return;
@@ -1467,7 +1464,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void checkHistory(Vod item) {
         String historyKey = getHistoryKey();
         History preloaded = takePreloadedHistory(historyKey);
-        logHistory("mobile_checkHistory_start key=" + historyKey + " preloaded=" + History.debug(preloaded) + " vod=" + item.getVodName());
         mHistoryRequests.submit("history", () -> {
             History history = HistoryRepository.get().prepare(preloaded == null ? HistoryRepository.get().find(historyKey) : preloaded, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark());
             if (Setting.isIncognito() && history.getKey().equals(historyKey)) HistoryRepository.get().delete(history);
@@ -1475,7 +1471,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }, Constant.TIMEOUT_VOD, result -> {
             App.post(() -> {
                 if (isFinishing() || isDestroyed() || !TextUtils.equals(historyKey, getHistoryKey())) return;
-                logHistory("mobile_checkHistory_apply " + History.debug(result));
                 applyHistory(result);
                 checkFlag(item);
                 checkKeepImg();
@@ -1485,7 +1480,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void applyHistory(History history) {
         mHistory = history;
-        logHistory("mobile_applyHistory " + History.debug(mHistory));
         mBinding.control.action.opening.setText(mHistory.getOpening() == 0 ? getString(R.string.play_op) : mPlayers.stringToTime(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() == 0 ? getString(R.string.play_ed) : mPlayers.stringToTime(mHistory.getEnding()));
         mPlayers.setPlayer(getPlayer());
@@ -1508,7 +1502,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void capturePlaybackPosition() {
         long position = getCurrentSwitchPosition();
-        logHistory("mobile_capturePlaybackPosition position=" + position + " player=" + (mPlayers == null ? -1 : mPlayers.getPosition()) + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " history=" + History.debug(mHistory));
+        if (position <= 0) return;
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && !mEpisodeAdapter.isEmpty()) {
             Episode episode = getEpisode();
@@ -1518,7 +1512,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             mHistory.setPosition(position);
             if (!Setting.isIncognito()) {
                 mLastHistorySaveAt = System.currentTimeMillis();
-                logHistory("mobile_capturePlaybackPosition_saveAsync " + History.debug(mHistory));
                 mHistory.saveAsync();
             }
         }
@@ -1608,7 +1601,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
                 mHistory.setCreateTime(now);
-                logHistory("mobile_onTimeChanged_save position=" + position + " duration=" + duration + " history=" + History.debug(mHistory));
                 mHistory.saveAsync();
             }
         }
@@ -2313,27 +2305,15 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void saveHistoryNow() {
-        if (mHistory == null || Setting.isIncognito()) {
-            logHistory("mobile_saveHistoryNow_skip history=" + History.debug(mHistory) + " incognito=" + Setting.isIncognito());
-            return;
-        }
+        if (mHistory == null || Setting.isIncognito()) return;
         long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
-        logHistory("mobile_saveHistoryNow_before position=" + position + " player=" + mPlayers.getPosition() + " coord=" + (mPlaybackCoordinator == null ? -1 : mPlaybackCoordinator.currentPosition()) + " duration=" + duration + " history=" + History.debug(mHistory));
-        if (position <= 0) {
-            logHistory("mobile_saveHistoryNow_skip_non_positive " + History.debug(mHistory));
-            return;
-        }
+        if (position <= 0) return;
         mHistory.setPosition(position);
         if (duration > 0) mHistory.setDuration(duration);
         mHistory.setCreateTime(System.currentTimeMillis());
         mLastHistorySaveAt = System.currentTimeMillis();
-        logHistory("mobile_saveHistoryNow_saveSync " + History.debug(mHistory));
         mHistory.save();
-    }
-
-    private void logHistory(String message) {
-        Logger.t(HISTORY_LOG_TAG).d(message);
     }
 
 }
