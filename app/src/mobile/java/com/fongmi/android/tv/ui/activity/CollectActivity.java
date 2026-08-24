@@ -28,6 +28,7 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityCollectBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.SiteCallback;
+import com.fongmi.android.tv.model.SearchRequestToken;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.adapter.RecordAdapter;
@@ -237,7 +238,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         mExecutor = new PauseExecutor(Math.min(6, ThreadPools.searchConcurrency()), Math.max(1, mSites.size()));
         String keyword = mBinding.keyword.getText().toString().trim();
         mSearchAdapter.setKeyword(keyword);
-        mSearchToken = "collect:" + System.currentTimeMillis();
+        mSearchToken = SearchRequestToken.next("collect");
         mPendingSearchCount = mSites.size();
         mBinding.result.setEmptyText(R.string.error_empty);
         mBinding.result.showProgress();

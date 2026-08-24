@@ -26,6 +26,7 @@ import com.fongmi.android.tv.bean.Collect;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityCollectBinding;
+import com.fongmi.android.tv.model.SearchRequestToken;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.fragment.CollectFragment;
@@ -167,7 +168,7 @@ public class CollectActivity extends BaseActivity {
         mCollectMap.clear();
         mPendingResults.clear();
         App.removeCallbacks(mFlushResults);
-        mSearchToken = "collect:" + System.currentTimeMillis();
+        mSearchToken = SearchRequestToken.next("collect");
         mPagerDirty = false;
         mFlushScheduled = false;
         mAllQueue = new PriorityQueue<>(51, this::compareAllForQueue);

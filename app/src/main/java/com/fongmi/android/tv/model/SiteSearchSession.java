@@ -11,11 +11,9 @@ import com.fongmi.android.tv.utils.ThreadPools;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class SiteSearchSession implements AutoCloseable {
 
-    private static final AtomicLong TOKENS = new AtomicLong();
     private enum Mode { MANUAL, SELECT_FIRST, RECOVERING }
 
     private final SiteViewModel viewModel;
@@ -40,7 +38,7 @@ public final class SiteSearchSession implements AutoCloseable {
     public synchronized void start(List<Site> sites, String keyword, boolean auto, Runnable onComplete) {
         cancel();
         List<Site> requests = sites == null ? new ArrayList<>() : new ArrayList<>(sites);
-        this.token = "search:" + TOKENS.incrementAndGet();
+        this.token = SearchRequestToken.next("search");
         this.active = true;
         this.pending = requests.size();
         this.mode = auto ? Mode.SELECT_FIRST : Mode.MANUAL;

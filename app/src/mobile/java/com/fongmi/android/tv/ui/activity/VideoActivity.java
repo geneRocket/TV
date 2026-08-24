@@ -65,6 +65,7 @@ import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.model.SearchRequestToken;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
@@ -197,7 +198,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private long mLastHistorySaveAt;
-    private long requestTokenSeed;
     private String pendingDetailToken;
     private final Object mHistoryLock = new Object();
     private History mPreloadedHistory;
@@ -620,7 +620,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void getDetail() {
         clearPlaybackTimeout();
-        String token = nextRequestToken("detail");
+        String token = SearchRequestToken.next("detail");
         setPendingDetailRequest(token);
         mViewModel.detailContent(getKey(), getId(), token);
         requestHistory(getHistoryKey());
@@ -1930,10 +1930,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     public void setForeground(boolean foreground) {
         this.foreground = foreground;
-    }
-
-    private String nextRequestToken(String prefix) {
-        return prefix + ":" + (++requestTokenSeed);
     }
 
     private void setPendingDetailRequest(String token) {

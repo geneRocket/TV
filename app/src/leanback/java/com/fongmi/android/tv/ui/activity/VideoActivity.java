@@ -63,6 +63,7 @@ import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.model.SearchRequestToken;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
@@ -345,7 +346,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private final class DetailPort implements TvVodDetailController.Port {
-        @Override public String nextRequestToken() { return VideoActivity.this.nextRequestToken("detail"); }
+        @Override public String nextRequestToken() { return SearchRequestToken.next("detail"); }
         @Override public void setPendingRequest(String token) { setPendingDetailRequest(token); }
         @Override public void scheduleSourceTimeout() { scheduleSourceSwitchTimeout(); }
         @Override public void requestDetail(String token) { mViewModel.detailContent(getKey(), getId(), token); }
@@ -531,7 +532,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean mResumeOnForeground = true;
     private final TvVodSelectionState mSelection = new TvVodSelectionState();
     private String mArtworkUrl;
-    private long requestTokenSeed;
     private String pendingDetailToken;
     private int mEpisodeNumColumns;
     private int mEpisodeColumnWidth;
@@ -2404,10 +2404,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mLastSavedHistoryDuration = mHistory.getDuration();
         if (async) mHistory.saveAsync();
         else mHistory.save();
-    }
-
-    private String nextRequestToken(String prefix) {
-        return prefix + ":" + (++requestTokenSeed);
     }
 
     private void setPendingDetailRequest(String token) {
