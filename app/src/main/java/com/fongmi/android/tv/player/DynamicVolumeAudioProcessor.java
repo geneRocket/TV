@@ -1,20 +1,33 @@
 package com.fongmi.android.tv.player;
 
+import android.content.Context;
+import android.media.AudioManager;
+import android.util.Log;
+
 import androidx.media3.common.audio.BaseAudioProcessor;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 
 import java.nio.ByteBuffer;
 
 public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
-    private static final double MAX_VOLUME = 4500D;
+
     private static final double TARGET_GAIN = 1D;
 
+    private final AudioManager manager;
     private AudioFormat audioFormat;
     private double gain;
     private int bytesPerSample;
     private double analyzedRms;
     private double analyzedMaxGain;
+    private double volume;
+    private long lastTime;
+    private long lastLog;
+
+    public DynamicVolumeAudioProcessor() {
+        this.manager = (AudioManager) App.get().getSystemService(Context.AUDIO_SERVICE);
+    }
 
     @Override
     protected AudioFormat onConfigure(AudioFormat inputAudioFormat) {
@@ -24,6 +37,11 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
         return audioFormat;
     }
 
+    private double getVolume() {
+        if (System.currentTimeMillis() - lastTime < 5000) return volume;
+        lastTime = System.currentTimeMillis();
+        return volume = manager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+    }
 
     @Override
     public void queueInput(ByteBuffer inputBuffer) {
@@ -32,21 +50,23 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
             return;
         }
         double currentVolume = analyzedRms;
-        double maxGain = analyzedMaxGain;
-        if (currentVolume != 0) {
-            double currentVolumeAfterGain = currentVolume * gain;
-            if (currentVolumeAfterGain > MAX_VOLUME) {
-                gain = Math.max(gain * 0.99D, MAX_VOLUME / currentVolume);
-            } else {
-                if (gain > TARGET_GAIN) {
-                    gain = Math.max(gain * 0.99D, TARGET_GAIN);
-                } else if (gain < TARGET_GAIN) {
-                    gain = Math.min(gain * 1.005D, TARGET_GAIN);
-                }
+        double maxVolume = Setting.getLoudness();
+        double volumeScale = Setting.getVolumeScale();
+        double volumeRatio = getVolume();
+        if (currentVolume != 0 && volumeRatio > 0) {
+            double currentVolumeAfterGain = currentVolume * gain * volumeRatio * volumeScale;
+            if (currentVolumeAfterGain > maxVolume) {
+                gain = Math.max(gain * 0.99D, maxVolume / (currentVolume * volumeRatio * volumeScale));
+            } else if (gain < TARGET_GAIN) {
+                gain = Math.min(gain * 1.005D, TARGET_GAIN);
+            }
+            if (System.currentTimeMillis() - lastLog > 1000) {
+                lastLog = System.currentTimeMillis();
+                Log.d("DynamicVolume", "Volume: " + (int) currentVolume + " Ratio: " + String.format("%.2f", volumeRatio) + " Scale: " + String.format("%.2f", volumeScale) + " Gain: " + String.format("%.2f", gain) + " Result: " + (int) currentVolumeAfterGain + " Max: " + (int) maxVolume);
             }
         }
-        gain = Math.min(gain, maxGain);
-        applyGain(inputBuffer, gain * Setting.getVolumeScale());
+        gain = Math.min(gain, Math.min(TARGET_GAIN, analyzedMaxGain));
+        applyGain(inputBuffer, gain * volumeScale);
     }
 
     private boolean analyzeVolume(ByteBuffer inputBuffer) {

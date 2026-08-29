@@ -48,6 +48,7 @@ import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownCast;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
+import com.fongmi.android.tv.ui.dialog.LoudnessDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.dialog.VolumeDialog;
 import com.fongmi.android.tv.utils.Clock;
@@ -137,6 +138,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mBinding.control.player.setOnClickListener(view -> onPlayer());
         mBinding.control.decode.setOnClickListener(view -> onDecode());
         mBinding.control.volume.setOnClickListener(view -> VolumeDialog.create(this).show());
+        mBinding.control.loudness.setOnClickListener(view -> LoudnessDialog.create(this).show());
         mBinding.control.speed.setOnLongClickListener(view -> onSpeedLong());
         mBinding.video.setOnTouchListener((view, event) -> mKeyDown.onTouchEvent(event));
     }

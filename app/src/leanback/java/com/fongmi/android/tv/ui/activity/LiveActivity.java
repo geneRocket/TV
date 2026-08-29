@@ -59,6 +59,7 @@ import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownLive;
 import com.fongmi.android.tv.ui.custom.CustomLiveListView;
+import com.fongmi.android.tv.ui.dialog.LoudnessDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.PassDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
@@ -206,6 +207,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mBinding.control.player.setOnClickListener(view -> onPlayer());
         mBinding.control.decode.setOnClickListener(view -> onDecode());
         mBinding.control.volume.setOnClickListener(view -> VolumeDialog.create(this).show());
+        mBinding.control.loudness.setOnClickListener(view -> LoudnessDialog.create(this).show());
         mBinding.control.player.setOnLongClickListener(view -> onChoose());
         mBinding.control.speed.setOnLongClickListener(view -> onSpeedLong());
         mBinding.widget.error.setOnClickListener(view -> fetch());

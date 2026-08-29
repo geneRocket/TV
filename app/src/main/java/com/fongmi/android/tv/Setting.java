@@ -145,6 +145,14 @@ public class Setting {
         getEditor().putFloat("volume_scale", Math.min(Math.max(value, 0f), 1f)).apply();
     }
 
+    public static int getLoudness() {
+        return Math.min(Math.max(getPref().getInt("loudness", 4500), 0), 10000);
+    }
+
+    public static void putLoudness(int value) {
+        getEditor().putInt("loudness", Math.min(Math.max(value, 0), 10000)).apply();
+    }
+
     public static float getPlaySpeed() {
         return Prefers.getFloat("play_speed", 1.0f);
     }

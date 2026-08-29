@@ -105,6 +105,19 @@
                 android:visibility="gone"
                 tools:visibility="visible" />
 
+            <TextView
+                android:id="@+id/loudness"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/selector_text"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusDown="@id/timeBar"
+                android:text="@string/play_loudness"
+                android:textColor="@color/white"
+                android:textSize="@dimen/tv_button_text_size" />
+
             <com.fongmi.android.tv.ui.custom.CustomUpDownView
                 android:id="@+id/text"
                 android:layout_width="wrap_content"

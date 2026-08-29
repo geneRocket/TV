@@ -89,6 +89,7 @@ import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
 import com.fongmi.android.tv.ui.custom.CustomMovement;
+import com.fongmi.android.tv.ui.dialog.LoudnessDialog;
 import com.fongmi.android.tv.ui.dialog.DescDialog;
 import com.fongmi.android.tv.ui.dialog.EpisodeDialog;
 import com.fongmi.android.tv.ui.dialog.FileChooserDialog;
@@ -766,6 +767,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.search1.setOnClickListener(view -> onSearchPage());
         mBinding.control.text.setOnClickListener(this::onTrack);
         mBinding.control.volume.setOnClickListener(view -> VolumeDialog.create(this).show());
+        mBinding.control.loudness.setOnClickListener(view -> LoudnessDialog.create(this).show());
         mBinding.control.audio.setOnClickListener(this::onTrack);
         mBinding.control.video.setOnClickListener(this::onTrack);
         mBinding.control.speed.setUpListener(this::onSpeedAdd);
