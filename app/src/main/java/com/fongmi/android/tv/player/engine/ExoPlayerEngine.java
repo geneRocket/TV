@@ -25,6 +25,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
     private long requestedStartPosition;
     private EnginePhase phase = EnginePhase.IDLE;
     private boolean pendingStartSeek;
+    private boolean pendingReady;
     private boolean released;
 
     public ExoPlayerEngine(PlayerView view, int decode, boolean playWithOthers, boolean tunnel) {
@@ -57,6 +58,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
         this.listener = listener;
         this.phase = EnginePhase.PREPARING;
         this.pendingStartSeek = requestedStartPosition > 0;
+        this.pendingReady = true;
         MediaItem item = ExoUtil.getMediaItem(request.getHeaders(), UrlUtil.uri(request.getUrl()), request.getFormat(), request.getDrm(), request.getSubtitles(), decode, request.isForceLive());
         player.setPlayWhenReady(true);
         player.setMediaItem(item, request.getStartPosition());
@@ -85,6 +87,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
     public void stop() {
         if (released) return;
         pendingStartSeek = false;
+        pendingReady = false;
         phase = EnginePhase.STOPPED;
         player.stop();
         player.clearMediaItems();
@@ -112,6 +115,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
     public void release() {
         if (released) return;
         released = true;
+        pendingReady = false;
         phase = EnginePhase.RELEASED;
         player.removeListener(this);
         player.stop();
@@ -125,15 +129,21 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
     public void onPlaybackStateChanged(int state) {
         switch (state) {
             case Player.STATE_IDLE:
+                pendingReady = false;
                 if (phase == EnginePhase.PREPARING || phase == EnginePhase.STOPPED) return;
                 phase = EnginePhase.IDLE;
                 break;
             case Player.STATE_BUFFERING: phase = EnginePhase.BUFFERING; break;
             case Player.STATE_READY:
                 ensureStartPositionApplied();
+                if (pendingReady && player.getPlayWhenReady()) return;
+                pendingReady = false;
                 phase = player.isPlaying() ? EnginePhase.READY : EnginePhase.PAUSED;
                 break;
-            case Player.STATE_ENDED: phase = EnginePhase.ENDED; break;
+            case Player.STATE_ENDED:
+                pendingReady = false;
+                phase = EnginePhase.ENDED;
+                break;
             default: return;
         }
         emit(null);
@@ -141,14 +151,29 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
 
     @Override
     public void onIsPlayingChanged(boolean isPlaying) {
-        if (player.getPlaybackState() != Player.STATE_READY) return;
-        phase = isPlaying ? EnginePhase.READY : EnginePhase.PAUSED;
-        emit(null);
+        if (isPlaying && pendingReady) {
+            pendingReady = false;
+            phase = EnginePhase.READY;
+            emit(null);
+        } else if (player.getPlaybackState() == Player.STATE_READY) {
+            phase = isPlaying ? EnginePhase.READY : EnginePhase.PAUSED;
+            emit(null);
+        }
+    }
+
+    @Override
+    public void onRenderedFirstFrame() {
+        if (pendingReady) {
+            pendingReady = false;
+            phase = player.isPlaying() ? EnginePhase.READY : EnginePhase.PAUSED;
+            emit(null);
+        }
     }
 
     @Override
     public void onPlayerError(@NonNull PlaybackException error) {
         if (released || phase == EnginePhase.STOPPED) return;
+        pendingReady = false;
         phase = EnginePhase.ERROR;
         emit(error);
     }
