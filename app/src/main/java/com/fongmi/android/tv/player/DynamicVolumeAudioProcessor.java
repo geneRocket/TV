@@ -13,6 +13,7 @@ import java.nio.ByteBuffer;
 
 public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
 
+    private static final long VOLUME_CACHE_MS = 1000;
     private static final double TARGET_GAIN = 1D;
 
     private final AudioManager manager;
@@ -38,9 +39,10 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
     }
 
     private double getVolume() {
-        if (System.currentTimeMillis() - lastTime < 5000) return volume;
+        if (System.currentTimeMillis() - lastTime < VOLUME_CACHE_MS) return volume;
         lastTime = System.currentTimeMillis();
-        return volume = manager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        return volume = max == 0 ? 0D : manager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) max;
     }
 
     @Override
@@ -53,15 +55,19 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
         double maxVolume = Setting.getLoudness();
         double volumeScale = Setting.getVolumeScale();
         double volumeRatio = getVolume();
-        if (currentVolume != 0 && volumeRatio > 0) {
+        if (currentVolume != 0 && volumeRatio > 0 && volumeScale > 0) {
+            if (gain <= 0D && maxVolume > 0D) gain = TARGET_GAIN;
+            double maxGain = maxVolume / (currentVolume * volumeRatio * volumeScale);
             double currentVolumeAfterGain = currentVolume * gain * volumeRatio * volumeScale;
             if (currentVolumeAfterGain > maxVolume) {
-                gain = Math.max(gain * 0.99D, maxVolume / (currentVolume * volumeRatio * volumeScale));
+                gain = Math.min(gain, maxGain);
             } else if (gain < TARGET_GAIN) {
                 gain = Math.min(gain * 1.005D, TARGET_GAIN);
             }
+            gain = Math.min(gain, maxGain);
             if (System.currentTimeMillis() - lastLog > 1000) {
                 lastLog = System.currentTimeMillis();
+                currentVolumeAfterGain = currentVolume * gain * volumeRatio * volumeScale;
                 Log.d("DynamicVolume", "Volume: " + (int) currentVolume + " Ratio: " + String.format("%.2f", volumeRatio) + " Scale: " + String.format("%.2f", volumeScale) + " Gain: " + String.format("%.2f", gain) + " Result: " + (int) currentVolumeAfterGain + " Max: " + (int) maxVolume);
             }
         }
