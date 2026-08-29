@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.player.engine;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.player.IjkUtil;
 
@@ -8,17 +9,24 @@ import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
 public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listener {
 
+    private static final long READY_FALLBACK_MS = 1000;
+
     private final IjkVideoView player;
+    private final Runnable readyFallback;
     private Listener listener;
     private long sessionId;
     private long requestedStartPosition;
     private EnginePhase phase = EnginePhase.IDLE;
     private boolean playWhenReady;
     private boolean pendingStartSeek;
+    private boolean pendingReady;
     private boolean released;
+    private int videoWidth;
+    private int videoHeight;
 
     public IjkPlayerEngine(IjkVideoView view, int playerType, int render, int decode) {
         this.player = view.render(render).decode(decode);
+        this.readyFallback = this::dispatchReadyFallback;
         player.addListener(this);
         player.setPlayer(playerType);
     }
@@ -36,6 +44,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         this.phase = EnginePhase.PREPARING;
         this.playWhenReady = true;
         this.pendingStartSeek = requestedStartPosition > 0;
+        this.pendingReady = true;
+        App.post(readyFallback, READY_FALLBACK_MS);
         player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), request.getStartPosition());
         if (phase == EnginePhase.PREPARING) player.start();
     }
@@ -69,8 +79,10 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     @Override
     public void stop() {
         if (released) return;
+        removeReadyFallback();
         playWhenReady = false;
         pendingStartSeek = false;
+        pendingReady = false;
         phase = EnginePhase.STOPPED;
         int state = player.getPlaybackState();
         if (state != IjkVideoView.STATE_IDLE && state != IjkVideoView.STATE_ERROR) player.stop();
@@ -91,13 +103,15 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         boolean starting = phase == EnginePhase.PREPARING;
         long position = starting ? requestedStartPosition : player.getCurrentPosition();
         long buffered = starting ? requestedStartPosition : player.getBufferedPosition();
-        return new EngineSnapshot(sessionId, phase, position, player.getDuration(), buffered, player.isPlaying(), player.getSpeed(), player.getVideoWidth(), player.getVideoHeight());
+        return new EngineSnapshot(sessionId, phase, position, player.getDuration(), buffered, player.isPlaying(), player.getSpeed(), videoWidth, videoHeight);
     }
 
     @Override
     public void release() {
         if (released) return;
         released = true;
+        removeReadyFallback();
+        pendingReady = false;
         phase = EnginePhase.RELEASED;
         player.release();
         listener = null;
@@ -106,6 +120,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     @Override
     public void onPrepared(IMediaPlayer mp) {
         if (released || phase == EnginePhase.STOPPED) return;
+        removeReadyFallback();
+        pendingReady = false;
         ensureStartPositionApplied();
         if (playWhenReady) player.start();
         else player.pause();
@@ -116,6 +132,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     @Override
     public void onCompletion(IMediaPlayer mp) {
         if (released || phase == EnginePhase.STOPPED) return;
+        removeReadyFallback();
+        pendingReady = false;
         playWhenReady = false;
         phase = EnginePhase.ENDED;
         emit(null);
@@ -134,6 +152,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
             case IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_VIDEO_SEEK_RENDERING_START:
             case IMediaPlayer.MEDIA_INFO_AUDIO_SEEK_RENDERING_START:
+                removeReadyFallback();
+                pendingReady = false;
                 phase = player.isPlaying() ? EnginePhase.READY : EnginePhase.PAUSED;
                 ensureStartPositionApplied();
                 emit(null);
@@ -142,12 +162,35 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     }
 
     @Override
+    public void onBufferingUpdate(IMediaPlayer mp, int percent) {
+    }
+
+    @Override
+    public void onVideoSizeChanged(IMediaPlayer mp, int width, int height, int sar_num, int sar_den) {
+        this.videoWidth = width;
+        this.videoHeight = height;
+    }
+
+    @Override
     public boolean onError(IMediaPlayer mp, int what, int extra) {
         if (released || phase == EnginePhase.STOPPED) return true;
+        removeReadyFallback();
         playWhenReady = false;
+        pendingReady = false;
         phase = EnginePhase.ERROR;
         emit(new IjkPlaybackException(what, extra));
         return true;
+    }
+
+    private void dispatchReadyFallback() {
+        if (!pendingReady || released || phase == EnginePhase.STOPPED) return;
+        pendingReady = false;
+        phase = playWhenReady ? EnginePhase.READY : EnginePhase.PAUSED;
+        emit(null);
+    }
+
+    private void removeReadyFallback() {
+        App.removeCallbacks(readyFallback);
     }
 
     private void emit(Throwable error) {

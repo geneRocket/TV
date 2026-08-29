@@ -462,7 +462,7 @@ public class PlaybackController {
     }
 
     public void nextPlayer() {
-        setPlayer(isExo() ? PlayerType.IJK : PlayerType.EXO);
+        setPlayer(isExo() ? PlayerType.SYSTEM : ++player);
     }
 
     public void toggleDecode(boolean save) {
