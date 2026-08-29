@@ -184,6 +184,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     private void dispatchReadyFallback() {
         if (!pendingReady || released || phase == EnginePhase.STOPPED) return;
+        int state = player.getPlaybackState();
+        if (state == IjkVideoView.STATE_IDLE || state == IjkVideoView.STATE_PREPARING || state == IjkVideoView.STATE_ERROR) return;
         pendingReady = false;
         phase = playWhenReady ? EnginePhase.READY : EnginePhase.PAUSED;
         emit(null);
