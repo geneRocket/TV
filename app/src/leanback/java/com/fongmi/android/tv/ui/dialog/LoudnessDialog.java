@@ -36,13 +36,13 @@ public class LoudnessDialog {
     }
 
     private void initView() {
-        binding.slider.setValue(Setting.getLoudness() / 100f);
+        binding.slider.setValue(Setting.getLoudnessProgress());
         binding.slider.setValueTo(100);
         binding.slider.setStepSize(1);
     }
 
     private void initEvent() {
-        binding.slider.addOnChangeListener((slider, value, fromUser) -> Setting.putLoudness((int) value * 100));
+        binding.slider.addOnChangeListener((slider, value, fromUser) -> Setting.putLoudness((int) value));
         binding.slider.setOnKeyListener((view, keyCode, event) -> {
             boolean enter = KeyUtil.isEnterKey(event);
             if (enter) dialog.dismiss();
