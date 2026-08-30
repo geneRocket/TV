@@ -2182,7 +2182,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 mPlaybackState.onBuffering();
                 break;
             case READY:
+                showPlayingState();
                 mPlaybackState.onReady();
+                break;
+            case PAUSED:
+                mResumeOnForeground = false;
+                showPausedState();
                 break;
             case ENDED:
                 checkEnded();
@@ -2311,20 +2316,28 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onPaused() {
+        showPausedState();
+        mResumeOnForeground = false;
+        mPlaybackCoordinator.pause();
+    }
+
+    private void showPausedState() {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setCenterAction(R.drawable.ic_widget_play);
         updateCenterProgress(mPlayers.getPosition(), mPlayers.getDuration());
         if (isFullscreen()) showInfoAndCenter();
         else hideInfoAndCenter();
-        mResumeOnForeground = false;
-        mPlaybackCoordinator.pause();
+    }
+
+    private void showPlayingState() {
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        mResumeOnForeground = true;
+        hideCenter();
     }
 
     private void onPlay() {
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        mResumeOnForeground = true;
+        showPlayingState();
         mPlaybackCoordinator.play();
-        hideCenter();
     }
 
     public boolean isBackground() {
