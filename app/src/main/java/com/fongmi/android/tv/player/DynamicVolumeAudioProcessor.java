@@ -22,12 +22,15 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
     private double gain;
     private double analyzedRms;
     private double analyzedMaxGain;
-    private double volume;
-    private long lastTime;
+    private volatile double volume;
+    private volatile long lastTime;
+    private boolean updating;
     private long lastLog;
 
     public DynamicVolumeAudioProcessor() {
         this.manager = (AudioManager) App.get().getSystemService(Context.AUDIO_SERVICE);
+        this.volume = 1.0D;
+        App.execute(this::updateVolume);
     }
 
     @Override
@@ -40,10 +43,22 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
     private double getVolume() {
         if (manager == null) return 1D;
         long now = SystemClock.elapsedRealtime();
-        if (now - lastTime < VOLUME_CACHE_MS) return volume;
-        lastTime = now;
-        int max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        return volume = max == 0 ? 0D : manager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) max;
+        if (now - lastTime > VOLUME_CACHE_MS && !updating) {
+            updating = true;
+            App.execute(this::updateVolume);
+        }
+        return volume;
+    }
+
+    private void updateVolume() {
+        try {
+            int max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            volume = max == 0 ? 0D : manager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) max;
+        } catch (Exception ignored) {
+        } finally {
+            lastTime = SystemClock.elapsedRealtime();
+            updating = false;
+        }
     }
 
     @Override
@@ -132,8 +147,6 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
         gain = TARGET_GAIN;
         analyzedRms = 0D;
         analyzedMaxGain = Double.POSITIVE_INFINITY;
-        volume = 0D;
-        lastTime = 0L;
         lastLog = 0L;
     }
 
