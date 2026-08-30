@@ -11,8 +11,7 @@ import com.github.catvod.utils.Prefers;
 
 public class Setting {
 
-    public static final int LOUDNESS_MAX = 1500;
-    public static final int LOUDNESS_DEFAULT = 50;
+    public static final int LOUDNESS_DEFAULT = 1000;
 
     private static SharedPreferences getPref() {
         return Prefers.getPrefers();
@@ -149,15 +148,11 @@ public class Setting {
     }
 
     public static int getLoudness() {
-        return getLoudnessProgress() * LOUDNESS_MAX / 100;
-    }
-
-    public static int getLoudnessProgress() {
-        return Math.min(Math.max(getPref().getInt("loudness", LOUDNESS_DEFAULT), 0), 100);
+        return getPref().getInt("loudness", LOUDNESS_DEFAULT);
     }
 
     public static void putLoudness(int value) {
-        getEditor().putInt("loudness", Math.min(Math.max(value, 0), 100)).apply();
+        getEditor().putInt("loudness", value).apply();
     }
 
     public static float getPlaySpeed() {
