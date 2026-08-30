@@ -2390,7 +2390,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (isSourceSwitching()) return;
         capturePlaybackPosition();
         mPlaybackIntent.keepCurrentPositionOnNextPlay();
-        mSourceSwitch.search(getCurrentSwitchEpisode());
+        mSourceSwitch.search(getCurrentSwitchEpisode(), isCurrentSingleEpisode());
     }
 
     private void clearSourceSwitch() {
@@ -2603,10 +2603,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private Flag findTargetFlag(List<Flag> flags) {
-        if (isSourceLoading()) {
-            for (Flag flag : flags) if (hasEpisode(flag)) return flag;
-            return firstPlayableFlag(flags);
-        }
+        if (isSourceLoading()) return mSourceSwitch.findTargetFlag(flags);
         String target = mHistory != null ? mHistory.getVodFlag() : null;
         for (Flag flag : flags) if (!flag.getEpisodes().isEmpty() && flag.getFlag().equals(target)) return flag;
         return firstPlayableFlag(flags);
@@ -2617,8 +2614,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         return null;
     }
 
-    private boolean hasEpisode(Flag flag) {
-        return flag != null && (flag.getEpisodes().size() == 1 || flag.find(mSourceSwitch.getEpisode(), !TextUtils.isEmpty(mSourceSwitch.getEpisode())) != null);
+    private boolean isCurrentSingleEpisode() {
+        if (mFlagAdapter == null || mFlagAdapter.size() == 0) return false;
+        Flag flag = getFlag();
+        return flag != null && flag.getEpisodes().size() == 1;
     }
 
     public boolean isUseParse() {
