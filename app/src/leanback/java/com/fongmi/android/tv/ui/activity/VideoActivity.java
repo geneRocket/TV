@@ -1646,11 +1646,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mHistory == null || Setting.isIncognito()) return;
         long position = getCurrentSwitchPosition();
         long duration = mPlayers.getDuration();
-        if (position <= 0) return;
-        mHistory.setPosition(position);
-        if (duration > 0) mHistory.setDuration(duration);
-        mHistory.setCreateTime(System.currentTimeMillis());
-        mLastHistorySaveAt = System.currentTimeMillis();
+        if (!updatePlaybackHistory(position, duration)) return;
+        markHistoryChanged(System.currentTimeMillis());
         saveHistorySnapshot(false);
     }
 
@@ -2126,25 +2123,22 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onTimeChanged() {
         onTimeChangeDisplaySpeed();
-        if (mHistory == null) return;
         long position, duration;
         position = getCurrentSwitchPosition();
-        mHistory.setPosition(position);
         duration = mPlayers.getDuration();
-        if (duration > 0) mHistory.setDuration(duration);
-        if (position > 0 && !Setting.isIncognito()) {
+        if (updatePlaybackHistory(position, duration) && !Setting.isIncognito()) {
             long now = System.currentTimeMillis();
             if (now - mLastHistorySaveAt >= 3000) {
                 mLastHistorySaveAt = now;
                 if (position != mLastSavedHistoryPosition || duration != mLastSavedHistoryDuration) {
-                    mHistory.setCreateTime(now);
+                    markHistoryChanged(now);
                     saveHistorySnapshot();
                 }
             }
         }
 
         // 片尾跳过检测
-        if (mHistory.getEnding() > 0 && duration > 0 && mHistory.getEnding() + position >= duration) {
+        if (mHistory != null && mHistory.getEnding() > 0 && duration > 0 && mHistory.getEnding() + position >= duration) {
             mClock.setCallback(null);
             checkNext();
         }
@@ -2201,10 +2195,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void renderPlayback(VodPlaybackState state) {
         if (!isCurrentPlayer() || isBackground()) return;
         boolean commitHistory = shouldCommitHistory(state.getPhase());
-        if (commitHistory && mHistory != null) {
-            if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
-            if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
-        }
+        if (commitHistory) updatePlaybackHistoryFields(state.getPosition(), state.getDuration());
         if (state.getEpisodeIndex() >= 0 && state.getEpisodeIndex() < mEpisodeAdapter.size()) {
             Episode episode = (Episode) mEpisodeAdapter.get(state.getEpisodeIndex());
             mSelection.selectEpisode(state.getEpisodeIndex(), mEpisodeAdapter.size());
@@ -2214,22 +2205,45 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             CharSequence title = getString(R.string.detail_title, mBinding.name.getText(), state.getEpisode().getName());
             setPlainTextIfChanged(mBinding.widget.title, title);
             setPlainTextIfChanged(mBinding.display.title, title);
-            if (commitHistory && mHistory != null && !TextUtils.equals(mHistory.getEpisodeUrl(), episode.getUrl())) {
-                mHistory.setEpisodeUrl(episode.getUrl());
-                mHistory.setVodRemarks(episode.getName());
-                mHistory.setVodFlag(getFlag().getFlag());
-                mHistory.setPosition(state.getPosition());
-                mHistory.setDuration(0);
-                mHistory.setCreateTime(System.currentTimeMillis());
-                mLastHistorySaveAt = System.currentTimeMillis();
-                saveHistorySnapshot();
-            }
+            if (commitHistory) commitEpisodeHistory(episode, state);
         }
         onPlaybackPhase(state.getPhase());
     }
 
+    private boolean updatePlaybackHistory(long position, long duration) {
+        if (mHistory == null || !canCommitCurrentHistory() || position <= 0) return false;
+        updatePlaybackHistoryFields(position, duration);
+        return true;
+    }
+
+    private void updatePlaybackHistoryFields(long position, long duration) {
+        if (mHistory == null) return;
+        if (position > 0) mHistory.setPosition(position);
+        if (duration > 0) mHistory.setDuration(duration);
+    }
+
+    private void commitEpisodeHistory(Episode episode, VodPlaybackState state) {
+        if (mHistory == null || TextUtils.equals(mHistory.getEpisodeUrl(), episode.getUrl())) return;
+        mHistory.setEpisodeUrl(episode.getUrl());
+        mHistory.setVodRemarks(episode.getName());
+        mHistory.setVodFlag(getFlag().getFlag());
+        mHistory.setPosition(state.getPosition());
+        mHistory.setDuration(0);
+        markHistoryChanged(System.currentTimeMillis());
+        saveHistorySnapshot();
+    }
+
+    private void markHistoryChanged(long now) {
+        mHistory.setCreateTime(now);
+        mLastHistorySaveAt = now;
+    }
+
     private boolean shouldCommitHistory(VodPlaybackPhase phase) {
         return phase == VodPlaybackPhase.READY || phase == VodPlaybackPhase.PAUSED || phase == VodPlaybackPhase.ENDED;
+    }
+
+    private boolean canCommitCurrentHistory() {
+        return mPlaybackCoordinator != null && shouldCommitHistory(mPlaybackCoordinator.state().getPhase());
     }
 
     private void checkEnded() {
