@@ -1,6 +1,9 @@
 package com.fongmi.android.tv.player;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.SystemClock;
 import android.util.Log;
@@ -15,22 +18,39 @@ import java.nio.ByteBuffer;
 
 public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
 
-    private static final long VOLUME_CACHE_MS = 1000;
     private static final double TARGET_GAIN = 1D;
+    private static volatile double volume = 1.0D;
+    private static boolean registered;
 
     private final AudioManager manager;
     private double gain;
     private double analyzedRms;
     private double analyzedMaxGain;
-    private volatile double volume;
-    private volatile long lastTime;
-    private boolean updating;
     private long lastLog;
 
     public DynamicVolumeAudioProcessor() {
         this.manager = (AudioManager) App.get().getSystemService(Context.AUDIO_SERVICE);
-        this.volume = 1.0D;
-        App.execute(this::updateVolume);
+        registerReceiver();
+    }
+
+    private void registerReceiver() {
+        if (registered) return;
+        registered = true;
+        updateVolume();
+        App.get().registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                updateVolume();
+            }
+        }, new IntentFilter("android.media.VOLUME_CHANGED_ACTION"));
+    }
+
+    private void updateVolume() {
+        try {
+            int max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            volume = max == 0 ? 0D : manager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) max;
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -41,24 +61,7 @@ public class DynamicVolumeAudioProcessor extends BaseAudioProcessor {
     }
 
     private double getVolume() {
-        if (manager == null) return 1D;
-        long now = SystemClock.elapsedRealtime();
-        if (now - lastTime > VOLUME_CACHE_MS && !updating) {
-            updating = true;
-            App.execute(this::updateVolume);
-        }
         return volume;
-    }
-
-    private void updateVolume() {
-        try {
-            int max = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-            volume = max == 0 ? 0D : manager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) max;
-        } catch (Exception ignored) {
-        } finally {
-            lastTime = SystemClock.elapsedRealtime();
-            updating = false;
-        }
     }
 
     @Override
