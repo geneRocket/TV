@@ -7,7 +7,7 @@ import com.fongmi.android.tv.utils.ThreadPools;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/** Stable session identity whose engine-backed delegate can be replaced for player/decode changes. */
+/** Stable session identity whose externally owned delegate can be replaced for player/decode changes. */
 public final class SwitchablePlayerSession implements PlayerSession {
 
     private final Set<PlaybackObserver> observers = new LinkedHashSet<>();
@@ -22,7 +22,6 @@ public final class SwitchablePlayerSession implements PlayerSession {
         if (released) throw new IllegalStateException("session is released");
         if (next == null) throw new IllegalArgumentException("delegate must not be null");
         if (next == delegate) return;
-        PlayerSession previous = delegate;
         Subscription previousSubscription = delegateSubscription;
         PlaybackState[] initial = new PlaybackState[1];
         boolean[] installed = {false};
@@ -39,11 +38,6 @@ public final class SwitchablePlayerSession implements PlayerSession {
             });
             if (nextSubscription == null) throw new IllegalStateException("delegate returned no subscription");
         } catch (RuntimeException error) {
-            try {
-                next.release();
-            } catch (RuntimeException releaseError) {
-                ThreadPools.log(releaseError, "Replacement player session release failed after observe error.");
-            }
             throw error;
         }
         if (previousSubscription != null) {
@@ -57,13 +51,6 @@ public final class SwitchablePlayerSession implements PlayerSession {
         delegateSubscription = nextSubscription;
         installed[0] = true;
         accept(next, initial[0]);
-        if (previous != null) {
-            try {
-                previous.release();
-            } catch (RuntimeException error) {
-                ThreadPools.log(error, "Previous player session release failed.");
-            }
-        }
     }
 
     @Override public synchronized long prepare(PlaybackItem item) { requireActive(); return delegate.prepare(item); }
@@ -115,11 +102,6 @@ public final class SwitchablePlayerSession implements PlayerSession {
             if (delegateSubscription != null) delegateSubscription.cancel();
         } catch (RuntimeException error) {
             ThreadPools.log(error, "Player session subscription cancel failed.");
-        }
-        try {
-            delegate.release();
-        } catch (RuntimeException error) {
-            ThreadPools.log(error, "Player session release failed.");
         }
         state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
         for (PlaybackObserver observer : new LinkedHashSet<>(observers)) {
