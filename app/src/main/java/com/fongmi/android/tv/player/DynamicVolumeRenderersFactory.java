@@ -20,6 +20,6 @@ public class DynamicVolumeRenderersFactory extends DefaultRenderersFactory {
     @Override
     protected AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioTrackPlaybackParams) {
         AudioProcessor[] audioProcessors = new AudioProcessor[]{new DynamicVolumeAudioProcessor()};
-        return new DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput).setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams).setAudioProcessors(audioProcessors).build();
+        return new DefaultAudioSink.Builder(context).setEnableFloatOutput(false).setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams).setAudioProcessors(audioProcessors).build();
     }
 }

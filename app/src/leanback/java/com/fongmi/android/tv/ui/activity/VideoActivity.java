@@ -2822,6 +2822,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             replacePlayerSession();
             setPlayerView();
             setDecodeView();
+            hideInfoAndCenter();
             mPlaybackCoordinator.reload();
         } else {
             reconcilePlaybackUiState();
