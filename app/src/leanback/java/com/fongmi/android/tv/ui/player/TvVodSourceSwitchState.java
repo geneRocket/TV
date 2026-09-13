@@ -25,10 +25,10 @@ public final class TvVodSourceSwitchState {
         return firstPlayableFlag(flags);
     }
 
-    public void search(String episode, boolean singleEpisode) {
+    public void search(String episode, Flag currentFlag) {
         phase = Phase.SEARCHING;
         this.episode = episode == null ? "" : episode;
-        this.singleEpisode = singleEpisode;
+        this.singleEpisode = isSingleEpisode(currentFlag);
     }
 
     public void resumeSearch() {
@@ -55,6 +55,10 @@ public final class TvVodSourceSwitchState {
 
     private boolean acceptsTargetEpisodeCount(int count) {
         return singleEpisode ? count == 1 : count > 1;
+    }
+
+    private boolean isSingleEpisode(Flag flag) {
+        return flag != null && flag.getEpisodes().size() == 1;
     }
 
     private Flag firstPlayableFlag(List<Flag> flags) {

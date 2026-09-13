@@ -79,7 +79,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
         cancelResolve();
         VodEpisode episode = episodes.get(index);
-        long preserved = preservedPosition(episode);
+        long preserved = preservedPosition(episode, policy);
         long startPosition = startPosition(policy, resumePosition(episode), state.getPosition(), preserved);
         clearPreservedPosition();
         long currentRequest = ++requestId;
@@ -251,8 +251,10 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         return episode.getIdentity().equals(resumeEpisodeId) ? resumePosition : 0;
     }
 
-    private long preservedPosition(VodEpisode episode) {
-        return hasPreservedPosition && episode.getIdentity().equals(preservedEpisodeId) ? preservedPosition : -1;
+    private long preservedPosition(VodEpisode episode, StartPolicy policy) {
+        if (!hasPreservedPosition) return -1;
+        if (policy == StartPolicy.KEEP_CURRENT_POSITION) return preservedPosition;
+        return episode.getIdentity().equals(preservedEpisodeId) ? preservedPosition : -1;
     }
 
     private void clearPreservedPosition() {

@@ -266,6 +266,25 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    public void keepCurrentPositionUsesPreservedPositionAcrossRouteIdentityChange() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 321_000, 900_000));
+
+        coordinator.preservePosition("site\u001fflag-a\u001f第1集", 321_000);
+        coordinator.setEpisodes(Arrays.asList(
+                new VodEpisode("site\u001fflag-b\u001f第1集", "site", "flag-b", "第1集", "episode-1-route-b"),
+                new VodEpisode("site\u001fflag-b\u001f第2集", "site", "flag-b", "第2集", "episode-2-route-b")));
+        coordinator.play(0, StartPolicy.KEEP_CURRENT_POSITION);
+        resolver.resolve(resolver.lastRequestId);
+
+        assertEquals(321_000, engine.request.getStartPosition());
+    }
+
+    @Test
     public void resumePositionIsDeliveredToEngineRequest() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
