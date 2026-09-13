@@ -210,6 +210,7 @@ public final class M3u8AdFilter {
         List<Record> records = parseRecords(content, baseUrl);
         if (isSubtitlePlaylist(content, records)) return toBytesOrOriginal(content, bytes);
 
+        int originalSegmentCount = countSegments(records);
         Set<String> repeatedSegments = collectRepeatedSegments(records);
         records = filterRepeatedDiscontinuityPods(records);
         records = filterAdTagSegments(records, baseUrl);
@@ -220,6 +221,7 @@ public final class M3u8AdFilter {
         // Never hand Exo a playlist that the filter has emptied. A false-positive ad rule
         // should leave the original stream playable rather than turn into a playback error.
         if (!startsWithM3uHeader(filtered) || countSegmentsFromString(filtered) == 0) return toBytesOrOriginal(content, bytes);
+        if (shouldKeepOriginalForHlsIntegrity(content, originalSegmentCount, records)) return toBytesOrOriginal(content, bytes);
 
         logFilterResult(baseUrl, content, filtered);
         return toBytesOrOriginal(filtered, bytes);
@@ -589,6 +591,8 @@ public final class M3u8AdFilter {
         int cueAdSegments = 0;
 
         double dateRangeAdSeconds = 0;
+        boolean dateRangeAdOpen = false;
+        int dateRangeAdSegments = 0;
 
         boolean discontinuityAdOpen = false;
         int discontinuityAdSegments = 0;
@@ -613,6 +617,8 @@ public final class M3u8AdFilter {
                     cueAdSeconds = 0;
                     cueAdSegments = 0;
                     dateRangeAdSeconds = 0;
+                    dateRangeAdOpen = false;
+                    dateRangeAdSegments = 0;
                     discontinuityAdOpen = false;
                     discontinuityAdSegments = 0;
                     pendingAdSignal = false;
@@ -623,6 +629,8 @@ public final class M3u8AdFilter {
                 if (isAdDateRangeTag(record.line)) {
                     double duration = parseDateRangeDuration(record.line);
                     if (duration > 0) dateRangeAdSeconds = Math.max(dateRangeAdSeconds, duration);
+                    dateRangeAdOpen = duration <= 0 && isStrongAdDateRangeTag(record.line);
+                    dateRangeAdSegments = 0;
                     pendingAdSignal = true;
                     pendingAdSignalLines = 0;
                     continue;
@@ -661,6 +669,11 @@ public final class M3u8AdFilter {
                     || (allowWeakDiscontinuitySignal && hasDiscontinuity && record.weakAdNumberUri);
             boolean adByPendingSignal = pendingAdSignal && (explicitAd || record.adLikeUri || hasAdSignalTag(record.tags));
 
+            if (dateRangeAdOpen && dateRangeAdSegments > 0 && hasDiscontinuity) {
+                dateRangeAdOpen = false;
+                dateRangeAdSegments = 0;
+            }
+
             if (explicitAd && hasDiscontinuity) {
                 discontinuityAdOpen = true;
                 discontinuityAdSegments = 0;
@@ -681,6 +694,7 @@ public final class M3u8AdFilter {
             if (explicitAd || adByPendingSignal) {
                 pendingAdSignal = false;
                 pendingAdSignalLines = 0;
+                if (dateRangeAdOpen) dateRangeAdSegments++;
                 if (cueAdOpen) {
                     cueAdSegments++;
                     if (cueAdSeconds > 0) {
@@ -690,6 +704,10 @@ public final class M3u8AdFilter {
                 }
                 if (dateRangeAdSeconds > 0) {
                     dateRangeAdSeconds = nextRemaining(dateRangeAdSeconds, record.duration);
+                }
+                if (dateRangeAdOpen && dateRangeAdSegments >= MAX_UNBOUNDED_CUE_AD_SEGMENTS) {
+                    dateRangeAdOpen = false;
+                    dateRangeAdSegments = 0;
                 }
                 continue;
             }
@@ -716,6 +734,15 @@ public final class M3u8AdFilter {
                     dateRangeAdSeconds = nextRemaining(dateRangeAdSeconds, record.duration);
                 }
 
+                continue;
+            }
+
+            if (dateRangeAdOpen) {
+                dateRangeAdSegments++;
+                if (dateRangeAdSegments >= MAX_UNBOUNDED_CUE_AD_SEGMENTS) {
+                    dateRangeAdOpen = false;
+                    dateRangeAdSegments = 0;
+                }
                 continue;
             }
 
@@ -760,7 +787,7 @@ public final class M3u8AdFilter {
         Map<String, Integer> counts = new HashMap<>();
         for (Record record : records) {
             if (!record.segment) continue;
-            String identity = exactMediaIdentity(record.resolvedUri);
+            String identity = exactMediaIdentity(record);
             if (!isEmpty(identity)) counts.put(identity, counts.getOrDefault(identity, 0) + 1);
         }
 
@@ -785,7 +812,7 @@ public final class M3u8AdFilter {
             }
 
             segmentCount++;
-            String identity = exactMediaIdentity(record.resolvedUri);
+            String identity = exactMediaIdentity(record);
             if (!isEmpty(identity) && repeatedSegments.contains(identity)) {
                 removedSegments++;
                 continue;
@@ -865,6 +892,22 @@ public final class M3u8AdFilter {
 
     static boolean shouldRemoveKeySwitchPod(boolean keySwitchSignal) {
         return keySwitchSignal;
+    }
+
+    private static boolean shouldKeepOriginalForHlsIntegrity(String original, int originalSegmentCount, List<Record> filteredRecords) {
+        if (originalSegmentCount <= countSegments(filteredRecords)) return false;
+        return hasSequenceDerivedAesKey(original);
+    }
+
+    private static boolean hasSequenceDerivedAesKey(String playlist) {
+        if (isEmpty(playlist) || !playlist.contains("#EXT-X-MEDIA-SEQUENCE")) return false;
+        for (String line : playlist.split("\n", -1)) {
+            String value = trimLineEnd(line).trim();
+            if (!value.startsWith("#EXT-X-KEY:")) continue;
+            if ("AES-128".equalsIgnoreCase(parseAttributeString(value, "METHOD"))
+                    && isEmpty(parseAttributeString(value, "IV"))) return true;
+        }
+        return false;
     }
 
     private static List<Record> filterShortAdClusters(List<Record> records) {
@@ -1051,14 +1094,44 @@ public final class M3u8AdFilter {
                 || lower.startsWith("#ext-x-cue:")
                 || lower.startsWith("#ext-cue-out")
                 || lower.startsWith("#ext-x-ad-start")
-                || lower.startsWith("#ext-x-vmap-ad-break");
+                || lower.startsWith("#ext-x-vmap-ad-break")
+                || lower.startsWith("#ext-x-scte35-out")
+                || isScte35CueDirection(line, "out");
     }
 
     private static boolean isCueInTag(String line) {
         String lower = line.toLowerCase(Locale.US);
         return lower.startsWith("#ext-x-cue-in")
                 || lower.startsWith("#ext-cue-in")
-                || lower.startsWith("#ext-x-ad-end");
+                || lower.startsWith("#ext-x-ad-end")
+                || lower.startsWith("#ext-x-scte35-in")
+                || isScte35CueDirection(line, "in");
+    }
+
+    private static boolean isScte35CueDirection(String line, String direction) {
+        if (isEmpty(line) || isEmpty(direction)) return false;
+        String lower = line.toLowerCase(Locale.US);
+        if (!lower.startsWith("#ext-x-scte35:")) return false;
+
+        String cue = parseAttributeString(line, "CUE");
+        if (matchesCueDirection(cue, direction)) return true;
+
+        String type = parseAttributeString(line, "TYPE");
+        if (matchesCueDirection(type, direction)) return true;
+
+        String event = parseAttributeString(line, "EVENT");
+        return matchesCueDirection(event, direction);
+    }
+
+    private static boolean matchesCueDirection(String value, String direction) {
+        if (isEmpty(value)) return false;
+        String[] tokens = value.toLowerCase(Locale.US).split("[^a-z0-9]+");
+        for (String token : tokens) {
+            if (token.equals(direction)) return true;
+            if ("out".equals(direction) && ("cueout".equals(token) || "start".equals(token))) return true;
+            if ("in".equals(direction) && ("cuein".equals(token) || "end".equals(token))) return true;
+        }
+        return false;
     }
 
     private static boolean isAdDateRangeTag(String line) {
@@ -1086,21 +1159,33 @@ public final class M3u8AdFilter {
                 || isLikelyAdResourceUri(assetUri)
                 || isLikelyAdResourceUri(assetList)
                 || isLikelyAdResourceUri(adUrl)
-                || containsCueKeyword(id)
-                || containsCueKeyword(clazz)
-                || containsCueKeyword(type)
                 || !isEmpty(scte)
                 || !isEmpty(scteCmd)
                 || hasAttributeKeyPrefix(line, "X-AD-");
     }
 
-    private static boolean containsCueKeyword(String text) {
-        if (isEmpty(text)) return false;
-        String[] tokens = text.toLowerCase(Locale.US).split("[^a-z0-9]+");
-        for (String token : tokens) {
-            if ("cue".equals(token) || "cueout".equals(token) || "cuein".equals(token)) return true;
-        }
-        return false;
+    private static boolean isStrongAdDateRangeTag(String line) {
+        if (!line.startsWith("#EXT-X-DATERANGE")) return false;
+
+        String clazz = parseAttributeString(line, "CLASS");
+        String asset = parseAttributeString(line, "X-ASSET");
+        String assetUri = parseAttributeString(line, "X-ASSET-URI");
+        String assetList = parseAttributeString(line, "X-ASSET-LIST");
+        String adUrl = parseAttributeString(line, "X-AD-URL");
+        String scte = parseAttributeString(line, "SCTE35-OUT");
+        String scteCmd = parseAttributeString(line, "SCTE35-CMD");
+
+        return containsAdKeyword(clazz)
+                || containsAdKeyword(asset)
+                || containsAdKeyword(assetUri)
+                || containsAdKeyword(assetList)
+                || containsAdKeyword(adUrl)
+                || isLikelyAdResourceUri(assetUri)
+                || isLikelyAdResourceUri(assetList)
+                || isLikelyAdResourceUri(adUrl)
+                || !isEmpty(scte)
+                || !isEmpty(scteCmd)
+                || hasAttributeKeyPrefix(line, "X-AD-");
     }
 
     private static boolean isAdSignalLine(String line) {
@@ -1320,6 +1405,15 @@ public final class M3u8AdFilter {
             if (tag != null && tag.startsWith(prefix)) return true;
         }
         return false;
+    }
+
+    private static String lastTag(List<String> tags, String prefix) {
+        if (tags == null || tags.isEmpty()) return "";
+        String match = "";
+        for (String tag : tags) {
+            if (tag != null && tag.startsWith(prefix)) match = tag;
+        }
+        return match;
     }
 
     private static boolean isLikelyAdSegmentUri(String uri) {
@@ -1559,6 +1653,16 @@ public final class M3u8AdFilter {
         String value = uri.trim();
         int fragment = value.indexOf('#');
         return fragment < 0 ? value : value.substring(0, fragment);
+    }
+
+    private static String exactMediaIdentity(Record record) {
+        String identity = exactMediaIdentity(record.resolvedUri);
+        String range = lastTag(record.tags, "#EXT-X-BYTERANGE");
+        // The same resource commonly backs many distinct byte-range segments. An
+        // omitted offset is derived from the preceding range, so the tag text alone
+        // is not a stable media identity. Keep all byte-range records out of the
+        // repeated-URI heuristic rather than risk deleting valid media.
+        return isEmpty(range) ? identity : "";
     }
 
     private static double parseDouble(String value) {

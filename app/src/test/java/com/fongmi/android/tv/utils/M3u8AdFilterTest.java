@@ -226,6 +226,45 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void removesScte35OutIntervalWithNeutralSegmentUris() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXT-X-SCTE35-OUT:DURATION=12,SCTE35=\"/DAvAAAAAAAAAP/wFAUAAAAEf+//yBysAAA==\"\n"
+                + segment(4.0, "stitched/clip-1.ts")
+                + "#EXT-X-SCTE35-OUT-CONT:ElapsedTime=4,Duration=12,SCTE35=\"/DAvAAAAAAAAAP/wFAUAAAAEf+//yBysAAA==\"\n"
+                + segment(4.0, "stitched/clip-2.ts")
+                + "#EXT-X-SCTE35-OUT-CONT:ElapsedTime=8,Duration=12,SCTE35=\"/DAvAAAAAAAAAP/wFAUAAAAEf+//yBysAAA==\"\n"
+                + segment(4.0, "stitched/clip-3.ts")
+                + "#EXT-X-SCTE35-IN\n"
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("stitched/clip-1.ts"));
+        assertFalse(filtered.contains("stitched/clip-3.ts"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
+    public void preservesScte35MetadataWithoutOutDirection() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXT-X-SCTE35:SCTE35=\"/DAvAAAAAAAAAP/wFAUAAAAEf+//yBysAAA==\"\n"
+                + segment(5.0, "main-middle.ts")
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-middle.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+    }
+
+    @Test
     public void commonCdnQueryKeysAreNotAdsByThemselves() {
         assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?vid=movie&output=hls&sz=720"));
         assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?adid=123"));
@@ -335,6 +374,46 @@ public class M3u8AdFilterTest {
         assertFalse(filtered.contains("X-ASSET-URI"));
         assertTrue(filtered.contains("main-before.ts"));
         assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
+    public void removesStrongAdDateRangeWithoutDurationUntilNextDiscontinuity() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://cdn.example/movie/main-before.ts")
+                + "#EXT-X-DATERANGE:ID=\"stitched-1\",CLASS=\"com.apple.hls.interstitial\",START-DATE=\"2026-08-15T00:00:00Z\",X-ASSET-URI=\"https://ads.example/vmap/break.m3u8\"\n"
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(4.0, "https://stitched-cdn.example/neutral/clip-1.ts")
+                + segment(4.0, "https://stitched-cdn.example/neutral/clip-2.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(5.0, "https://cdn.example/movie/main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("neutral/clip-1.ts"));
+        assertFalse(filtered.contains("neutral/clip-2.ts"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+    }
+
+    @Test
+    public void preservesWeakDateRangeWithoutDuration() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXT-X-DATERANGE:ID=\"cue-1\",CLASS=\"chapter\",START-DATE=\"2026-08-15T00:00:00Z\"\n"
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(5.0, "chapter-clip-1.ts")
+                + segment(5.0, "chapter-clip-2.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertTrue(filtered.contains("chapter-clip-1.ts"));
+        assertTrue(filtered.contains("chapter-clip-2.ts"));
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
     }
 
     @Test
@@ -570,6 +649,45 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void preservesRepeatedByteRangeSegmentsOnSameResource() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-VERSION:4\n"
+                + "#EXT-X-BYTERANGE:100@0\n"
+                + segment(5.0, "https://cdn.example/video/media.ts")
+                + "#EXT-X-BYTERANGE:100@100\n"
+                + segment(5.0, "https://cdn.example/video/media.ts")
+                + "#EXT-X-BYTERANGE:100@200\n"
+                + segment(5.0, "https://cdn.example/video/media.ts")
+                + segment(5.0, "https://cdn.example/video/main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertTrue(filtered.contains("#EXT-X-BYTERANGE:100@0"));
+        assertTrue(filtered.contains("#EXT-X-BYTERANGE:100@200"));
+    }
+
+    @Test
+    public void preservesImplicitRepeatedByteRangeSegmentsOnSameResource() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-VERSION:4\n"
+                + "#EXT-X-BYTERANGE:100@0\n"
+                + segment(5.0, "https://cdn.example/video/media.ts")
+                + "#EXT-X-BYTERANGE:100\n"
+                + segment(5.0, "https://cdn.example/video/media.ts")
+                + "#EXT-X-BYTERANGE:100\n"
+                + segment(5.0, "https://cdn.example/video/media.ts")
+                + segment(5.0, "https://cdn.example/video/main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(3, countOccurrences(filtered, "https://cdn.example/video/media.ts\n"));
+    }
+
+    @Test
     public void preservesRealLoneAdNumberFilenameCollisions() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://cdn.example/202604/15/main001.ts")
@@ -727,6 +845,62 @@ public class M3u8AdFilterTest {
         assertFalse(filtered.contains("METHOD=NONE"));
         assertTrue(filtered.contains("main-1.ts"));
         assertTrue(filtered.contains("main-4.ts"));
+    }
+
+    @Test
+    public void preservesSequenceDerivedEncryptedPlaylistWhenFilteringWouldShiftIv() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-VERSION:3\n"
+                + "#EXT-X-MEDIA-SEQUENCE:100\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\"\n"
+                + segment(5.0, "main-1.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "main-2.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "main-3.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(2, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
+        assertTrue(filtered.contains("#EXT-X-MEDIA-SEQUENCE:100"));
+    }
+
+    @Test
+    public void keyUriContainingIvTextDoesNotPretendToProvideExplicitIv() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-VERSION:3\n"
+                + "#EXT-X-MEDIA-SEQUENCE:100\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key?iv=value\"\n"
+                + segment(5.0, "main-1.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "main-2.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "main-3.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+    }
+
+    @Test
+    public void explicitIvStillAllowsRepeatedSegmentFiltering() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-VERSION:3\n"
+                + "#EXT-X-MEDIA-SEQUENCE:100\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\",IV=0x1\n"
+                + segment(5.0, "main-1.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "main-2.ts")
+                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "main-3.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertEquals(0, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
     }
 
     @Test
