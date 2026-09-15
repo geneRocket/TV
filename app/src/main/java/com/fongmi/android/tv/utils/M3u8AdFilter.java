@@ -24,6 +24,8 @@ public final class M3u8AdFilter {
     private static final int SUBTITLE_WHITELIST_MAX = 512;
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
     private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
+    private static final int MAX_EDGE_POD_SEGMENTS = 20;
+    private static final double MAX_EDGE_POD_SECONDS = 90;
     private static final int MAX_LOG_CONTENT_CHARS = 8000;
     private static final int URI_AD_LIKE = 1;
     private static final int URI_STRONG_AD = 1 << 1;
@@ -132,6 +134,9 @@ public final class M3u8AdFilter {
         add("adpod");
         add("ad_pod");
         add("ad-pod");
+        add("adtagurl");
+        add("ad_tag_url");
+        add("ad-tag-url");
         add("adsystem");
         add("ad_system");
         add("ad-system");
@@ -215,6 +220,7 @@ public final class M3u8AdFilter {
         records = filterRepeatedDiscontinuityPods(records);
         records = filterAdTagSegments(records, baseUrl);
         records = filterShortAdClusters(records);
+        records = filterEdgeDiscontinuityPods(records);
         records = filterRepeatedSegments(records, repeatedSegments);
 
         String filtered = filterMinorHostSegments(records, content);
@@ -411,6 +417,7 @@ public final class M3u8AdFilter {
             if (line.startsWith("#EXT-X-MEDIA:")) {
                 String type = parseAttributeString(line, "TYPE");
                 String uri = parseAttributeString(line, "URI");
+                String name = parseAttributeString(line, "NAME");
 
                 if ("SUBTITLES".equalsIgnoreCase(type) || "CLOSED-CAPTIONS".equalsIgnoreCase(type)) {
                     continue;
@@ -418,7 +425,7 @@ public final class M3u8AdFilter {
 
                 String groupKey = mediaGroupKey(type, parseAttributeString(line, "GROUP-ID"));
                 boolean hasAlternative = mediaGroupCounts.getOrDefault(groupKey, 0) > 1;
-                if (hasAlternative && !isEmpty(uri) && isLikelyAdPlaylistUri(uri, baseUrl)) {
+                if (hasAlternative && !isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsAdKeyword(name))) {
                     remove[i] = true;
                 }
                 continue;
@@ -867,6 +874,90 @@ public final class M3u8AdFilter {
         return kept;
     }
 
+    private static List<Record> filterEdgeDiscontinuityPods(List<Record> records) {
+        if (records == null || records.isEmpty()) return records;
+
+        List<Period> periods = collectPeriods(records);
+        if (periods.size() < 2) return records;
+
+        int segmentCount = countSegments(records);
+        boolean[] remove = new boolean[records.size()];
+        int removedSegments = 0;
+
+        Period first = periods.get(0);
+        Period second = periods.get(1);
+        if (shouldRemoveEdgePod(first, second, segmentCount)) {
+            removedSegments += markPeriodRemoved(remove, records, first);
+        }
+
+        Period last = periods.get(periods.size() - 1);
+        Period previous = periods.get(periods.size() - 2);
+        if (last != first && shouldRemoveEdgePod(last, previous, segmentCount)) {
+            removedSegments += markPeriodRemoved(remove, records, last);
+        }
+
+        if (removedSegments <= 0 || removedSegments >= segmentCount) return records;
+
+        List<Record> kept = new ArrayList<>(records.size());
+        for (int i = 0; i < records.size(); i++) if (!remove[i]) kept.add(records.get(i));
+        return kept;
+    }
+
+    private static List<Period> collectPeriods(List<Record> records) {
+        List<Period> periods = new ArrayList<>();
+        int start = -1;
+        Period current = null;
+
+        for (int i = 0; i < records.size(); i++) {
+            Record record = records.get(i);
+            if (!record.segment) continue;
+
+            boolean boundary = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
+            if (current != null && boundary) {
+                periods.add(current.end(i));
+                current = null;
+            }
+
+            if (current == null) {
+                start = i;
+                current = new Period(start);
+            }
+
+            current.add(record);
+        }
+
+        if (current != null) periods.add(current.end(records.size()));
+        return periods;
+    }
+
+    private static boolean shouldRemoveEdgePod(Period candidate, Period neighbor, int segmentCount) {
+        if (candidate == null || neighbor == null) return false;
+        if (segmentCount < 6) return false;
+        if (candidate.segments <= 0 || candidate.segments > MAX_EDGE_POD_SEGMENTS) return false;
+        if (candidate.duration <= 0 || candidate.duration > MAX_EDGE_POD_SECONDS) return false;
+        if (candidate.segments * 3 > segmentCount) return false;
+        if (neighbor.segments < Math.max(3, candidate.segments)) return false;
+        return isDistinctPeriod(candidate, neighbor);
+    }
+
+    private static boolean isDistinctPeriod(Period a, Period b) {
+        if (!isEmpty(a.host) && !isEmpty(b.host) && !a.host.equals(b.host)) return true;
+        if (!isEmpty(a.directory) && !isEmpty(b.directory) && !a.directory.equals(b.directory)) {
+            return a.duration <= 60 || b.segments >= a.segments * 3;
+        }
+        return false;
+    }
+
+    private static int markPeriodRemoved(boolean[] remove, List<Record> records, Period period) {
+        int removed = 0;
+        for (int i = period.start; i < period.end; i++) {
+            if (!records.get(i).segment) continue;
+            remove[i] = true;
+            removed++;
+        }
+        return removed;
+    }
+
     private static void addPod(List<Pod> pods, List<Record> records, int start, int end) {
         Pod pod = Pod.create(records, start, end);
         if (pod != null) pods.add(pod);
@@ -1060,7 +1151,8 @@ public final class M3u8AdFilter {
                 || line.startsWith("#EXT-X-GAP")
                 || line.startsWith("#EXT-X-PROGRAM-DATE-TIME")
                 || line.startsWith("#EXT-X-KEY:")
-                || line.startsWith("#EXT-X-MAP:");
+                || line.startsWith("#EXT-X-MAP:")
+                || isExplicitAdTag(line);
     }
 
     private static boolean isPartTag(String line) {
@@ -1143,6 +1235,9 @@ public final class M3u8AdFilter {
         String asset = parseAttributeString(line, "X-ASSET");
         String assetUri = parseAttributeString(line, "X-ASSET-URI");
         String assetList = parseAttributeString(line, "X-ASSET-LIST");
+        String contentType = parseAttributeString(line, "X-CONTENT-TYPE");
+        String placement = parseAttributeString(line, "X-PLACEMENT");
+        String playbackRestriction = parseAttributeString(line, "X-PLAYBACK-RESTRICTION");
         String adUrl = parseAttributeString(line, "X-AD-URL");
         String adId = parseAttributeString(line, "X-AD-ID");
         String scte = parseAttributeString(line, "SCTE35-OUT");
@@ -1154,6 +1249,9 @@ public final class M3u8AdFilter {
                 || containsAdKeyword(asset)
                 || containsAdKeyword(assetUri)
                 || containsAdKeyword(assetList)
+                || containsAdKeyword(contentType)
+                || containsAdKeyword(placement)
+                || containsAdKeyword(playbackRestriction)
                 || containsAdKeyword(adUrl)
                 || containsAdKeyword(adId)
                 || isLikelyAdResourceUri(assetUri)
@@ -1171,6 +1269,9 @@ public final class M3u8AdFilter {
         String asset = parseAttributeString(line, "X-ASSET");
         String assetUri = parseAttributeString(line, "X-ASSET-URI");
         String assetList = parseAttributeString(line, "X-ASSET-LIST");
+        String contentType = parseAttributeString(line, "X-CONTENT-TYPE");
+        String placement = parseAttributeString(line, "X-PLACEMENT");
+        String playbackRestriction = parseAttributeString(line, "X-PLAYBACK-RESTRICTION");
         String adUrl = parseAttributeString(line, "X-AD-URL");
         String scte = parseAttributeString(line, "SCTE35-OUT");
         String scteCmd = parseAttributeString(line, "SCTE35-CMD");
@@ -1179,6 +1280,9 @@ public final class M3u8AdFilter {
                 || containsAdKeyword(asset)
                 || containsAdKeyword(assetUri)
                 || containsAdKeyword(assetList)
+                || containsAdKeyword(contentType)
+                || containsAdKeyword(placement)
+                || containsAdKeyword(playbackRestriction)
                 || containsAdKeyword(adUrl)
                 || isLikelyAdResourceUri(assetUri)
                 || isLikelyAdResourceUri(assetList)
@@ -1526,6 +1630,7 @@ public final class M3u8AdFilter {
                 String value = safeDecode(uri.substring(equals + 1, separator)).toLowerCase(Locale.US);
                 if (containsAdKeyword(value)) return true;
             }
+            if (equals < separator && isLikelyAdQueryValueResource(uri.substring(equals + 1, separator))) return true;
             start = separator + 1;
         }
 
@@ -1539,7 +1644,31 @@ public final class M3u8AdFilter {
                 || "category".equals(key)
                 || "asset".equals(key)
                 || "content".equals(key)
-                || "label".equals(key);
+                || "content_type".equals(key)
+                || "content-type".equals(key)
+                || "cust_params".equals(key)
+                || "cust-params".equals(key)
+                || "event".equals(key)
+                || "iu".equals(key)
+                || "kind".equals(key)
+                || "label".equals(key)
+                || "marker".equals(key)
+                || "placement".equals(key)
+                || "purpose".equals(key);
+    }
+
+    private static boolean isLikelyAdQueryValueResource(String value) {
+        String decoded = safeDecode(value).toLowerCase(Locale.US).trim();
+        if (isEmpty(decoded)) return false;
+        if (!decoded.startsWith("http://")
+                && !decoded.startsWith("https://")
+                && !decoded.startsWith("//")
+                && !decoded.contains("/")
+                && !decoded.contains(".m3u")
+                && !decoded.contains(".ts")
+                && !decoded.contains(".m4s")
+                && !decoded.contains(".mp4")) return false;
+        return isLikelyAdResourceUri(decoded);
     }
 
     private static boolean isEmpty(CharSequence value) {
@@ -1848,5 +1977,66 @@ public final class M3u8AdFilter {
             }
             return key;
         }
+    }
+
+    private static class Period {
+
+        private final int start;
+        private int end;
+        private int segments;
+        private double duration;
+        private String host = "";
+        private String directory = "";
+        private final Map<String, Integer> hostCounts = new HashMap<>();
+        private final Map<String, Integer> directoryCounts = new HashMap<>();
+
+        private Period(int start) {
+            this.start = start;
+        }
+
+        private void add(Record record) {
+            segments++;
+            duration += record.duration;
+            if (!isEmpty(record.host)) {
+                hostCounts.put(record.host, hostCounts.getOrDefault(record.host, 0) + 1);
+                host = dominant(hostCounts, segments);
+            }
+            String dir = directoryIdentity(record.resolvedUri);
+            if (!isEmpty(dir)) {
+                directoryCounts.put(dir, directoryCounts.getOrDefault(dir, 0) + 1);
+                directory = dominant(directoryCounts, segments);
+            }
+        }
+
+        private Period end(int end) {
+            this.end = end;
+            return this;
+        }
+
+        private static String dominant(Map<String, Integer> counts, int total) {
+            String value = "";
+            int max = 0;
+            for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+                if (entry.getValue() > max) {
+                    value = entry.getKey();
+                    max = entry.getValue();
+                }
+            }
+            return max * 2 >= total ? value : "";
+        }
+    }
+
+    private static String directoryIdentity(String uri) {
+        if (isEmpty(uri)) return "";
+        String path;
+        try {
+            path = new URI(uri).getRawPath();
+        } catch (Throwable ignored) {
+            path = stripQueryAndFragment(uri);
+        }
+        if (isEmpty(path)) return "";
+        int slash = path.lastIndexOf('/');
+        if (slash <= 0) return "";
+        return path.substring(0, slash).toLowerCase(Locale.US);
     }
 }

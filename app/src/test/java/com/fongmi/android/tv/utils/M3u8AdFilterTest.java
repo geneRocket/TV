@@ -248,6 +248,28 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void removesCueOutContTagPlacedBetweenExtinfAndUri() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXTINF:4.0,\n"
+                + "#EXT-X-CUE-OUT-CONT:ElapsedTime=4,Duration=12,SCTE35=\"/DAvAAAAAAAAAP/wFAUAAAAEf+//yBysAAA==\"\n"
+                + "neutral-ad-1.ts\n"
+                + "#EXTINF:4.0,\n"
+                + "#EXT-X-CUE-OUT-CONT:ElapsedTime=8,Duration=12,SCTE35=\"/DAvAAAAAAAAAP/wFAUAAAAEf+//yBysAAA==\"\n"
+                + "neutral-ad-2.ts\n"
+                + "#EXT-X-CUE-IN\n"
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("neutral-ad-1.ts"));
+        assertFalse(filtered.contains("neutral-ad-2.ts"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
     public void preservesScte35MetadataWithoutOutDirection() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "main-before.ts")
@@ -269,7 +291,31 @@ public class M3u8AdFilterTest {
         assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?vid=movie&output=hls&sz=720"));
         assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?adid=123"));
         assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?category=pre%72oll"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?placement=midroll"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?kind=preroll"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?content_type=advertisement"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?u=https%3A%2F%2Fads.example%2Fvast%2Fad-1.ts"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?iu=%2F123%2Fmidroll"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?cust_params=slot%3Dpreroll"));
         assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?type=video#label=ad"));
+        assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?u=https%3A%2F%2Fcdn.example%2Fmovie%2Fmain-1.ts"));
+    }
+
+    @Test
+    public void removesSegmentsWithAdResourceHiddenInGenericQueryValue() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://cdn.example/movie/main-1.ts")
+                + segment(5.0, "https://cdn.example/proxy.ts?u=https%3A%2F%2Fpubads.g.doubleclick.net%2Fgampad%2Fad-1.ts")
+                + segment(5.0, "https://cdn.example/proxy.ts?redirect=%2Fvast%2Fad-2.ts")
+                + segment(5.0, "https://cdn.example/movie/main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("pubads.g.doubleclick"));
+        assertFalse(filtered.contains("redirect=%2Fvast%2Fad-2.ts"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-2.ts"));
     }
 
     @Test
@@ -283,6 +329,21 @@ public class M3u8AdFilterTest {
         String filtered = M3u8AdFilter.filterAdVariantPlaylists(playlist, "https://video.example/master.m3u8");
 
         assertFalse(filtered.contains("ads/audio.m3u8"));
+        assertTrue(filtered.contains("audio/main.m3u8"));
+        assertTrue(filtered.contains("video/main.m3u8"));
+    }
+
+    @Test
+    public void removesAdMediaRenditionMarkedOnlyByName() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Advertisement\",URI=\"audio/track-2.m3u8\"\n"
+                + "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Main\",URI=\"audio/main.m3u8\"\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=1000000,AUDIO=\"audio\"\n"
+                + "video/main.m3u8\n";
+
+        String filtered = M3u8AdFilter.filterAdVariantPlaylists(playlist, "https://video.example/master.m3u8");
+
+        assertFalse(filtered.contains("track-2.m3u8"));
         assertTrue(filtered.contains("audio/main.m3u8"));
         assertTrue(filtered.contains("video/main.m3u8"));
     }
@@ -372,6 +433,24 @@ public class M3u8AdFilterTest {
 
         assertFalse(filtered.contains("preroll/ad-1.ts"));
         assertFalse(filtered.contains("X-ASSET-URI"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
+    public void removesInterstitialDateRangeMarkedByContentType() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "main-before.ts")
+                + "#EXT-X-DATERANGE:ID=\"splice-1\",START-DATE=\"2026-08-15T00:00:00Z\",DURATION=10,X-CONTENT-TYPE=\"ADVERTISEMENT\",X-PLACEMENT=\"midroll\"\n"
+                + segment(5.0, "neutral-insert-1.ts")
+                + segment(5.0, "neutral-insert-2.ts")
+                + segment(5.0, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("neutral-insert-1.ts"));
+        assertFalse(filtered.contains("X-CONTENT-TYPE"));
         assertTrue(filtered.contains("main-before.ts"));
         assertTrue(filtered.contains("main-after.ts"));
     }
@@ -578,6 +657,48 @@ public class M3u8AdFilterTest {
         assertTrue(filtered.contains("insert.example/clip-1.ts"));
         assertTrue(filtered.contains("insert.example/clip-2.ts"));
         assertTrue(filtered.contains("main-8.ts"));
+    }
+
+    @Test
+    public void removesShortLeadingPodOnDifferentHostBeforeMainContent() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://insert.example/opening/clip-1.ts")
+                + segment(5.0, "https://insert.example/opening/clip-2.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(5.0, "https://main.example/movie/main-1.ts")
+                + segment(5.0, "https://main.example/movie/main-2.ts")
+                + segment(5.0, "https://main.example/movie/main-3.ts")
+                + segment(5.0, "https://main.example/movie/main-4.ts")
+                + segment(5.0, "https://main.example/movie/main-5.ts")
+                + segment(5.0, "https://main.example/movie/main-6.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("insert.example/opening"));
+        assertTrue(filtered.contains("main.example/movie/main-1.ts"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+    }
+
+    @Test
+    public void removesShortTrailingPodOnDifferentHostAfterMainContent() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://main.example/movie/main-1.ts")
+                + segment(5.0, "https://main.example/movie/main-2.ts")
+                + segment(5.0, "https://main.example/movie/main-3.ts")
+                + segment(5.0, "https://main.example/movie/main-4.ts")
+                + segment(5.0, "https://main.example/movie/main-5.ts")
+                + segment(5.0, "https://main.example/movie/main-6.ts")
+                + "#EXT-X-DISCONTINUITY\n"
+                + segment(5.0, "https://insert.example/closing/clip-1.ts")
+                + segment(5.0, "https://insert.example/closing/clip-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("insert.example/closing"));
+        assertTrue(filtered.contains("main.example/movie/main-6.ts"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
     }
 
     @Test
