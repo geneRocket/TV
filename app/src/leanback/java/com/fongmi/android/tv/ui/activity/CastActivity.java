@@ -334,8 +334,10 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onActionEvent(ActionEvent event) {
         if (!isCurrentPlayer()) return;
-        if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
-            onKeyCenter();
+        if (ActionEvent.PLAY.equals(event.getAction())) {
+            onPlay();
+        } else if (ActionEvent.PAUSE.equals(event.getAction())) {
+            onPaused();
         } else if (ActionEvent.STOP.equals(event.getAction())) {
             finish();
         }

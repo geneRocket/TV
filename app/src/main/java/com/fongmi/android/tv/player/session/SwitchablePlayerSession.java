@@ -22,6 +22,7 @@ public final class SwitchablePlayerSession implements PlayerSession {
         if (released) throw new IllegalStateException("session is released");
         if (next == null) throw new IllegalArgumentException("delegate must not be null");
         if (next == delegate) return;
+        PlayerSession previous = delegate;
         Subscription previousSubscription = delegateSubscription;
         PlaybackState[] initial = new PlaybackState[1];
         boolean[] installed = {false};
@@ -38,6 +39,7 @@ public final class SwitchablePlayerSession implements PlayerSession {
             });
             if (nextSubscription == null) throw new IllegalStateException("delegate returned no subscription");
         } catch (RuntimeException error) {
+            releaseDelegate(next);
             throw error;
         }
         if (previousSubscription != null) {
@@ -51,6 +53,7 @@ public final class SwitchablePlayerSession implements PlayerSession {
         delegateSubscription = nextSubscription;
         installed[0] = true;
         accept(next, initial[0]);
+        releaseDelegate(previous);
     }
 
     @Override public synchronized long prepare(PlaybackItem item) { requireActive(); return delegate.prepare(item); }
@@ -103,6 +106,7 @@ public final class SwitchablePlayerSession implements PlayerSession {
         } catch (RuntimeException error) {
             ThreadPools.log(error, "Player session subscription cancel failed.");
         }
+        releaseDelegate(delegate);
         state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
         for (PlaybackObserver observer : new LinkedHashSet<>(observers)) {
             try {
@@ -111,6 +115,15 @@ public final class SwitchablePlayerSession implements PlayerSession {
             }
         }
         observers.clear();
+    }
+
+    private void releaseDelegate(PlayerSession target) {
+        if (target == null) return;
+        try {
+            target.release();
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Player session release failed.");
+        }
     }
 
     private void requireActive() {

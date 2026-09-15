@@ -807,8 +807,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onActionEvent(ActionEvent event) {
         if (!isCurrentPlayer()) return;
-        if (ActionEvent.PLAY.equals(event.getAction()) || ActionEvent.PAUSE.equals(event.getAction())) {
-            checkPlay();
+        if (ActionEvent.PLAY.equals(event.getAction())) {
+            onPlay();
+        } else if (ActionEvent.PAUSE.equals(event.getAction())) {
+            onPaused();
         } else if (ActionEvent.NEXT.equals(event.getAction())) {
             nextChannel();
         } else if (ActionEvent.PREV.equals(event.getAction())) {

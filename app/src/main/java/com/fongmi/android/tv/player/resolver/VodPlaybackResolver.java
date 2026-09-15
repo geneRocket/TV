@@ -69,6 +69,10 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
             if (result == null) throw new IllegalStateException("playback gateway returned null");
             if (!activate(task)) return;
             resultPrepared.accept(result);
+            if (closed || task.cancelled) {
+                finish(task);
+                return;
+            }
             sourceResolver.resolve(result, useParse.test(result), false, new PlaybackSourceResolver.Callback() {
                 @Override public void onResolved(ResolvedMedia media) {
                     if (closed || task.cancelled) {

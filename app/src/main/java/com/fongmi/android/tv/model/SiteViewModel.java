@@ -24,10 +24,13 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 import okhttp3.Call;
 
 public class SiteViewModel extends BaseSiteViewModel {
+
+    private static final int CANCELLED_SEARCH_TOKEN_LIMIT = 128;
 
     private final MutableLiveData<Episode> ep;
     private final MutableLiveData<Episode> episode;
@@ -38,6 +41,7 @@ public class SiteViewModel extends BaseSiteViewModel {
     private final TaskScope downloadRequests;
     private final ConcurrentHashMap<String, Set<Call>> activeSearchCalls = new ConcurrentHashMap<>();
     private final Set<String> cancelledSearchTokens = ConcurrentHashMap.newKeySet();
+    private final ConcurrentLinkedDeque<String> cancelledSearchTokenOrder = new ConcurrentLinkedDeque<>();
 
     private static final String REQUEST_DOWNLOAD = "download";
     private static final String REQUEST_ACTION = "action";
@@ -161,10 +165,19 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     public void cancelSearch(String token) {
         if (token == null) return;
-        cancelledSearchTokens.add(token);
+        markSearchCancelled(token);
         Set<Call> calls = activeSearchCalls.remove(token);
         if (calls == null) return;
         for (Call call : calls) call.cancel();
+    }
+
+    private void markSearchCancelled(String token) {
+        if (!cancelledSearchTokens.add(token)) return;
+        cancelledSearchTokenOrder.addLast(token);
+        while (cancelledSearchTokenOrder.size() > CANCELLED_SEARCH_TOKEN_LIMIT) {
+            String expired = cancelledSearchTokenOrder.pollFirst();
+            if (expired != null) cancelledSearchTokens.remove(expired);
+        }
     }
 
     public void finishSearch(String token) {
@@ -255,6 +268,7 @@ public class SiteViewModel extends BaseSiteViewModel {
         for (String token : activeSearchCalls.keySet()) cancelSearch(token);
         activeSearchCalls.clear();
         cancelledSearchTokens.clear();
+        cancelledSearchTokenOrder.clear();
         downloadRequests.close();
         super.onCleared();
     }

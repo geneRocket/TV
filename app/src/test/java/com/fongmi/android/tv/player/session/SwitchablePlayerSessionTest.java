@@ -125,6 +125,23 @@ public class SwitchablePlayerSessionTest {
     }
 
     @Test
+    public void failedReplacementKeepsPreviousDelegateSubscribed() {
+        FakeSession first = new FakeSession();
+        FakeSession broken = new FakeSession();
+        broken.observeError = new IllegalStateException("subscribe failed");
+        SwitchablePlayerSession session = new SwitchablePlayerSession(first);
+
+        try {
+            session.replace(broken);
+        } catch (IllegalStateException expected) {
+            assertEquals("subscribe failed", expected.getMessage());
+        }
+        first.emit(PlaybackPhase.READY);
+
+        assertEquals(PlaybackPhase.READY, session.state().getPhase());
+    }
+
+    @Test
     public void missingReplacementSubscriptionLeavesPreviousDelegateUsable() {
         FakeSession first = new FakeSession();
         FakeSession broken = new FakeSession();
