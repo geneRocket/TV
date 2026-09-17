@@ -14,6 +14,7 @@ public final class TvVodPlaybackStateBinder {
         boolean isBackground();
         boolean isBuffering();
         void beginPreparing();
+        void clearPlaybackOverlay();
         void showProgress();
         void stopContentSearch();
         void clearPlaybackTimeout();
@@ -51,6 +52,7 @@ public final class TvVodPlaybackStateBinder {
         cancelBufferingCommit();
         cancelReadyCommit();
         port.beginPreparing();
+        port.clearPlaybackOverlay();
         port.showProgress();
     }
 

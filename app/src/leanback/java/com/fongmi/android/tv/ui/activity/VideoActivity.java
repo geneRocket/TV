@@ -206,6 +206,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             mClock.setCallback(VideoActivity.this);
         }
 
+        @Override public void clearPlaybackOverlay() { hideInfoAndCenter(); }
         @Override public void showProgress() { VideoActivity.this.showProgress(); }
         @Override public void stopContentSearch() { mSourceSearch.stop(); }
         @Override public void clearPlaybackTimeout() { VideoActivity.this.clearPlaybackTimeout(); }

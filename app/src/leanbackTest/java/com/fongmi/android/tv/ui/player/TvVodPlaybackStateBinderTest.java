@@ -54,6 +54,18 @@ public class TvVodPlaybackStateBinderTest {
         assertEquals(1, port.progressShows);
     }
 
+    @Test
+    public void preparingClearsStalePlaybackOverlayBeforeProgress() {
+        FakePort port = new FakePort();
+        FakeScheduler scheduler = new FakeScheduler();
+        TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, scheduler);
+
+        binder.onPreparing();
+
+        assertEquals(1, port.overlayClears);
+        assertEquals(1, port.progressShows);
+    }
+
     private static final class FakeScheduler implements TaskScheduler {
         private final Map<Runnable, Long> tasks = new LinkedHashMap<>();
 
@@ -73,11 +85,13 @@ public class TvVodPlaybackStateBinderTest {
     private static final class FakePort implements TvVodPlaybackStateBinder.Port {
         private boolean buffering;
         private int progressShows;
+        private int overlayClears;
 
         @Override public boolean isBackground() { return false; }
         @Override public boolean isBuffering() { return buffering; }
         @Override public void showProgress() { progressShows++; }
         @Override public void beginPreparing() {}
+        @Override public void clearPlaybackOverlay() { overlayClears++; }
         @Override public void stopContentSearch() {}
         @Override public void clearPlaybackTimeout() {}
         @Override public void updateMetadata() {}
