@@ -17,6 +17,49 @@ import static org.junit.Assert.fail;
 public class VodPlaybackResolverTest {
 
     @Test
+    public void prefetchIsSingleUseAndFresh() throws Exception {
+        checkPrefetch(false, false, 1);
+    }
+
+    @Test
+    public void expiredPrefetchResolvesAgain() throws Exception {
+        checkPrefetch(true, false, 2);
+    }
+
+    @Test
+    public void cancelledPrefetchIsNeverUsed() throws Exception {
+        checkPrefetch(false, true, 2);
+    }
+
+    private void checkPrefetch(boolean expired, boolean cancelled, int expectedCalls) throws Exception {
+        java.util.concurrent.ExecutorService foreground = Executors.newSingleThreadExecutor();
+        java.util.concurrent.ExecutorService background = Executors.newSingleThreadExecutor();
+        java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong();
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        CountDownLatch done = new CountDownLatch(1);
+        VodPlaybackResolver resolver = new VodPlaybackResolver(foreground, Runnable::run,
+                (site, flag, url) -> { calls.incrementAndGet(); return Result.empty(); },
+                result -> { throw new IllegalStateException("stop before Android media preparation"); },
+                result -> false, background, now::get);
+        try {
+            ResolveRequest request = new ResolveRequest(1, "site", "flag", "next-episode");
+            resolver.prefetch(request);
+            background.submit(() -> {}).get(3, TimeUnit.SECONDS);
+            if (expired) now.set(TimeUnit.SECONDS.toNanos(31));
+            if (cancelled) resolver.cancelPrefetch();
+            resolver.resolve(request, new PlaybackResolver.Callback() {
+                @Override public void onResolved(ResolveResult result) { done.countDown(); }
+                @Override public void onFailure(ResolveFailure failure) { done.countDown(); }
+            });
+            assertTrue(done.await(3, TimeUnit.SECONDS));
+            org.junit.Assert.assertEquals(expectedCalls, calls.get());
+        } finally {
+            resolver.close();
+            background.shutdownNow();
+        }
+    }
+
+    @Test
     public void nullGatewayResultIsReportedAsFailure() throws Exception {
         assertFailure((site, flag, url) -> null, result -> {}, result -> false);
     }

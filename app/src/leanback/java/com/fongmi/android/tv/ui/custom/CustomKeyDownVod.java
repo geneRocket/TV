@@ -31,8 +31,8 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     private boolean full;
     private float bright;
     private float volume;
-    private int holdSecond;
-    private boolean isMoveAdd;
+    private final com.fongmi.android.tv.player.RemoteSeekAccumulator seek = new com.fongmi.android.tv.player.RemoteSeekAccumulator();
+    private boolean seeking;
     private final Runnable seekRunnable;
 
     public static CustomKeyDownVod create(Activity activity, View videoView) {
@@ -46,7 +46,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         this.videoView = videoView;
         this.activity = activity;
         this.seekRunnable = () -> {
-            listener.onSeekTo(getDelta(holdSecond, isMoveAdd));
+            listener.onSeekTo(seek.value());
             resetTime();
         };
     }
@@ -74,12 +74,14 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     private void check(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isLeftKey(event)) {
             App.removeCallbacks(seekRunnable);
-            listener.onSeeking(subTime());
+            seeking = true;
+            listener.onSeeking(seek.step(false, event.getRepeatCount(), Constant.INTERVAL_SEEK));
         } else if (event.getAction() == KeyEvent.ACTION_DOWN && KeyUtil.isRightKey(event)) {
             App.removeCallbacks(seekRunnable);
-            listener.onSeeking(addTime());
+            seeking = true;
+            listener.onSeeking(seek.step(true, event.getRepeatCount(), Constant.INTERVAL_SEEK));
         } else if (event.getAction() == KeyEvent.ACTION_UP && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
-            if (holdSecond == 0) return;
+            if (!seeking) return;
             App.removeCallbacks(seekRunnable);
             App.post(seekRunnable, 250);
         } else if (event.getAction() == KeyEvent.ACTION_UP && KeyUtil.isUpKey(event)) {
@@ -129,27 +131,14 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         return true;
     }
 
-    private int addTime() {
-        if (!isMoveAdd) holdSecond = 0;
-        isMoveAdd = true;
-        holdSecond++;
-        return getDelta(holdSecond, isMoveAdd);
-    }
-
-    private int subTime() {
-        if (isMoveAdd) holdSecond = 0;
-        isMoveAdd = false;
-        holdSecond++;
-        return getDelta(holdSecond, isMoveAdd);
-    }
-
     public static int getDelta(int holdSecond, boolean isMoveAdd) {
         int delta = (int) (Math.min(6, Math.max(1, Math.sqrt(holdSecond))) * holdSecond * Constant.INTERVAL_SEEK);
         return isMoveAdd ? delta : -delta;
     }
 
     public void resetTime() {
-        holdSecond = 0;
+        seeking = false;
+        seek.reset();
     }
 
     public void release() {

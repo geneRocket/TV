@@ -38,6 +38,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
     private DialogEpisodeBinding binding;
     private VideoActivity activity;
     private View mFocus1;
+    private View returnFocus;
     private List<Episode> episodes;
     private EpisodePresenter mEpisodePresenter;
     private ArrayObjectAdapter mEpisodeAdapter;
@@ -73,7 +74,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
     }
 
     public EpisodeDialog episodes(List<Episode> episodes) {
-        this.episodes = episodes;
+        this.episodes = new ArrayList<>(episodes);
         return this;
     }
 
@@ -81,6 +82,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
         for (Fragment f : activity.getSupportFragmentManager().getFragments()) if (f instanceof BottomSheetDialogFragment) return;
         show(activity.getSupportFragmentManager(), null);
         this.activity = (VideoActivity) activity;
+        this.returnFocus = activity.getCurrentFocus();
     }
 
     @Override
@@ -100,7 +102,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
                 if (position < 0) return;
-                if (mEpisodeAdapter.size() > getGroupSize()) setEpisodeSelectedPosition(position * getGroupSize());
+                if (binding.array.hasFocus() && mEpisodeAdapter.size() > getGroupSize()) setEpisodeSelectedPosition(position * getGroupSize());
             }
         });
         this.binding.episodeVert.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
@@ -159,6 +161,7 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
         this.binding.episodeVert.post(() -> {
             if (!isAdded() || binding == null) return;
             int position = getEpisodePosition();
+            binding.array.setSelectedPosition(position / getGroupSize());
             setEpisodeSelectedPosition(position);
             View view = binding.episodeVert.getLayoutManager() == null ? null : binding.episodeVert.getLayoutManager().findViewByPosition(position);
             if (view != null) view.requestFocus();
@@ -209,6 +212,13 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
     private void setEpisodeActivated(Episode item) {
         if (!this.activity.isFullscreen() || !item.isActivated()) this.activity.setEpisodeActivated(item);
         this.dismiss();
+    }
+
+    @Override
+    public void onDismiss(@NonNull DialogInterface dialog) {
+        super.onDismiss(dialog);
+        if (returnFocus != null && returnFocus.isAttachedToWindow() && returnFocus.isShown()) returnFocus.requestFocus();
+        returnFocus = null;
     }
 
     @Override

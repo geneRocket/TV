@@ -23,9 +23,63 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     private final Set<Task> tasks = new LinkedHashSet<>();
     private volatile Task activeMediaTask;
     private volatile boolean closed;
+    private final ExecutorService prefetchExecutor;
+    private final java.util.function.LongSupplier clock;
+    private Future<?> prefetch;
+    private long prefetchGeneration;
+    private String cachedKey;
+    // Owned by this resolver until transferred once to the foreground request.
+    private Result cachedResult;
+    private long cachedAt;
+
+    private String cacheKey(ResolveRequest request) {
+        return request.getSiteKey() + "\u001f" + request.getFlag() + "\u001f" + request.getEpisodeUrl();
+    }
+
+    @Override public synchronized void prefetch(ResolveRequest request) {
+        if (closed || prefetch != null) return;
+        long generation = ++prefetchGeneration;
+        prefetch = prefetchExecutor.submit(() -> {
+            try {
+                Result result = gateway.resolve(request.getSiteKey(), request.getFlag(), request.getEpisodeUrl());
+                synchronized (VodPlaybackResolver.this) {
+                    if (closed || generation != prefetchGeneration || Thread.currentThread().isInterrupted()) return;
+                    if (result != null) {
+                        cachedKey = cacheKey(request);
+                        cachedResult = result;
+                        cachedAt = clock.getAsLong();
+                    }
+                }
+            } catch (Exception ignored) {
+                // Speculative work must never trigger playback recovery.
+            }
+        });
+    }
+
+    @Override public synchronized void cancelPrefetch() {
+        prefetchGeneration++;
+        ThreadPools.cancel(prefetchExecutor, prefetch);
+        prefetch = null;
+        cachedKey = null;
+        cachedResult = null;
+    }
+
+    private synchronized Result takePrefetch(ResolveRequest request) {
+        Result value = cacheKey(request).equals(cachedKey) && clock.getAsLong() - cachedAt < 30_000_000_000L ? cachedResult : null;
+        cancelPrefetch();
+        return value;
+    }
 
     public VodPlaybackResolver(ExecutorService executor, Consumer<Runnable> dispatcher, PlaybackGateway gateway,
                                Consumer<Result> resultPrepared, Predicate<Result> useParse) {
+        this(executor, dispatcher, gateway, resultPrepared, useParse, ThreadPools.preloadParse(), System::nanoTime);
+    }
+
+    VodPlaybackResolver(ExecutorService executor, Consumer<Runnable> dispatcher, PlaybackGateway gateway,
+                        Consumer<Result> resultPrepared, Predicate<Result> useParse,
+                        ExecutorService prefetchExecutor, java.util.function.LongSupplier clock) {
+        this.prefetchExecutor = prefetchExecutor;
+        this.clock = clock;
         if (executor == null) throw new IllegalArgumentException("executor must not be null");
         if (dispatcher == null) throw new IllegalArgumentException("dispatcher must not be null");
         if (gateway == null) throw new IllegalArgumentException("gateway must not be null");
@@ -41,12 +95,13 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     @Override public ResolveHandle resolve(ResolveRequest request, Callback callback) {
         if (request == null) throw new IllegalArgumentException("request must not be null");
         if (callback == null) throw new IllegalArgumentException("callback must not be null");
+        Result cached = takePrefetch(request);
         Task task = new Task(request.getRequestId());
         register(task);
         try {
             Future<?> future = executor.submit(() -> {
                 try {
-                    Result result = gateway.resolve(request.getSiteKey(), request.getFlag(), request.getEpisodeUrl());
+                    Result result = cached == null ? gateway.resolve(request.getSiteKey(), request.getFlag(), request.getEpisodeUrl()) : cached;
                     dispatcher.accept(() -> resolveMedia(task, result, callback));
                 } catch (Throwable error) {
                     dispatchFailure(task, callback, error);
@@ -164,6 +219,7 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
     @Override public synchronized void close() {
         if (closed) return;
         closed = true;
+        cancelPrefetch();
         for (Task task : new LinkedHashSet<>(tasks)) cancel(task);
         sourceResolver.close();
         executor.shutdownNow();

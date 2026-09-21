@@ -319,4 +319,7 @@
         <item>選擇字幕</item>
     </string-array>
 
+    <string name="play_recovery_expired">自動恢復逾時，請手動換源或重試</string>
+    <string name="play_recovery_cancelled">已取消自動恢復，可手動換源或重試</string>
+    <string name="play_recovery_running">正在嘗試恢復播放，按返回可取消（最多45秒）</string>
 </resources>

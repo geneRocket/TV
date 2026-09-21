@@ -39,11 +39,14 @@ import java.util.concurrent.TimeoutException;
 
 public class Source {
 
-    private static final int MAX_PRELOAD_TASKS_PER_FLAG = 8;
+    private static final int MAX_PRELOAD_TASKS_PER_FLAG = 2;
     private static final int MAX_PARSE_CACHE_SIZE = 64;
 
     private final List<Extractor> extractors;
     private final Map<String, List<Episode>> parseCache;
+    private final Map<String, Long> cacheTimes = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Set<Future<?>> preloadTasks = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.atomic.AtomicLong preloadGeneration = new java.util.concurrent.atomic.AtomicLong();
     private volatile Extractor activeExtractor;
 
     private static class Loader {
@@ -89,9 +92,10 @@ public class Source {
 
     public void parse(List<Flag> flags) throws Exception {
         if (flags == null || flags.isEmpty()) return;
+        long generation = preloadGeneration.get();
         ExecutorService executor = ThreadPools.preloadParse();
         for (Flag flag : flags) {
-            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+            if (Thread.currentThread().isInterrupted() || generation != preloadGeneration.get()) throw new InterruptedException();
             if (flag == null || flag.getEpisodes() == null || flag.getEpisodes().isEmpty()) continue;
             List<Episode> originals = new ArrayList<>(flag.getEpisodes());
             List<ParseTask> tasks = new ArrayList<>();
@@ -114,20 +118,25 @@ public class Source {
                 List<Future<ParsedEpisodes>> futures = new ArrayList<>(tasks.size());
                 for (ParseTask task : tasks) {
                     try {
-                        futures.add(completed.submit(() -> new ParsedEpisodes(task, task.callable.call())));
+                        Future<ParsedEpisodes> submitted = completed.submit(() -> new ParsedEpisodes(task, task.callable.call()));
+                        futures.add(submitted);
+                        preloadTasks.add(submitted);
+                        if (generation != preloadGeneration.get()) submitted.cancel(true);
                     } catch (RejectedExecutionException error) {
                         ThreadPools.log(error, "Episode preload queue is full; keeping original episode.");
                     }
                 }
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
                 for (int i = 0; i < futures.size(); i++) {
                     try {
-                        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                        if (Thread.currentThread().isInterrupted() || generation != preloadGeneration.get()) throw new InterruptedException();
                         long remaining = deadline - System.nanoTime();
                         if (remaining <= 0) throw new TimeoutException();
                         Future<ParsedEpisodes> future = completed.poll(remaining, TimeUnit.NANOSECONDS);
                         if (future == null) throw new TimeoutException();
+                        preloadTasks.remove(future);
                         ParsedEpisodes parsed = future.get();
+                        if (generation != preloadGeneration.get()) throw new InterruptedException();
                         List<Episode> episodes = parsed.episodes;
                         if (episodes != null && !episodes.isEmpty()) {
                             String key = parsed.task.url;
@@ -149,6 +158,7 @@ public class Source {
                     }
                 }
             }
+            if (generation != preloadGeneration.get()) throw new InterruptedException();
             if (replacements.isEmpty()) continue;
             flag.getEpisodes().clear();
             for (int i = 0; i < originals.size(); i++) {
@@ -160,7 +170,10 @@ public class Source {
     }
 
     private void cancel(List<? extends Future<?>> futures) {
-        for (Future<?> future : futures) ThreadPools.cancel(ThreadPools.preloadParse(), future);
+        for (Future<?> future : futures) {
+            preloadTasks.remove(future);
+            ThreadPools.cancel(ThreadPools.preloadParse(), future);
+        }
     }
 
     public String fetch(Result result) throws Exception {
@@ -185,13 +198,21 @@ public class Source {
         activeExtractor = extractor;
     }
 
+    public void cancelPreloads() {
+        preloadGeneration.incrementAndGet();
+        for (Future<?> future : preloadTasks) ThreadPools.cancel(ThreadPools.preloadParse(), future);
+        preloadTasks.clear();
+    }
+
     public void stop() {
+        cancelPreloads();
         if (extractors == null) return;
         extractors.forEach(Extractor::stop);
         activeExtractor = null;
     }
 
     public void exit() {
+        cancelPreloads();
         if (extractors == null) return;
         parseCache.clear();
         activeExtractor = null;
@@ -234,13 +255,23 @@ public class Source {
     }
 
     private List<Episode> getCachedEpisodes(String url) {
+        Long at = cacheTimes.get(url);
+        if (at == null || System.nanoTime() - at > TimeUnit.MINUTES.toNanos(2)) {
+            parseCache.remove(url);
+            cacheTimes.remove(url);
+            return null;
+        }
         List<Episode> items = parseCache.get(url);
         return items == null ? null : copyEpisodes(items);
     }
 
     private void putCachedEpisodes(String url, List<Episode> episodes) {
         if (url == null || url.isEmpty() || episodes == null || episodes.isEmpty()) return;
-        parseCache.put(url, copyEpisodes(episodes));
+        synchronized (parseCache) {
+            cacheTimes.keySet().retainAll(parseCache.keySet());
+            cacheTimes.put(url, System.nanoTime());
+            parseCache.put(url, copyEpisodes(episodes));
+        }
     }
 
     private List<Episode> copyEpisodes(List<Episode> episodes) {

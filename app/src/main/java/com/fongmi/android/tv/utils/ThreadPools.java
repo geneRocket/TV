@@ -22,6 +22,7 @@ public final class ThreadPools {
     private static final ExecutorService CONFIG = createQueued("config", BUDGET.config);
     private static final ExecutorService CONFIG_LOAD = createQueued("config-load", 1);
     private static final ExecutorService LOADER = createQueued("loader", BUDGET.loader);
+    private static final ExecutorService RECOMMEND = createQueued("recommend", 1);
     private static final ExecutorService SEARCH = createQueued("search", BUDGET.search);
     private static final ExecutorService PARSE = createQueued("parse", BUDGET.parse);
     private static final ExecutorService PRELOAD_PARSE = createQueued("preload-parse", BUDGET.preload);
@@ -92,6 +93,8 @@ public final class ThreadPools {
     public static ExecutorService parse() {
         return PARSE;
     }
+
+    public static ExecutorService recommendations() { return RECOMMEND; }
 
     public static ExecutorService preloadParse() {
         return PRELOAD_PARSE;
@@ -177,7 +180,7 @@ public final class ThreadPools {
     }
 
     private static int threadPriority(String name) {
-        if ("config-load".equals(name) || "config".equals(name) || "parse".equals(name) || "parse-job".equals(name) || name.endsWith("-playback") || name.endsWith("-url")) return Process.THREAD_PRIORITY_DEFAULT;
+        if ("vod-resolver".equals(name) || "config-load".equals(name) || "config".equals(name) || "parse".equals(name) || "parse-job".equals(name) || name.endsWith("-playback") || name.endsWith("-url")) return Process.THREAD_PRIORITY_DEFAULT;
         return Process.THREAD_PRIORITY_BACKGROUND;
     }
 }

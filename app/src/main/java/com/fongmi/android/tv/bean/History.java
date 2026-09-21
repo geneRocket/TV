@@ -46,6 +46,7 @@ public class History {
     private static final Map<String, Long> WRITE_VERSIONS = new ConcurrentHashMap<>();
     private static final ExecutorService WRITE_EXECUTOR = ThreadPools.newSingle("history-write");
     private static final Object WRITE_LOCK = new Object();
+    private static final Object QUEUE_LOCK = new Object();
     private static final long REFRESH_THROTTLE_MS = 1000;
     private static long lastRefreshAt;
     private static final Pattern PATTERN_END = Pattern.compile("(?i)[\\s\\p{P}\\p{S}]+$");
@@ -58,8 +59,10 @@ public class History {
 
     public static void cancelPendingWrites() {
         synchronized (WRITE_LOCK) {
-            for (String key : WRITE_VERSIONS.keySet()) WRITE_VERSIONS.merge(key, 1L, Long::sum);
-            PENDING_WRITES.clear();
+            synchronized (QUEUE_LOCK) {
+                for (String key : WRITE_VERSIONS.keySet()) WRITE_VERSIONS.merge(key, 1L, Long::sum);
+                PENDING_WRITES.clear();
+            }
         }
     }
 
@@ -620,7 +623,7 @@ public class History {
         if (TextUtils.isEmpty(getKey())) return;
         History snapshot = copy(this);
         String key = cacheKey(snapshot.getCid(), snapshot.getKey());
-        synchronized (WRITE_LOCK) {
+        synchronized (QUEUE_LOCK) {
             cache(snapshot);
             long version = WRITE_VERSIONS.merge(key, 1L, Long::sum);
             PENDING_WRITES.put(key, new PendingWrite(snapshot, version));
@@ -638,14 +641,21 @@ public class History {
             PendingWrite pending;
             while ((pending = PENDING_WRITES.remove(key)) != null) {
                 synchronized (WRITE_LOCK) {
-                    if (pending.version == WRITE_VERSIONS.getOrDefault(key, 0L)) {
-                        pending.item.save(false);
-                        notifyHistoryChangedLocked();
+                    synchronized (QUEUE_LOCK) {
+                        if (pending.version != WRITE_VERSIONS.getOrDefault(key, 0L)) continue;
                     }
+                    // Never hold the enqueue lock during disk I/O: lifecycle saves
+                    // must not wait for a slow database transaction on the UI thread.
+                    pending.item.preserveCurrentProgressIfNeeded();
+                    AppDatabase.get().getHistoryDao().insertOrUpdate(pending.item);
+                    synchronized (QUEUE_LOCK) {
+                        if (pending.version == WRITE_VERSIONS.getOrDefault(key, 0L)) cache(pending.item);
+                    }
+                    notifyHistoryChangedLocked();
                 }
             }
         } finally {
-            synchronized (WRITE_LOCK) {
+            synchronized (QUEUE_LOCK) {
                 ACTIVE_WRITES.remove(key);
                 if (PENDING_WRITES.containsKey(key)) scheduleWrite(key);
                 else WRITE_VERSIONS.remove(key);
@@ -690,9 +700,11 @@ public class History {
     }
 
     private static void cancelWrite(String key) {
-        WRITE_VERSIONS.merge(key, 1L, Long::sum);
-        PENDING_WRITES.remove(key);
-        if (!ACTIVE_WRITES.contains(key)) WRITE_VERSIONS.remove(key);
+        synchronized (QUEUE_LOCK) {
+            WRITE_VERSIONS.merge(key, 1L, Long::sum);
+            PENDING_WRITES.remove(key);
+            if (!ACTIVE_WRITES.contains(key)) WRITE_VERSIONS.remove(key);
+        }
     }
 
     public List<History> find() {

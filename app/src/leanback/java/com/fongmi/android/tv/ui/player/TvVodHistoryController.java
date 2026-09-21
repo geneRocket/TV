@@ -59,7 +59,7 @@ public final class TvVodHistoryController {
         if (history == null || Setting.isIncognito()) return false;
         if (!updateProgress(history, canCommit, position, duration)) return false;
         markChanged(history, System.currentTimeMillis());
-        saveSnapshot(history, false);
+        saveSnapshot(history, true);
         return true;
     }
 

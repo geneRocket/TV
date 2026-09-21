@@ -35,6 +35,15 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private boolean acceptingSession;
     private long opening;
     private boolean closed;
+    private com.fongmi.android.tv.utils.TaskScheduler timeoutScheduler;
+    private long timeoutMillis;
+    private Runnable timeoutTask;
+    private long timeoutGeneration;
+    private Runnable prefetchTask;
+    private long prefetchedRequest = -1;
+    private boolean preserveControls;
+    private boolean resumePaused;
+    private float resumeSpeed = 1;
     private String resumeEpisodeId = "";
     private long resumePosition;
     private String preservedEpisodeId = "";
@@ -51,6 +60,81 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         Subscription subscription = session.observe(this::onSessionState);
         if (subscription == null) throw new IllegalStateException("session returned no subscription");
         this.sessionSubscription = subscription;
+    }
+
+    public synchronized void configureTimeout(com.fongmi.android.tv.utils.TaskScheduler scheduler, long millis) {
+        clearTimeout();
+        timeoutScheduler = scheduler;
+        timeoutMillis = Math.max(1, millis);
+    }
+
+    public synchronized void clearTimeout() {
+        timeoutGeneration++;
+        if (timeoutTask != null && timeoutScheduler != null) timeoutScheduler.remove(timeoutTask);
+        timeoutTask = null;
+    }
+
+    public synchronized void cancelPrefetch() {
+        if (prefetchTask != null && timeoutScheduler != null) timeoutScheduler.remove(prefetchTask);
+        prefetchTask = null;
+        resolver.cancelPrefetch();
+    }
+
+    private void updatePrefetch(VodPlaybackPhase phase) {
+        if (phase != VodPlaybackPhase.READY) {
+            if (prefetchTask != null && timeoutScheduler != null) timeoutScheduler.remove(prefetchTask);
+            prefetchTask = null;
+            if (phase != VodPlaybackPhase.RESOLVING) resolver.cancelPrefetch();
+            return;
+        }
+        int next = state.getEpisodeIndex() + 1;
+        if (timeoutScheduler == null || prefetchedRequest == requestId || prefetchTask != null || next >= episodes.size()) return;
+        long expected = requestId;
+        prefetchTask = () -> {
+            synchronized (VodPlaybackCoordinator.this) {
+                prefetchTask = null;
+                if (closed || expected != requestId || state.getPhase() != VodPlaybackPhase.READY) return;
+                if (next >= episodes.size()) return;
+                EngineSnapshot snapshot = session.snapshot();
+                if (snapshot.getDuration() <= 0 || snapshot.getDuration() - snapshot.getPosition() > 20_000) {
+                    updatePrefetch(VodPlaybackPhase.READY);
+                    return;
+                }
+                prefetchedRequest = expected;
+                VodEpisode episode = episodes.get(next);
+                resolver.prefetch(new ResolveRequest(expected, episode.getSiteKey(), episode.getFlag(), episode.getResolverUrl()));
+            }
+        };
+        timeoutScheduler.post(prefetchTask, 5_000);
+    }
+
+    public synchronized void preserveControls(boolean paused, float speed) {
+        if (preserveControls) return;
+        preserveControls = true;
+        resumePaused = paused;
+        resumeSpeed = Float.isFinite(speed) && speed > 0 ? speed : 1;
+    }
+
+    private void updateTimeout(VodPlaybackPhase phase) {
+        boolean waiting = phase == VodPlaybackPhase.RESOLVING || phase == VodPlaybackPhase.PREPARING
+                || phase == VodPlaybackPhase.BUFFERING;
+        if (!waiting) { clearTimeout(); return; }
+        if (timeoutScheduler == null || timeoutTask != null) return;
+        long expected = requestId;
+        long timer = timeoutGeneration;
+        timeoutTask = () -> {
+            synchronized (VodPlaybackCoordinator.this) {
+                if (closed || expected != requestId || timer != timeoutGeneration || timeoutTask == null) return;
+                clearTimeout();
+                requestId++;
+                pendingRequestId = 0;
+                acceptingSession = false;
+                cancelResolve();
+                publish(new VodPlaybackState(VodPlaybackPhase.ERROR, state.getEpisode(), state.getEpisodeIndex(),
+                        state.getPosition(), state.getDuration(), new java.util.concurrent.TimeoutException("Playback timed out")));
+            }
+        };
+        timeoutScheduler.post(timeoutTask, timeoutMillis);
     }
 
     public synchronized void setResumePosition(String episodeId, long position) {
@@ -70,6 +154,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         requireOpen();
         List<VodEpisode> copy = new ArrayList<>(episodes == null ? new ArrayList<>() : episodes);
         if (copy.contains(null)) throw new IllegalArgumentException("episodes must not contain null");
+        cancelPrefetch();
         this.episodes = copy;
     }
 
@@ -82,6 +167,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         requireOpen();
         if (policy == null) throw new IllegalArgumentException("policy must not be null");
         if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
+        clearTimeout();
+        if (policy != StartPolicy.KEEP_CURRENT_POSITION) preserveControls = false;
         long currentPosition = state.getEpisode() == null ? -1 : currentPosition();
         long currentRequest = ++requestId;
         pendingRequestId = currentRequest;
@@ -143,7 +230,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized void pause() { requireOpen(); session.pause(); }
 
-    public synchronized void seekTo(long position) { requireOpen(); session.seekTo(position); }
+    public synchronized void seekTo(long position) { requireOpen(); cancelPrefetch(); session.seekTo(position); }
 
     public synchronized void stop() {
         requireOpen();
@@ -195,11 +282,19 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
             publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, new IllegalStateException("resolver returned an invalid result")));
             return;
         }
+        boolean restore = preserveControls;
+        boolean paused = resumePaused;
+        float speed = resumeSpeed;
+        preserveControls = false;
         try {
             PlaybackItem item = itemFactory.create(episode, resolved.getResult(), startPosition);
             if (closed || expectedRequest != requestId) return;
             acceptingSession = true;
             session.prepare(item);
+            if (!closed && expectedRequest == requestId && restore) {
+                session.setSpeed(speed);
+                if (paused) session.pause();
+            }
         } catch (Throwable error) {
             if (!closed && expectedRequest == requestId) publishPrepareErrorIfNeeded(episode, index, startPosition, error);
         }
@@ -289,6 +384,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     private void publish(VodPlaybackState next) {
         state = next;
+        updateTimeout(next.getPhase());
+        updatePrefetch(next.getPhase());
         for (VodPlaybackObserver observer : new LinkedHashSet<>(observers)) {
             if (state != next) break;
             try {
@@ -308,6 +405,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     public synchronized void close() {
         if (closed) return;
         closed = true;
+        cancelPrefetch();
+        clearTimeout();
         cancelResolve();
         try {
             sessionSubscription.cancel();

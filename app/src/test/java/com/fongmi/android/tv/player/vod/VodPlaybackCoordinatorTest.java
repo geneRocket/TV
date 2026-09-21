@@ -461,6 +461,81 @@ public class VodPlaybackCoordinatorTest {
         assertEquals(VodPlaybackPhase.RESOLVING, coordinator.state().getPhase());
     }
 
+    @Test
+    public void timeoutCoversResolveAndPrepareWithoutRestartingClock() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        Runnable deadline = scheduler.task;
+        resolver.resolve(resolver.lastRequestId);
+        assertTrue(deadline == scheduler.task);
+        deadline.run();
+        assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 0, 100));
+        assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
+    }
+
+    @Test
+    public void oldTimeoutCannotCancelNewEpisode() {
+        ManualResolver resolver = new ManualResolver();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, new FakeEngine());
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        Runnable old = scheduler.task;
+        coordinator.play(1, StartPolicy.FRESH);
+        old.run();
+        assertEquals(VodPlaybackPhase.RESOLVING, coordinator.state().getPhase());
+        assertEquals("episode-2", coordinator.state().getEpisode().getIdentity());
+    }
+
+    @Test
+    public void routeReloadRestoresSpeedAndPauseButNewEpisodeDoesNot() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        coordinator.preserveControls(true, 1.5f);
+        coordinator.reload();
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(1.5f, engine.speed, 0.01f);
+        assertEquals(1, engine.pauses);
+        coordinator.preserveControls(true, 2);
+        coordinator.play(1, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(1, engine.pauses);
+    }
+
+    @Test
+    public void expiredStartupTimerCannotCancelLaterBuffering() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        Runnable startup = scheduler.task;
+        resolver.resolve(resolver.lastRequestId);
+        long id = engine.request.getSessionId();
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 100, 100_000));
+        engine.emit(EngineEvent.state(id, EnginePhase.BUFFERING, 100, 100_000));
+        Runnable buffering = scheduler.task;
+        startup.run();
+        assertEquals(VodPlaybackPhase.BUFFERING, coordinator.state().getPhase());
+        buffering.run();
+        assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
+    }
+
+    private static class ManualScheduler implements com.fongmi.android.tv.utils.TaskScheduler {
+        Runnable task;
+        public void post(Runnable task, long delay) { this.task = task; }
+        public void remove(Runnable task) { if (this.task == task) this.task = null; }
+    }
+
     private VodPlaybackCoordinator coordinator(ManualResolver resolver, FakeEngine engine) {
         return coordinator((PlaybackResolver) resolver, engine);
     }
@@ -498,6 +573,8 @@ public class VodPlaybackCoordinatorTest {
     private static final class FakeEngine implements PlayerEngine {
 
         private EngineRequest request;
+        private float speed;
+        private int pauses;
         private Listener listener;
         private EngineSnapshot snapshot = EngineSnapshot.EMPTY;
 
@@ -507,10 +584,10 @@ public class VodPlaybackCoordinatorTest {
             listener.onEngineEvent(event);
         }
         @Override public void play() {}
-        @Override public void pause() {}
+        @Override public void pause() { pauses++; }
         @Override public void seekTo(long position) {}
         @Override public void stop() {}
-        @Override public void setSpeed(float speed) {}
+        @Override public void setSpeed(float speed) { this.speed = speed; }
         @Override public void setTrack(Track track) {}
         @Override public EngineSnapshot snapshot() { return snapshot; }
         @Override public void release() {}

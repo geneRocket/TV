@@ -342,4 +342,7 @@
     <string name="download">Download</string>
     <string name="no_results">No results</string>
 
+    <string name="play_recovery_expired">Recovery timed out. Choose another source or retry.</string>
+    <string name="play_recovery_cancelled">Recovery cancelled. Choose a source or retry.</string>
+    <string name="play_recovery_running">Trying another playback route. Press Back to cancel (45-second limit).</string>
 </resources>
