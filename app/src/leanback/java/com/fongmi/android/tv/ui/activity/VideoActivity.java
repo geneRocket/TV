@@ -1385,8 +1385,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void showDisplayInfo() {
         boolean hasDialog = hasBottomSheetDialog();
-        setVisibilityIfChanged(mBinding.display.clock, Setting.isDisplayTime() || isVisible(mBinding.widget.info)  ? View.VISIBLE : View.GONE);
-        setVisibilityIfChanged(mBinding.display.titleLayout, Setting.isDisplayVideoTitle() && !isVisible(mBinding.control.getRoot()) ? View.VISIBLE : View.GONE);
+        boolean playing = mPlayers.isPlaying();
+        setVisibilityIfChanged(mBinding.display.clock, !playing && (Setting.isDisplayTime() || isVisible(mBinding.widget.info)) ? View.VISIBLE : View.GONE);
+        setVisibilityIfChanged(mBinding.display.titleLayout, !playing && Setting.isDisplayVideoTitle() && !isVisible(mBinding.control.getRoot()) ? View.VISIBLE : View.GONE);
         boolean showNetSpeed = shouldShowDisplaySpeed(hasDialog);
         setVisibilityIfChanged(mBinding.display.netspeed, showNetSpeed ? View.VISIBLE : View.GONE);
         if (showNetSpeed) startDisplayTrafficPolling();
@@ -2281,6 +2282,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         mResumeOnForeground = true;
         hideCenter();
+        showDisplayInfo();
     }
 
     private void onPlay() {
