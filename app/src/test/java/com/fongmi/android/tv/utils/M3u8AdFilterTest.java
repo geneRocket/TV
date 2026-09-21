@@ -1044,6 +1044,122 @@ public class M3u8AdFilterTest {
         assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
     }
 
+    @Test
+    public void boundedCueDoesNotSpillPastExplicitDiscontinuityAd() {
+        String playlist = "#EXTM3U\n" + segment(5, "main-before.ts")
+                + "#EXT-X-CUE-OUT:8\n#EXT-X-DISCONTINUITY\n"
+                + segment(4, "ads/clip-1.ts") + segment(4, "ads/clip-2.ts")
+                + "#EXT-X-DISCONTINUITY\n" + segment(5, "main-after.ts")
+                + segment(5, "main-last.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("ads/"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+        assertTrue(filtered.contains("main-last.ts"));
+    }
+
+    @Test
+    public void continuationUsesRemainingDurationInSlidingWindow() {
+        for (String value : new String[]{"ElapsedTime=8,Duration=12", "8/12"}) {
+            String playlist = "#EXTM3U\n#EXT-X-CUE-OUT-CONT:" + value + "\n"
+                    + segment(4, "clip.ts") + segment(4, "main-1.ts")
+                    + segment(4, "main-2.ts") + "#EXT-X-ENDLIST\n";
+            String filtered = filter(playlist);
+            assertFalse(filtered.contains("clip.ts"));
+            assertTrue(filtered.contains("main-1.ts"));
+            assertTrue(filtered.contains("main-2.ts"));
+        }
+    }
+
+    @Test
+    public void continuationWithoutDurationDoesNotTreatElapsedAsRemaining() {
+        String playlist = "#EXTM3U\n#EXT-X-CUE-OUT-CONT:ElapsedTime=4\n"
+                + segment(4, "clip-1.ts") + segment(4, "clip-2.ts")
+                + "#EXT-X-CUE-IN\n" + segment(5, "main.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("clip-1.ts"));
+        assertFalse(filtered.contains("clip-2.ts"));
+        assertTrue(filtered.contains("main.ts"));
+    }
+
+    @Test
+    public void ignoresAdAttributesInsideQuotedMetadata() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-DATERANGE:ID=\"chapter\",X-NOTE=\"text,X-AD-ID=123,SCTE35-OUT=bad\",DURATION=8\n"
+                + segment(4, "main-1.ts") + segment(4, "main-2.ts")
+                + segment(4, "main-3.ts") + "#EXT-X-ENDLIST\n";
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void quotedFakeDurationDoesNotOverrideRealAdDuration() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",X-NOTE=\"text,DURATION=100\",DURATION=4\n"
+                + segment(4, "clip.ts") + segment(4, "main-1.ts")
+                + segment(4, "main-2.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("clip.ts"));
+        assertTrue(filtered.contains("main-1.ts"));
+    }
+
+    @Test
+    public void preservesThreeDifferentRotatingKeys() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+        for (int period = 0; period < 3; period++) {
+            if (period > 0) playlist.append("#EXT-X-DISCONTINUITY\n");
+            playlist.append("#EXT-X-KEY:METHOD=AES-128,URI=\"key-").append(period).append("\",IV=0x1\n");
+            for (int segment = 0; segment < 4; segment++) {
+                playlist.append(segment(4, "main-" + period + "-" + segment + ".ts"));
+            }
+        }
+        playlist.append("#EXT-X-ENDLIST\n");
+        assertEquals(playlist.toString(), filter(playlist.toString()));
+    }
+
+    @Test
+    public void completedContinuationDoesNotOpenUnboundedBreak() {
+        String playlist = "#EXTM3U\n#EXT-X-CUE-OUT-CONT:ElapsedTime=12,Duration=12\n"
+                + segment(4, "main-1.ts") + segment(4, "main-2.ts") + "#EXT-X-ENDLIST\n";
+        assertEquals(2, M3u8AdFilter.countSegmentsFromString(filter(playlist)));
+    }
+
+    @Test
+    public void cueBetweenExtinfAndUriControlsWholeInterval() {
+        String playlist = "#EXTM3U\n" + segment(4, "main-before.ts")
+                + "#EXTINF:4,\n#EXT-X-CUE-OUT:8\nclip-1.ts\n"
+                + segment(4, "clip-2.ts")
+                + "#EXTINF:4,\n#EXT-X-CUE-IN\nmain-after.ts\n#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("clip-1.ts"));
+        assertFalse(filtered.contains("clip-2.ts"));
+        assertTrue(filtered.contains("main-before.ts"));
+        assertTrue(filtered.contains("main-after.ts"));
+    }
+
+    @Test
+    public void preservesByteRangesAcrossRepeatedDiscontinuityPods() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+        playlist.append(segment(4, "main.ts"));
+        for (int period = 0; period < 2; period++) {
+            playlist.append("#EXT-X-DISCONTINUITY\n");
+            for (int index = 0; index < 3; index++) {
+                playlist.append("#EXT-X-BYTERANGE:100@").append((period * 3 + index) * 100).append("\n");
+                playlist.append(segment(4, "media.ts"));
+            }
+        }
+        playlist.append("#EXT-X-ENDLIST\n");
+        assertEquals(playlist.toString(), filter(playlist.toString()));
+    }
+
+    @Test
+    public void preservesLowLatencyPartsWithDifferentByteRanges() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-PART:DURATION=1,URI=\"media.mp4\",BYTERANGE=\"100@0\"\n"
+                + "#EXT-X-PART:DURATION=1,URI=\"media.mp4\",BYTERANGE=\"100@100\"\n"
+                + "#EXT-X-PART:DURATION=1,URI=\"last.mp4\"\n";
+        assertEquals(playlist, filter(playlist));
+    }
+
     private static void appendUnlabelledPod(StringBuilder playlist, String path) {
         playlist.append("#EXT-X-DISCONTINUITY\n");
         playlist.append("#EXT-X-KEY:METHOD=NONE\n");
