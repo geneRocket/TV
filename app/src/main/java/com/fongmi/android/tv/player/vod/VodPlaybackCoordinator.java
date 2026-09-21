@@ -7,6 +7,7 @@ import com.fongmi.android.tv.player.resolver.ResolveRequest;
 import com.fongmi.android.tv.player.resolver.ResolveResult;
 import com.fongmi.android.tv.player.engine.EngineSnapshot;
 import com.fongmi.android.tv.player.session.PlaybackPhase;
+import com.fongmi.android.tv.player.session.PlaybackItem;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.PlayerSession;
 import com.fongmi.android.tv.player.session.Subscription;
@@ -28,6 +29,10 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private ResolveHandle resolveHandle;
     private VodPlaybackState state = VodPlaybackState.IDLE;
     private long requestId;
+    // Only one terminal resolver callback may claim a request.
+    private long pendingRequestId;
+    // Old engine events must not leave RESOLVING, even when reloading the same episode.
+    private boolean acceptingSession;
     private long opening;
     private boolean closed;
     private String resumeEpisodeId = "";
@@ -77,13 +82,17 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         requireOpen();
         if (policy == null) throw new IllegalArgumentException("policy must not be null");
         if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
+        long currentPosition = state.getEpisode() == null ? -1 : currentPosition();
+        long currentRequest = ++requestId;
+        pendingRequestId = currentRequest;
+        acceptingSession = false;
         cancelResolve();
         VodEpisode episode = episodes.get(index);
         long preserved = preservedPosition(episode, policy);
-        long startPosition = startPosition(policy, resumePosition(episode), state.getPosition(), preserved);
+        long startPosition = startPosition(policy, resumePosition(episode), currentPosition, preserved);
         clearPreservedPosition();
-        long currentRequest = ++requestId;
         publish(new VodPlaybackState(VodPlaybackPhase.RESOLVING, episode, index, startPosition, -1, null));
+        if (closed || currentRequest != requestId) return;
         try {
             ResolveHandle handle = resolver.resolve(new ResolveRequest(currentRequest, episode.getSiteKey(), episode.getFlag(), episode.getResolverUrl()), new PlaybackResolver.Callback() {
                 @Override public void onResolved(ResolveResult result) { applyResolved(currentRequest, episode, index, startPosition, result); }
@@ -94,10 +103,11 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
                 handle.cancel();
                 throw new IllegalStateException("resolver returned a handle for another request");
             }
-            if (requestId != currentRequest) handle.cancel();
+            if (closed || requestId != currentRequest) handle.cancel();
             else if (state.getPhase() == VodPlaybackPhase.RESOLVING) resolveHandle = handle;
         } catch (Throwable error) {
-            if (requestId == currentRequest && state.getPhase() == VodPlaybackPhase.RESOLVING) {
+            if (!closed && requestId == currentRequest && state.getPhase() == VodPlaybackPhase.RESOLVING) {
+                pendingRequestId = 0;
                 publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, error));
             }
         }
@@ -137,15 +147,17 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized void stop() {
         requireOpen();
+        long stoppingRequest = ++requestId;
+        pendingRequestId = 0;
+        acceptingSession = false;
         cancelResolve();
-        requestId++;
         clearPreservedPosition();
         try {
             session.stop();
         } catch (RuntimeException error) {
             ThreadPools.log(error, "Vod playback session stop failed.");
         }
-        if (state.getPhase() != VodPlaybackPhase.STOPPED) {
+        if (!closed && requestId == stoppingRequest && state.getPhase() != VodPlaybackPhase.STOPPED) {
             publish(new VodPlaybackState(VodPlaybackPhase.STOPPED, state.getEpisode(), state.getEpisodeIndex(), state.getPosition(), state.getDuration(), null));
         }
     }
@@ -156,7 +168,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized long currentPosition() {
         if (closed) return state.getPosition();
-        return firstPositive(sessionSnapshotPosition(), state.getPosition());
+        long snapshot = sessionSnapshotPosition();
+        return snapshot >= 0 ? snapshot : state.getPosition();
     }
 
     public synchronized Subscription observe(VodPlaybackObserver observer) {
@@ -175,21 +188,26 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private synchronized void applyResolved(long expectedRequest, VodEpisode episode, int index, long startPosition, ResolveResult resolved) {
-        if (closed || expectedRequest != requestId) return;
+        if (closed || expectedRequest != requestId || pendingRequestId != expectedRequest) return;
+        pendingRequestId = 0;
         resolveHandle = null;
         if (resolved == null || resolved.getRequestId() != requestId) {
             publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, new IllegalStateException("resolver returned an invalid result")));
             return;
         }
         try {
-            session.prepare(itemFactory.create(episode, resolved.getResult(), startPosition));
+            PlaybackItem item = itemFactory.create(episode, resolved.getResult(), startPosition);
+            if (closed || expectedRequest != requestId) return;
+            acceptingSession = true;
+            session.prepare(item);
         } catch (Throwable error) {
-            publishPrepareErrorIfNeeded(episode, index, startPosition, error);
+            if (!closed && expectedRequest == requestId) publishPrepareErrorIfNeeded(episode, index, startPosition, error);
         }
     }
 
     private synchronized void applyFailure(long expectedRequest, VodEpisode episode, int index, ResolveFailure failure) {
-        if (closed || expectedRequest != requestId) return;
+        if (closed || expectedRequest != requestId || pendingRequestId != expectedRequest) return;
+        pendingRequestId = 0;
         resolveHandle = null;
         if (failure == null || failure.getRequestId() != requestId) {
             publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, state.getPosition(), state.getDuration(), new IllegalStateException("resolver returned an invalid failure")));
@@ -204,7 +222,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private synchronized void onSessionState(PlaybackState playback) {
-        if (closed || playback.getItem() == null || state.getEpisode() == null) return;
+        if (closed || !acceptingSession || playback == null || playback.getItem() == null || state.getEpisode() == null) return;
         if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return;
         if (state.getPhase() == VodPlaybackPhase.RESOLVING && playback.getPhase() != PlaybackPhase.PREPARING) return;
         publish(new VodPlaybackState(map(playback.getPhase()), state.getEpisode(), state.getEpisodeIndex(), playback.getPosition(), playback.getDuration(), playback.getError()));
@@ -227,23 +245,19 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     private long startPosition(StartPolicy policy, long saved, long current, long preserved) {
         switch (policy) {
-            case KEEP_CURRENT_POSITION: return Math.max(opening, firstPositive(preserved, current, saved));
+            case KEEP_CURRENT_POSITION: return Math.max(opening, preserved >= 0 ? preserved : current >= 0 ? current : saved);
             case RESUME_SAVED: return Math.max(opening, Math.max(saved, 0));
             default: return opening;
         }
     }
 
-    private long firstPositive(long... values) {
-        for (long value : values) if (value > 0) return value;
-        return 0;
-    }
-
     private long sessionSnapshotPosition() {
+        if (!acceptingSession) return -1;
         PlaybackState playback = session.state();
-        if (playback == null || playback.getItem() == null || state.getEpisode() == null) return 0;
-        if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return 0;
+        if (playback == null || playback.getItem() == null || state.getEpisode() == null) return -1;
+        if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return -1;
         EngineSnapshot snapshot = session.snapshot();
-        if (snapshot == null || snapshot.getSessionId() != playback.getSessionId()) return 0;
+        if (snapshot == null || snapshot.getSessionId() != playback.getSessionId()) return -1;
         return snapshot.getPosition();
     }
 
@@ -264,17 +278,19 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private void cancelResolve() {
+        ResolveHandle previous = resolveHandle;
+        resolveHandle = null;
         try {
-            if (resolveHandle != null) resolveHandle.cancel();
+            if (previous != null) previous.cancel();
         } catch (RuntimeException error) {
             ThreadPools.log(error, "Vod playback resolve cancel failed.");
         }
-        resolveHandle = null;
     }
 
     private void publish(VodPlaybackState next) {
         state = next;
         for (VodPlaybackObserver observer : new LinkedHashSet<>(observers)) {
+            if (state != next) break;
             try {
                 observer.onVodPlaybackState(next);
             } catch (RuntimeException ignored) {

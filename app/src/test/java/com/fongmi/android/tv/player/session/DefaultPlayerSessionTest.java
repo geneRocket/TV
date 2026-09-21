@@ -137,6 +137,45 @@ public class DefaultPlayerSessionTest {
         assertEquals(Collections.emptyList(), item.getSubtitles());
     }
 
+    @Test
+    public void stoppedSessionIgnoresLateEngineEvents() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long id = session.prepare(item("episode-1", 0));
+        session.stop();
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 10, 100));
+        engine.emit(EngineEvent.state(id, EnginePhase.ENDED, 100, 100));
+        assertEquals(PlaybackPhase.STOPPED, session.state().getPhase());
+    }
+
+    @Test
+    public void observerReleasePreventsPreparingReleasedEngine() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        session.observe(state -> {
+            if (state.getPhase() == PlaybackPhase.PREPARING) session.release();
+        });
+        List<PlaybackPhase> phases = new ArrayList<>();
+        session.observe(state -> phases.add(state.getPhase()));
+        session.prepare(item("episode-1", 0));
+        assertEquals(null, engine.request);
+        assertEquals(List.of(PlaybackPhase.IDLE, PlaybackPhase.RELEASED), phases);
+    }
+
+    @Test
+    public void observerSwitchDoesNotPrepareOldItemAfterNewItem() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        session.observe(state -> {
+            if (state.getItem() != null && state.getItem().getIdentity().equals("episode-1")) {
+                session.prepare(item("episode-2", 0));
+            }
+        });
+        session.prepare(item("episode-1", 0));
+        assertEquals(session.state().getSessionId(), engine.request.getSessionId());
+        assertEquals("episode-2", session.state().getItem().getIdentity());
+    }
+
     private PlaybackItem item(String identity, long position) {
         return new PlaybackItem(identity, "https://example.com/video.m3u8", Collections.emptyMap(), "m3u8", null, Collections.emptyList(), position, false);
     }

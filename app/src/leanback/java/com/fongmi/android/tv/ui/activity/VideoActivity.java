@@ -2158,6 +2158,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 break;
             case IDLE:
             case STOPPED:
+            case ERROR:
+            case RELEASED:
+                mPlaybackState.clear();
                 break;
             case BUFFERING:
                 mPlaybackState.onBuffering();
@@ -2167,10 +2170,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 mPlaybackState.onReady();
                 break;
             case PAUSED:
+                mPlaybackState.clear();
                 mResumeOnForeground = false;
                 showPausedState();
                 break;
             case ENDED:
+                mPlaybackState.clear();
                 checkEnded();
                 break;
             default:
@@ -2194,6 +2199,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             if (commitHistory && getFlag() != null) mHistoryController.commitEpisode(mHistory, getFlag().getFlag(), episode, state);
         }
         onPlaybackPhase(state.getPhase());
+        if (state.getPhase() == VodPlaybackPhase.ERROR) {
+            Throwable error = state.getError();
+            // Engine failures already travel through PlaybackController. Resolver
+            // failures need the same recovery path even after an earlier engine error.
+            if (error != null && mPlayers.session().state().getError() == error) return;
+            ErrorEvent.extract(error == null ? getString(R.string.error_play_timeout) : error.getMessage());
+        }
     }
 
     private boolean canCommitCurrentHistory() {
@@ -2782,6 +2794,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mSeekGesture.reset();
         super.onPause();
         setBackground(true);
+        mPlaybackState.clear();
         saveHistoryNow();
         mPlayers.pause();
         mClock.stop();

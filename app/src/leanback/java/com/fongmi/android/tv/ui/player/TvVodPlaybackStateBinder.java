@@ -49,8 +49,7 @@ public final class TvVodPlaybackStateBinder {
     }
 
     public void onPreparing() {
-        cancelBufferingCommit();
-        cancelReadyCommit();
+        clear();
         port.beginPreparing();
         port.clearPlaybackOverlay();
         port.showProgress();
@@ -69,14 +68,15 @@ public final class TvVodPlaybackStateBinder {
     }
 
     public void onReady() {
+        cancelReadyCommit();
         cancelBufferingCommit();
-        if (!pendingSeek || System.currentTimeMillis() - lastSeekAt >= SEEK_BOUNCE_WINDOW_MS) commitReady();
+        if (!pendingSeek || java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()) - lastSeekAt >= SEEK_BOUNCE_WINDOW_MS) commitReady();
         else scheduler.post(readyCommit, READY_STABLE_MS);
     }
 
     public void onSeek() {
         pendingSeek = true;
-        lastSeekAt = System.currentTimeMillis();
+        lastSeekAt = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         cancelBufferingCommit();
         cancelReadyCommit();
     }

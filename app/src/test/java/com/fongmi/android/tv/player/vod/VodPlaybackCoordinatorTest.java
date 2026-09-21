@@ -370,6 +370,97 @@ public class VodPlaybackCoordinatorTest {
         assertEquals(VodPlaybackPhase.PREPARING, coordinator.state().getPhase());
     }
 
+    @Test
+    public void cancellationCallbackCannotPreparePreviousRequest() {
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator((request, callback) -> new ResolveHandle() {
+            @Override public long getRequestId() { return request.getRequestId(); }
+            @Override public void cancel() {
+                callback.onResolved(new ResolveResult(request.getRequestId(), Result.empty()));
+            }
+        }, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.play(1, StartPolicy.FRESH);
+        assertTrue(engine.request == null);
+        coordinator.stop();
+        assertTrue(engine.request == null);
+        assertEquals(VodPlaybackPhase.STOPPED, coordinator.state().getPhase());
+    }
+
+    @Test
+    public void duplicateResolverCompletionCannotRestartPlayback() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        long request = resolver.lastRequestId;
+        resolver.resolve(request);
+        long session = engine.request.getSessionId();
+        resolver.resolve(request);
+        resolver.callbacks.get(request).onFailure(new ResolveFailure(request, new IllegalStateException("late")));
+        assertEquals(session, engine.request.getSessionId());
+        assertEquals(VodPlaybackPhase.PREPARING, coordinator.state().getPhase());
+    }
+
+    @Test
+    public void resolvingObserverCanStopBeforeResolverStarts() {
+        ManualResolver resolver = new ManualResolver();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, new FakeEngine());
+        coordinator.observe(state -> {
+            if (state.getPhase() == VodPlaybackPhase.RESOLVING) coordinator.stop();
+        });
+        coordinator.play(0, StartPolicy.FRESH);
+        assertEquals(0, resolver.lastRequestId);
+        assertEquals(VodPlaybackPhase.STOPPED, coordinator.state().getPhase());
+    }
+
+    @Test
+    public void reloadUsesFreshSnapshotAndPreservesZero() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 600_000);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        engine.snapshot = new EngineSnapshot(engine.request.getSessionId(), EnginePhase.READY, 88_000, 900_000, 0, true, 1, 0, 0);
+        coordinator.reload();
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(88_000, engine.request.getStartPosition());
+        engine.snapshot = new EngineSnapshot(engine.request.getSessionId(), EnginePhase.READY, 0, 900_000, 0, true, 1, 0, 0);
+        assertEquals(0, coordinator.currentPosition());
+        coordinator.reload();
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(0, engine.request.getStartPosition());
+    }
+
+    @Test
+    public void explicitPreservedZeroDoesNotFallBackToHistory() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 600_000);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        coordinator.preservePosition("episode-1", 0);
+        coordinator.reload();
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(0, engine.request.getStartPosition());
+    }
+
+    @Test
+    public void oldPreparingEventCannotEndNewResolve() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        long old = engine.request.getSessionId();
+        coordinator.reload();
+        engine.emit(EngineEvent.state(old, EnginePhase.PREPARING, 0, -1));
+        engine.emit(EngineEvent.state(old, EnginePhase.ENDED, 100, 100));
+        assertEquals(VodPlaybackPhase.RESOLVING, coordinator.state().getPhase());
+    }
+
     private VodPlaybackCoordinator coordinator(ManualResolver resolver, FakeEngine engine) {
         return coordinator((PlaybackResolver) resolver, engine);
     }

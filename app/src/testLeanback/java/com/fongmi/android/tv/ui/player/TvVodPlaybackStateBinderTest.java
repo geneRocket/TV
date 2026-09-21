@@ -66,6 +66,31 @@ public class TvVodPlaybackStateBinderTest {
         assertEquals(1, port.progressShows);
     }
 
+    @Test
+    public void preparingNewEpisodeClearsPreviousSeekGracePeriod() {
+        FakePort port = new FakePort();
+        FakeScheduler scheduler = new FakeScheduler();
+        TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, scheduler);
+        binder.onSeek();
+        binder.onPreparing();
+        port.buffering = true;
+        binder.onBuffering();
+        assertEquals(2, port.progressShows);
+        assertEquals(0, scheduler.size());
+    }
+
+    @Test
+    public void clearCancelsDelayedReadyEffects() {
+        FakePort port = new FakePort();
+        FakeScheduler scheduler = new FakeScheduler();
+        TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, scheduler);
+        binder.onSeek();
+        binder.onReady();
+        binder.clear();
+        scheduler.runAll();
+        assertEquals(0, port.metadataUpdates);
+    }
+
     private static final class FakeScheduler implements TaskScheduler {
         private final Map<Runnable, Long> tasks = new LinkedHashMap<>();
 
@@ -86,6 +111,7 @@ public class TvVodPlaybackStateBinderTest {
         private boolean buffering;
         private int progressShows;
         private int overlayClears;
+        private int metadataUpdates;
 
         @Override public boolean isBackground() { return false; }
         @Override public boolean isBuffering() { return buffering; }
@@ -94,7 +120,7 @@ public class TvVodPlaybackStateBinderTest {
         @Override public void clearPlaybackOverlay() { overlayClears++; }
         @Override public void stopContentSearch() {}
         @Override public void clearPlaybackTimeout() {}
-        @Override public void updateMetadata() {}
+        @Override public void updateMetadata() { metadataUpdates++; }
         @Override public void resetRecovery() {}
         @Override public void clearBrokenSources() {}
         @Override public void hideProgress() {}

@@ -16,6 +16,7 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     private PlaybackState state = PlaybackState.IDLE;
     private long nextSessionId;
     private boolean released;
+    private boolean acceptingEvents;
 
     public DefaultPlayerSession(PlayerEngine engine) {
         if (engine == null) throw new IllegalArgumentException("engine must not be null");
@@ -27,11 +28,14 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         requireActive();
         if (item == null) throw new IllegalArgumentException("item must not be null");
         long sessionId = ++nextSessionId;
+        acceptingEvents = true;
         publish(new PlaybackState(sessionId, PlaybackPhase.PREPARING, item, item.getStartPosition(), -1, null));
+        if (released || !acceptingEvents || state.getSessionId() != sessionId) return sessionId;
         try {
             engine.prepare(new EngineRequest(sessionId, item.getUrl(), item.getHeaders(), item.getFormat(), item.getDrm(), item.getSubtitles(), item.getStartPosition(), item.isForceLive()), this);
         } catch (RuntimeException error) {
-            if (state.getPhase() != PlaybackPhase.ERROR || state.getError() != error) {
+            if (!released && acceptingEvents && state.getSessionId() == sessionId
+                    && (state.getPhase() != PlaybackPhase.ERROR || state.getError() != error)) {
                 publish(new PlaybackState(sessionId, PlaybackPhase.ERROR, item, item.getStartPosition(), -1, error));
             }
             throw error;
@@ -55,7 +59,9 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     public synchronized void seekTo(long position) {
         requireActive();
         long target = Math.max(position, 0);
+        long sessionId = state.getSessionId();
         engine.seekTo(target);
+        if (released || !acceptingEvents || state.getSessionId() != sessionId) return;
         publish(new PlaybackState(state.getSessionId(), state.getPhase(), state.getItem(), target, state.getDuration(), state.getError()));
     }
 
@@ -79,12 +85,14 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     @Override
     public synchronized void stop() {
         if (released) return;
+        acceptingEvents = false;
+        long sessionId = state.getSessionId();
         try {
             engine.stop();
         } catch (RuntimeException error) {
             ThreadPools.log(error, "Player engine stop failed.");
         }
-        if (state.getPhase() != PlaybackPhase.STOPPED) {
+        if (!released && state.getSessionId() == sessionId && state.getPhase() != PlaybackPhase.STOPPED) {
             publish(new PlaybackState(state.getSessionId(), PlaybackPhase.STOPPED, state.getItem(), state.getPosition(), state.getDuration(), null));
         }
     }
@@ -131,7 +139,7 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
 
     @Override
     public synchronized void onEngineEvent(EngineEvent event) {
-        if (released || event == null || event.getSessionId() != state.getSessionId()) return;
+        if (released || !acceptingEvents || event == null || event.getSessionId() != state.getSessionId()) return;
         PlaybackPhase phase = map(event.getPhase());
         publish(new PlaybackState(event.getSessionId(), phase, state.getItem(), event.getPosition(), event.getDuration(), event.getError()));
     }
@@ -154,6 +162,7 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     private void publish(PlaybackState next) {
         state = next;
         for (PlaybackObserver observer : snapshotObservers()) {
+            if (state != next) break;
             try {
                 observer.onPlaybackState(next);
             } catch (RuntimeException ignored) {

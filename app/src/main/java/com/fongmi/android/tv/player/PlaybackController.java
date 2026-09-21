@@ -792,12 +792,14 @@ public class PlaybackController {
         }
         if (state.getSessionId() != 0) activeSessionId = state.getSessionId();
         for (com.fongmi.android.tv.player.session.PlaybackObserver observer : new LinkedHashSet<>(observers)) {
+            if (playbackSession == null || playbackSession.state() != state) return;
             try {
                 observer.onPlaybackState(state);
             } catch (RuntimeException error) {
                 ThreadPools.log(error, "Playback observer failed.");
             }
         }
+        if (playbackSession == null || playbackSession.state() != state) return;
         PlaybackPhase phase = state.getPhase();
         switch (phase) {
             case IDLE:

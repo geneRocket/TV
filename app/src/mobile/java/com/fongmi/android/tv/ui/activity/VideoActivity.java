@@ -544,8 +544,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
             }
             if (state.getPhase() != VodPlaybackPhase.ERROR) return;
-            if (mPlayers.session().state().getPhase() == com.fongmi.android.tv.player.session.PlaybackPhase.ERROR) return;
             Throwable error = state.getError();
+            if (error != null && mPlayers.session().state().getError() == error) return;
             ErrorEvent.extract(error == null ? getString(R.string.error_play_timeout) : error.getMessage());
         });
     }
