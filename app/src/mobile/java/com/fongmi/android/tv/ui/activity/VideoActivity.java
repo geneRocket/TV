@@ -196,9 +196,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private boolean stop;
     private boolean lock;
     private int mDanmakuRequestId;
-    private int mRecommendGeneration;
-    private Runnable mRecommendRequest;
-    private java.util.concurrent.Future<?> mRecommendFuture;
+    private final com.fongmi.android.tv.utils.DeferredTask<List<Vod>> mRecommendations =
+            new com.fongmi.android.tv.utils.DeferredTask<>(ThreadPools.recommendations(),
+                    com.fongmi.android.tv.utils.AppTaskScheduler.get(), error -> ThreadPools.log(error, "Recommendation failed."));
     private final PlaybackRecovery mRecovery = new PlaybackRecovery();
     private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private long mLastHistorySaveAt;
@@ -542,9 +542,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
         mPlaybackCoordinator.configureTimeout(com.fongmi.android.tv.utils.AppTaskScheduler.get(), Constant.TIMEOUT_PLAY);
         mPlaybackSubscription = mPlaybackCoordinator.observe(state -> {
+            mRecommendations.setReady(state.getPhase() == VodPlaybackPhase.READY && !mSeekGesture.isActive());
             if (state.getPhase() == VodPlaybackPhase.RESOLVING || state.getPhase() == VodPlaybackPhase.BUFFERING) {
                 if (mSiteSearch != null) mSiteSearch.cancel();
-                ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
             }
             if (mHistory != null) {
                 if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
@@ -2130,7 +2130,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Source.get().cancelPreloads();
         stopSearch();
         if (mPlaybackCoordinator != null) mPlaybackCoordinator.cancelPrefetch();
-        ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
+        mRecommendations.setReady(false);
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         mBinding.widget.time.setText(mPlayers.stringToTime(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time)));
         mBinding.widget.seek.setVisibility(View.VISIBLE);
@@ -2142,16 +2142,19 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.widget.seek.setVisibility(View.GONE);
         if (time == 0) {
             mSeekGesture.reset();
+            updateRecommendationReadiness();
             return;
         }
         // Seeking preserves the engine's play intent, including while buffering.
         mPlaybackCoordinator.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
+        updateRecommendationReadiness();
     }
 
     @Override
     public void onSeekCancel() {
         mBinding.widget.seek.setVisibility(View.GONE);
         mSeekGesture.reset();
+        updateRecommendationReadiness();
     }
 
     @Override
@@ -2319,9 +2322,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     protected void onDestroy() {
         mRecoveryWindow.cancel();
-        mRecommendGeneration++;
-        App.removeCallbacks(mRecommendRequest);
-        ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
+        mRecommendations.close();
         saveHistoryNow();
         super.onDestroy();
         stopSearch();
@@ -2340,31 +2341,22 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         App.removeCallbacks(mR1, mR2, mR3, mR4);
     }
 
+    private void updateRecommendationReadiness() {
+        mRecommendations.setReady(mPlaybackCoordinator != null
+                && mPlaybackCoordinator.state().getPhase() == VodPlaybackPhase.READY && !mSeekGesture.isActive());
+    }
+
     private void loadRecommendations(Vod item) {
-        int generation = ++mRecommendGeneration;
-        App.removeCallbacks(mRecommendRequest);
-        ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
         mRecommendAdapter.clear();
         mBinding.recommendGroup.setVisibility(View.GONE);
         String title = item.getVodName(getName());
         String year = item.getVodYear();
-        if (title.isEmpty()) return;
-        mRecommendRequest = () -> {
-            if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
-            if (mSeekGesture.isActive() || (mPlaybackCoordinator != null && mPlaybackCoordinator.state().getPhase() != VodPlaybackPhase.READY)) {
-                App.post(mRecommendRequest, 2_000);
-                return;
-            }
-            mRecommendFuture = ThreadPools.recommendations().submit(() -> {
-            List<Vod> items = DoubanRecommendRepository.get(title, year);
-            App.post(() -> {
-                if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
-                mRecommendAdapter.addAll(items);
-                mBinding.recommendGroup.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
-            });
-            });
-        };
-        App.post(mRecommendRequest, 1500);
+        mRecommendations.load(title.isEmpty() ? null : () -> DoubanRecommendRepository.request(title, year), items -> {
+            if (isFinishing() || isDestroyed()) return;
+            mRecommendAdapter.addAll(items);
+            mBinding.recommendGroup.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        });
+        updateRecommendationReadiness();
     }
 
     private void saveHistoryNow() {

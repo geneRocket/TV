@@ -47,10 +47,13 @@ public final class TaskScope implements AutoCloseable {
             active.put(key, entry);
         }
         runCancelHook(replaced);
-        if (timeoutMillis > 0) scheduler.post(entry.timeout, timeoutMillis);
+        synchronized (lock) {
+            if (closed || active.get(key) != entry) return;
+            if (timeoutMillis > 0) scheduler.post(entry.timeout, timeoutMillis);
+        }
         try {
             entry.future = executor.submit(() -> run(entry));
-            if (entry.done.get()) cancelFuture(entry.future);
+            if (entry.done.get() || entry.cancelled.get()) cancelFuture(entry.future);
         } catch (RejectedExecutionException error) {
             finishWithError(entry, error);
         }
@@ -81,7 +84,7 @@ public final class TaskScope implements AutoCloseable {
     }
 
     private <T> void run(Entry<T> entry) {
-        if (entry.cancelled.get()) return;
+        if (entry.cancelled.get() || entry.done.get()) return;
         try {
             T value = entry.callable.call();
             if (completeWork(entry)) dispatch(entry, value);
@@ -128,8 +131,8 @@ public final class TaskScope implements AutoCloseable {
         synchronized (lock) {
             if (closed || active.get(entry.key) != entry) return;
             entry.delivery = delivery;
+            scheduler.post(delivery, 0);
         }
-        scheduler.post(delivery, 0);
     }
 
     private boolean completeWork(Entry<?> entry) {

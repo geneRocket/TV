@@ -88,6 +88,27 @@ public class SiteSearchSessionTest {
         assertTrue(scheduler.tasks.isEmpty());
     }
 
+    @Test public void sharedPoolSurvivesCancellationAndLimitsSubmittedWorkers() {
+        QueueExecutor shared = new QueueExecutor();
+        Backend firstBackend = new Backend();
+        Backend secondBackend = new Backend();
+        SiteSearchSession first = new SiteSearchSession(firstBackend, () -> shared, scheduler, false, 2);
+        SiteSearchSession second = new SiteSearchSession(secondBackend, () -> shared, scheduler, false, 1);
+        first.start(Arrays.asList(site("a"), site("b"), site("c")), "old", false, null);
+        assertEquals(2, shared.tasks.size());
+        first.cancel();
+        assertFalse(shared.isShutdown());
+        second.start(Arrays.asList(site("x"), site("y")), "new", false, () -> completed++);
+        shared.runAll();
+        scheduler.runImmediate();
+        assertTrue(firstBackend.searches.isEmpty());
+        assertEquals(Arrays.asList("x:new", "y:new"), secondBackend.searches);
+        assertEquals(1, completed);
+        assertFalse(shared.isShutdown());
+        second.close();
+        assertFalse(shared.isShutdown());
+    }
+
     private static Result result(String token) {
         return new Result() { @Override public String getRequestToken() { return token; } };
     }

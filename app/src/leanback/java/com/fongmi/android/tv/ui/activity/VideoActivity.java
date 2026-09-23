@@ -499,7 +499,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private boolean initTrack;
     private boolean mDanmuVisible;
     private boolean useParse;
-    private int mRecommendGeneration;
     private final TvVodSourceCandidates mSourceCandidates = new TvVodSourceCandidates();
     private final Runnable mQuickFlush = this::flushQuickItems;
     private boolean mQuickFlushScheduled;
@@ -519,9 +518,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private Runnable mR5;
     private Runnable mR6;
     private Runnable mR8;
-    private Runnable mRecommendRequest;
-    private java.util.concurrent.Future<?> mRecommendFuture;
-    private Call mPartCall;
+    private final com.fongmi.android.tv.utils.DeferredTask<List<Vod>> mRecommendations =
+            new com.fongmi.android.tv.utils.DeferredTask<>(ThreadPools.recommendations(),
+                    com.fongmi.android.tv.utils.AppTaskScheduler.get(), error -> ThreadPools.log(error, "Recommendation failed."));
+    private volatile Call mPartCall;
     private Clock mClock;
     private View mFocus1;
     private View mFocus2;
@@ -2018,9 +2018,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPartCall.enqueue(new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (call != mPartCall) return;
                 List<String> items;
                 try (Response res = response) {
+                    if (call != mPartCall) return;
                     ResponseBody body = res.body();
                     items = body == null ? new ArrayList<>() : new ArrayList<>(Part.get(body.string()));
                 }
@@ -2054,32 +2054,23 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPartCall = null;
     }
 
+    private void updateRecommendationReadiness() {
+        mRecommendations.setReady(mPlaybackCoordinator != null
+                && mPlaybackCoordinator.state().getPhase() == VodPlaybackPhase.READY && !mSeekGesture.isActive());
+    }
+
     private void loadRecommendations(Vod item) {
-        int generation = ++mRecommendGeneration;
-        App.removeCallbacks(mRecommendRequest);
-        ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
         mRecommendAdapter.clear();
-        setVisibilityIfChanged(mBinding.recommendGroup, View.GONE);
+        mBinding.recommendGroup.setVisibility(View.GONE);
         String title = item.getVodName(getName());
         String year = item.getVodYear();
-        if (title.isEmpty()) return;
-        mRecommendRequest = () -> {
-            if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
-            if (mSeekGesture.isActive() || (mPlaybackCoordinator != null && mPlaybackCoordinator.state().getPhase() != VodPlaybackPhase.READY)) {
-                App.post(mRecommendRequest, 2_000);
-                return;
-            }
-            mRecommendFuture = ThreadPools.recommendations().submit(() -> {
-            List<Vod> items = DoubanRecommendRepository.get(title, year);
-            App.post(() -> {
-                if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
-                mRecommendAdapter.setItems(items, null);
-                setVisibilityIfChanged(mBinding.recommendGroup, items.isEmpty() ? View.GONE : View.VISIBLE);
-                updateFocus();
-            });
-            });
-        };
-        App.post(mRecommendRequest, 1500);
+        mRecommendations.load(title.isEmpty() ? null : () -> DoubanRecommendRepository.request(title, year), items -> {
+            if (isFinishing() || isDestroyed()) return;
+            mRecommendAdapter.setItems(items, null);
+            setVisibilityIfChanged(mBinding.recommendGroup, items.isEmpty() ? View.GONE : View.VISIBLE);
+            updateFocus();
+        });
+        updateRecommendationReadiness();
     }
 
     private void setPartAdapter(List<String> items) {
@@ -2218,10 +2209,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void renderPlayback(VodPlaybackState state) {
-            if (state.getPhase() == VodPlaybackPhase.RESOLVING || state.getPhase() == VodPlaybackPhase.BUFFERING) {
-                if (mSiteSearch != null) mSiteSearch.cancel();
-                ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
-            }
+        mRecommendations.setReady(state.getPhase() == VodPlaybackPhase.READY && !mSeekGesture.isActive());
+        if (state.getPhase() == VodPlaybackPhase.RESOLVING || state.getPhase() == VodPlaybackPhase.BUFFERING) {
+            if (mSiteSearch != null) mSiteSearch.cancel();
+        }
         if (state.getPhase() == VodPlaybackPhase.READY) mRecoveryWindow.ready();
         else mRecoveryWindow.unstable();
         if (!isCurrentPlayer() || isBackground()) return;
@@ -2722,7 +2713,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         Source.get().cancelPreloads();
         mSourceSearch.stop();
         if (mPlaybackCoordinator != null) mPlaybackCoordinator.cancelPrefetch();
-        ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
+        mRecommendations.setReady(false);
         setCenterAction(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         updateCenterProgress(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time), mPlayers.getDuration());
         setCenterVisible(true);
@@ -2734,6 +2725,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlaybackState.onSeek();
         mPlaybackCoordinator.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
         mKeyDown.resetTime();
+        updateRecommendationReadiness();
         // Seeking preserves the engine's play intent. isPlaying() is false
         // during buffering too, so it must never decide whether to pause here.
         if (mPlaybackCoordinator.state().getPhase() == VodPlaybackPhase.PAUSED) showPausedState();
@@ -2889,6 +2881,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mSeekGesture.isActive()) {
             mKeyDown.release();
             mSeekGesture.reset();
+            updateRecommendationReadiness();
             hideCenter();
             return;
         }
@@ -2907,9 +2900,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     protected void onDestroy() {
         mRecoveryWindow.cancel();
-        mRecommendGeneration++;
-        App.removeCallbacks(mRecommendRequest);
-        ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
+        mRecommendations.close();
         App.removeCallbacks(mEpisodeInputCommit);
         mEpisodeInput.setLength(0);
         mKeyDown.release();

@@ -24,6 +24,7 @@ public final class ThreadPools {
     private static final ExecutorService LOADER = createQueued("loader", BUDGET.loader);
     private static final ExecutorService RECOMMEND = createQueued("recommend", 1);
     private static final ExecutorService SEARCH = createQueued("search", BUDGET.search);
+    private static final ExecutorService SITE_SEARCH = createQueued("site-search", BUDGET.search);
     private static final ExecutorService PARSE = createQueued("parse", BUDGET.parse);
     private static final ExecutorService PRELOAD_PARSE = createQueued("preload-parse", BUDGET.preload);
     private static final ConcurrentHashMap<String, LatestFutureTask> CONFIG_TASKS = new ConcurrentHashMap<>();
@@ -89,6 +90,9 @@ public final class ThreadPools {
     public static ExecutorService search() {
         return SEARCH;
     }
+
+    /** Bulk searches share a budget without occupying foreground detail workers. */
+    public static ExecutorService siteSearch() { return SITE_SEARCH; }
 
     public static ExecutorService parse() {
         return PARSE;

@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class SiteSearchSession implements AutoCloseable {
 
@@ -29,6 +31,9 @@ public final class SiteSearchSession implements AutoCloseable {
     private final Backend backend;
     private final Supplier<ExecutorService> executorFactory;
     private final TaskScheduler scheduler;
+    private final boolean ownsExecutor;
+    private final int concurrency;
+    private final List<Future<?>> workers = new ArrayList<>();
     private ExecutorService executor;
     private String token;
     private Runnable completion;
@@ -45,13 +50,20 @@ public final class SiteSearchSession implements AutoCloseable {
             @Override public void search(Site site, String keyword, String token) throws Throwable { viewModel.searchContent(site, keyword, false, token); }
             @Override public void cancel(String token) { viewModel.cancelSearch(token); }
             @Override public void finish(String token) { viewModel.finishSearch(token); }
-        }, () -> ThreadPools.newFixedQueued(executorName, Math.max(1, concurrency)), AppTaskScheduler.get());
+        }, ThreadPools::siteSearch, AppTaskScheduler.get(), false, concurrency);
     }
 
     SiteSearchSession(Backend backend, Supplier<ExecutorService> executorFactory, TaskScheduler scheduler) {
+        this(backend, executorFactory, scheduler, true, Integer.MAX_VALUE);
+    }
+
+    SiteSearchSession(Backend backend, Supplier<ExecutorService> executorFactory, TaskScheduler scheduler,
+                      boolean ownsExecutor, int concurrency) {
         this.backend = backend;
         this.executorFactory = executorFactory;
         this.scheduler = scheduler;
+        this.ownsExecutor = ownsExecutor;
+        this.concurrency = Math.max(1, concurrency);
     }
 
     public synchronized void start(List<Site> sites, String keyword, boolean auto, Runnable onComplete) {
@@ -77,7 +89,14 @@ public final class SiteSearchSession implements AutoCloseable {
         deadline = () -> expire(currentGeneration, onComplete);
         scheduler.post(deadline, SEARCH_TIMEOUT_MS);
         executor = executorFactory.get();
-        for (Site site : requests) executor.execute(() -> search(site, query, currentToken, currentGeneration, onComplete));
+        AtomicInteger next = new AtomicInteger();
+        for (int i = 0; i < Math.min(concurrency, requests.size()); i++) {
+            workers.add(executor.submit(() -> {
+                int index;
+                while (isCurrent(currentGeneration, currentToken) && (index = next.getAndIncrement()) < requests.size())
+                    search(requests.get(index), query, currentToken, currentGeneration, onComplete);
+            }));
+        }
     }
 
     public synchronized boolean accepts(Result result) {
@@ -121,8 +140,7 @@ public final class SiteSearchSession implements AutoCloseable {
         clearDeadline();
         if (token != null) backend.cancel(token);
         token = null;
-        if (executor != null) executor.shutdownNow();
-        executor = null;
+        cancelWorkers();
     }
 
     @Override
@@ -162,7 +180,8 @@ public final class SiteSearchSession implements AutoCloseable {
         if (!active || timedOut || this.generation != generation || pending <= 0) return false;
         if (pending > 0) pending--;
         if (pending == 0 && executor != null) {
-            executor.shutdown();
+            if (ownsExecutor) executor.shutdown();
+            workers.clear();
             executor = null;
         }
         return pending == 0;
@@ -173,9 +192,15 @@ public final class SiteSearchSession implements AutoCloseable {
         timedOut = true;
         pending = 0;
         backend.cancel(token);
-        if (executor != null) executor.shutdownNow();
-        executor = null;
+        cancelWorkers();
         complete(generation, callback);
+    }
+
+    private void cancelWorkers() {
+        for (Future<?> worker : workers) ThreadPools.cancel(executor, worker);
+        workers.clear();
+        if (ownsExecutor && executor != null) executor.shutdownNow();
+        executor = null;
     }
 
     private void clearDeadline() {

@@ -207,19 +207,19 @@ public class LiveViewModel extends ViewModel {
     }
 
     private void submitLive(java.util.concurrent.Callable<Live> task) {
-        tasks.submit("live", task, Constant.TIMEOUT_LIVE, live::postValue, error -> new Live(), null);
+        tasks.submit("live", task, Constant.TIMEOUT_LIVE, live::setValue, error -> new Live(), null);
     }
 
     private void submitEpg(java.util.concurrent.Callable<Epg> task) {
-        tasks.submit("epg", task, Constant.TIMEOUT_EPG, epg::postValue, error -> new Epg(), this::cancelEpgCall);
+        tasks.submit("epg", task, Constant.TIMEOUT_EPG, epg::setValue, error -> new Epg(), this::cancelEpgCall);
     }
 
     private void submitUrl(java.util.concurrent.Callable<Channel> task, java.util.function.Function<Throwable, Channel> fallback) {
-        urlTasks.submit("url", task, Constant.TIMEOUT_PARSE_LIVE, url::postValue, fallback, Source.get()::stop);
+        urlTasks.submit("url", task, Constant.TIMEOUT_PARSE_LIVE, url::setValue, fallback, Source.get()::stop);
     }
 
     private void submitXml(java.util.concurrent.Callable<Boolean> task) {
-        tasks.submit("xml", task, Constant.TIMEOUT_XML, xml::postValue, error -> false, null);
+        tasks.submit("xml", task, Constant.TIMEOUT_XML, xml::setValue, error -> false, null);
     }
 
     private Channel urlFallback(Channel request, Throwable error) {

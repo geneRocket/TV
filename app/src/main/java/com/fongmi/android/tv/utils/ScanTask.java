@@ -10,7 +10,10 @@ import java.util.Collections;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
+import okhttp3.Call;
 import java.util.concurrent.ExecutorService;
 
 import okhttp3.OkHttpClient;
@@ -24,6 +27,7 @@ public class ScanTask {
     private volatile ExecutorService executor;
     private volatile Runnable completion;
     private volatile long generation;
+    private final Set<Call> calls = ConcurrentHashMap.newKeySet();
 
     public static ScanTask create(Listener listener) {
         return new ScanTask(listener);
@@ -47,6 +51,8 @@ public class ScanTask {
         generation++;
         if (completion != null) scheduler.remove(completion);
         completion = null;
+        for (Call call : calls) call.cancel();
+        calls.clear();
         if (executor != null) executor.shutdownNow();
         executor = null;
     }
@@ -57,25 +63,32 @@ public class ScanTask {
         List<Device> devices = Collections.synchronizedList(new ArrayList<>());
         ExecutorService currentExecutor = ThreadPools.newFixed("scan", ThreadPools.searchConcurrency());
         executor = currentExecutor;
-        currentExecutor.execute(() -> run(urls, currentExecutor, currentGeneration, devices));
+        currentExecutor.execute(() -> enqueue(urls, currentExecutor, currentGeneration, devices));
     }
 
-    private void run(List<String> items, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
-        boolean current;
-        try {
-            getDevice(items, currentExecutor, currentGeneration, devices);
-        } catch (Exception e) {
-            ThreadPools.log(e, "Scan task failed.");
-        } finally {
-            synchronized (this) {
-                current = isCurrent(currentExecutor, currentGeneration);
-                if (current) {
-                    ThreadPools.shutdown(currentExecutor);
-                    executor = null;
-                }
+    private void enqueue(List<String> urls, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
+        AtomicInteger remaining = new AtomicInteger(urls.size());
+        if (urls.isEmpty()) finish(currentExecutor, currentGeneration, devices);
+        for (String url : urls) {
+            if (!isCurrent(currentExecutor, currentGeneration)) return;
+            try {
+                currentExecutor.execute(() -> {
+                    try { findDevice(url, currentExecutor, currentGeneration, devices); }
+                    finally {
+                        if (remaining.decrementAndGet() == 0) finish(currentExecutor, currentGeneration, devices);
+                    }
+                });
+            } catch (java.util.concurrent.RejectedExecutionException error) {
+                if (remaining.decrementAndGet() == 0) finish(currentExecutor, currentGeneration, devices);
             }
-            if (current) scheduleComplete(currentGeneration, devices);
         }
+    }
+
+    private synchronized void finish(ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
+        if (!isCurrent(currentExecutor, currentGeneration)) return;
+        currentExecutor.shutdown();
+        executor = null;
+        scheduleComplete(currentGeneration, devices);
     }
 
     private synchronized void scheduleComplete(long currentGeneration, List<Device> devices) {
@@ -94,22 +107,6 @@ public class ScanTask {
         listener.onFind(new ArrayList<>(devices));
     }
 
-    private void getDevice(List<String> urls, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) throws Exception {
-        CountDownLatch cd = new CountDownLatch(urls.size());
-        for (String url : urls) {
-            if (!isCurrent(currentExecutor, currentGeneration)) {
-                cd.countDown();
-                continue;
-            }
-            try {
-                currentExecutor.execute(() -> findDevice(cd, url, currentExecutor, currentGeneration, devices));
-            } catch (RuntimeException e) {
-                cd.countDown();
-            }
-        }
-        cd.await();
-    }
-
     private List<String> getUrl(List<String> ips) {
         LinkedHashSet<String> urls = new LinkedHashSet<>(ips == null ? Collections.emptyList() : ips);
         String local = Server.get().getAddress();
@@ -122,12 +119,16 @@ public class ScanTask {
         return executor == currentExecutor && generation == currentGeneration;
     }
 
-    private void findDevice(CountDownLatch cd, String url, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
+    private void findDevice(String url, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
+        Call call = null;
         try {
             if (!isCurrent(currentExecutor, currentGeneration) || Thread.currentThread().isInterrupted()) return;
             if (url.contains(Server.get().getAddress())) return;
             String result;
-            try (Response response = OkHttp.newCall(client, url.concat("/device")).execute()) {
+            call = OkHttp.newCall(client, url.concat("/device"));
+            calls.add(call);
+            if (!isCurrent(currentExecutor, currentGeneration) || Thread.currentThread().isInterrupted()) call.cancel();
+            try (Response response = call.execute()) {
                 if (!response.isSuccessful()) return;
                 result = response.body() == null ? "" : response.body().string();
             }
@@ -136,7 +137,7 @@ public class ScanTask {
             devices.add(device.save());
         } catch (Exception ignored) {
         } finally {
-            cd.countDown();
+            if (call != null) calls.remove(call);
         }
     }
 

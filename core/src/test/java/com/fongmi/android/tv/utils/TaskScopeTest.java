@@ -176,6 +176,47 @@ public class TaskScopeTest {
         scope.close();
     }
 
+    @Test
+    public void cancelBeforeSubmitReturnsStillInterruptsWorker() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch allowReturn = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService executor = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0,
+                TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>()) {
+            @Override public java.util.concurrent.Future<?> submit(Runnable task) {
+                java.util.concurrent.Future<?> future = super.submit(task);
+                try { allowReturn.await(); }
+                catch (InterruptedException error) { throw new AssertionError(error); }
+                return future;
+            }
+        };
+        Scheduler scheduler = new Scheduler();
+        TaskScope scope = new TaskScope(executor, scheduler, error -> {}, false);
+        Thread submitter = new Thread(() -> scope.submit("race", () -> {
+            started.countDown();
+            try { release.await(); }
+            catch (InterruptedException error) { interrupted.countDown(); throw error; }
+            return true;
+        }, 1000, value -> {}, error -> false, null));
+        try {
+            submitter.start();
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            assertTrue(scope.cancel("race"));
+            allowReturn.countDown();
+            submitter.join(2000);
+            assertFalse(submitter.isAlive());
+            assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+            assertEquals(0, scheduler.size());
+        } finally {
+            allowReturn.countDown();
+            release.countDown();
+            scope.close();
+            executor.shutdownNow();
+            submitter.join(2000);
+        }
+    }
+
     private static final class Scheduler implements TaskScheduler {
         private final List<Runnable> tasks = new ArrayList<>();
         @Override public synchronized void post(Runnable task, long delayMillis) {

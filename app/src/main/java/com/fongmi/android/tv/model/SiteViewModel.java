@@ -87,12 +87,12 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     public void homeContent(String key, String token) {
-        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().homeContent(key), data -> result.postValue(withHomeRequest(data, key, token)), this::homeFallback);
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().homeContent(key), data -> result.setValue(withHomeRequest(data, key, token)), this::homeFallback);
     }
 
     public void categoryContent(String key, String tid, String page, boolean filter, HashMap<String, String> extend) {
         HashMap<String, String> extendSnapshot = extend == null ? new HashMap<>() : new HashMap<>(extend);
-        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().categoryContent(key, tid, page, filter, extendSnapshot), data -> result.postValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::categoryFallback);
+        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().categoryContent(key, tid, page, filter, extendSnapshot), data -> result.setValue(withCategoryRequest(data, key, tid, page, extendSnapshot)), this::categoryFallback);
     }
 
     public void cancelCategoryContent() {
@@ -106,7 +106,7 @@ public class SiteViewModel extends BaseSiteViewModel {
     public void detailContent(String key, String id, String token) {
         executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD,
                 () -> SpiderRepository.get().detailContent(key, id),
-                data -> result.postValue(withRequest(data, key, id, null, token)),
+                data -> result.setValue(withRequest(data, key, id, null, token)),
                 this::requestRequestFallback);
     }
 
@@ -115,7 +115,7 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     public void action(String key, String action) {
-        executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> SpiderRepository.get().action(key, action), this.action::postValue, this::requestFallback);
+        executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> SpiderRepository.get().action(key, action), this.action::setValue, this::requestFallback);
     }
 
     public void searchContent(Site site, String keyword, boolean quick) throws Throwable {
@@ -137,7 +137,7 @@ public class SiteViewModel extends BaseSiteViewModel {
             res.setKeyword(query);
             res.setRequestToken(token);
             finishSearch(token);
-            this.result.postValue(res);
+            this.result.setValue(res);
         }, this::requestFallback);
     }
 
@@ -214,7 +214,7 @@ public class SiteViewModel extends BaseSiteViewModel {
     private void submitDownloadRequest(String key, String flag, String id) {
         Callable<Result> request = () -> SpiderRepository.get().playerContent(key, flag, id);
         downloadRequests.submit(REQUEST_DOWNLOAD, request, Constant.TIMEOUT_PLAY,
-                data -> download.postValue(withRequest(data, key, id, flag, "")),
+                data -> download.setValue(withRequest(data, key, id, flag, "")),
                 this::requestRequestFallback,
                 Source.get()::stop);
     }
