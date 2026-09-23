@@ -68,7 +68,7 @@ public final class AdBlocker {
         String host = uri.getHost();
         if (matchesConfiguredHost(rules, host) || matchesConfiguredUrl(rules, value)) return true;
         if (!Setting.isRemoveAd()) return false;
-        return hasDefaultAdHost(host) || hasDefaultAdSignal(uri);
+        return hasDefaultAdHost(host) || hasDefaultAdSignal(value);
     }
 
     public static boolean isAdHost(String host) {
@@ -208,15 +208,18 @@ public final class AdBlocker {
         return false;
     }
 
-    private static boolean hasDefaultAdSignal(Uri uri) {
-        String path = Objects.toString(uri.getPath(), "").toLowerCase(Locale.US);
-        if (hasToken(path)) return true;
-        String query = Objects.toString(uri.getEncodedQuery(), "").toLowerCase(Locale.US);
-        return hasToken(query);
+    static boolean hasDefaultAdSignal(String url) {
+        if (url == null || url.isEmpty()) return false;
+        try {
+            String path = Objects.toString(new java.net.URI(url).getPath(), "").toLowerCase(Locale.US);
+            return hasToken(path) || M3u8AdFilter.containsAdQueryKey(url);
+        } catch (java.net.URISyntaxException error) {
+            return false;
+        }
     }
 
     private static boolean hasToken(String value) {
-        if (TextUtils.isEmpty(value)) return false;
+        if (value == null || value.isEmpty()) return false;
         Matcher matcher = PATTERN_TOKEN_SPLIT.matcher(value);
         int start = 0;
         while (matcher.find()) {

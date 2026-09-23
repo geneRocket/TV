@@ -1178,6 +1178,90 @@ public class M3u8AdFilterTest {
         }
     }
 
+    @Test
+    public void preservesDisabledAdFlagsAndOpaqueQueryValuesButRemovesEnabledAds() {
+        String playlist = "#EXTM3U\n"
+                + segment(5, "main-1.ts?ad=0")
+                + segment(5, "main-2.ts?ads=false")
+                + segment(5, "main-3.ts?token=opaque-ad-signature")
+                + segment(5, "main-4.ts?title=advertisement")
+                + segment(5, "break.ts?ad=1")
+                + segment(5, "main-5.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        for (int i = 1; i <= 5; i++) assertTrue(filtered, filtered.contains("main-" + i + ".ts"));
+        assertFalse(filtered.contains("break.ts"));
+        assertEquals(5, M3u8AdFilter.countSegmentsFromString(filtered));
+    }
+
+    @Test
+    public void preservesActualSubtitleSegmentsWithoutMasterPlaylist() {
+        String playlist = "#EXTM3U\n" + segment(5, "subtitles/part-1.vtt")
+                + segment(5, "subtitles/ads/part-2.vtt") + "#EXT-X-ENDLIST\n";
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void captionWordsInVideoPathsDoNotDisableAdFiltering() {
+        String playlist = "#EXTM3U\n"
+                + segment(5, "movie-with-subtitles/main-1.ts")
+                + segment(5, "ads/break.ts")
+                + segment(5, "captioned/main-2.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("break.ts"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-2.ts"));
+    }
+
+    @Test
+    public void subtitleWhitelistDoesNotCoverVideoAtSameEndpointWithDifferentQuery() {
+        try {
+            filter("#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"s\",NAME=\"English\",URI=\"https://cdn.example/playlist?track=subtitles\"\n",
+                    "https://cdn.example/master.m3u8");
+            String playlist = "#EXTM3U\n" + segment(5, "main-1.ts") + segment(5, "ads/break.ts")
+                    + segment(5, "main-2.ts") + "#EXT-X-ENDLIST\n";
+            assertEquals(playlist, filter(playlist, "https://cdn.example/playlist?track=subtitles"));
+            String filtered = filter(playlist, "https://cdn.example/playlist?track=video");
+            assertFalse(filtered.contains("break.ts"));
+            assertTrue(filtered.contains("main-1.ts"));
+            assertTrue(filtered.contains("main-2.ts"));
+        } finally {
+            M3u8AdFilter.clearSubtitlePlaylistWhitelist();
+        }
+    }
+
+    @Test
+    public void preservesAudioDescriptionRenditionsAlongsideNormalAudio() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"English AD\",URI=\"audio/description.m3u8\"\n"
+                + "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Described\",CHARACTERISTICS=\"public.accessibility.describes-video\",URI=\"audio/ad.m3u8\"\n"
+                + "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Main\",URI=\"audio/main.m3u8\"\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=1000000,AUDIO=\"audio\"\nvideo/main.m3u8\n";
+        assertEquals(playlist, M3u8AdFilter.filterAdVariantPlaylists(playlist, "https://video.example/master.m3u8"));
+    }
+
+    @Test
+    public void neverRemovesEveryRenditionFromReferencedAudioGroup() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Ad one\",URI=\"ads/one.m3u8\"\n"
+                + "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Ad two\",URI=\"ads/two.m3u8\"\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=1000000,AUDIO=\"audio\"\nvideo/main.m3u8\n";
+        String filtered = M3u8AdFilter.filterAdVariantPlaylists(playlist, "https://video.example/master.m3u8");
+        assertTrue(filtered.contains("#EXT-X-MEDIA:TYPE=AUDIO"));
+        assertTrue(filtered.contains("video/main.m3u8"));
+    }
+
+    @Test
+    public void removesPercentEncodedAdDirectoryWithoutMatchingRandomHashes() {
+        String playlist = "#EXTM3U\n" + segment(5, "main-1.ts")
+                + segment(5, "%61ds/break.ts") + segment(5, "a61dsb9.ts")
+                + segment(5, "main-2.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("break.ts"));
+        assertTrue(filtered.contains("a61dsb9.ts"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-2.ts"));
+    }
+
     private static String segment(double duration, String uri) {
         return "#EXTINF:" + duration + ",\n" + uri + "\n";
     }

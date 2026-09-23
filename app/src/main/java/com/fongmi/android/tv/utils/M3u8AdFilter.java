@@ -325,12 +325,11 @@ public final class M3u8AdFilter {
     }
 
     private static String normalizeForMatch(String url) {
-        String lower = url.toLowerCase(Locale.US).trim();
-        int q = lower.indexOf('?');
-        if (q >= 0) lower = lower.substring(0, q);
-        int h = lower.indexOf('#');
-        if (h >= 0) lower = lower.substring(0, h);
-        return lower;
+        // Query parameters can select entirely different tracks at one endpoint.
+        // Paths and query values are case-sensitive; only fragments are irrelevant.
+        String value = url.trim();
+        int h = value.indexOf('#');
+        return h >= 0 ? value.substring(0, h) : value;
     }
 
     private static String resolveUri(String baseUrl, String uri) {
@@ -345,25 +344,20 @@ public final class M3u8AdFilter {
         String lowerContent = content.toLowerCase(Locale.US);
 
         if (lowerContent.startsWith("webvtt") || lowerContent.contains("\nwebvtt")) return true;
-        if (lowerContent.contains("type=subtitles")) return true;
-        if (lowerContent.contains("type=closed-captions")) return true;
-        if (lowerContent.contains("subtitle") || lowerContent.contains("subtitles")) return true;
-        if (lowerContent.contains("caption") || lowerContent.contains("captions")) return true;
 
         int subtitleUriCount = 0;
         int segmentCount = 0;
 
         for (Record record : records) {
             if (record.segment) segmentCount++;
-            if (isSubtitleUri(record.line)) subtitleUriCount++;
+            if (record.segment && isSubtitleUri(record.line)) subtitleUriCount++;
             if (record.tags == null) continue;
             for (String tag : record.tags) {
-                if (isSubtitleMapTag(tag)) subtitleUriCount++;
-                if (tag.toLowerCase(Locale.US).contains("webvtt")) return true;
+                if (isSubtitleMapTag(tag)) return true;
             }
         }
 
-        return segmentCount > 0 && subtitleUriCount >= Math.max(1, segmentCount / 2);
+        return segmentCount > 0 && subtitleUriCount == segmentCount;
     }
 
     private static boolean isSubtitleMapTag(String tag) {
@@ -422,11 +416,16 @@ public final class M3u8AdFilter {
                 if ("SUBTITLES".equalsIgnoreCase(type) || "CLOSED-CAPTIONS".equalsIgnoreCase(type)) {
                     continue;
                 }
+                if ("AUDIO".equalsIgnoreCase(type) && parseAttributeString(line, "CHARACTERISTICS")
+                        .contains("public.accessibility.describes-video")) continue;
 
                 String groupKey = mediaGroupKey(type, parseAttributeString(line, "GROUP-ID"));
                 boolean hasAlternative = mediaGroupCounts.getOrDefault(groupKey, 0) > 1;
-                if (hasAlternative && !isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsAdKeyword(name))) {
+                // AD is also the standard abbreviation for audio description.
+                String adName = "AUDIO".equalsIgnoreCase(type) ? name.replaceAll("(?i)\\bad\\b", "") : name;
+                if (hasAlternative && !isEmpty(uri) && (isLikelyAdPlaylistUri(uri, baseUrl) || containsAdKeyword(adName))) {
                     remove[i] = true;
+                    mediaGroupCounts.put(groupKey, mediaGroupCounts.get(groupKey) - 1);
                 }
                 continue;
             }
@@ -1565,7 +1564,7 @@ public final class M3u8AdFilter {
 
         String lower = uri.toLowerCase(Locale.US).trim();
         if (containsAdQueryKey(lower)) return true;
-        if (containsAdKeyword(mediaPathAndQuery(lower))) return true;
+        if (containsAdKeyword(safeDecode(stripQueryAndFragment(mediaPathAndQuery(lower))))) return true;
         if (containsAdPathPart(lower, false)) return true;
         try {
             if (AdBlocker.isAdUrl(lower)) return true;
@@ -1581,7 +1580,7 @@ public final class M3u8AdFilter {
         String lower = uri.toLowerCase(Locale.US).trim();
 
         if (containsAdQueryKey(lower)) return true;
-        if (containsAdKeyword(mediaPathAndQuery(lower))) return true;
+        if (containsAdKeyword(safeDecode(stripQueryAndFragment(mediaPathAndQuery(lower))))) return true;
         if (containsAdPathPart(lower)) return true;
         try {
             if (AdBlocker.isAdUrl(lower)) return true;
@@ -1593,10 +1592,10 @@ public final class M3u8AdFilter {
     }
 
     static boolean containsAdQueryKey(String uri) {
-        int query = uri.indexOf('?');
-        if (query < 0 || query >= uri.length() - 1) return false;
-        int fragment = uri.indexOf('#', query + 1);
+        int fragment = uri.indexOf('#');
         int end = fragment >= 0 ? fragment : uri.length();
+        int query = uri.indexOf('?');
+        if (query < 0 || query >= end - 1) return false;
 
         for (int start = query + 1; start < end; ) {
             int separator = uri.indexOf('&', start);
@@ -1605,12 +1604,11 @@ public final class M3u8AdFilter {
             if (equals < 0 || equals > separator) equals = separator;
 
             String key = safeDecode(uri.substring(start, equals)).toLowerCase(Locale.US);
+            String value = equals < separator ? safeDecode(uri.substring(equals + 1, separator)).toLowerCase(Locale.US) : "";
 
-            if (AD_QUERY_KEYS.contains(key)) return true;
-            if (containsAdKeyword(key)) return true;
+            if ((AD_QUERY_KEYS.contains(key) || containsAdKeyword(key)) && !isDisabledAdValue(value)) return true;
 
             if (isAdValueKey(key) && equals < separator) {
-                String value = safeDecode(uri.substring(equals + 1, separator)).toLowerCase(Locale.US);
                 if (containsAdKeyword(value)) return true;
             }
             if (equals < separator && isLikelyAdQueryValueResource(uri.substring(equals + 1, separator))) return true;
@@ -1618,6 +1616,13 @@ public final class M3u8AdFilter {
         }
 
         return false;
+    }
+
+    private static boolean isDisabledAdValue(String value) {
+        String normalized = value.trim();
+        return normalized.isEmpty() || normalized.equals("0") || normalized.equals("false")
+                || normalized.equals("off") || normalized.equals("no") || normalized.equals("none")
+                || normalized.equals("null");
     }
 
     private static boolean isAdValueKey(String key) {
@@ -1663,7 +1668,7 @@ public final class M3u8AdFilter {
     }
 
     private static boolean containsAdPathPart(String uri, boolean includeAdNumbers) {
-        String path = stripQueryAndFragment(mediaPathAndQuery(uri));
+        String path = safeDecode(stripQueryAndFragment(mediaPathAndQuery(uri)));
         if (isEmpty(path)) return false;
 
         String[] parts = path.toLowerCase(Locale.US).split("[/._\\-]+");
