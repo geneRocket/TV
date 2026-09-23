@@ -87,6 +87,8 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
 
     @Override
     protected void initView() {
+        activity = (VideoActivity) requireActivity();
+        if (episodes == null) episodes = activity.playbackEpisodes();
         this.binding.array.setHorizontalSpacing(ResUtil.dp2px(8));
         this.binding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         this.binding.array.setAdapter(new ItemBridgeAdapter(mArrayAdapter = new ArrayObjectAdapter(mArrayPresenter = new ArrayPresenter(this))));
@@ -211,13 +213,14 @@ public class EpisodeDialog extends BaseDialog implements ArrayPresenter.OnClickL
 
     private void setEpisodeActivated(Episode item) {
         if (!this.activity.isFullscreen() || !item.isActivated()) this.activity.setEpisodeActivated(item);
+        returnFocus = null;
         this.dismiss();
     }
 
     @Override
     public void onDismiss(@NonNull DialogInterface dialog) {
         super.onDismiss(dialog);
-        if (returnFocus != null && returnFocus.isAttachedToWindow() && returnFocus.isShown()) returnFocus.requestFocus();
+        if (activity != null) activity.restoreEpisodePanelFocus(returnFocus);
         returnFocus = null;
     }
 

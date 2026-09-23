@@ -1,7 +1,5 @@
 package com.fongmi.android.tv.model;
 
-import android.text.TextUtils;
-
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.utils.AppTaskScheduler;
@@ -10,34 +8,62 @@ import com.fongmi.android.tv.utils.ThreadPools;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.concurrent.ExecutorService;
 
 public final class SiteSearchSession implements AutoCloseable {
 
     private enum Mode { MANUAL, SELECT_FIRST, RECOVERING }
 
-    private final SiteViewModel viewModel;
-    private final String executorName;
-    private final int concurrency;
+    private static final long SEARCH_TIMEOUT_MS = 30_000;
+
+    interface Backend {
+        void search(Site site, String keyword, String token) throws Throwable;
+        void cancel(String token);
+        void finish(String token);
+    }
+
+    private final Backend backend;
+    private final Supplier<ExecutorService> executorFactory;
     private final TaskScheduler scheduler;
     private ExecutorService executor;
     private String token;
     private Runnable completion;
+    private Runnable deadline;
+    private boolean settled;
+    private boolean timedOut;
     private int generation;
     private int pending;
     private boolean active;
     private Mode mode = Mode.MANUAL;
 
     public SiteSearchSession(SiteViewModel viewModel, String executorName, int concurrency) {
-        this.viewModel = viewModel;
-        this.executorName = executorName;
-        this.concurrency = concurrency;
-        this.scheduler = AppTaskScheduler.get();
+        this(new Backend() {
+            @Override public void search(Site site, String keyword, String token) throws Throwable { viewModel.searchContent(site, keyword, false, token); }
+            @Override public void cancel(String token) { viewModel.cancelSearch(token); }
+            @Override public void finish(String token) { viewModel.finishSearch(token); }
+        }, () -> ThreadPools.newFixedQueued(executorName, Math.max(1, concurrency)), AppTaskScheduler.get());
+    }
+
+    SiteSearchSession(Backend backend, Supplier<ExecutorService> executorFactory, TaskScheduler scheduler) {
+        this.backend = backend;
+        this.executorFactory = executorFactory;
+        this.scheduler = scheduler;
     }
 
     public synchronized void start(List<Site> sites, String keyword, boolean auto, Runnable onComplete) {
         cancel();
-        List<Site> requests = sites == null ? new ArrayList<>() : new ArrayList<>(sites);
+        String query = keyword == null ? "" : keyword.trim();
+        Map<String, Site> unique = new LinkedHashMap<>();
+        if (!query.isEmpty() && sites != null) {
+            for (Site site : sites) if (site != null && !site.getKey().isEmpty()) unique.putIfAbsent(site.getKey(), site);
+        }
+        List<Site> requests = new ArrayList<>(unique.values());
+        settled = false;
+        timedOut = false;
         this.token = SearchRequestToken.next("search");
         this.active = true;
         this.pending = requests.size();
@@ -48,12 +74,14 @@ public final class SiteSearchSession implements AutoCloseable {
             scheduleComplete(currentGeneration, onComplete);
             return;
         }
-        executor = ThreadPools.newFixedQueued(executorName, concurrency);
-        for (Site site : requests) executor.execute(() -> search(site, keyword, currentToken, currentGeneration, onComplete));
+        deadline = () -> expire(currentGeneration, onComplete);
+        scheduler.post(deadline, SEARCH_TIMEOUT_MS);
+        executor = executorFactory.get();
+        for (Site site : requests) executor.execute(() -> search(site, query, currentToken, currentGeneration, onComplete));
     }
 
     public synchronized boolean accepts(Result result) {
-        return active && result != null && TextUtils.equals(token, result.getRequestToken());
+        return active && !timedOut && result != null && Objects.equals(token, result.getRequestToken());
     }
 
     public synchronized boolean isActive() {
@@ -90,7 +118,8 @@ public final class SiteSearchSession implements AutoCloseable {
         generation++;
         if (completion != null) scheduler.remove(completion);
         completion = null;
-        if (!TextUtils.isEmpty(token)) viewModel.cancelSearch(token);
+        clearDeadline();
+        if (token != null) backend.cancel(token);
         token = null;
         if (executor != null) executor.shutdownNow();
         executor = null;
@@ -104,7 +133,7 @@ public final class SiteSearchSession implements AutoCloseable {
     private void search(Site site, String keyword, String token, int generation, Runnable onComplete) {
         try {
             if (!isCurrent(generation, token)) return;
-            viewModel.searchContent(site, keyword, false, token);
+            backend.search(site, keyword, token);
         } catch (Throwable error) {
             ThreadPools.log(error, "Video search failed for " + site.getName());
         } finally {
@@ -115,21 +144,22 @@ public final class SiteSearchSession implements AutoCloseable {
     private void scheduleComplete(int generation, Runnable callback) {
         Runnable delivery = () -> complete(generation, callback);
         synchronized (this) {
-            if (!active || this.generation != generation || pending > 0) return;
+            if (!active || settled || this.generation != generation || pending > 0) return;
             completion = delivery;
+            scheduler.post(delivery, 0);
         }
-        scheduler.post(delivery, 0);
     }
 
     private synchronized boolean isCurrent(int generation, String token) {
         return active
                 && this.generation == generation
-                && TextUtils.equals(this.token, token)
+                && !timedOut
+                && Objects.equals(this.token, token)
                 && !Thread.currentThread().isInterrupted();
     }
 
     private synchronized boolean finish(int generation) {
-        if (!active || this.generation != generation) return false;
+        if (!active || timedOut || this.generation != generation || pending <= 0) return false;
         if (pending > 0) pending--;
         if (pending == 0 && executor != null) {
             executor.shutdown();
@@ -138,15 +168,28 @@ public final class SiteSearchSession implements AutoCloseable {
         return pending == 0;
     }
 
-    private void complete(int generation, Runnable callback) {
-        String completedToken;
-        synchronized (this) {
-            if (!active || this.generation != generation || pending > 0) return;
-            if (completion != null) scheduler.remove(completion);
-            completion = null;
-            completedToken = token;
-        }
-        viewModel.finishSearch(completedToken);
-        callback.run();
+    private synchronized void expire(int generation, Runnable callback) {
+        if (!active || settled || this.generation != generation || pending <= 0) return;
+        timedOut = true;
+        pending = 0;
+        backend.cancel(token);
+        if (executor != null) executor.shutdownNow();
+        executor = null;
+        complete(generation, callback);
+    }
+
+    private void clearDeadline() {
+        if (deadline != null) scheduler.remove(deadline);
+        deadline = null;
+    }
+
+    private synchronized void complete(int generation, Runnable callback) {
+        if (!active || settled || this.generation != generation || pending > 0) return;
+        settled = true;
+        clearDeadline();
+        if (completion != null) scheduler.remove(completion);
+        completion = null;
+        backend.finish(token);
+        if (callback != null) callback.run();
     }
 }

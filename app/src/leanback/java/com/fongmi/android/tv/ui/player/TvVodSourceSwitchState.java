@@ -1,7 +1,5 @@
 package com.fongmi.android.tv.ui.player;
 
-import android.text.TextUtils;
-
 import com.fongmi.android.tv.bean.Flag;
 
 import java.util.List;
@@ -22,7 +20,7 @@ public final class TvVodSourceSwitchState {
     public Flag findTargetFlag(List<Flag> flags) {
         if (flags == null) return null;
         for (Flag flag : flags) if (matchesTargetFlag(flag)) return flag;
-        return firstPlayableFlag(flags);
+        return isActive() ? null : firstPlayableFlag(flags);
     }
 
     public void search(String episode, Flag currentFlag) {
@@ -50,7 +48,7 @@ public final class TvVodSourceSwitchState {
         int count = flag.getEpisodes().size();
         if (!acceptsTargetEpisodeCount(count)) return false;
         if (count == 1) return true;
-        return flag.find(episode, !TextUtils.isEmpty(episode)) != null;
+        return flag.find(episode, !episode.isEmpty()) != null;
     }
 
     private boolean acceptsTargetEpisodeCount(int count) {

@@ -56,10 +56,10 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private RecordAdapter mRecordAdapter;
     private WordAdapter mWordAdapter;
     private boolean mAutoSearched;
-    private Call mHotCall;
-    private Call mSuggestOneCall;
-    private Call mSuggestTwoCall;
-    private String mSuggestKeyword;
+    private volatile Call mHotCall;
+    private volatile Call mSuggestOneCall;
+    private volatile Call mSuggestTwoCall;
+    private volatile String mSuggestKeyword = "";
     private String mLastSearchKeyword;
     private long mLastSearchAt;
     private final Runnable mSuggestTask = new Runnable() {
@@ -105,6 +105,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                 String keyword = s.toString().trim();
                 if (keyword.isEmpty()) {
                     cancelSuggestTask();
+                    mSuggestKeyword = "";
                     getHot();
                 } else {
                     cancelHotRequest();
@@ -243,11 +244,11 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     private boolean isSuggestRequestValid(Call call, String requestKeyword) {
         boolean currentCall = call == mSuggestOneCall || call == mSuggestTwoCall;
-        return currentCall && requestKeyword.equals(getKeyword());
+        return currentCall && requestKeyword.equals(mSuggestKeyword);
     }
 
     private boolean isHotRequestValid(Call call) {
-        return call == mHotCall && TextUtils.isEmpty(getKeyword());
+        return call == mHotCall && TextUtils.isEmpty(mSuggestKeyword);
     }
 
     @Override

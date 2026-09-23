@@ -79,6 +79,7 @@ import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
 import com.fongmi.android.tv.player.vod.StartPolicy;
 import com.fongmi.android.tv.player.vod.DefaultPlaybackItemFactory;
 import com.fongmi.android.tv.player.vod.VodEpisode;
+import com.fongmi.android.tv.player.vod.VodSourceMatcher;
 import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
 import com.fongmi.android.tv.player.vod.VodPlaybackIntent;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
@@ -280,9 +281,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         @Override public Flag nextPlayableFlag() {
+            Flag current = getCurrentSwitchFlag();
+            boolean singleEpisode = current != null && current.getEpisodes().size() == 1;
+            String episode = getCurrentSwitchEpisode();
             for (int i = getFlagPosition() + 1; i < mFlagAdapter.size(); i++) {
                 Flag item = (Flag) mFlagAdapter.get(i);
-                if (!item.getEpisodes().isEmpty()) return item;
+                if (VodSourceMatcher.canResume(item, episode, singleEpisode)) return item;
             }
             return null;
         }
@@ -1046,10 +1050,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         CharSequence title = getString(R.string.detail_title, mBinding.name.getText(), episode.getName());
         if (!TextUtils.equals(mBinding.widget.title.getText(), title)) mBinding.widget.title.setText(title);
         if (!TextUtils.equals(mBinding.display.title.getText(), title)) mBinding.display.title.setText(title);
-        mPlayers.clear();
-        mPlayers.stop();
+        mKeyDown.release();
+        mSeekGesture.reset();
         StartPolicy policy = mPlaybackIntent.consumeStartPolicy(replay, isSourceSwitching());
+        if (policy != StartPolicy.KEEP_CURRENT_POSITION) mPlayers.clear();
         Source.get().cancelPreloads();
+        mPlaybackCoordinator.setPrefetchReverse(mHistory != null && mHistory.isRevPlay());
         mPlaybackCoordinator.play(index, policy);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         clearDanmakuView();
@@ -1392,7 +1398,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         boolean hasDialog = hasBottomSheetDialog();
         boolean playing = mPlayers.isPlaying();
         setVisibilityIfChanged(mBinding.display.clock, !playing && (Setting.isDisplayTime() || isVisible(mBinding.widget.info)) ? View.VISIBLE : View.GONE);
-        setVisibilityIfChanged(mBinding.display.titleLayout, !playing && Setting.isDisplayVideoTitle() && !isVisible(mBinding.control.getRoot()) ? View.VISIBLE : View.GONE);
+        boolean paused = mPlaybackCoordinator != null && mPlaybackCoordinator.state().getPhase() == VodPlaybackPhase.PAUSED;
+        setVisibilityIfChanged(mBinding.display.titleLayout, paused && !playing && Setting.isDisplayVideoTitle() && !isVisible(mBinding.control.getRoot()) ? View.VISIBLE : View.GONE);
         boolean showNetSpeed = shouldShowDisplaySpeed(hasDialog);
         setVisibilityIfChanged(mBinding.display.netspeed, showNetSpeed ? View.VISIBLE : View.GONE);
         if (showNetSpeed) startDisplayTrafficPolling();
@@ -1456,6 +1463,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public void onRevPlay(TextView view) {
         if (mHistory == null) return;
         mHistory.setRevPlay(!mHistory.isRevPlay());
+        mPlaybackCoordinator.setPrefetchReverse(mHistory.isRevPlay());
         view.setText(mHistory.getRevPlayText());
         Notify.show(mHistory.getRevPlayHint());
     }
@@ -1557,6 +1565,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             Notify.show(mDanmakus.get(next).getName());
         }
         return true;
+    }
+
+    public List<Episode> playbackEpisodes() {
+        if (mFlagAdapter == null || mFlagAdapter.size() == 0) return new ArrayList<>();
+        Flag flag = getFlag();
+        return flag == null ? new ArrayList<>() : new ArrayList<>(flag.getEpisodes());
+    }
+
+    public void restoreEpisodePanelFocus(View previous) {
+        if (isFinishing() || isDestroyed()) return;
+        if (previous != null && previous.isAttachedToWindow() && previous.isShown()) previous.requestFocus();
+        else mBinding.video.requestFocus();
     }
 
     private void onEpisodes() {
@@ -2045,7 +2065,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (title.isEmpty()) return;
         mRecommendRequest = () -> {
             if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
-            if (mPlaybackCoordinator != null && mPlaybackCoordinator.state().getPhase() != VodPlaybackPhase.READY) {
+            if (mSeekGesture.isActive() || (mPlaybackCoordinator != null && mPlaybackCoordinator.state().getPhase() != VodPlaybackPhase.READY)) {
                 App.post(mRecommendRequest, 2_000);
                 return;
             }
@@ -2198,6 +2218,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void renderPlayback(VodPlaybackState state) {
+            if (state.getPhase() == VodPlaybackPhase.RESOLVING || state.getPhase() == VodPlaybackPhase.BUFFERING) {
+                if (mSiteSearch != null) mSiteSearch.cancel();
+                ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
+            }
         if (state.getPhase() == VodPlaybackPhase.READY) mRecoveryWindow.ready();
         else mRecoveryWindow.unstable();
         if (!isCurrentPlayer() || isBackground()) return;
@@ -2317,8 +2341,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void showPlayingState() {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         mResumeOnForeground = true;
-        hideCenter();
-        showDisplayInfo();
+        // A transient pause while advancing episodes may have shown the title.
+        // Clear both overlays when playback starts, including automatic next/skip-ending.
+        hideInfoAndCenter();
+        setVisibilityIfChanged(mBinding.display.titleLayout, View.GONE);
     }
 
     private void onPlay() {
@@ -2399,10 +2425,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private String getCurrentSwitchEpisode() {
-        if (!TextUtils.isEmpty(getMark())) return getMark();
+        if (mPlaybackCoordinator != null && mPlaybackCoordinator.state().getEpisode() != null)
+            return mPlaybackCoordinator.state().getEpisode().getName();
         if (mEpisodeAdapter != null && mEpisodeAdapter.size() > 0) return getEpisode().getName();
-        if (mHistory != null) return mHistory.getVodRemarks();
-        return "";
+        if (mHistory != null && !TextUtils.isEmpty(mHistory.getVodRemarks())) return mHistory.getVodRemarks();
+        return getMark();
     }
 
     private String getCurrentSwitchKeyword() {
@@ -2707,7 +2734,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlaybackState.onSeek();
         mPlaybackCoordinator.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
         mKeyDown.resetTime();
-        onPlay();
+        // Seeking preserves the engine's play intent. isPlaying() is false
+        // during buffering too, so it must never decide whether to pause here.
+        if (mPlaybackCoordinator.state().getPhase() == VodPlaybackPhase.PAUSED) showPausedState();
+        else hideInfoAndCenter();
     }
 
     @Override
@@ -2856,6 +2886,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onBackPressed() {
         if (mRecoveryWindow.isActive()) { cancelAutomaticRecovery(false); return; }
+        if (mSeekGesture.isActive()) {
+            mKeyDown.release();
+            mSeekGesture.reset();
+            hideCenter();
+            return;
+        }
         if (isVisible(mBinding.control.getRoot())) {
             hideControl();
         } else if (isVisible(mBinding.widget.center)) {

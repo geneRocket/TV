@@ -85,6 +85,7 @@ import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
 import com.fongmi.android.tv.player.vod.StartPolicy;
 import com.fongmi.android.tv.player.vod.DefaultPlaybackItemFactory;
 import com.fongmi.android.tv.player.vod.VodEpisode;
+import com.fongmi.android.tv.player.vod.VodSourceMatcher;
 import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
 import com.fongmi.android.tv.player.vod.VodPlaybackIntent;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
@@ -498,8 +499,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         VodAdapter.OnClickListener recommendListener = new VodAdapter.OnClickListener() {
             @Override
             public void onItemClick(Vod item) {
-        capturePlaybackPosition();
-        takePlaybackControl();
                 CollectActivity.start(VideoActivity.this, item.getVodName());
             }
 
@@ -543,6 +542,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
         mPlaybackCoordinator.configureTimeout(com.fongmi.android.tv.utils.AppTaskScheduler.get(), Constant.TIMEOUT_PLAY);
         mPlaybackSubscription = mPlaybackCoordinator.observe(state -> {
+            if (state.getPhase() == VodPlaybackPhase.RESOLVING || state.getPhase() == VodPlaybackPhase.BUFFERING) {
+                if (mSiteSearch != null) mSiteSearch.cancel();
+                ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
+            }
             if (mHistory != null) {
                 if (state.getPosition() > 0) mHistory.setPosition(state.getPosition());
                 if (state.getDuration() > 0) mHistory.setDuration(state.getDuration());
@@ -750,11 +753,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }
         mBinding.control.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
         mBinding.display.title.setText(mBinding.control.title.getText());
-        mPlayers.clear();
-        mPlayers.stop();
+        mKeyDown.release();
+        mSeekGesture.reset();
         StartPolicy policy = mPlaybackIntent.consumeStartPolicy(replay, false);
+        if (policy != StartPolicy.KEEP_CURRENT_POSITION) mPlayers.clear();
         updateHistory(episode);
         Source.get().cancelPreloads();
+        mPlaybackCoordinator.setPrefetchReverse(mHistory != null && mHistory.isRevPlay());
         mPlaybackCoordinator.play(index, policy);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         clearDanmakuView();
@@ -1257,7 +1262,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.display.netspeed.setVisibility(showNetSpeed ? View.VISIBLE : View.GONE);
         mBinding.display.duration.setVisibility(Setting.isDisplayDuration() && visible && (mPlayers.isVod()) ? View.VISIBLE : View.GONE);
         mBinding.display.progress.setVisibility(Setting.isDisplayMiniProgress() && visible && (mPlayers.isVod()) ? View.VISIBLE : View.GONE);
-        mBinding.display.titleLayout.setVisibility(Setting.isDisplayVideoTitle()&& visible ? View.VISIBLE : View.GONE);
+        boolean paused = mPlayers.session().state().getPhase() == com.fongmi.android.tv.player.session.PlaybackPhase.PAUSED;
+        mBinding.display.titleLayout.setVisibility(paused && Setting.isDisplayVideoTitle() && visible ? View.VISIBLE : View.GONE);
     }
 
     private void onTimeChangeDisplaySpeed() {
@@ -1472,19 +1478,24 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void checkHistory(Vod item) {
         String historyKey = getHistoryKey();
+        String detailToken = pendingDetailToken;
+        int siteCid = getSiteCid();
+        String mark = getMark();
+        float speed = Setting.getPlaySpeed();
         History preloaded = takePreloadedHistory(historyKey);
         mHistoryRequests.submit("history", () -> {
             History history = preloaded == null
-                    ? HistoryRepository.get().prepareBestMatch(historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark())
-                    : HistoryRepository.get().prepare(preloaded, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark());
+                    ? HistoryRepository.get().prepareBestMatch(historyKey, siteCid, item, speed, mark)
+                    : HistoryRepository.get().prepare(preloaded, historyKey, siteCid, item, speed, mark);
             if (Setting.isIncognito() && history.getKey().equals(historyKey)) HistoryRepository.get().delete(history);
             return history;
         }, Constant.TIMEOUT_VOD, result -> {
-            if (isFinishing() || isDestroyed() || !TextUtils.equals(historyKey, getHistoryKey())) return;
+            if (isFinishing() || isDestroyed() || !TextUtils.equals(historyKey, getHistoryKey())
+                    || !TextUtils.equals(detailToken, pendingDetailToken)) return;
             applyHistory(result);
             checkFlag(item);
             checkKeepImg();
-        }, error -> HistoryRepository.get().prepare(null, historyKey, getSiteCid(), item, Setting.getPlaySpeed(), getMark()), null);
+        }, error -> HistoryRepository.get().prepare(null, historyKey, siteCid, item, speed, mark), null);
     }
 
     private void applyHistory(History history) {
@@ -1675,7 +1686,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             case BUFFERING:
                 showProgress();
                 break;
+            case PAUSED:
+                showDisplayInfo();
+                break;
             case READY:
+                mBinding.display.titleLayout.setVisibility(View.GONE);
                 clearPlaybackTimeout();
                 stopSearch();
                 mBroken.clear();
@@ -1905,9 +1920,16 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void nextFlag(int position) {
-        Flag flag = mFlagAdapter.get(position + 1);
-        Notify.show(getString(R.string.play_switch_flag, flag.getFlag()));
-        switchFlag(flag);
+        boolean singleEpisode = getFlag() != null && getFlag().getEpisodes().size() == 1;
+        String episode = mHistory == null ? "" : mHistory.getVodRemarks();
+        for (int next = position + 1; next < mFlagAdapter.getItemCount(); next++) {
+            Flag flag = mFlagAdapter.get(next);
+            if (!VodSourceMatcher.canResume(flag, episode, singleEpisode)) continue;
+            Notify.show(getString(R.string.play_switch_flag, flag.getFlag()));
+            switchFlag(flag);
+            return;
+        }
+        checkSearch(false);
     }
 
     private void nextSite() {
@@ -2105,6 +2127,10 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onSeek(int time) {
+        Source.get().cancelPreloads();
+        stopSearch();
+        if (mPlaybackCoordinator != null) mPlaybackCoordinator.cancelPrefetch();
+        ThreadPools.cancel(ThreadPools.recommendations(), mRecommendFuture);
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         mBinding.widget.time.setText(mPlayers.stringToTime(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time)));
         mBinding.widget.seek.setVisibility(View.VISIBLE);
@@ -2118,8 +2144,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             mSeekGesture.reset();
             return;
         }
+        // Seeking preserves the engine's play intent, including while buffering.
         mPlaybackCoordinator.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
-        onPlay();
     }
 
     @Override
@@ -2325,7 +2351,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (title.isEmpty()) return;
         mRecommendRequest = () -> {
             if (generation != mRecommendGeneration || isFinishing() || isDestroyed()) return;
-            if (mPlaybackCoordinator != null && mPlaybackCoordinator.state().getPhase() != VodPlaybackPhase.READY) {
+            if (mSeekGesture.isActive() || (mPlaybackCoordinator != null && mPlaybackCoordinator.state().getPhase() != VodPlaybackPhase.READY)) {
                 App.post(mRecommendRequest, 2_000);
                 return;
             }

@@ -20,6 +20,8 @@ public final class PlaybackSeekGesture {
         return PlaybackSeek.target(base, duration, offset);
     }
 
+    public boolean isActive() { return active; }
+
     public void reset() {
         active = false;
         origin = 0;

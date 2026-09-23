@@ -27,6 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 
 public class VodPlaybackCoordinatorTest {
 
@@ -326,6 +329,52 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    public void stopRetainsLatestSnapshotForReload() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 40_000, 900_000));
+        engine.snapshot = new EngineSnapshot(engine.request.getSessionId(), EnginePhase.READY, 88_000, 900_000, 120_000, true, 1.0f, 1920, 1080);
+
+        coordinator.stop();
+        assertEquals(88_000, coordinator.state().getPosition());
+        assertEquals(88_000, coordinator.currentPosition());
+        coordinator.reload();
+        assertEquals(88_000, coordinator.state().getPosition());
+    }
+
+    @Test
+    public void stopStillCompletesWhenSnapshotFails() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 40_000, 900_000));
+        engine.failSnapshot = true;
+
+        coordinator.stop();
+        assertEquals(VodPlaybackPhase.STOPPED, coordinator.state().getPhase());
+        assertEquals(40_000, coordinator.state().getPosition());
+    }
+
+    @Test
+    public void stopIgnoresForeignSessionSnapshot() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 40_000, 900_000));
+        engine.snapshot = new EngineSnapshot(engine.request.getSessionId() + 1, EnginePhase.READY, 88_000, 900_000, 120_000, true, 1.0f, 1920, 1080);
+
+        coordinator.stop();
+        assertEquals(40_000, coordinator.currentPosition());
+    }
+
+    @Test
     public void currentPositionIgnoresSnapshotFromDifferentSession() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
@@ -530,6 +579,203 @@ public class VodPlaybackCoordinatorTest {
         assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
     }
 
+    @Test
+    public void completedEpisodeKeepsPrefetchUntilNextResolveConsumesIt() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        long id = engine.request.getSessionId();
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 85_000, 100_000));
+        scheduler.task.run();
+        assertTrue(resolver.prefetched);
+        engine.emit(EngineEvent.state(id, EnginePhase.ENDED, 100_000, 100_000));
+        coordinator.next();
+        assertTrue(resolver.prefetchedAtResolve);
+    }
+
+    @Test
+    public void bufferingCancellationAllowsPrefetchToResume() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        long id = engine.request.getSessionId();
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 85_000, 100_000));
+        scheduler.task.run();
+        assertTrue(resolver.prefetched);
+        engine.emit(EngineEvent.state(id, EnginePhase.BUFFERING, 85_000, 100_000));
+        assertFalse(resolver.prefetched);
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 85_000, 100_000));
+        assertNotNull(scheduler.task);
+        scheduler.task.run();
+        assertTrue(resolver.prefetched);
+    }
+
+    @Test
+    public void cancelledPrefetchTimerCannotReplaceSeekTimer() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 85_000, 100_000));
+        Runnable stale = scheduler.task;
+        coordinator.seekTo(90_000);
+        Runnable current = scheduler.task;
+        assertNotSame(stale, current);
+        stale.run();
+        assertFalse(resolver.prefetched);
+        assertSame(current, scheduler.task);
+        current.run();
+        assertTrue(resolver.prefetched);
+    }
+
+    @Test
+    public void reorderedListKeepsCurrentEpisodeForReload() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 42_000, 100_000));
+        coordinator.setEpisodes(Arrays.asList(episode(2), episode(1)));
+        assertEquals(1, coordinator.state().getEpisodeIndex());
+        assertTrue(coordinator.reload());
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals("episode-1", engine.request.getUrl());
+        assertEquals(42_000, engine.request.getStartPosition());
+    }
+
+    @Test
+    public void reorderWhileResolvingDoesNotRestoreCapturedOldIndex() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.setEpisodes(Arrays.asList(episode(2), episode(1)));
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 0, 100_000));
+        assertEquals(1, coordinator.state().getEpisodeIndex());
+        assertFalse(coordinator.next());
+        assertTrue(coordinator.previous());
+        assertEquals("episode-2", coordinator.state().getEpisode().getIdentity());
+    }
+
+    @Test
+    public void removedEpisodeDoesNotNavigateOrReloadAnotherEpisode() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(1, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        coordinator.setEpisodes(Collections.singletonList(episode(1)));
+        assertEquals(-1, coordinator.state().getEpisodeIndex());
+        assertFalse(coordinator.next());
+        assertFalse(coordinator.previous());
+        assertFalse(coordinator.reload());
+        assertFalse(coordinator.replay());
+        coordinator.play(0, StartPolicy.FRESH);
+        assertEquals("episode-1", coordinator.state().getEpisode().getIdentity());
+    }
+
+    @Test
+    public void reorderDoesNotRepublishPlaybackTransitions() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.ENDED, 100_000, 100_000));
+        java.util.List<VodPlaybackPhase> notifications = new ArrayList<>();
+        coordinator.observe(state -> notifications.add(state.getPhase()));
+        notifications.clear();
+        coordinator.setEpisodes(Arrays.asList(episode(2), episode(1)));
+        assertTrue(notifications.isEmpty());
+        assertEquals(VodPlaybackPhase.ENDED, coordinator.state().getPhase());
+    }
+
+    @Test
+    public void refreshedListPrefetchesActualNeighborAndRejectsOldTimer() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 85_000, 100_000));
+        Runnable stale = scheduler.task;
+        coordinator.setEpisodes(Arrays.asList(episode(2), episode(1), episode(3)));
+        Runnable current = scheduler.task;
+        stale.run();
+        assertFalse(resolver.prefetched);
+        current.run();
+        assertEquals("episode-3", resolver.prefetchedUrl);
+    }
+
+    @Test
+    public void duplicateLabelsKeepTheirMatchingRouteAfterReorder() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        VodEpisode first = new VodEpisode("same-label", "site", "flag", "正片", "cut-1");
+        VodEpisode second = new VodEpisode("same-label", "site", "flag", "正片", "cut-2");
+        coordinator.setEpisodes(Arrays.asList(first, second));
+        coordinator.play(1, StartPolicy.FRESH);
+        assertEquals(1, coordinator.state().getEpisodeIndex());
+        coordinator.setEpisodes(Arrays.asList(second, first));
+        assertEquals(0, coordinator.state().getEpisodeIndex());
+        assertTrue(coordinator.reload());
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals("cut-2", engine.request.getUrl());
+    }
+
+    @Test
+    public void uniqueEpisodeCanReloadItsRefreshedAddress() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.setEpisodes(Collections.singletonList(new VodEpisode("episode-1", "site", "flag", "第1集", "fresh-url")));
+        assertTrue(coordinator.reload());
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals("fresh-url", engine.request.getUrl());
+    }
+
+    private static VodEpisode episode(int number) {
+        return new VodEpisode("episode-" + number, "site", "flag", "第" + number + "集", "episode-" + number);
+    }
+
+    @Test
+    public void seekDoesNotTogglePlaybackDuringBufferingOrPause() {
+        for (EnginePhase phase : Arrays.asList(EnginePhase.READY, EnginePhase.BUFFERING, EnginePhase.PAUSED)) {
+            ManualResolver resolver = new ManualResolver();
+            FakeEngine engine = new FakeEngine();
+            VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+            coordinator.play(0, StartPolicy.FRESH);
+            resolver.resolve(resolver.lastRequestId);
+            engine.emit(EngineEvent.state(engine.request.getSessionId(), phase, 20_000, 100_000));
+            VodPlaybackPhase before = coordinator.state().getPhase();
+
+            coordinator.seekTo(30_000);
+            coordinator.seekTo(40_000);
+
+            assertEquals(before, coordinator.state().getPhase());
+            assertEquals(40_000, engine.seekPosition);
+            assertEquals(0, engine.plays);
+            assertEquals(0, engine.pauses);
+        }
+    }
+
     private static class ManualScheduler implements com.fongmi.android.tv.utils.TaskScheduler {
         Runnable task;
         public void post(Runnable task, long delay) { this.task = task; }
@@ -554,9 +800,16 @@ public class VodPlaybackCoordinatorTest {
 
         private final Map<Long, Callback> callbacks = new LinkedHashMap<>();
         private long lastRequestId;
+        private boolean prefetched;
+        private String prefetchedUrl;
+        private boolean prefetchedAtResolve;
+
+        @Override public void prefetch(ResolveRequest request) { prefetched = true; prefetchedUrl = request.getEpisodeUrl(); }
+        @Override public void cancelPrefetch() { prefetched = false; }
 
         @Override
         public ResolveHandle resolve(ResolveRequest request, Callback callback) {
+            prefetchedAtResolve = prefetched;
             lastRequestId = request.getRequestId();
             callbacks.put(lastRequestId, callback);
             return new ResolveHandle() {
@@ -573,8 +826,11 @@ public class VodPlaybackCoordinatorTest {
     private static final class FakeEngine implements PlayerEngine {
 
         private EngineRequest request;
+        private boolean failSnapshot;
         private float speed;
         private int pauses;
+        private int plays;
+        private long seekPosition;
         private Listener listener;
         private EngineSnapshot snapshot = EngineSnapshot.EMPTY;
 
@@ -583,13 +839,16 @@ public class VodPlaybackCoordinatorTest {
             snapshot = new EngineSnapshot(event.getSessionId(), event.getPhase(), event.getPosition(), event.getDuration(), 0, event.getPhase() == EnginePhase.READY, 1.0f, 0, 0);
             listener.onEngineEvent(event);
         }
-        @Override public void play() {}
+        @Override public void play() { plays++; }
         @Override public void pause() { pauses++; }
-        @Override public void seekTo(long position) {}
+        @Override public void seekTo(long position) { seekPosition = position; }
         @Override public void stop() {}
         @Override public void setSpeed(float speed) { this.speed = speed; }
         @Override public void setTrack(Track track) {}
-        @Override public EngineSnapshot snapshot() { return snapshot; }
+        @Override public EngineSnapshot snapshot() {
+            if (failSnapshot) throw new IllegalStateException("engine unavailable");
+            return snapshot;
+        }
         @Override public void release() {}
     }
 }

@@ -183,7 +183,9 @@ public class CollectActivity extends BaseActivity {
         mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
         if (TextUtils.isEmpty(getKeyword().trim())) return;
         mExecutor = new PauseExecutor(Math.min(10, ThreadPools.searchConcurrency()), Math.max(1, mSites.size()));
-        for (Site site : mSites) mSearchTasks.add(mExecutor.submit(() -> search(site)));
+        String keyword = getKeyword().trim();
+        String token = mSearchToken;
+        for (Site site : mSites) mSearchTasks.add(mExecutor.submit(() -> search(site, keyword, token)));
     }
 
     private void addCollect(List<Vod> items) {
@@ -306,10 +308,10 @@ public class CollectActivity extends BaseActivity {
         mPageAdapter.submit(new ArrayList<>(mCollectMap.keySet()));
     }
 
-    private void search(Site site) {
-        if (isFinishing() || isDestroyed() || mExecutor == null) return;
+    private void search(Site site, String keyword, String token) {
+        if (Thread.currentThread().isInterrupted()) return;
         try {
-            mViewModel.searchContent(site, getKeyword(), false, mSearchToken);
+            mViewModel.searchContent(site, keyword, false, token);
         } catch (Throwable e) {
             ThreadPools.log(e, "Collect search failed for " + site.getName());
         }
@@ -321,6 +323,7 @@ public class CollectActivity extends BaseActivity {
         mFlushScheduled = false;
         mAllQueue = null;
         if (mViewModel != null) mViewModel.cancelSearch(mSearchToken);
+        mSearchToken = null;
         for (Future<?> task : mSearchTasks) task.cancel(true);
         mSearchTasks.clear();
         if (mExecutor == null) return;

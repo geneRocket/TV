@@ -45,6 +45,7 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     private static final String REQUEST_DOWNLOAD = "download";
     private static final String REQUEST_ACTION = "action";
+    private static final String REQUEST_SEARCH_PAGE = "search-page";
 
     public SiteViewModel() {
         super();
@@ -122,12 +123,27 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     public void searchContent(Site site, String keyword, String page) {
-        executeAsync(REQUEST_RESULT, Constant.TIMEOUT_VOD, () -> SpiderRepository.get().searchContent(site, Trans.t2s(keyword), false, page), data -> {
+        searchContent(site, keyword, page, "");
+    }
+
+    public void searchContent(Site site, String keyword, String page, String token) {
+        String query = keyword == null ? "" : keyword.trim();
+        executeAsync(REQUEST_SEARCH_PAGE, Constant.TIMEOUT_VOD,
+                () -> SpiderRepository.get().searchContent(site, Trans.t2s(query), false, page,
+                        call -> trackSearchCall(token, call)), data -> {
+            if (cancelledSearchTokens.contains(token)) return;
             Result res = java.util.Objects.requireNonNullElseGet(data, Result::empty);
             res.setKey(site.getKey());
-            res.setKeyword(keyword);
+            res.setKeyword(query);
+            res.setRequestToken(token);
+            finishSearch(token);
             this.result.postValue(res);
         }, this::requestFallback);
+    }
+
+    public void cancelSearchPage(String token) {
+        requests.cancel(REQUEST_SEARCH_PAGE);
+        cancelSearch(token);
     }
 
     public void searchContent(Site site, String keyword, boolean quick, String token) throws Throwable {

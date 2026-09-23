@@ -620,7 +620,7 @@ public class History {
     }
 
     public void saveAsync() {
-        if (TextUtils.isEmpty(getKey())) return;
+        if (isEmpty(getKey())) return;
         History snapshot = copy(this);
         String key = cacheKey(snapshot.getCid(), snapshot.getKey());
         synchronized (QUEUE_LOCK) {

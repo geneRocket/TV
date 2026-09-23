@@ -75,6 +75,8 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     private PauseExecutor mExecutor;
     private List<Site> mSites;
     private String mSearchToken;
+    private String mPageToken;
+    private String mSearchKeyword = "";
     private String mSuggestKeyword;
     private volatile Call mHotCall;
     private volatile Call mSuggestOneCall;
@@ -186,14 +188,17 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
             enqueueResult(result);
         });
         mViewModel.result().observe(this, result -> {
-            boolean same = result.getList().size() > 0
-                    && TextUtils.equals(result.getKeyword(), mBinding.keyword.getText().toString().trim())
-                    && mCollectAdapter.getActivated().getSite().equals(result.getList().get(0).getSite());
-            if (same) mCollectAdapter.getActivated().getList().addAll(result.getList());
-            if (same) mCollectAdapter.getActivated().setPageCount(result.getPageCount());
-            if (same) mSearchAdapter.addAll(result.getList());
+            if (result == null || mPageToken == null || mCollectAdapter.getItemCount() == 0
+                    || !TextUtils.equals(mPageToken, result.getRequestToken())
+                    || !TextUtils.equals(mSearchKeyword, result.getKeyword())) return;
+            Collect activated = mCollectAdapter.getActivated();
+            if (!TextUtils.equals(activated.getSite().getKey(), result.getKey())) return;
+            mPageToken = null;
+            activated.getList().addAll(result.getList());
+            activated.setPageCount(result.getPageCount());
+            mSearchAdapter.addAll(result.getList());
             mScroller.endLoading(result);
-            mCollectAdapter.getActivated().setPage(mScroller.getPage());
+            activated.setPage(mScroller.getPage());
         });
     }
 
@@ -237,6 +242,8 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         stopSearch();
         mExecutor = new PauseExecutor(Math.min(6, ThreadPools.searchConcurrency()), Math.max(1, mSites.size()));
         String keyword = mBinding.keyword.getText().toString().trim();
+        mSearchKeyword = keyword;
+        mScroller.reset();
         mSearchAdapter.setKeyword(keyword);
         mSearchToken = SearchRequestToken.next("collect");
         mPendingSearchCount = mSites.size();
@@ -406,7 +413,14 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
         stopSearch();
     }
 
+    private void cancelPageSearch() {
+        if (mViewModel != null) mViewModel.cancelSearchPage(mPageToken);
+        mPageToken = null;
+        if (mScroller != null) mScroller.setLoading(false);
+    }
+
     private void stopSearch() {
+        cancelPageSearch();
         App.removeCallbacks(mFlushResults);
         mFlushScheduled = false;
         mPendingResults.clear();
@@ -443,6 +457,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
 
     @Override
     public void onItemClick(int position, Collect item) {
+        cancelPageSearch();
         mBinding.recycler.scrollToPosition(0);
         mCollectAdapter.setActivated(position);
         mSearchAdapter.setAll(item.getList());
@@ -465,8 +480,8 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
     public void onLoadMore(String page) {
         Collect activated = mCollectAdapter.getActivated();
         if ("all".equals(activated.getSite().getKey())) return;
-        mViewModel.searchContent(activated.getSite(), mBinding.keyword.getText().toString(), page);
-        activated.setPage(Integer.parseInt(page));
+        mPageToken = SearchRequestToken.next("collect-page");
+        mViewModel.searchContent(activated.getSite(), mSearchKeyword, page, mPageToken);
         mScroller.setLoading(true);
     }
 
