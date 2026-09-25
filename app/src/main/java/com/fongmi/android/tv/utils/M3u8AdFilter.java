@@ -24,8 +24,6 @@ public final class M3u8AdFilter {
     private static final int SUBTITLE_WHITELIST_MAX = 512;
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
     private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
-    private static final int MAX_EDGE_POD_SEGMENTS = 20;
-    private static final double MAX_EDGE_POD_SECONDS = 90;
     private static final int MAX_LOG_CONTENT_CHARS = 8000;
     private static final int URI_AD_LIKE = 1;
     private static final int URI_STRONG_AD = 1 << 1;
@@ -216,12 +214,13 @@ public final class M3u8AdFilter {
         if (isSubtitlePlaylist(content, records)) return toBytesOrOriginal(content, bytes);
 
         int originalSegmentCount = countSegments(records);
+        List<Record> originalRecords = records;
         Set<String> repeatedSegments = collectRepeatedSegments(records);
         records = filterAdTagSegments(records, baseUrl);
         records = filterRepeatedDiscontinuityPods(records);
         records = filterShortAdClusters(records);
-        records = filterEdgeDiscontinuityPods(records);
-        records = filterRepeatedSegments(records, repeatedSegments);
+        Set<String> confirmedRepeatedAds = collectRemovedRepeatedMedia(originalRecords, records, repeatedSegments);
+        records = filterRepeatedSegments(records, confirmedRepeatedAds);
 
         String filtered = filterMinorHostSegments(records, content);
         // Never hand Exo a playlist that the filter has emptied. A false-positive ad rule
@@ -784,6 +783,20 @@ public final class M3u8AdFilter {
         return repeated;
     }
 
+    private static Set<String> collectRemovedRepeatedMedia(List<Record> original, List<Record> kept, Set<String> repeated) {
+        if (repeated.isEmpty() || original.size() == kept.size()) return Collections.emptySet();
+        Set<Record> retained = new HashSet<>(kept);
+        Set<String> confirmed = new HashSet<>();
+        for (Record record : original) {
+            if (!record.segment || retained.contains(record)) continue;
+            String identity = exactMediaIdentity(record);
+            if (!isEmpty(identity) && repeated.contains(identity)) confirmed.add(identity);
+        }
+        return confirmed;
+    }
+
+    // URI reuse alone also occurs for normal still frames and broadcast fillers.
+    // Propagate only a decision already supported by a cue, resource signal or pod.
     private static List<Record> filterRepeatedSegments(List<Record> records, Set<String> repeatedSegments) {
         if (records == null || records.isEmpty() || repeatedSegments == null || repeatedSegments.isEmpty()) return records;
 
@@ -851,90 +864,6 @@ public final class M3u8AdFilter {
         List<Record> kept = new ArrayList<>(records.size());
         for (int i = 0; i < records.size(); i++) if (!remove[i]) kept.add(records.get(i));
         return kept;
-    }
-
-    private static List<Record> filterEdgeDiscontinuityPods(List<Record> records) {
-        if (records == null || records.isEmpty()) return records;
-
-        List<Period> periods = collectPeriods(records);
-        if (periods.size() < 2) return records;
-
-        int segmentCount = countSegments(records);
-        boolean[] remove = new boolean[records.size()];
-        int removedSegments = 0;
-
-        Period first = periods.get(0);
-        Period second = periods.get(1);
-        if (shouldRemoveEdgePod(first, second, segmentCount)) {
-            removedSegments += markPeriodRemoved(remove, records, first);
-        }
-
-        Period last = periods.get(periods.size() - 1);
-        Period previous = periods.get(periods.size() - 2);
-        if (last != first && shouldRemoveEdgePod(last, previous, segmentCount)) {
-            removedSegments += markPeriodRemoved(remove, records, last);
-        }
-
-        if (removedSegments <= 0 || removedSegments >= segmentCount) return records;
-
-        List<Record> kept = new ArrayList<>(records.size());
-        for (int i = 0; i < records.size(); i++) if (!remove[i]) kept.add(records.get(i));
-        return kept;
-    }
-
-    private static List<Period> collectPeriods(List<Record> records) {
-        List<Period> periods = new ArrayList<>();
-        int start = -1;
-        Period current = null;
-
-        for (int i = 0; i < records.size(); i++) {
-            Record record = records.get(i);
-            if (!record.segment) continue;
-
-            boolean boundary = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
-            if (current != null && boundary) {
-                periods.add(current.end(i));
-                current = null;
-            }
-
-            if (current == null) {
-                start = i;
-                current = new Period(start);
-            }
-
-            current.add(record);
-        }
-
-        if (current != null) periods.add(current.end(records.size()));
-        return periods;
-    }
-
-    private static boolean shouldRemoveEdgePod(Period candidate, Period neighbor, int segmentCount) {
-        if (candidate == null || neighbor == null) return false;
-        if (segmentCount < 6) return false;
-        if (candidate.segments <= 0 || candidate.segments > MAX_EDGE_POD_SEGMENTS) return false;
-        if (candidate.duration <= 0 || candidate.duration > MAX_EDGE_POD_SECONDS) return false;
-        if (candidate.segments * 3 > segmentCount) return false;
-        if (neighbor.segments < Math.max(3, candidate.segments)) return false;
-        return isDistinctPeriod(candidate, neighbor);
-    }
-
-    private static boolean isDistinctPeriod(Period a, Period b) {
-        if (!isEmpty(a.host) && !isEmpty(b.host) && !a.host.equals(b.host)) return true;
-        if (!isEmpty(a.directory) && !isEmpty(b.directory) && !a.directory.equals(b.directory)) {
-            return a.duration <= 60 || b.segments >= a.segments * 3;
-        }
-        return false;
-    }
-
-    private static int markPeriodRemoved(boolean[] remove, List<Record> records, Period period) {
-        int removed = 0;
-        for (int i = period.start; i < period.end; i++) {
-            if (!records.get(i).segment) continue;
-            remove[i] = true;
-            removed++;
-        }
-        return removed;
     }
 
     private static void addPod(List<Pod> pods, List<Record> records, int start, int end) {
@@ -1975,64 +1904,4 @@ public final class M3u8AdFilter {
         }
     }
 
-    private static class Period {
-
-        private final int start;
-        private int end;
-        private int segments;
-        private double duration;
-        private String host = "";
-        private String directory = "";
-        private final Map<String, Integer> hostCounts = new HashMap<>();
-        private final Map<String, Integer> directoryCounts = new HashMap<>();
-
-        private Period(int start) {
-            this.start = start;
-        }
-
-        private void add(Record record) {
-            segments++;
-            duration += record.duration;
-            if (!isEmpty(record.host)) {
-                hostCounts.put(record.host, hostCounts.getOrDefault(record.host, 0) + 1);
-                host = dominant(hostCounts, segments);
-            }
-            String dir = directoryIdentity(record.resolvedUri);
-            if (!isEmpty(dir)) {
-                directoryCounts.put(dir, directoryCounts.getOrDefault(dir, 0) + 1);
-                directory = dominant(directoryCounts, segments);
-            }
-        }
-
-        private Period end(int end) {
-            this.end = end;
-            return this;
-        }
-
-        private static String dominant(Map<String, Integer> counts, int total) {
-            String value = "";
-            int max = 0;
-            for (Map.Entry<String, Integer> entry : counts.entrySet()) {
-                if (entry.getValue() > max) {
-                    value = entry.getKey();
-                    max = entry.getValue();
-                }
-            }
-            return max * 2 >= total ? value : "";
-        }
-    }
-
-    private static String directoryIdentity(String uri) {
-        if (isEmpty(uri)) return "";
-        String path;
-        try {
-            path = new URI(uri).getRawPath();
-        } catch (Throwable ignored) {
-            path = stripQueryAndFragment(uri);
-        }
-        if (isEmpty(path)) return "";
-        int slash = path.lastIndexOf('/');
-        if (slash <= 0) return "";
-        return path.substring(0, slash).toLowerCase(Locale.US);
-    }
 }

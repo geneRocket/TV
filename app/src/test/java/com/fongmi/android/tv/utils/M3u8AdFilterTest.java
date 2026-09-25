@@ -660,7 +660,7 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesShortLeadingPodOnDifferentHostBeforeMainContent() {
+    public void preservesShortLeadingPodWithoutAdEvidence() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://insert.example/opening/clip-1.ts")
                 + segment(5.0, "https://insert.example/opening/clip-2.ts")
@@ -675,13 +675,13 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("insert.example/opening"));
+        assertTrue(filtered.contains("insert.example/opening"));
         assertTrue(filtered.contains("main.example/movie/main-1.ts"));
         assertTrue(filtered.contains("#EXT-X-ENDLIST"));
     }
 
     @Test
-    public void removesShortTrailingPodOnDifferentHostAfterMainContent() {
+    public void preservesShortTrailingPodWithoutAdEvidence() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://main.example/movie/main-1.ts")
                 + segment(5.0, "https://main.example/movie/main-2.ts")
@@ -696,7 +696,7 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("insert.example/closing"));
+        assertTrue(filtered.contains("insert.example/closing"));
         assertTrue(filtered.contains("main.example/movie/main-6.ts"));
         assertTrue(filtered.contains("#EXT-X-ENDLIST"));
     }
@@ -749,7 +749,7 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesAllOccurrencesOfRepeatedSegmentUris() {
+    public void preservesRepeatedSegmentUrisWithoutAdEvidence() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://cdn.example/video/main-1.ts")
                 + segment(5.0, "https://cdn.example/video/repeated.ts")
@@ -761,8 +761,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(4, M3u8AdFilter.countSegmentsFromString(filtered));
-        assertEquals(0, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
+        assertEquals(6, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(2, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
         assertTrue(filtered.contains("repeated.ts?range=1"));
         assertTrue(filtered.contains("repeated.ts?range=2"));
         assertTrue(filtered.contains("main-1.ts"));
@@ -1013,15 +1013,15 @@ public class M3u8AdFilterTest {
                 + "#EXT-X-MEDIA-SEQUENCE:100\n"
                 + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\",IV=0x1\n"
                 + segment(5.0, "main-1.ts")
-                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "https://cdn.example/ads/repeated.ts")
                 + segment(5.0, "main-2.ts")
-                + segment(5.0, "https://cdn.example/video/repeated.ts")
+                + segment(5.0, "https://cdn.example/ads/repeated.ts")
                 + segment(5.0, "main-3.ts")
                 + "#EXT-X-ENDLIST\n";
 
         String filtered = filter(playlist);
 
-        assertEquals(0, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
+        assertEquals(0, countOccurrences(filtered, "https://cdn.example/ads/repeated.ts\n"));
     }
 
     @Test
@@ -1260,6 +1260,64 @@ public class M3u8AdFilterTest {
         assertTrue(filtered.contains("a61dsb9.ts"));
         assertTrue(filtered.contains("main-1.ts"));
         assertTrue(filtered.contains("main-2.ts"));
+    }
+
+    @Test
+    public void preservesNormalOpeningAndEndingOnSeparateResources() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+        playlist.append(segment(5, "https://intro.example/opening/1.ts"));
+        playlist.append(segment(5, "https://intro.example/opening/2.ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 0; i < 20; i++) playlist.append(segment(5, "https://main.example/movie/" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        playlist.append(segment(5, "https://credits.example/ending/1.ts"));
+        playlist.append(segment(5, "https://credits.example/ending/2.ts"));
+        playlist.append("#EXT-X-ENDLIST\n");
+        assertEquals(24, M3u8AdFilter.countSegmentsFromString(filter(playlist.toString())));
+    }
+
+    @Test
+    public void removesRepeatedMediaAlreadyIdentifiedByClosedCue() {
+        String playlist = "#EXTM3U\n" + segment(5, "main-1.ts")
+                + "#EXT-X-CUE-OUT:5\n" + segment(5, "asset-123.ts")
+                + "#EXT-X-CUE-IN\n" + segment(5, "main-2.ts")
+                + segment(5, "asset-123.ts") + segment(5, "main-3.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("asset-123.ts"));
+        assertEquals(3, M3u8AdFilter.countSegmentsFromString(filtered));
+    }
+
+    @Test
+    public void stillRemovesLeadingAndTrailingClosedAdBreaks() {
+        String playlist = "#EXTM3U\n#EXT-X-CUE-OUT:10\n"
+                + segment(5, "https://insert.example/opening/1.ts")
+                + segment(5, "https://insert.example/opening/2.ts")
+                + "#EXT-X-CUE-IN\n#EXT-X-DISCONTINUITY\n"
+                + segment(5, "main-1.ts") + segment(5, "main-2.ts")
+                + "#EXT-X-CUE-OUT:10\n"
+                + segment(5, "https://insert.example/closing/1.ts")
+                + segment(5, "https://insert.example/closing/2.ts")
+                + "#EXT-X-CUE-IN\n#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("insert.example"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-2.ts"));
+        assertEquals(2, M3u8AdFilter.countSegmentsFromString(filtered));
+    }
+
+    @Test
+    public void frameVerifiedCasinoFilterPreservesEveryOtherMediaUriInOrder() throws IOException {
+        String original = readRealFixture("chimi-18.m3u8");
+        String filtered = filter(original, "https://bf.modujx11.com/20260630/JbD1RgRr/index.m3u8");
+        java.util.List<String> expected = java.util.Arrays.stream(original.split("\n"))
+                .map(String::trim).filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .filter(line -> !line.contains("/20260727/wRbpF6Qd/"))
+                .collect(java.util.stream.Collectors.toList());
+        java.util.List<String> actual = java.util.Arrays.stream(filtered.split("\n"))
+                .map(String::trim).filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .collect(java.util.stream.Collectors.toList());
+        assertEquals(3265, expected.size());
+        assertEquals(expected, actual);
     }
 
     private static String segment(double duration, String uri) {
