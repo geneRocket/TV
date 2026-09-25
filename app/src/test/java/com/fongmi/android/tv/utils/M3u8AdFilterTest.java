@@ -944,6 +944,41 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void removesRepeatedUnlabelledPrerollWithoutOpeningDiscontinuity() {
+        for (boolean postroll : new boolean[]{false, true}) {
+            StringBuilder pod = new StringBuilder();
+            appendUnlabelledPod(pod, "/20260727/FxLgovfH/10128kb/hls/");
+            StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+            playlist.append(pod.substring("#EXT-X-DISCONTINUITY\n".length()));
+            playlist.append("#EXT-X-DISCONTINUITY\n");
+            for (int i = 0; i < 20; i++) playlist.append(segment(5, "movie/" + i + ".ts"));
+            playlist.append(pod);
+            if (!postroll) playlist.append("#EXT-X-DISCONTINUITY\n").append(segment(5, "movie/end.ts"));
+            playlist.append("#EXT-X-ENDLIST\n");
+
+            String filtered = filter(playlist.toString());
+            assertFalse(filtered.contains("FxLgovfH"));
+            assertEquals(postroll ? 20 : 21, M3u8AdFilter.countSegmentsFromString(filtered));
+            for (int i = 0; i < 20; i++) assertTrue(filtered.contains("movie/" + i + ".ts"));
+            assertTrue(filtered.startsWith("#EXTM3U\n"));
+            assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+        }
+    }
+
+    @Test
+    public void preservesDifferentOpeningAndEndingWithIdenticalDurations() {
+        StringBuilder opening = new StringBuilder();
+        appendUnlabelledPod(opening, "https://intro.example/opening/");
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+        playlist.append(opening.substring("#EXT-X-DISCONTINUITY\n".length()));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 0; i < 20; i++) playlist.append(segment(5, "movie/" + i + ".ts"));
+        appendUnlabelledPod(playlist, "https://credits.example/ending/");
+        playlist.append("#EXT-X-ENDLIST\n");
+        assertEquals(playlist.toString(), filter(playlist.toString()));
+    }
+
+    @Test
     public void removesShortDiscontinuityPodWhenKeySwitchesAwayAndBack() {
         String playlist = "#EXTM3U\n"
                 + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\"\n"

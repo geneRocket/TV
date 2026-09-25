@@ -831,9 +831,14 @@ public final class M3u8AdFilter {
         int podStart = -1;
         for (int i = 0; i < records.size(); i++) {
             Record record = records.get(i);
-            if (!record.segment || !hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) continue;
-            if (podStart >= 0) addPod(pods, records, podStart, i);
-            podStart = i;
+            if (!record.segment) continue;
+            // A preroll starts at the playlist boundary and need not carry its
+            // own discontinuity. Include it in exact repeated-pod matching.
+            if (podStart < 0) podStart = i;
+            else if (hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) {
+                addPod(pods, records, podStart, i);
+                podStart = i;
+            }
         }
         if (podStart >= 0) addPod(pods, records, podStart, records.size());
 
