@@ -1355,6 +1355,64 @@ public class M3u8AdFilterTest {
         assertEquals(expected, actual);
     }
 
+    @Test
+    public void removesFrameVerifiedCasinoPodsWithRotatingFilenames() throws IOException {
+        String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
+        String filtered = filter(original, "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8");
+        java.util.Set<String> ads = new java.util.HashSet<>(java.util.Arrays.asList(
+                readFixture("/m3u8/research/ffzy-20260926-ads.txt").split("\n")));
+        java.util.List<String> expected = java.util.Arrays.stream(original.split("\n"))
+                .filter(line -> !line.isEmpty() && !line.startsWith("#") && !ads.contains(line))
+                .collect(java.util.stream.Collectors.toList());
+        java.util.List<String> actual = java.util.Arrays.stream(filtered.split("\n"))
+                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .collect(java.util.stream.Collectors.toList());
+        assertEquals(18, ads.size());
+        assertEquals(1839, expected.size());
+        assertEquals(expected, actual);
+        assertTrue(filtered.startsWith("#EXTM3U\n"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+    }
+
+    @Test
+    public void preservesCapturedDenseProviderPlaylist() throws IOException {
+        String original = readFixture("/m3u8/research/ffzy-dense-20260926.m3u8");
+        assertEquals(1096, M3u8AdFilter.countSegmentsFromString(original));
+        assertEquals(original.trim(), filter(original,
+                "https://vip.ffzy-online5.com/20230422/10921_214e81bf/3000k/hls/mixed.m3u8").trim());
+    }
+
+    @Test
+    public void casinoDurationProfileRequiresVerifiedSourceAndVod() throws IOException {
+        String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
+        for (String base : new String[]{"https://video.example/movie/index.m3u8",
+                "https://vip.ffzy-play7.com.evil.example/20221105/1676_5181746d/2000k/hls/mixed.m3u8"}) {
+            assertEquals(original.trim(), filter(original, base).trim());
+        }
+        String live = original.replace("#EXT-X-ENDLIST", "");
+        assertEquals(live.trim(), filter(live,
+                "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8").trim());
+    }
+
+    @Test
+    public void casinoDurationProfileRequiresWholeSequenceAndLongNeighbors() throws IOException {
+        String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
+        String base = "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8";
+        String different = original.replace("#EXTINF:4.866667,", "#EXTINF:4.966667,")
+                .replace("#EXTINF:6.960000,", "#EXTINF:6.860000,");
+        assertEquals(different.trim(), filter(different, base).trim());
+        String noRepeatedProfile = original.replaceFirst("#EXTINF:4\\.866667,", "#EXTINF:4.966667,")
+                .replaceFirst("#EXTINF:6\\.960000,", "#EXTINF:6.860000,");
+        assertEquals(noRepeatedProfile.trim(), filter(noRepeatedProfile, base).trim());
+        String[] groups = original.split("#EXT-X-DISCONTINUITY\n");
+        // Keep both matching signatures, but remove the long main-content intervals.
+        String dense = "#EXTM3U\n#EXT-X-DISCONTINUITY\n" + groups[2]
+                + "#EXT-X-DISCONTINUITY\n" + groups[4]
+                + "#EXT-X-DISCONTINUITY\n" + groups[6]
+                + "#EXT-X-DISCONTINUITY\n" + groups[8] + "#EXT-X-ENDLIST\n";
+        assertEquals(dense.trim(), filter(dense, base).trim());
+    }
+
     private static String segment(double duration, String uri) {
         return "#EXTINF:" + duration + ",\n" + uri + "\n";
     }
