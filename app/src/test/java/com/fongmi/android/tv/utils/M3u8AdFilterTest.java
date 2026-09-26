@@ -1169,6 +1169,36 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void preservesSequenceDerivedAesWhenOnlyMinorHostPassRemovesSegment() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\"\n"
+                + segment(5, "main-1.ts")
+                + segment(5, "main-2.ts")
+                + segment(5, "https://secondary.example/promo/clip.ts")
+                + segment(5, "main-3.ts")
+                + segment(5, "main-4.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void explicitIvAllowsMinorHostPassToRemoveSegment() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\",IV=0x1\n"
+                + segment(5, "main-1.ts")
+                + segment(5, "main-2.ts")
+                + segment(5, "https://secondary.example/promo/clip.ts")
+                + segment(5, "main-3.ts")
+                + segment(5, "main-4.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("secondary.example"));
+        assertTrue(filtered.contains("main-4.ts"));
+    }
+
+    @Test
     public void keyUriContainingIvTextDoesNotPretendToProvideExplicitIv() {
         String playlist = "#EXTM3U\n"
                 + "#EXT-X-VERSION:3\n"

@@ -303,10 +303,11 @@ public final class M3u8AdFilter {
         records = filterRepeatedSegments(records, confirmedRepeatedAds);
 
         String filtered = filterMinorHostSegments(records, content);
+        int filteredSegmentCount = countSegmentsFromString(filtered);
         // Never hand Exo a playlist that the filter has emptied. A false-positive ad rule
         // should leave the original stream playable rather than turn into a playback error.
-        if (!startsWithM3uHeader(filtered) || countSegmentsFromString(filtered) == 0) return toBytesOrOriginal(content, bytes);
-        if (shouldKeepOriginalForHlsIntegrity(content, originalSegmentCount, records)) return toBytesOrOriginal(content, bytes);
+        if (!startsWithM3uHeader(filtered) || filteredSegmentCount == 0) return toBytesOrOriginal(content, bytes);
+        if (shouldKeepOriginalForHlsIntegrity(content, originalSegmentCount, filteredSegmentCount)) return toBytesOrOriginal(content, bytes);
 
         logFilterResult(baseUrl, content, filtered);
         return toBytesOrOriginal(filtered, bytes);
@@ -1337,8 +1338,8 @@ public final class M3u8AdFilter {
         return keySwitchSignal;
     }
 
-    private static boolean shouldKeepOriginalForHlsIntegrity(String original, int originalSegmentCount, List<Record> filteredRecords) {
-        if (originalSegmentCount <= countSegments(filteredRecords)) return false;
+    private static boolean shouldKeepOriginalForHlsIntegrity(String original, int originalSegmentCount, int filteredSegmentCount) {
+        if (originalSegmentCount <= filteredSegmentCount) return false;
         return hasSequenceDerivedEncryptionKey(original);
     }
 
