@@ -1383,15 +1383,41 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void casinoDurationProfileRequiresVerifiedSourceAndVod() throws IOException {
+    public void casinoDurationProfileWorksAcrossSourcesButRequiresVod() throws IOException {
         String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
+        String expected = filter(original, "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8");
         for (String base : new String[]{"https://video.example/movie/index.m3u8",
-                "https://vip.ffzy-play7.com.evil.example/20221105/1676_5181746d/2000k/hls/mixed.m3u8"}) {
-            assertEquals(original.trim(), filter(original, base).trim());
+                "https://another.example/unrelated/path/playlist.m3u8"}) {
+            assertEquals(expected, filter(original, base));
         }
         String live = original.replace("#EXT-X-ENDLIST", "");
         assertEquals(live.trim(), filter(live,
                 "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8").trim());
+    }
+
+    @Test
+    public void casinoDurationProfileAllowsDifferentHostsDirectoriesAndFilenames() throws IOException {
+        String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
+        java.util.Set<String> ads = new java.util.HashSet<>(java.util.Arrays.asList(
+                readFixture("/m3u8/research/ffzy-20260926-ads.txt").split("\n")));
+        StringBuilder changed = new StringBuilder();
+        java.util.List<String> expected = new java.util.ArrayList<>();
+        int index = 0;
+        for (String line : original.split("\n")) {
+            if (!line.isEmpty() && !line.startsWith("#")) {
+                String uri = "https://cdn" + index % 3 + ".example/resource/" + index
+                        + "/clip.jpeg?token=" + index++;
+                if (!ads.contains(line)) expected.add(uri);
+                line = uri;
+            }
+            changed.append(line).append('\n');
+        }
+        String filtered = filter(changed.toString());
+        java.util.List<String> actual = java.util.Arrays.stream(filtered.split("\n"))
+                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .collect(java.util.stream.Collectors.toList());
+        assertEquals(1839, expected.size());
+        assertEquals(expected, actual);
     }
 
     @Test

@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 public final class M3u8AdFilter {
 
@@ -28,13 +27,9 @@ public final class M3u8AdFilter {
     private static final int MAX_LOG_CONTENT_CHARS = 8000;
     private static final int URI_AD_LIKE = 1;
     private static final int URI_STRONG_AD = 1 << 1;
-    // Frame-verified on 2026-09-26; see m3u8/research/README.md. These profiles
-    // apply only to this resource family, never to arbitrary equal-duration pods.
-    private static final Pattern FFZY_MEDIA = Pattern.compile(
-            "https?://(?:[a-z0-9-]+\\.)?ffzy-(?:play|online)[0-9]+\\.com(?::[0-9]+)?/"
-                    + "[0-9]{8}/[^/?#]+/[0-9]+k/hls/[a-f0-9]{32}\\.ts(?:\\?[^#]*)?",
-            Pattern.CASE_INSENSITIVE);
-    private static final Set<String> FFZY_CASINO_PROFILES = new HashSet<>(java.util.Arrays.asList(
+    // Frame-verified on 2026-09-26; see m3u8/research/README.md. Match these
+    // specific repeated insertion profiles across sources, not arbitrary durations.
+    private static final Set<String> CASINO_PROFILES = new HashSet<>(java.util.Arrays.asList(
             "4867,3333,5600,2867,2967,", "6960,4000,2560,3840,"));
 
     private static final Set<String> SUBTITLE_PLAYLIST_WHITELIST = Collections.newSetFromMap(new LinkedHashMap<String, Boolean>(SUBTITLE_WHITELIST_MAX, 0.75f, true) {
@@ -895,30 +890,20 @@ public final class M3u8AdFilter {
 
     private static String verifiedCasinoProfile(List<Record> records, Pod pod) {
         StringBuilder fingerprint = new StringBuilder();
-        String directory = "";
         for (int i = pod.start; i < pod.end; i++) {
             Record record = records.get(i);
             if (!record.segment) continue;
-            if (!FFZY_MEDIA.matcher(record.resolvedUri).matches()) return "";
-            String current = mediaDirectory(record.resolvedUri);
-            if (!directory.isEmpty() && !directory.equals(current)) return "";
-            directory = current;
+            if (isPartOnlyRecord(record)) return "";
             fingerprint.append(Math.round(record.duration * 1000)).append(',');
         }
         String profile = fingerprint.toString();
-        if (!FFZY_CASINO_PROFILES.contains(profile)) return "";
-        if (!hasLongMainNeighbor(records, pod.start - 1, -1, directory)
-                || !hasLongMainNeighbor(records, pod.end, 1, directory)) return "";
-        return directory + ':' + profile;
+        if (!CASINO_PROFILES.contains(profile)) return "";
+        if (!hasLongMainNeighbor(records, pod.start - 1, -1)
+                || !hasLongMainNeighbor(records, pod.end, 1)) return "";
+        return profile;
     }
 
-    private static String mediaDirectory(String uri) {
-        String path = stripQueryAndFragment(uri);
-        int slash = path.lastIndexOf('/');
-        return slash < 0 ? "" : path.substring(0, slash + 1);
-    }
-
-    private static boolean hasLongMainNeighbor(List<Record> records, int index, int step, String directory) {
+    private static boolean hasLongMainNeighbor(List<Record> records, int index, int step) {
         int segments = 0;
         double duration = 0;
         for (int i = index; i >= 0 && i < records.size(); i += step) {
@@ -926,7 +911,6 @@ public final class M3u8AdFilter {
             if (!record.segment) continue;
             boolean boundary = hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY");
             if (step > 0 && segments > 0 && boundary) return false;
-            if (!directory.equals(mediaDirectory(record.resolvedUri))) return false;
             duration += record.duration;
             if (++segments == 20) return duration >= 60;
             if (step < 0 && boundary) return false;
