@@ -115,13 +115,7 @@ public final class M3u8AdFilter {
         add("tracking");
         add("beacon");
         add("measurement");
-        add("changze");
-        add("czzy");
         add("czad");
-        add("changzeyun");
-        add("changzepiepian");
-        add("czm3u8");
-        add("czplayer");
         add("guanggao");
         add("adjump");
         add("adslice");
@@ -201,8 +195,6 @@ public final class M3u8AdFilter {
         add("vmap");
         add("vast");
         add("czad");
-        add("changze");
-        add("czzy");
         add("guanggao");
         add("adjump");
     }};
@@ -235,13 +227,7 @@ public final class M3u8AdFilter {
         add("freewheel");
         add("spotx");
         add("ima");
-        add("changze");
-        add("czzy");
         add("czad");
-        add("changzeyun");
-        add("changzepiepian");
-        add("czm3u8");
-        add("czplayer");
         add("guanggao");
         add("imads");
         add("adjump");
@@ -938,15 +924,23 @@ public final class M3u8AdFilter {
 
     public static String identifyProvider(String url) {
         if (isEmpty(url)) return "unknown";
-        String lower = url.toLowerCase(Locale.US);
+        String lower;
+        try {
+            String host = new URI(url).getHost();
+            if (isEmpty(host)) return "unknown";
+            lower = host.toLowerCase(Locale.US);
+        } catch (Exception ignored) {
+            return "unknown";
+        }
         if (lower.contains("lzcdn") || lower.contains("cdnlz") || lower.contains("lzzy") || lower.contains("liangzi")) return "liangzi";
         if (lower.contains("ffzy") || lower.contains("feifan")) return "feifan";
         if (lower.contains("bfikun") || lower.contains("ikun")) return "ikun";
         if (lower.contains("suoni") || lower.contains("rstu") || lower.contains("snzy") || lower.contains("suonizy")) return "suoni";
-        if (lower.contains("fengbao") || lower.contains("bfvvs") || lower.contains("baofeng") || lower.contains("bfzy")) return "baofeng";
-        if (lower.contains("czzy") || lower.contains("changze") || lower.contains("czad")) return "changze";
+        if (lower.contains("bfvvs") || lower.contains("hongniu") || lower.contains("hnzy")) return "hongniu";
+        if (lower.contains("fengbao") || lower.contains("baofeng") || lower.contains("bfzy")) return "baofeng";
+        if (lower.contains("czzy")) return "changzhang";
+        if (lower.contains("changze")) return "changze";
         if (lower.contains("modu") || lower.contains("modujx")) return "modu";
-        if (lower.contains("hongniu") || lower.contains("hnzy")) return "hongniu";
         if (lower.contains("kudian") || lower.contains("kdzy")) return "kudian";
         return "unknown";
     }
@@ -2158,8 +2152,6 @@ public final class M3u8AdFilter {
                 || value.startsWith("adpod")
                 || value.startsWith("adbreak")
                 || value.startsWith("czad")
-                || value.startsWith("changze")
-                || value.startsWith("czzy")
                 || value.startsWith("guanggao")
                 || value.startsWith("adjump")
                 || value.startsWith("kudad")

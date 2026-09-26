@@ -313,11 +313,14 @@ public class M3u8AdFilterTest {
         assertEquals("ikun", M3u8AdFilter.identifyProvider("https://bfikuncdn.com/20260403/index.m3u8"));
         assertEquals("suoni", M3u8AdFilter.identifyProvider("https://v13.rstu6.com/202512/28/index.m3u8"));
         assertEquals("baofeng", M3u8AdFilter.identifyProvider("https://s1.fengbao9.com/video/index.m3u8"));
-        assertEquals("changze", M3u8AdFilter.identifyProvider("https://czzy.top/video/index.m3u8"));
+        assertEquals("changzhang", M3u8AdFilter.identifyProvider("https://czzy.top/video/index.m3u8"));
+        assertEquals("changze", M3u8AdFilter.identifyProvider("https://changze.example/video/index.m3u8"));
         assertEquals("modu", M3u8AdFilter.identifyProvider("https://bf.modujx11.com/index.m3u8"));
         assertEquals("hongniu", M3u8AdFilter.identifyProvider("https://hnzy.com/index.m3u8"));
+        assertEquals("hongniu", M3u8AdFilter.identifyProvider("https://hn.bfvvs.com/play/bW68lMna/index.m3u8"));
         assertEquals("kudian", M3u8AdFilter.identifyProvider("https://kudianzy.com/index.m3u8"));
         assertEquals("unknown", M3u8AdFilter.identifyProvider("https://example.com/index.m3u8"));
+        assertEquals("unknown", M3u8AdFilter.identifyProvider("https://example.com/ffzy/index.m3u8?source=lzcdn"));
     }
 
     @Test
@@ -988,10 +991,10 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesNagasawaChangzeAdSegments() {
+    public void removesExplicitCzadMarkersWithoutMatchingProviderName() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://cdn.example/movie/main-1.ts")
-                + segment(5.0, "https://czzycdn.com/changze/czad01.ts")
+                + segment(5.0, "https://czzycdn.com/changze/czad/01.ts")
                 + segment(5.0, "https://cdn.example/movie/main-2.ts?czad=1")
                 + segment(5.0, "https://cdn.example/movie/changzepiepian/ad.ts")
                 + segment(5.0, "https://cdn.example/movie/main-3.ts")
@@ -999,11 +1002,28 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("czad01.ts"));
+        assertFalse(filtered.contains("czad/01.ts"));
         assertFalse(filtered.contains("czad=1"));
         assertFalse(filtered.contains("changzepiepian"));
         assertTrue(filtered.contains("main-1.ts"));
         assertTrue(filtered.contains("main-3.ts"));
+    }
+
+    @Test
+    public void preservesProviderNamesInOtherwiseNormalMediaPaths() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n");
+        for (int i = 1; i <= 4; i++) playlist.append(segment(5, "https://cdn.example/movie/main-" + i + ".ts"));
+        playlist.append(segment(5, "https://cdn.example/czzy/episode/001.ts"));
+        playlist.append(segment(5, "https://cdn.example/czzy/episode/002.ts"));
+        for (int i = 5; i <= 8; i++) playlist.append(segment(5, "https://cdn.example/movie/main-" + i + ".ts"));
+        playlist.append(segment(5, "https://cdn.example/changze/episode/003.ts"));
+        playlist.append(segment(5, "https://cdn.example/changze/episode/004.ts"));
+        for (int i = 9; i <= 12; i++) playlist.append(segment(5, "https://cdn.example/movie/main-" + i + ".ts"));
+        playlist.append("#EXT-X-ENDLIST\n");
+
+        assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?czzy=1"));
+        assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?changze=1"));
+        assertEquals(playlist.toString().trim(), filter(playlist.toString()).trim());
     }
 
     @Test
