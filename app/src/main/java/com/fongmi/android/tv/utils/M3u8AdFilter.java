@@ -1340,7 +1340,15 @@ public final class M3u8AdFilter {
 
     private static boolean shouldKeepOriginalForHlsIntegrity(String original, int originalSegmentCount, int filteredSegmentCount) {
         if (originalSegmentCount <= filteredSegmentCount) return false;
-        return hasSequenceDerivedEncryptionKey(original);
+        return hasSequenceDerivedEncryptionKey(original) || hasImplicitByteRange(original);
+    }
+
+    private static boolean hasImplicitByteRange(String playlist) {
+        for (String line : playlist.split("\n", -1)) {
+            String value = trimLineEnd(line).trim();
+            if (value.startsWith("#EXT-X-BYTERANGE:") && value.indexOf('@') < 0) return true;
+        }
+        return false;
     }
 
     private static boolean hasSequenceDerivedEncryptionKey(String playlist) {

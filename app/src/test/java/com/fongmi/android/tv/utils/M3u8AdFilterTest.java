@@ -117,6 +117,16 @@ public class M3u8AdFilterTest {
             new RealFixture("real-ruyi.m3u8", "https://svip.ryiplay18.com/20260720/8194_82dad43b/2000k/hls/index.m3u8"),
     };
 
+    private static final RealFixture[] NEW_PROVIDER_FIXTURES = {
+            new RealFixture("jisu-20260926.m3u8", "https://vv.jisuzyv.com/play/aQWO2xYd/index.m3u8"),
+            new RealFixture("baofeng-20260926.m3u8", "https://fengbao12.com/video/tezhongbuduizhongjikaoyandiwuji/f5c3cf79d115/index.m3u8", "/video/adjump/"),
+            new RealFixture("uku-20260926.m3u8", "https://ukzy.ukubf8.com/20260926/whcY7186/2000kb/hls/index.m3u8"),
+            new RealFixture("ruyi-short-20260926.m3u8", "https://cdn.ryplay12.com/20260926/41911_3e8b7d3d/2000k/hls/index.m3u8"),
+            new RealFixture("ok-shandian-shared-20260926.m3u8", "https://v13.yaaabc.com/yyv13/202609/25/cxHipUhcRS27/video/2000k_1080/hls/index.m3u8"),
+            new RealFixture("ck-episode-a-20260926.m3u8", "https://ckzy3.com/20260918/2bee6d70bdbf07da/index.m3u8", "/20260926/7a11a6bd39b97be3/"),
+            new RealFixture("ck-episode-b-20260926.m3u8", "https://ckzy3.com/20260918/697c678ffa315208/index.m3u8", "/20260926/7a11a6bd39b97be3/"),
+    };
+
     @Test
     public void filtersCapturedRealMediaPlaylistsWithoutRegressions() throws IOException {
         for (RealFixture fixture : REAL_FIXTURES) {
@@ -125,6 +135,15 @@ public class M3u8AdFilterTest {
                     original.getBytes(StandardCharsets.UTF_8),
                     fixture.baseUrl), StandardCharsets.UTF_8);
 
+            assertOnlyAdsRemoved(fixture.name, original, filtered, fixture.adUris);
+        }
+    }
+
+    @Test
+    public void filtersNewProviderCapturesByVerifiedAdLabels() throws IOException {
+        for (RealFixture fixture : NEW_PROVIDER_FIXTURES) {
+            String original = readFixture("/m3u8/research/" + fixture.name);
+            String filtered = filter(original, fixture.baseUrl);
             assertOnlyAdsRemoved(fixture.name, original, filtered, fixture.adUris);
         }
     }
@@ -845,6 +864,20 @@ public class M3u8AdFilterTest {
 
         assertEquals(mediaEntries(playlist), mediaEntries(filtered));
         assertTrue(filtered.contains("https://cdn.example/video/media.ts\n"));
+    }
+
+    @Test
+    public void doesNotOrphanImplicitByteRangeAfterCueRemoval() {
+        String playlist = "#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-PLAYLIST-TYPE:VOD\n"
+                + segment(5, "main-before.ts")
+                + "#EXT-X-CUE-OUT:4\n"
+                + "#EXT-X-BYTERANGE:100@0\n" + segment(4, "shared.ts")
+                + "#EXT-X-CUE-IN\n"
+                + "#EXT-X-BYTERANGE:100\n" + segment(4, "shared.ts")
+                + segment(5, "main-after.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        assertEquals(playlist, filter(playlist));
     }
 
     @Test
