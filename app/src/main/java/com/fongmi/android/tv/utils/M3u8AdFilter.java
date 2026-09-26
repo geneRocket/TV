@@ -679,10 +679,6 @@ public final class M3u8AdFilter {
         double cueAdSeconds = 0;
         int cueAdSegments = 0;
 
-        double dateRangeAdSeconds = 0;
-        boolean dateRangeAdOpen = false;
-        int dateRangeAdSegments = 0;
-
         boolean discontinuityAdOpen = false;
         int discontinuityAdSegments = 0;
 
@@ -706,9 +702,6 @@ public final class M3u8AdFilter {
                     cueAdHasClosingTag = false;
                     cueAdSeconds = 0;
                     cueAdSegments = 0;
-                    dateRangeAdSeconds = 0;
-                    dateRangeAdOpen = false;
-                    dateRangeAdSegments = 0;
                     discontinuityAdOpen = false;
                     discontinuityAdSegments = 0;
                     pendingAdSignal = false;
@@ -717,12 +710,8 @@ public final class M3u8AdFilter {
                 }
 
                 if (isAdDateRangeTag(record.line)) {
-                    double duration = parseDateRangeDuration(record.line);
-                    if (duration > 0) dateRangeAdSeconds = Math.max(dateRangeAdSeconds, duration);
-                    dateRangeAdOpen = duration <= 0 && isStrongAdDateRangeTag(record.line);
-                    dateRangeAdSegments = 0;
-                    pendingAdSignal = true;
-                    pendingAdSignalLines = 0;
+                    // DATERANGE describes a wall-clock interval. Its position in
+                    // the playlist does not identify the following media segments.
                     continue;
                 }
 
@@ -759,18 +748,13 @@ public final class M3u8AdFilter {
                     || (allowWeakDiscontinuitySignal && hasDiscontinuity && record.weakAdNumberUri);
             boolean adByPendingSignal = pendingAdSignal && (explicitAd || record.adLikeUri || hasAdSignalTag(record.tags));
 
-            if (dateRangeAdOpen && dateRangeAdSegments > 0 && hasDiscontinuity) {
-                dateRangeAdOpen = false;
-                dateRangeAdSegments = 0;
-            }
-
             // Account for every segment in a declared break before URI/pod rules
             // can skip it. Otherwise the remaining duration spills into content.
             if (cueAdOpen && shouldEndCue(cueAdSeconds, cueAdSegments, cueAdHasClosingTag)) {
                 cueAdOpen = false;
                 cueAdHasClosingTag = false;
             }
-            if (cueAdOpen || dateRangeAdSeconds > 0) {
+            if (cueAdOpen) {
                 if (cueAdOpen) {
                     cueAdSegments++;
                     if (cueAdSeconds > 0) {
@@ -778,7 +762,6 @@ public final class M3u8AdFilter {
                         if (cueAdSeconds <= 0) cueAdOpen = false;
                     }
                 }
-                dateRangeAdSeconds = nextRemaining(dateRangeAdSeconds, record.duration);
                 pendingAdSignal = false;
                 continue;
             }
@@ -800,18 +783,6 @@ public final class M3u8AdFilter {
             if (explicitAd || adByPendingSignal) {
                 pendingAdSignal = false;
                 pendingAdSignalLines = 0;
-                if (dateRangeAdOpen && ++dateRangeAdSegments >= MAX_UNBOUNDED_CUE_AD_SEGMENTS) {
-                    dateRangeAdOpen = false;
-                }
-                continue;
-            }
-
-            if (dateRangeAdOpen) {
-                dateRangeAdSegments++;
-                if (dateRangeAdSegments >= MAX_UNBOUNDED_CUE_AD_SEGMENTS) {
-                    dateRangeAdOpen = false;
-                    dateRangeAdSegments = 0;
-                }
                 continue;
             }
 
@@ -1048,14 +1019,16 @@ public final class M3u8AdFilter {
         boolean pathDisparity = hasPathDisparity(records, pod);
         boolean indexJump = hasIndexJump(records, pod);
         boolean repeatedDirectory = hasRepeatedPodDirectory(records, pods, pod);
-        boolean repeatedMediaLocation = matchingMedia >= 2 || repeatedDirectory;
+        boolean repeatedMediaLocation = matchingMedia >= 2;
+        boolean repeatedForeignDirectory = repeatedDirectory && pathDisparity;
         if (pod.strongAdSignal) score += 5;
         if (repeatedMediaLocation) score += 4;
         else if (matchingDurations >= 2) score += 2;
+        if (repeatedForeignDirectory && !repeatedMediaLocation) score += 1;
         if (pod.keySwitchSignal) score += 3;
         // A repeated fingerprint only becomes actionable with an independent
         // change in media location or numbering and enough surrounding content.
-        if (repeatedMediaLocation && pathDisparity && pod.duration <= 30.0) score += 3;
+        if ((repeatedMediaLocation || repeatedForeignDirectory) && pathDisparity && pod.duration <= 30.0) score += 3;
         else if (matchingDurations >= 2 && longNeighbors && indexJump) score += 4;
 
         if (shouldUseWeakDiscontinuitySignal(records)) {
@@ -1064,7 +1037,7 @@ public final class M3u8AdFilter {
 
             boolean hasDisparityOrAnomaly = pathDisparity || indexJump || durationAnomaly;
             if ((longNeighbors || longShortPattern) && hasDisparityOrAnomaly
-                    && !(repeatedMediaLocation && pathDisparity && pod.duration <= 30.0)
+                    && !((repeatedMediaLocation || repeatedForeignDirectory) && pathDisparity && pod.duration <= 30.0)
                     && !(matchingDurations >= 2 && longNeighbors && indexJump)) {
                 score += 3;
             }
@@ -1366,15 +1339,18 @@ public final class M3u8AdFilter {
 
     private static boolean shouldKeepOriginalForHlsIntegrity(String original, int originalSegmentCount, List<Record> filteredRecords) {
         if (originalSegmentCount <= countSegments(filteredRecords)) return false;
-        return hasSequenceDerivedAesKey(original);
+        return hasSequenceDerivedEncryptionKey(original);
     }
 
-    private static boolean hasSequenceDerivedAesKey(String playlist) {
-        if (isEmpty(playlist) || !playlist.contains("#EXT-X-MEDIA-SEQUENCE")) return false;
+    private static boolean hasSequenceDerivedEncryptionKey(String playlist) {
+        if (isEmpty(playlist)) return false;
         for (String line : playlist.split("\n", -1)) {
             String value = trimLineEnd(line).trim();
             if (!value.startsWith("#EXT-X-KEY:")) continue;
-            if ("AES-128".equalsIgnoreCase(parseAttributeString(value, "METHOD"))
+            String method = parseAttributeString(value, "METHOD");
+            String keyFormat = parseAttributeString(value, "KEYFORMAT");
+            if (("AES-128".equalsIgnoreCase(method) || "SAMPLE-AES".equalsIgnoreCase(method))
+                    && (isEmpty(keyFormat) || "identity".equalsIgnoreCase(keyFormat))
                     && isEmpty(parseAttributeString(value, "IV"))) return true;
         }
         return false;
@@ -1442,16 +1418,20 @@ public final class M3u8AdFilter {
             if (!key.isEmpty() && !key.equals(activeKey)) return true;
             if (!key.isEmpty()) activeKey = key;
         }
-        if (end < records.size()) {
-            Record next = records.get(end);
+        int previousSegment = start - 1;
+        while (previousSegment >= 0 && !records.get(previousSegment).segment) previousSegment--;
+        int nextSegment = end;
+        while (nextSegment < records.size() && !records.get(nextSegment).segment) nextSegment++;
+        if (nextSegment < records.size()) {
+            Record next = records.get(nextSegment);
             if (hasTagPrefix(next.tags, "#EXT-X-DISCONTINUITY")) return true;
             String key = Pod.lastKey(next.tags);
             if (!key.isEmpty() && !key.equals(activeKey)) return true;
         }
-        if (start > 0 && end < records.size()) {
+        if (previousSegment >= 0 && nextSegment < records.size()) {
             String clusterDir = extractDirectory(cluster.get(0).resolvedUri);
-            String beforeDir = extractDirectory(records.get(start - 1).resolvedUri);
-            String afterDir = extractDirectory(records.get(end).resolvedUri);
+            String beforeDir = extractDirectory(records.get(previousSegment).resolvedUri);
+            String afterDir = extractDirectory(records.get(nextSegment).resolvedUri);
             if (!clusterDir.isEmpty() && !beforeDir.isEmpty() && !afterDir.isEmpty()
                     && !clusterDir.equals(beforeDir) && !clusterDir.equals(afterDir)) return true;
         }
@@ -1689,36 +1669,6 @@ public final class M3u8AdFilter {
                 || hasAttributeKeyPrefix(line, "X-AD-");
     }
 
-    private static boolean isStrongAdDateRangeTag(String line) {
-        if (!line.startsWith("#EXT-X-DATERANGE")) return false;
-
-        String clazz = parseAttributeString(line, "CLASS");
-        String asset = parseAttributeString(line, "X-ASSET");
-        String assetUri = parseAttributeString(line, "X-ASSET-URI");
-        String assetList = parseAttributeString(line, "X-ASSET-LIST");
-        String contentType = parseAttributeString(line, "X-CONTENT-TYPE");
-        String placement = parseAttributeString(line, "X-PLACEMENT");
-        String playbackRestriction = parseAttributeString(line, "X-PLAYBACK-RESTRICTION");
-        String adUrl = parseAttributeString(line, "X-AD-URL");
-        String scte = parseAttributeString(line, "SCTE35-OUT");
-        String scteCmd = parseAttributeString(line, "SCTE35-CMD");
-
-        return containsAdKeyword(clazz)
-                || containsAdKeyword(asset)
-                || containsAdKeyword(assetUri)
-                || containsAdKeyword(assetList)
-                || containsAdKeyword(contentType)
-                || containsAdKeyword(placement)
-                || containsAdKeyword(playbackRestriction)
-                || containsAdKeyword(adUrl)
-                || isLikelyAdResourceUri(assetUri)
-                || isLikelyAdResourceUri(assetList)
-                || isLikelyAdResourceUri(adUrl)
-                || !isEmpty(scte)
-                || !isEmpty(scteCmd)
-                || hasAttributeKeyPrefix(line, "X-AD-");
-    }
-
     private static boolean isAdSignalLine(String line) {
         if (isEmpty(line)) return false;
 
@@ -1759,19 +1709,6 @@ public final class M3u8AdFilter {
             return duration > 0 ? (elapsed >= duration ? -1 : duration - elapsed) : 0;
         }
         return duration;
-    }
-
-    private static double parseDateRangeDuration(String line) {
-        double duration = parseAttributeDouble(line, "DURATION");
-        if (duration > 0) return duration;
-
-        duration = parseAttributeDouble(line, "PLANNED-DURATION");
-        if (duration > 0) return duration;
-
-        duration = parseAttributeDouble(line, "X-DURATION");
-        if (duration > 0) return duration;
-
-        return 0;
     }
 
     private static int indexOfKey(String line, String key) {

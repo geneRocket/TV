@@ -445,10 +445,11 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesStandardInterstitialDateRange() {
+    public void stripsInterstitialDateRangeWithoutDroppingPrimaryMedia() {
         String playlist = "#EXTM3U\n"
+                + "#EXT-X-PROGRAM-DATE-TIME:2026-08-15T00:00:00Z\n"
                 + segment(5.0, "main-before.ts")
-                + "#EXT-X-DATERANGE:ID=\"break-1\",CLASS=\"com.apple.hls.interstitial\",DURATION=10\n"
+                + "#EXT-X-DATERANGE:ID=\"break-1\",CLASS=\"com.apple.hls.interstitial\",START-DATE=\"2026-08-15T00:00:20Z\",DURATION=10,X-ASSET-URI=\"https://ads.example/break.m3u8\"\n"
                 + segment(5.0, "insert-1.ts")
                 + segment(5.0, "insert-2.ts")
                 + segment(5.0, "main-after.ts")
@@ -456,10 +457,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("insert-1.ts"));
-        assertFalse(filtered.contains("insert-2.ts"));
-        assertTrue(filtered.contains("main-before.ts"));
-        assertTrue(filtered, filtered.contains("main-after.ts"));
+        assertFalse(filtered.contains("#EXT-X-DATERANGE"));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
@@ -482,7 +481,7 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesInterstitialDateRangeMarkedByContentType() {
+    public void stripsAdContentTypeDateRangeWithoutDroppingPrimaryMedia() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "main-before.ts")
                 + "#EXT-X-DATERANGE:ID=\"splice-1\",START-DATE=\"2026-08-15T00:00:00Z\",DURATION=10,X-CONTENT-TYPE=\"ADVERTISEMENT\",X-PLACEMENT=\"midroll\"\n"
@@ -493,14 +492,12 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("neutral-insert-1.ts"));
         assertFalse(filtered.contains("X-CONTENT-TYPE"));
-        assertTrue(filtered.contains("main-before.ts"));
-        assertTrue(filtered.contains("main-after.ts"));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
-    public void removesStrongAdDateRangeWithoutDurationUntilNextDiscontinuity() {
+    public void preservesMediaAfterUnboundedInterstitialDateRange() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://cdn.example/movie/main-before.ts")
                 + "#EXT-X-DATERANGE:ID=\"stitched-1\",CLASS=\"com.apple.hls.interstitial\",START-DATE=\"2026-08-15T00:00:00Z\",X-ASSET-URI=\"https://ads.example/vmap/break.m3u8\"\n"
@@ -513,10 +510,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("neutral/clip-1.ts"));
-        assertFalse(filtered.contains("neutral/clip-2.ts"));
-        assertTrue(filtered.contains("main-before.ts"));
-        assertTrue(filtered.contains("main-after.ts"));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
+        assertFalse(filtered.contains("#EXT-X-DATERANGE"));
         assertTrue(filtered.contains("#EXT-X-ENDLIST"));
     }
 
@@ -1149,6 +1144,31 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void preservesImplicitSequenceDerivedAesPlaylist() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\"\n"
+                + segment(5, "main-1.ts")
+                + segment(5, "https://cdn.example/ads/clip.ts")
+                + segment(5, "main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void preservesSequenceDerivedSampleAesPlaylist() {
+        String playlist = "#EXTM3U\n"
+                + "#EXT-X-MEDIA-SEQUENCE:42\n"
+                + "#EXT-X-KEY:METHOD=SAMPLE-AES,KEYFORMAT=\"identity\",URI=\"main.key\"\n"
+                + segment(5, "main-1.ts")
+                + segment(5, "https://cdn.example/ads/clip.ts")
+                + segment(5, "main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
     public void keyUriContainingIvTextDoesNotPretendToProvideExplicitIv() {
         String playlist = "#EXTM3U\n"
                 + "#EXT-X-VERSION:3\n"
@@ -1252,14 +1272,14 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void quotedFakeDurationDoesNotOverrideRealAdDuration() {
+    public void quotedFakeDurationDoesNotDeletePrimaryMedia() {
         String playlist = "#EXTM3U\n"
                 + "#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",X-NOTE=\"text,DURATION=100\",DURATION=4\n"
                 + segment(4, "clip.ts") + segment(4, "main-1.ts")
                 + segment(4, "main-2.ts") + "#EXT-X-ENDLIST\n";
         String filtered = filter(playlist);
-        assertFalse(filtered.contains("clip.ts"));
-        assertTrue(filtered.contains("main-1.ts"));
+        assertFalse(filtered.contains("#EXT-X-DATERANGE"));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
