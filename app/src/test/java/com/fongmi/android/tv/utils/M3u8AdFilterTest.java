@@ -6,6 +6,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -46,56 +50,56 @@ public class M3u8AdFilterTest {
     };
 
     private static final RealFixture[] REAL_FIXTURES = {
-            new RealFixture("chimi-01.m3u8", 1645, 1645),
-            new RealFixture("chimi-02.m3u8", 1647, 1647),
-            new RealFixture("chimi-03.m3u8", 6551, 6533),
-            new RealFixture("chimi-04.m3u8", 2214, 2178),
-            new RealFixture("chimi-05.m3u8", 809, 809),
-            new RealFixture("chimi-06.m3u8", 809, 809),
-            new RealFixture("chimi-07.m3u8", 3267, 3267),
-            new RealFixture("chimi-08.m3u8", 409, 409),
-            new RealFixture("chimi-09.m3u8", 3179, 3179),
-            new RealFixture("chimi-10.m3u8", 3262, 3262),
-            new RealFixture("chimi-11.m3u8", 1315, 1315),
-            new RealFixture("chimi-12.m3u8", 3303, 3279),
-            new RealFixture("chimi-13.m3u8", 809, 809),
-            new RealFixture("chimi-14.m3u8", 809, 809),
-            new RealFixture("chimi-15.m3u8", 809, 809),
-            new RealFixture("chimi-16.m3u8", 809, 809),
-            new RealFixture("chimi-17.m3u8", 1651, 1651),
-            new RealFixture("chimi-18.m3u8", 3346, 3265),
-            new RealFixture("chimi-19.m3u8", 3267, 3267),
-            new RealFixture("odyssey-01.m3u8", 1395, 1395, "https://1080p.huyall.com/play/zbqX53ap/index.m3u8"),
-            new RealFixture("odyssey-02.m3u8", 3684, 3684, "https://b2.bdzybf22.com/videos/202505/27/6822707861f13823c825ad5a/011edg/index.m3u8"),
-            new RealFixture("odyssey-03.m3u8", 1395, 1395, "https://hd.ijycnd.com/play/zbqX53ap/index.m3u8"),
-            new RealFixture("odyssey-04.m3u8", 1395, 1395, "https://hn.bfvvs.com/play/penVX4e7/index.m3u8"),
-            new RealFixture("odyssey-05.m3u8", 1395, 1395, "https://play.hhuus.com/play/QeZX3q5b/index.m3u8"),
-            new RealFixture("odyssey-06.m3u8", 1395, 1395, "https://play.subokk.com/play/mep6K1bM/index.m3u8"),
-            new RealFixture("odyssey-07.m3u8", 6649, 6631, "https://s1.fengbao9.com/video/aodesai/27f955720965/index.m3u8"),
-            new RealFixture("odyssey-08.m3u8", 2495, 2495, "https://svip.ryiplay18.com/20260720/8194_82dad43b/2000k/hls/index.m3u8"),
-            new RealFixture("odyssey-09.m3u8", 1395, 1395, "https://v.gsuus.com/play/xbo9Kzeg/index.m3u8"),
-            new RealFixture("odyssey-10.m3u8", 2498, 2498, "https://v.lfthirtytwo.com/20260720/8777_6fbd0ae8/2000k/hls/mixed.m3u8"),
-            new RealFixture("odyssey-11.m3u8", 3684, 3684, "https://v1.ppqrrs.com/wjv1/202308/19/KNhCf0iibU2/video/1000k_720/hls/index.m3u8"),
-            new RealFixture("odyssey-12.m3u8", 3696, 3696, "https://v1.zuidazym3u8.com/yyv1/202308/19/KNhCf0iibU2/video/2000k_1080/hls/index.m3u8"),
-            new RealFixture("odyssey-13.m3u8", 1857, 1857, "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8"),
-            new RealFixture("qunti-01.m3u8", 1848, 1838),
-            new RealFixture("qunti-02.m3u8", 1852, 1852),
-            new RealFixture("qunti-03.m3u8", 7140, 7122),
-            new RealFixture("qunti-04.m3u8", 2491, 2449),
-            new RealFixture("qunti-07.m3u8", 3674, 3674),
-            new RealFixture("qunti-08.m3u8", 3562, 3562),
-            new RealFixture("qunti-09.m3u8", 3583, 3583),
-            new RealFixture("qunti-10.m3u8", 1478, 1478),
-            new RealFixture("qunti-11.m3u8", 3717, 3693),
-            new RealFixture("qunti-16.m3u8", 1798, 1798),
-            new RealFixture("qunti-17.m3u8", 3711, 3669),
-            new RealFixture("spirited-away-01.m3u8", 1877, 1877),
-            new RealFixture("spirited-away-02.m3u8", 1876, 1876),
-            new RealFixture("station-360.m3u8", 3220, 3200),
-            new RealFixture("station-fengbao.m3u8", 6407, 6389),
-            new RealFixture("station-zuidai.m3u8", 3222, 3222),
-            new RealFixture("xuan-an-current.m3u8", 2955, 2937),
-            new RealFixture("xuan-an-episode-01.m3u8", 2735, 2717),
+            new RealFixture("chimi-01.m3u8", null),
+            new RealFixture("chimi-02.m3u8", null),
+            new RealFixture("chimi-03.m3u8", null, "/video/adjump/"),
+            new RealFixture("chimi-04.m3u8", null, "/20260727/FxLgovfH/"),
+            new RealFixture("chimi-05.m3u8", null),
+            new RealFixture("chimi-06.m3u8", null),
+            new RealFixture("chimi-07.m3u8", null),
+            new RealFixture("chimi-08.m3u8", null),
+            new RealFixture("chimi-09.m3u8", null),
+            new RealFixture("chimi-10.m3u8", null),
+            new RealFixture("chimi-11.m3u8", null),
+            new RealFixture("chimi-12.m3u8", null, "/20260523/fgtjx0Du/"),
+            new RealFixture("chimi-13.m3u8", null),
+            new RealFixture("chimi-14.m3u8", null),
+            new RealFixture("chimi-15.m3u8", null),
+            new RealFixture("chimi-16.m3u8", null),
+            new RealFixture("chimi-17.m3u8", null),
+            new RealFixture("chimi-18.m3u8", null, "/20260727/wRbpF6Qd/"),
+            new RealFixture("chimi-19.m3u8", null),
+            new RealFixture("odyssey-01.m3u8", "https://1080p.huyall.com/play/zbqX53ap/index.m3u8"),
+            new RealFixture("odyssey-02.m3u8", "https://b2.bdzybf22.com/videos/202505/27/6822707861f13823c825ad5a/011edg/index.m3u8"),
+            new RealFixture("odyssey-03.m3u8", "https://hd.ijycnd.com/play/zbqX53ap/index.m3u8"),
+            new RealFixture("odyssey-04.m3u8", "https://hn.bfvvs.com/play/penVX4e7/index.m3u8"),
+            new RealFixture("odyssey-05.m3u8", "https://play.hhuus.com/play/QeZX3q5b/index.m3u8"),
+            new RealFixture("odyssey-06.m3u8", "https://play.subokk.com/play/mep6K1bM/index.m3u8"),
+            new RealFixture("odyssey-07.m3u8", "https://s1.fengbao9.com/video/aodesai/27f955720965/index.m3u8", "/video/adjump/"),
+            new RealFixture("odyssey-08.m3u8", "https://svip.ryiplay18.com/20260720/8194_82dad43b/2000k/hls/index.m3u8"),
+            new RealFixture("odyssey-09.m3u8", "https://v.gsuus.com/play/xbo9Kzeg/index.m3u8"),
+            new RealFixture("odyssey-10.m3u8", "https://v.lfthirtytwo.com/20260720/8777_6fbd0ae8/2000k/hls/mixed.m3u8"),
+            new RealFixture("odyssey-11.m3u8", "https://v1.ppqrrs.com/wjv1/202308/19/KNhCf0iibU2/video/1000k_720/hls/index.m3u8"),
+            new RealFixture("odyssey-12.m3u8", "https://v1.zuidazym3u8.com/yyv1/202308/19/KNhCf0iibU2/video/2000k_1080/hls/index.m3u8"),
+            new RealFixture("odyssey-13.m3u8", "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8"),
+            new RealFixture("qunti-01.m3u8", null, "511bbce97206bf92ec35dc252f066430.ts", "b737810c3a808938877100d2a1319b6e.ts", "d70225e17c7aaebd79f810d4d5c90a98.ts", "431209dd72f8045900592416a82ad61f.ts", "c5e66da16786c7f70f2356f66a921597.ts"),
+            new RealFixture("qunti-02.m3u8", null),
+            new RealFixture("qunti-03.m3u8", null, "/video/adjump/"),
+            new RealFixture("qunti-04.m3u8", null, "/20260727/FxLgovfH/"),
+            new RealFixture("qunti-07.m3u8", null),
+            new RealFixture("qunti-08.m3u8", null),
+            new RealFixture("qunti-09.m3u8", null),
+            new RealFixture("qunti-10.m3u8", null),
+            new RealFixture("qunti-11.m3u8", null, "/20260523/fgtjx0Du/"),
+            new RealFixture("qunti-16.m3u8", null),
+            new RealFixture("qunti-17.m3u8", null, "/20260727/YfRHNor8/"),
+            new RealFixture("spirited-away-01.m3u8", null),
+            new RealFixture("spirited-away-02.m3u8", null),
+            new RealFixture("station-360.m3u8", null, "/20260726/1AS9nSvi/"),
+            new RealFixture("station-fengbao.m3u8", null, "/video/adjump/"),
+            new RealFixture("station-zuidai.m3u8", null),
+            new RealFixture("xuan-an-current.m3u8", null, "/video/adjump/"),
+            new RealFixture("xuan-an-episode-01.m3u8", null, "/video/adjump/"),
     };
 
     @Test
@@ -106,43 +110,29 @@ public class M3u8AdFilterTest {
                     original.getBytes(StandardCharsets.UTF_8),
                     fixture.baseUrl), StandardCharsets.UTF_8);
 
-            assertEquals(fixture.name + " input changed", fixture.before, M3u8AdFilter.countSegmentsFromString(original));
-            assertEquals(fixture.name + " filtering changed", fixture.after, M3u8AdFilter.countSegmentsFromString(filtered));
-            assertTrue(fixture.name, filtered.startsWith("#EXTM3U"));
-            assertTrue(fixture.name, fixture.after > 0);
-            if (original.contains("#EXT-X-ENDLIST")) assertTrue(fixture.name, filtered.contains("#EXT-X-ENDLIST"));
+            assertOnlyAdsRemoved(fixture.name, original, filtered, fixture.adUris);
         }
     }
 
     @Test
-    public void filtersCurrentLiveMultiHostPlaylistsWithoutBreakingPlayback() throws IOException {
+    public void filtersCapturedMultiHostVodPlaylistsByLabelledContent() throws IOException {
         for (String name : LIVE_FIXTURES) {
             String original = readLiveFixture(name);
             String filtered = filter(original, "https://live-fixture.invalid/" + name);
-            int before = M3u8AdFilter.countSegmentsFromString(original);
-            int after = M3u8AdFilter.countSegmentsFromString(filtered);
-
-            assertTrue(name + " input has no segments", before > 0);
-            assertTrue(name + " filtered playlist is empty", after > 0);
-            assertTrue(name + " gained segments", after <= before);
-            assertTrue(name, filtered.startsWith("#EXTM3U"));
-            if (original.contains("#EXT-X-ENDLIST")) assertTrue(name, filtered.contains("#EXT-X-ENDLIST"));
+            assertOnlyAdsRemoved(name, original, filtered,
+                    name.equals("odyssey-07-live.m3u8") ? new String[]{"/video/adjump/"} : new String[0]);
         }
     }
 
     @Test
-    public void filtersTvBoxInterfaceSitePlaylistsWithoutBreakingPlayback() throws IOException {
+    public void preservesTvBoxMasterReferencesAndFiltersLabelledMedia() throws IOException {
         for (String name : TVBOX_SITE_FIXTURES) {
             String original = readTvBoxFixture(name);
             String filtered = filter(original, "https://tvbox-site-fixture.invalid/" + name);
-            int before = countPlaylistUris(original);
-            int after = countPlaylistUris(filtered);
-
-            assertTrue(name + " input has no segments", before > 0);
-            assertTrue(name + " filtered playlist is empty", after > 0);
-            assertTrue(name + " gained segments", after <= before);
-            assertTrue(name, filtered.startsWith("#EXTM3U"));
-            if (original.contains("#EXT-X-ENDLIST")) assertTrue(name, filtered.contains("#EXT-X-ENDLIST"));
+            // Several captures are master playlists: check their child references,
+            // not a fictional count of media segments in an unfetched child.
+            assertOnlyAdsRemoved(name, original, filtered,
+                    name.equals("tvbox-yinghua.m3u8") ? new String[]{"11466_IMADS.jpeg"} : new String[0]);
         }
     }
 
@@ -163,7 +153,7 @@ public class M3u8AdFilterTest {
 
         assertTrue(original.contains("/video/adjump/"));
         assertFalse(filtered.contains("/video/adjump/"));
-        assertEquals(6631, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertOnlyAdsRemoved("adjump", original, filtered, "/video/adjump/");
     }
 
     @Test
@@ -174,7 +164,7 @@ public class M3u8AdFilterTest {
         assertFalse(filtered.contains("/video/adjump/"));
         assertTrue(filtered.contains("0000312.ts"));
         assertTrue(filtered.contains("0000313.ts"));
-        assertEquals(6631, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertOnlyAdsRemoved("adjump", original, filtered, "/video/adjump/");
     }
 
     @Test
@@ -185,7 +175,7 @@ public class M3u8AdFilterTest {
         assertFalse(filtered.contains("/20260727/wRbpF6Qd/"));
         assertTrue(filtered.contains("b1x48sws.ts"));
         assertTrue(filtered.contains("fD37xao5.ts"));
-        assertEquals(3265, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertOnlyAdsRemoved("casino pod", original, filtered, "/20260727/wRbpF6Qd/");
     }
 
     @Test
@@ -283,7 +273,7 @@ public class M3u8AdFilterTest {
         assertTrue(filtered.contains("main-before.ts"));
         assertTrue(filtered.contains("main-middle.ts"));
         assertTrue(filtered.contains("main-after.ts"));
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
@@ -397,7 +387,7 @@ public class M3u8AdFilterTest {
                 + segment(5.0, "main-4.ts")
                 + "#EXT-X-ENDLIST\n";
 
-        assertEquals(4, M3u8AdFilter.countSegmentsFromString(filter(playlist)));
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
     }
 
     @Test
@@ -492,7 +482,7 @@ public class M3u8AdFilterTest {
 
         assertTrue(filtered.contains("chapter-clip-1.ts"));
         assertTrue(filtered.contains("chapter-clip-2.ts"));
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
@@ -557,7 +547,7 @@ public class M3u8AdFilterTest {
         String filtered = filter(playlist);
 
         assertTrue(filtered.contains("EXT-X-ASSET-LIST"));
-        assertEquals(2, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
@@ -571,7 +561,7 @@ public class M3u8AdFilterTest {
                 + segment(5.0, "main-4.ts")
                 + "#EXT-X-ENDLIST\n";
 
-        assertEquals(4, M3u8AdFilter.countSegmentsFromString(filter(playlist)));
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
     }
 
     @Test
@@ -720,7 +710,7 @@ public class M3u8AdFilterTest {
                 + segment(5.0, "https://ima.example/video/main-3.ts")
                 + "#EXT-X-ENDLIST\n";
 
-        assertEquals(3, M3u8AdFilter.countSegmentsFromString(filter(playlist)));
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
     }
 
     @Test
@@ -743,7 +733,7 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
         assertTrue(filtered.contains("range=0"));
         assertTrue(filtered.contains("range=5"));
     }
@@ -761,8 +751,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(6, M3u8AdFilter.countSegmentsFromString(filtered));
-        assertEquals(2, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
+        assertTrue(filtered.contains("https://cdn.example/video/repeated.ts\n"));
         assertTrue(filtered.contains("repeated.ts?range=1"));
         assertTrue(filtered.contains("repeated.ts?range=2"));
         assertTrue(filtered.contains("main-1.ts"));
@@ -784,7 +774,7 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
         assertTrue(filtered.contains("#EXT-X-BYTERANGE:100@0"));
         assertTrue(filtered.contains("#EXT-X-BYTERANGE:100@200"));
     }
@@ -804,8 +794,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
-        assertEquals(3, countOccurrences(filtered, "https://cdn.example/video/media.ts\n"));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
+        assertTrue(filtered.contains("https://cdn.example/video/media.ts\n"));
     }
 
     @Test
@@ -879,7 +869,7 @@ public class M3u8AdFilterTest {
         String filtered = filter(playlist);
 
         assertTrue(filtered.contains("ad2b67f39fa51f00b99448372bd9538f.ts"));
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
@@ -958,7 +948,7 @@ public class M3u8AdFilterTest {
 
             String filtered = filter(playlist.toString());
             assertFalse(filtered.contains("FxLgovfH"));
-            assertEquals(postroll ? 20 : 21, M3u8AdFilter.countSegmentsFromString(filtered));
+            assertOnlyAdsRemoved("repeated preroll/postroll", playlist.toString(), filtered, "/20260727/FxLgovfH/");
             for (int i = 0; i < 20; i++) assertTrue(filtered.contains("movie/" + i + ".ts"));
             assertTrue(filtered.startsWith("#EXTM3U\n"));
             assertTrue(filtered.contains("#EXT-X-ENDLIST"));
@@ -1018,8 +1008,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
-        assertEquals(2, countOccurrences(filtered, "https://cdn.example/video/repeated.ts\n"));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
+        assertTrue(filtered.contains("https://cdn.example/video/repeated.ts\n"));
         assertTrue(filtered.contains("#EXT-X-MEDIA-SEQUENCE:100"));
     }
 
@@ -1038,7 +1028,7 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
@@ -1056,7 +1046,7 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertEquals(0, countOccurrences(filtered, "https://cdn.example/ads/repeated.ts\n"));
+        assertOnlyAdsRemoved("explicit IV", playlist, filtered, "/ads/repeated.ts");
     }
 
     @Test
@@ -1076,7 +1066,7 @@ public class M3u8AdFilterTest {
 
         assertTrue(filtered.contains("main-b.key"));
         assertTrue(filtered.contains("main-3.ts"));
-        assertEquals(M3u8AdFilter.countSegmentsFromString(playlist), M3u8AdFilter.countSegmentsFromString(filtered));
+        assertEquals(mediaEntries(playlist), mediaEntries(filtered));
     }
 
     @Test
@@ -1155,7 +1145,7 @@ public class M3u8AdFilterTest {
     public void completedContinuationDoesNotOpenUnboundedBreak() {
         String playlist = "#EXTM3U\n#EXT-X-CUE-OUT-CONT:ElapsedTime=12,Duration=12\n"
                 + segment(4, "main-1.ts") + segment(4, "main-2.ts") + "#EXT-X-ENDLIST\n";
-        assertEquals(2, M3u8AdFilter.countSegmentsFromString(filter(playlist)));
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
     }
 
     @Test
@@ -1225,7 +1215,7 @@ public class M3u8AdFilterTest {
         String filtered = filter(playlist);
         for (int i = 1; i <= 5; i++) assertTrue(filtered, filtered.contains("main-" + i + ".ts"));
         assertFalse(filtered.contains("break.ts"));
-        assertEquals(5, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertOnlyAdsRemoved("query flags", playlist, filtered, "break.ts?ad=1");
     }
 
     @Test
@@ -1308,7 +1298,7 @@ public class M3u8AdFilterTest {
         playlist.append(segment(5, "https://credits.example/ending/1.ts"));
         playlist.append(segment(5, "https://credits.example/ending/2.ts"));
         playlist.append("#EXT-X-ENDLIST\n");
-        assertEquals(24, M3u8AdFilter.countSegmentsFromString(filter(playlist.toString())));
+        assertEquals(mediaEntries(playlist.toString()), mediaEntries(filter(playlist.toString())));
     }
 
     @Test
@@ -1319,7 +1309,7 @@ public class M3u8AdFilterTest {
                 + segment(5, "asset-123.ts") + segment(5, "main-3.ts") + "#EXT-X-ENDLIST\n";
         String filtered = filter(playlist);
         assertFalse(filtered.contains("asset-123.ts"));
-        assertEquals(3, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertOnlyAdsRemoved("closed cue", playlist, filtered, "asset-123.ts");
     }
 
     @Test
@@ -1337,47 +1327,27 @@ public class M3u8AdFilterTest {
         assertFalse(filtered.contains("insert.example"));
         assertTrue(filtered.contains("main-1.ts"));
         assertTrue(filtered.contains("main-2.ts"));
-        assertEquals(2, M3u8AdFilter.countSegmentsFromString(filtered));
+        assertOnlyAdsRemoved("closed edge breaks", playlist, filtered, "https://insert.example/");
     }
 
     @Test
     public void frameVerifiedCasinoFilterPreservesEveryOtherMediaUriInOrder() throws IOException {
         String original = readRealFixture("chimi-18.m3u8");
         String filtered = filter(original, "https://bf.modujx11.com/20260630/JbD1RgRr/index.m3u8");
-        java.util.List<String> expected = java.util.Arrays.stream(original.split("\n"))
-                .map(String::trim).filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                .filter(line -> !line.contains("/20260727/wRbpF6Qd/"))
-                .collect(java.util.stream.Collectors.toList());
-        java.util.List<String> actual = java.util.Arrays.stream(filtered.split("\n"))
-                .map(String::trim).filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                .collect(java.util.stream.Collectors.toList());
-        assertEquals(3265, expected.size());
-        assertEquals(expected, actual);
+        assertOnlyAdsRemoved("frame-verified casino", original, filtered, "/20260727/wRbpF6Qd/");
     }
 
     @Test
     public void removesFrameVerifiedCasinoPodsWithRotatingFilenames() throws IOException {
         String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
         String filtered = filter(original, "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8");
-        java.util.Set<String> ads = new java.util.HashSet<>(java.util.Arrays.asList(
-                readFixture("/m3u8/research/ffzy-20260926-ads.txt").split("\n")));
-        java.util.List<String> expected = java.util.Arrays.stream(original.split("\n"))
-                .filter(line -> !line.isEmpty() && !line.startsWith("#") && !ads.contains(line))
-                .collect(java.util.stream.Collectors.toList());
-        java.util.List<String> actual = java.util.Arrays.stream(filtered.split("\n"))
-                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                .collect(java.util.stream.Collectors.toList());
-        assertEquals(18, ads.size());
-        assertEquals(1839, expected.size());
-        assertEquals(expected, actual);
-        assertTrue(filtered.startsWith("#EXTM3U\n"));
-        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+        assertOnlyAdsRemoved("frame-verified rotating names", original, filtered,
+                readFixture("/m3u8/research/ffzy-20260926-ads.txt").trim().split("\n"));
     }
 
     @Test
     public void preservesCapturedDenseProviderPlaylist() throws IOException {
         String original = readFixture("/m3u8/research/ffzy-dense-20260926.m3u8");
-        assertEquals(1096, M3u8AdFilter.countSegmentsFromString(original));
         assertEquals(original.trim(), filter(original,
                 "https://vip.ffzy-online5.com/20230422/10921_214e81bf/3000k/hls/mixed.m3u8").trim());
     }
@@ -1385,10 +1355,10 @@ public class M3u8AdFilterTest {
     @Test
     public void casinoDurationProfileWorksAcrossSourcesButRequiresVod() throws IOException {
         String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
-        String expected = filter(original, "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8");
+        String[] ads = readFixture("/m3u8/research/ffzy-20260926-ads.txt").trim().split("\n");
         for (String base : new String[]{"https://video.example/movie/index.m3u8",
                 "https://another.example/unrelated/path/playlist.m3u8"}) {
-            assertEquals(expected, filter(original, base));
+            assertOnlyAdsRemoved(base, original, filter(original, base), ads);
         }
         String live = original.replace("#EXT-X-ENDLIST", "");
         assertEquals(live.trim(), filter(live,
@@ -1401,23 +1371,19 @@ public class M3u8AdFilterTest {
         java.util.Set<String> ads = new java.util.HashSet<>(java.util.Arrays.asList(
                 readFixture("/m3u8/research/ffzy-20260926-ads.txt").split("\n")));
         StringBuilder changed = new StringBuilder();
-        java.util.List<String> expected = new java.util.ArrayList<>();
+        List<String> renamedAds = new ArrayList<>();
         int index = 0;
         for (String line : original.split("\n")) {
             if (!line.isEmpty() && !line.startsWith("#")) {
                 String uri = "https://cdn" + index % 3 + ".example/resource/" + index
                         + "/clip.jpeg?token=" + index++;
-                if (!ads.contains(line)) expected.add(uri);
+                if (ads.contains(line)) renamedAds.add(uri);
                 line = uri;
             }
             changed.append(line).append('\n');
         }
         String filtered = filter(changed.toString());
-        java.util.List<String> actual = java.util.Arrays.stream(filtered.split("\n"))
-                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                .collect(java.util.stream.Collectors.toList());
-        assertEquals(1839, expected.size());
-        assertEquals(expected, actual);
+        assertOnlyAdsRemoved("renamed cross-CDN media", changed.toString(), filtered, renamedAds.toArray(new String[0]));
     }
 
     @Test
@@ -1437,6 +1403,57 @@ public class M3u8AdFilterTest {
                 + "#EXT-X-DISCONTINUITY\n" + groups[6]
                 + "#EXT-X-DISCONTINUITY\n" + groups[8] + "#EXT-X-ENDLIST\n";
         assertEquals(dense.trim(), filter(dense, base).trim());
+    }
+
+    // Expected removals are independently labelled resource paths/URIs, never
+    // inferred by calling the filter or copying its current output.
+    private static void assertOnlyAdsRemoved(String label, String original, String filtered, String... adUris) {
+        List<Map.Entry<String, String>> input = mediaEntries(original);
+        assertTrue(label + " invalid input header", original.startsWith("#EXTM3U"));
+        assertFalse(label + " empty input", input.isEmpty());
+        for (String adUri : adUris) {
+            assertTrue(label + " missing labelled ad: " + adUri,
+                    input.stream().anyMatch(entry -> entry.getKey().contains(adUri)));
+        }
+        List<Map.Entry<String, String>> expected = new ArrayList<>();
+        for (Map.Entry<String, String> entry : input) {
+            boolean ad = false;
+            for (String adUri : adUris) ad |= entry.getKey().contains(adUri);
+            if (!ad) expected.add(entry);
+        }
+        assertFalse(label + " no retained content", expected.isEmpty());
+        assertEquals(label + " retained media content/order", expected, mediaEntries(filtered));
+        assertTrue(label, filtered.startsWith("#EXTM3U"));
+        if (original.contains("#EXT-X-ENDLIST")) assertTrue(label, filtered.contains("#EXT-X-ENDLIST"));
+    }
+
+    // Include each media URI, duration/range, active KEY/MAP (or complete PART tag).
+    // Comparing ordered entries also detects replacement, reordering and lost duplicates.
+    private static List<Map.Entry<String, String>> mediaEntries(String playlist) {
+        List<Map.Entry<String, String>> entries = new ArrayList<>();
+        StringBuilder pending = new StringBuilder();
+        String key = "#EXT-X-KEY:METHOD=NONE";
+        String map = "";
+        for (String raw : playlist.split("\\r?\\n")) {
+            String line = raw.trim();
+            if (line.startsWith("#EXT-X-KEY:")) {
+                key = line;
+            } else if (line.startsWith("#EXT-X-MAP:")) {
+                map = line;
+            } else if (line.startsWith("#EXTINF:") || line.startsWith("#EXT-X-BYTERANGE:")
+                    || line.startsWith("#EXT-X-STREAM-INF:")) {
+                pending.append(line).append('\n');
+            } else if (line.startsWith("#EXT-X-PART:")) {
+                java.util.regex.Matcher uri = java.util.regex.Pattern.compile("URI=\"([^\"]+)\"").matcher(line);
+                assertTrue("PART without a URI: " + line, uri.find());
+                entries.add(new AbstractMap.SimpleImmutableEntry<>(uri.group(1), key + '\n' + map + '\n' + line));
+            } else if (!line.isEmpty() && !line.startsWith("#")) {
+                entries.add(new AbstractMap.SimpleImmutableEntry<>(line, key + '\n' + map + '\n' + pending + line));
+                pending.setLength(0);
+            }
+        }
+        assertEquals("Media declaration without a URI", "", pending.toString());
+        return entries;
     }
 
     private static String segment(double duration, String uri) {
@@ -1478,41 +1495,15 @@ public class M3u8AdFilterTest {
         }
     }
 
-    private static int countPlaylistUris(String playlist) {
-        int count = 0;
-        for (String line : playlist.split("\\r?\\n")) {
-            line = line.trim();
-            if (!line.isEmpty() && !line.startsWith("#")) count++;
-        }
-        return count;
-    }
-
-    private static int countOccurrences(String value, String needle) {
-        int count = 0;
-        int index = 0;
-        while ((index = value.indexOf(needle, index)) >= 0) {
-            count++;
-            index += needle.length();
-        }
-        return count;
-    }
-
     private static final class RealFixture {
-
         private final String name;
-        private final int before;
-        private final int after;
         private final String baseUrl;
+        private final String[] adUris;
 
-        private RealFixture(String name, int before, int after) {
-            this(name, before, after, "https://fixture.invalid/" + name);
-        }
-
-        private RealFixture(String name, int before, int after, String baseUrl) {
+        private RealFixture(String name, String baseUrl, String... adUris) {
             this.name = name;
-            this.before = before;
-            this.after = after;
-            this.baseUrl = baseUrl;
+            this.baseUrl = baseUrl == null ? "https://fixture.invalid/" + name : baseUrl;
+            this.adUris = adUris;
         }
     }
 }
