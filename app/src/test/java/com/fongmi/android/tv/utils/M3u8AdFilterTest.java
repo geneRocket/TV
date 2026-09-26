@@ -1353,6 +1353,16 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void preservesCapturedRepeatedDurationsWithFrameVerifiedMovieScenes() throws IOException {
+        String original = readFixture("/m3u8/research/ruyi-dense-20260926.m3u8");
+        String filtered = filter(original,
+                "https://svip.ryiplay18.com/20260720/8194_82dad43b/2000k/hls/index.m3u8");
+        // Three separate 5 x 4-second groups contain continuous movie scenes,
+        // verified against their first/middle segments and adjacent footage.
+        assertEquals(original.trim(), filtered.trim());
+    }
+
+    @Test
     public void casinoDurationProfileWorksAcrossSourcesButRequiresVod() throws IOException {
         String original = readFixture("/m3u8/research/ffzy-20260926.m3u8");
         String[] ads = readFixture("/m3u8/research/ffzy-20260926-ads.txt").trim().split("\n");

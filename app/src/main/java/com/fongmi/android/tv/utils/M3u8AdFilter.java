@@ -837,18 +837,27 @@ public final class M3u8AdFilter {
 
         List<Pod> pods = new ArrayList<>();
         int podStart = -1;
+        String activeKey = "";
+        String podBeforeKey = "";
         for (int i = 0; i < records.size(); i++) {
             Record record = records.get(i);
             if (!record.segment) continue;
+            String beforeKey = activeKey;
+            String key = Pod.lastKey(record.tags);
+            if (!isEmpty(key)) activeKey = key;
             // A preroll starts at the playlist boundary and need not carry its
             // own discontinuity. Include it in exact repeated-pod matching.
-            if (podStart < 0) podStart = i;
-            else if (hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) {
-                addPod(pods, records, podStart, i);
+            if (podStart < 0) {
                 podStart = i;
+                podBeforeKey = beforeKey;
+            } else if (hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) {
+                // This segment's effective key is the preceding pod's after-key.
+                addPod(pods, records, podStart, i, podBeforeKey, activeKey);
+                podStart = i;
+                podBeforeKey = beforeKey;
             }
         }
-        if (podStart >= 0) addPod(pods, records, podStart, records.size());
+        if (podStart >= 0) addPod(pods, records, podStart, records.size(), podBeforeKey, activeKey);
 
         Map<String, Integer> durationCounts = new HashMap<>();
         Map<String, Integer> mediaCounts = new HashMap<>();
@@ -918,8 +927,8 @@ public final class M3u8AdFilter {
         return false;
     }
 
-    private static void addPod(List<Pod> pods, List<Record> records, int start, int end) {
-        Pod pod = Pod.create(records, start, end);
+    private static void addPod(List<Pod> pods, List<Record> records, int start, int end, String beforeKey, String afterKey) {
+        Pod pod = Pod.create(records, start, end, beforeKey, afterKey);
         if (pod != null) pods.add(pod);
     }
 
@@ -1882,14 +1891,12 @@ public final class M3u8AdFilter {
             this.keySwitchSignal = keySwitchSignal;
         }
 
-        private static Pod create(List<Record> records, int start, int end) {
+        private static Pod create(List<Record> records, int start, int end, String beforeKey, String afterKey) {
             int segments = 0;
             int lastSegment = -1;
             double duration = 0;
             boolean strongAdSignal = false;
-            String beforeKey = activeKeyBefore(records, start);
             String podKey = "";
-            String afterKey = activeKeyAfter(records, end);
             StringBuilder durationFingerprint = new StringBuilder();
             StringBuilder mediaFingerprint = new StringBuilder();
 
@@ -1901,7 +1908,7 @@ public final class M3u8AdFilter {
                 if (hasTagPrefix(record.tags, "#EXT-X-BYTERANGE")
                         || (isPartOnlyRecord(record) && !isEmpty(parseAttributeString(
                         lastTag(record.tags, "#EXT-X-PART:"), "BYTERANGE")))) return null;
-                segments++;
+                if (++segments > MAX_SEGMENTS) return null;
                 lastSegment = i;
                 duration += record.duration;
                 strongAdSignal |= record.explicitAd;
@@ -1921,29 +1928,6 @@ public final class M3u8AdFilter {
             if (isEmpty(podKey)) return false;
             if (podKey.equals(beforeKey)) return false;
             return !isEmpty(beforeKey) && afterKey.equals(beforeKey);
-        }
-
-        private static String activeKeyBefore(List<Record> records, int end) {
-            String key = "";
-            for (int i = 0; i < end; i++) {
-                Record record = records.get(i);
-                if (!record.segment) continue;
-                String value = lastKey(record.tags);
-                if (!isEmpty(value)) key = value;
-            }
-            return key;
-        }
-
-        private static String activeKeyAfter(List<Record> records, int start) {
-            String key = activeKeyBefore(records, start);
-            for (int i = start; i < records.size(); i++) {
-                Record record = records.get(i);
-                if (!record.segment) continue;
-                String value = lastKey(record.tags);
-                if (!isEmpty(value)) key = value;
-                return key;
-            }
-            return key;
         }
 
         private static String lastKey(List<String> tags) {
