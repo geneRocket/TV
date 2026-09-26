@@ -44,13 +44,20 @@ public final class AdBlocker {
             "v.fwmrm.net",
             "adform.net",
             "taboola.com",
-            "outbrain.com"
+            "outbrain.com",
+            "czzycdn.com",
+            "changzeyun.com"
     ));
 
     private static final Set<String> DEFAULT_TOKENS = new HashSet<>(Arrays.asList(
             "ad", "ads", "adv", "advert", "advertising", "commercial", "doubleclick",
             "gampad", "ima", "vast", "vmap", "preroll", "midroll", "postroll",
-            "adbreak", "adpod", "scte35", "ssai", "csai", "tracking", "beacon"
+            "adbreak", "adpod", "scte35", "ssai", "csai", "tracking", "beacon",
+            "changze", "czzy", "czad", "changzeyun", "changzepiepian",
+            "guanggao", "imads", "adjump", "adslice", "slicead", "popad", "popads",
+            "splashad", "casino", "gambling", "kudad", "kudianad", "chabo", "chaboad",
+            "kaipian", "kaipianad", "piantou", "piantouad", "pianwei", "pianweiad",
+            "paomadeng", "macau", "pujing", "xinpujing", "bet365"
     ));
 
     private static volatile AdsRules rules = AdsRules.empty();

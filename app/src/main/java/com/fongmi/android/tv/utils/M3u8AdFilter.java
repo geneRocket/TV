@@ -115,6 +115,37 @@ public final class M3u8AdFilter {
         add("tracking");
         add("beacon");
         add("measurement");
+        add("changze");
+        add("czzy");
+        add("czad");
+        add("changzeyun");
+        add("changzepiepian");
+        add("czm3u8");
+        add("czplayer");
+        add("guanggao");
+        add("adjump");
+        add("adslice");
+        add("slicead");
+        add("popad");
+        add("popads");
+        add("splashad");
+        add("casino");
+        add("gambling");
+        add("kudad");
+        add("kudianad");
+        add("chabo");
+        add("chaboad");
+        add("kaipian");
+        add("kaipianad");
+        add("piantou");
+        add("piantouad");
+        add("pianwei");
+        add("pianweiad");
+        add("paomadeng");
+        add("macau");
+        add("pujing");
+        add("xinpujing");
+        add("bet365");
     }};
 
     private static final Set<String> AD_QUERY_KEYS = new HashSet<String>() {{
@@ -152,6 +183,11 @@ public final class M3u8AdFilter {
         add("csai");
         add("vmap");
         add("vast");
+        add("czad");
+        add("changze");
+        add("czzy");
+        add("guanggao");
+        add("adjump");
     }};
 
     private static final Set<String> AD_PATH_PARTS = new HashSet<String>() {{
@@ -182,6 +218,38 @@ public final class M3u8AdFilter {
         add("freewheel");
         add("spotx");
         add("ima");
+        add("changze");
+        add("czzy");
+        add("czad");
+        add("changzeyun");
+        add("changzepiepian");
+        add("czm3u8");
+        add("czplayer");
+        add("guanggao");
+        add("imads");
+        add("adjump");
+        add("adslice");
+        add("slicead");
+        add("popad");
+        add("popads");
+        add("splashad");
+        add("casino");
+        add("gambling");
+        add("kudad");
+        add("kudianad");
+        add("chabo");
+        add("chaboad");
+        add("kaipian");
+        add("kaipianad");
+        add("piantou");
+        add("piantouad");
+        add("pianwei");
+        add("pianweiad");
+        add("paomadeng");
+        add("macau");
+        add("pujing");
+        add("xinpujing");
+        add("bet365");
     }};
 
     private M3u8AdFilter() {
@@ -205,6 +273,7 @@ public final class M3u8AdFilter {
         if (headerIndex < 0) return bytes;
         if (headerIndex > 0) content = content.substring(headerIndex);
 
+        if (isLowLatencyHls(content)) return toBytesOrOriginal(content, bytes);
         if (isSubtitleWhitelisted(baseUrl)) return toBytesOrOriginal(content, bytes);
 
         registerSubtitlePlaylists(content, baseUrl);
@@ -217,12 +286,13 @@ public final class M3u8AdFilter {
         List<Record> records = parseRecords(content, baseUrl);
         if (isSubtitlePlaylist(content, records)) return toBytesOrOriginal(content, bytes);
 
+        boolean vod = content.contains("#EXT-X-ENDLIST");
         int originalSegmentCount = countSegments(records);
         List<Record> originalRecords = records;
         Set<String> repeatedSegments = collectRepeatedSegments(records);
-        records = filterAdTagSegments(records, baseUrl);
-        records = filterRepeatedDiscontinuityPods(records, content.contains("#EXT-X-ENDLIST"));
-        records = filterShortAdClusters(records);
+        records = filterAdTagSegments(records, baseUrl, vod);
+        records = filterRepeatedDiscontinuityPods(records, baseUrl, vod);
+        if (vod) records = filterShortAdClusters(records);
         Set<String> confirmedRepeatedAds = collectRemovedRepeatedMedia(originalRecords, records, repeatedSegments);
         records = filterRepeatedSegments(records, confirmedRepeatedAds);
 
@@ -594,9 +664,9 @@ public final class M3u8AdFilter {
         return count;
     }
 
-    private static List<Record> filterAdTagSegments(List<Record> records, String baseUrl) {
+    private static List<Record> filterAdTagSegments(List<Record> records, String baseUrl, boolean vod) {
         List<Record> kept = new ArrayList<>(records.size());
-        boolean allowWeakDiscontinuitySignal = shouldUseWeakDiscontinuitySignal(records);
+        boolean allowWeakDiscontinuitySignal = vod && shouldUseWeakDiscontinuitySignal(records);
 
         boolean cueAdOpen = false;
         boolean cueAdHasClosingTag = false;
@@ -707,7 +777,7 @@ public final class M3u8AdFilter {
                 continue;
             }
 
-            if (explicitAd && hasDiscontinuity) {
+            if (vod && explicitAd && hasDiscontinuity) {
                 discontinuityAdOpen = true;
                 discontinuityAdSegments = 0;
             }
@@ -832,9 +902,33 @@ public final class M3u8AdFilter {
         return kept;
     }
 
-    private static List<Record> filterRepeatedDiscontinuityPods(List<Record> records, boolean vod) {
+    private static boolean isLowLatencyHls(String content) {
+        if (isEmpty(content)) return false;
+        return content.contains("#EXT-X-PART-INF:")
+                || content.contains("#EXT-X-SKIP:")
+                || content.contains("#EXT-X-PRELOAD-HINT:")
+                || content.contains("#EXT-X-SERVER-CONTROL:");
+    }
+
+    public static String identifyProvider(String url) {
+        if (isEmpty(url)) return "unknown";
+        String lower = url.toLowerCase(Locale.US);
+        if (lower.contains("lzcdn") || lower.contains("cdnlz") || lower.contains("lzzy") || lower.contains("liangzi")) return "liangzi";
+        if (lower.contains("ffzy") || lower.contains("feifan")) return "feifan";
+        if (lower.contains("bfikun") || lower.contains("ikun")) return "ikun";
+        if (lower.contains("suoni") || lower.contains("rstu") || lower.contains("snzy") || lower.contains("suonizy")) return "suoni";
+        if (lower.contains("fengbao") || lower.contains("bfvvs") || lower.contains("baofeng") || lower.contains("bfzy")) return "baofeng";
+        if (lower.contains("czzy") || lower.contains("changze") || lower.contains("czad")) return "changze";
+        if (lower.contains("modu") || lower.contains("modujx")) return "modu";
+        if (lower.contains("hongniu") || lower.contains("hnzy")) return "hongniu";
+        if (lower.contains("kudian") || lower.contains("kdzy")) return "kudian";
+        return "unknown";
+    }
+
+    private static List<Record> filterRepeatedDiscontinuityPods(List<Record> records, String baseUrl, boolean vod) {
         if (records == null || records.isEmpty()) return records;
 
+        String provider = identifyProvider(baseUrl);
         List<Pod> pods = new ArrayList<>();
         int podStart = -1;
         String activeKey = "";
@@ -879,10 +973,9 @@ public final class M3u8AdFilter {
         for (Pod pod : pods) {
             int matchingDurations = durationCounts.getOrDefault(pod.durationFingerprint, 0);
             int matchingMedia = mediaCounts.getOrDefault(pod.mediaFingerprint, 0);
-            if (!shouldRemoveRepeatedPod(matchingDurations, pod.strongAdSignal)
-                    && !shouldRemoveIdenticalMediaPod(matchingMedia)
-                    && !shouldRemoveKeySwitchPod(pod.keySwitchSignal)
-                    && casinoCounts.getOrDefault(casinoProfiles.get(pod), 0) < 2) continue;
+            boolean isCasino = allowCasinoProfiles && casinoCounts.getOrDefault(casinoProfiles.get(pod), 0) >= 2;
+            int score = calculatePodScore(records, pods, pod, matchingDurations, matchingMedia, provider, vod);
+            if (!isCasino && score < 6) continue;
             for (int i = pod.start; i < pod.end; i++) {
                 if (records.get(i).segment) removedSegments++;
                 remove[i] = true;
@@ -907,12 +1000,84 @@ public final class M3u8AdFilter {
         }
         String profile = fingerprint.toString();
         if (!CASINO_PROFILES.contains(profile)) return "";
-        if (!hasLongMainNeighbor(records, pod.start - 1, -1)
-                || !hasLongMainNeighbor(records, pod.end, 1)) return "";
+        if (!hasLongMainNeighborOrBoundary(records, pod.start - 1, -1)
+                || !hasLongMainNeighborOrBoundary(records, pod.end, 1)) return "";
         return profile;
     }
 
-    private static boolean hasLongMainNeighbor(List<Record> records, int index, int step) {
+    private static int calculatePodScore(List<Record> records, List<Pod> pods, Pod pod, int matchingDurations, int matchingMedia, String provider, boolean vod) {
+        if (!vod) return 0;
+        if ("hongniu".equals(provider) && !pod.strongAdSignal) return 0;
+
+        int score = 0;
+
+        if (pod.strongAdSignal) score += 5;
+        if (matchingMedia >= 2) score += 4;
+        if (pod.keySwitchSignal) score += 3;
+        if (matchingDurations >= 2) score += 2;
+
+        if (shouldUseWeakDiscontinuitySignal(records)) {
+            boolean longNeighbors = hasLongMainNeighborOrBoundary(records, pod.start - 1, -1)
+                    && hasLongMainNeighborOrBoundary(records, pod.end, 1);
+            boolean pathDisparity = hasPathDisparity(records, pod);
+            boolean indexJump = hasIndexJump(records, pod);
+            boolean durationAnomaly = hasSegmentDurationAnomaly(records, pod);
+            boolean longShortPattern = isLongShortAlternatingPattern(pods, pod);
+
+            boolean hasDisparityOrAnomaly = pathDisparity || indexJump || durationAnomaly;
+            if ((longNeighbors || longShortPattern) && hasDisparityOrAnomaly) {
+                score += 3;
+            }
+
+            if ("liangzi".equals(provider) && hasDisparityOrAnomaly) score += 2;
+            if ("feifan".equals(provider) && hasDisparityOrAnomaly && pod.duration <= 25.0) score += 2;
+            if ("ikun".equals(provider) && (pod.keySwitchSignal || pathDisparity)) score += 2;
+            if ("suoni".equals(provider) && hasDisparityOrAnomaly && (pod.duration >= 14.5 && pod.duration <= 16.0)) score += 2;
+        }
+
+        return score;
+    }
+
+    private static boolean hasSegmentDurationAnomaly(List<Record> records, Pod pod) {
+        if (pod.end <= pod.start) return false;
+
+        int podSegCount = 0;
+        double podDurationSum = 0;
+        for (int i = pod.start; i < pod.end; i++) {
+            Record r = records.get(i);
+            if (r.segment) {
+                podSegCount++;
+                podDurationSum += r.duration;
+            }
+        }
+        if (podSegCount == 0) return false;
+        double podAvgDur = podDurationSum / podSegCount;
+
+        int mainSegCount = 0;
+        double mainDurationSum = 0;
+        for (int i = pod.start - 1; i >= 0; i--) {
+            Record r = records.get(i);
+            if (r.segment) {
+                mainSegCount++;
+                mainDurationSum += r.duration;
+            }
+        }
+        for (int i = pod.end; i < records.size(); i++) {
+            Record r = records.get(i);
+            if (r.segment) {
+                mainSegCount++;
+                mainDurationSum += r.duration;
+            }
+        }
+        if (mainSegCount < 5) return false;
+        double mainAvgDur = mainDurationSum / mainSegCount;
+
+        return mainAvgDur >= 6.0 && podAvgDur <= 3.5 && (mainAvgDur / podAvgDur >= 2.0);
+    }
+
+    private static boolean hasLongMainNeighborOrBoundary(List<Record> records, int index, int step) {
+        if (step < 0 && index < 0) return true;
+        if (step > 0 && index >= records.size()) return true;
         int segments = 0;
         double duration = 0;
         for (int i = index; i >= 0 && i < records.size(); i += step) {
@@ -922,9 +1087,142 @@ public final class M3u8AdFilter {
             if (step > 0 && segments > 0 && boundary) return false;
             duration += record.duration;
             if (++segments == 20) return duration >= 60;
-            if (step < 0 && boundary) return false;
+            if (step < 0 && boundary) {
+                if (i <= 5) return true;
+                return false;
+            }
+        }
+        return (step < 0 && index < 20) || (step > 0 && index >= records.size() - 20);
+    }
+
+    private static boolean hasPathDisparity(List<Record> records, Pod pod) {
+        Set<String> podDirs = new HashSet<>();
+        for (int i = pod.start; i < pod.end; i++) {
+            Record r = records.get(i);
+            if (r.segment) {
+                String dir = extractDirectory(r.resolvedUri);
+                if (!dir.isEmpty()) podDirs.add(dir);
+            }
+        }
+        if (podDirs.isEmpty()) return false;
+
+        Set<String> neighborDirs = new HashSet<>();
+        for (int i = pod.start - 1; i >= 0; i--) {
+            Record r = records.get(i);
+            if (r.segment) {
+                String dir = extractDirectory(r.resolvedUri);
+                if (!dir.isEmpty()) neighborDirs.add(dir);
+            }
+        }
+        for (int i = pod.end; i < records.size(); i++) {
+            Record r = records.get(i);
+            if (r.segment) {
+                String dir = extractDirectory(r.resolvedUri);
+                if (!dir.isEmpty()) neighborDirs.add(dir);
+            }
+        }
+
+        if (neighborDirs.isEmpty()) return false;
+
+        for (String pDir : podDirs) {
+            if (neighborDirs.contains(pDir)) return false;
+        }
+        return true;
+    }
+
+    private static String extractDirectory(String uri) {
+        if (isEmpty(uri)) return "";
+        String clean = stripQueryAndFragment(uri);
+        int lastSlash = clean.lastIndexOf('/');
+        if (lastSlash > 0) {
+            return clean.substring(0, lastSlash + 1);
+        }
+        return clean;
+    }
+
+    private static boolean hasIndexJump(List<Record> records, Pod pod) {
+        long numBefore = -1;
+        for (int i = pod.start - 1; i >= 0; i--) {
+            Record r = records.get(i);
+            if (r.segment) {
+                numBefore = extractFilenameNumber(r.resolvedUri);
+                if (numBefore >= 0) break;
+            }
+        }
+
+        long numAfter = -1;
+        for (int i = pod.end; i < records.size(); i++) {
+            Record r = records.get(i);
+            if (r.segment) {
+                numAfter = extractFilenameNumber(r.resolvedUri);
+                if (numAfter >= 0) break;
+            }
+        }
+
+        if (numBefore < 0 || numAfter < 0) return false;
+
+        long diff = numAfter - numBefore;
+        if (diff >= 1 && diff <= 10) {
+            for (int i = pod.start; i < pod.end; i++) {
+                Record r = records.get(i);
+                if (r.segment) {
+                    long podNum = extractFilenameNumber(r.resolvedUri);
+                    if (podNum < numBefore || podNum > numAfter) return true;
+                }
+            }
         }
         return false;
+    }
+
+    private static long extractFilenameNumber(String uri) {
+        if (isEmpty(uri)) return -1;
+        String clean = stripQueryAndFragment(uri);
+        int lastSlash = clean.lastIndexOf('/');
+        String filename = lastSlash >= 0 ? clean.substring(lastSlash + 1) : clean;
+        int dot = filename.lastIndexOf('.');
+        String stem = dot > 0 ? filename.substring(0, dot) : filename;
+
+        if (isHexString(stem)) return -1;
+
+        String[] tokens = stem.split("[^0-9]+");
+        for (int k = tokens.length - 1; k >= 0; k--) {
+            String token = tokens[k];
+            if (token.isEmpty() || token.length() > 10) continue;
+            try {
+                return Long.parseLong(token);
+            } catch (Throwable ignored) {
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isHexString(String s) {
+        if (s == null || s.length() < 12) return false;
+        boolean hasLetter = false;
+        boolean hasDigit = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) hasLetter = true;
+            else if (c >= '0' && c <= '9') hasDigit = true;
+            else return false;
+        }
+        return hasLetter && hasDigit;
+    }
+
+    private static boolean isLongShortAlternatingPattern(List<Pod> pods, Pod pod) {
+        if (pods == null || pods.size() < 3 || pods.size() > 8) return false;
+
+        double podDuration = pod.duration;
+        int longCount = 0;
+
+        for (Pod p : pods) {
+            if (p == pod) continue;
+            if (p.duration >= Math.max(60.0, podDuration * 3.0)) {
+                longCount++;
+            }
+        }
+
+        return longCount >= 1 && podDuration <= 45.0;
     }
 
     private static void addPod(List<Pod> pods, List<Record> records, int start, int end, String beforeKey, String afterKey) {
@@ -1008,12 +1306,21 @@ public final class M3u8AdFilter {
         for (Record record : cluster) duration += record.duration;
 
         boolean hasExplicitAd = hasAnyExplicitAd(cluster);
+        boolean hasCorroboration = hasStructuralCorroboration(cluster);
         boolean looksLikeAdCluster = clusterSize <= Math.max(1, segmentCount / 3)
-                && (hasExplicitAd || (clusterSize >= 2 && duration <= 120));
+                && (hasExplicitAd || (clusterSize >= 2 && duration <= 120 && hasCorroboration));
 
         if (!looksLikeAdCluster) kept.addAll(cluster);
 
         cluster.clear();
+    }
+
+    private static boolean hasStructuralCorroboration(List<Record> records) {
+        for (Record record : records) {
+            if (isExplicitAdRecord(record)) return true;
+            if (record.adLikeUri) return true;
+        }
+        return false;
     }
 
     private static boolean hasAnyExplicitAd(List<Record> records) {
@@ -1167,6 +1474,8 @@ public final class M3u8AdFilter {
         return lower.startsWith("#ext-x-cue-out")
                 || lower.startsWith("#ext-x-cue:")
                 || lower.startsWith("#ext-cue-out")
+                || lower.startsWith("#ext-vl-cue-out")
+                || lower.startsWith("#ext-x-cue-span")
                 || lower.startsWith("#ext-x-ad-start")
                 || lower.startsWith("#ext-x-vmap-ad-break")
                 || lower.startsWith("#ext-x-scte35-out")
@@ -1177,6 +1486,7 @@ public final class M3u8AdFilter {
         String lower = line.toLowerCase(Locale.US);
         return lower.startsWith("#ext-x-cue-in")
                 || lower.startsWith("#ext-cue-in")
+                || lower.startsWith("#ext-vl-cue-in")
                 || lower.startsWith("#ext-x-ad-end")
                 || lower.startsWith("#ext-x-scte35-in")
                 || isScte35CueDirection(line, "in");
@@ -1451,6 +1761,8 @@ public final class M3u8AdFilter {
         if (lower.startsWith("#ext-x-cue-out")) return true;
         if (lower.startsWith("#ext-x-cue-out-cont")) return true;
         if (lower.startsWith("#ext-cue-out")) return true;
+        if (lower.startsWith("#ext-vl-cue-out")) return true;
+        if (lower.startsWith("#ext-x-cue-span")) return true;
         if (lower.startsWith("#ext-oatcls-scte35")) return true;
         if (lower.startsWith("#ext-x-scte35")) return true;
         if (lower.startsWith("#ext-x-splicepoint-scte35")) return true;
@@ -1668,7 +1980,7 @@ public final class M3u8AdFilter {
             if (part.startsWith("ad") && part.length() <= 16
                     && (includeAdNumbers ? hasAdBoundaryWord(part) : hasStrongAdBoundaryWord(part))) return true;
             if (hasEndingAdWord(part)) return true;
-            if (part.contains("adbreak") || part.contains("adpod")) return true;
+            if (part.equals("adbreak") || part.equals("adpod")) return true;
         }
 
         return false;
@@ -1687,11 +1999,27 @@ public final class M3u8AdFilter {
                 || value.startsWith("advert")
                 || value.startsWith("adroll")
                 || value.startsWith("adpod")
-                || value.startsWith("adbreak");
+                || value.startsWith("adbreak")
+                || value.startsWith("czad")
+                || value.startsWith("changze")
+                || value.startsWith("czzy")
+                || value.startsWith("guanggao")
+                || value.startsWith("adjump")
+                || value.startsWith("kudad")
+                || value.startsWith("chaboad")
+                || value.startsWith("kaipianad")
+                || value.startsWith("piantouad")
+                || value.startsWith("pianweiad")
+                || value.startsWith("paomadeng")
+                || value.startsWith("xinpujing")
+                || value.startsWith("bet365");
     }
 
     private static boolean isAdNumber(String value, String prefix) {
-        return value.length() > prefix.length() && value.startsWith(prefix) && Character.isDigit(value.charAt(prefix.length()));
+        if (value.length() > prefix.length() && value.startsWith(prefix) && Character.isDigit(value.charAt(prefix.length()))) {
+            return !isHexString(value);
+        }
+        return false;
     }
 
     private static boolean hasEndingAdWord(String value) {
@@ -1701,7 +2029,14 @@ public final class M3u8AdFilter {
     private static String safeDecode(String value) {
         if (value == null) return "";
         try {
-            return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+            String decoded = URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+            if (decoded.contains("%") && !decoded.equals(value)) {
+                try {
+                    decoded = URLDecoder.decode(decoded, StandardCharsets.UTF_8.name());
+                } catch (Throwable ignored) {
+                }
+            }
+            return decoded;
         } catch (Throwable ignored) {
             return value;
         }
@@ -1881,14 +2216,16 @@ public final class M3u8AdFilter {
         private final String mediaFingerprint;
         private final boolean strongAdSignal;
         private final boolean keySwitchSignal;
+        private final double duration;
 
-        private Pod(int start, int end, String durationFingerprint, String mediaFingerprint, boolean strongAdSignal, boolean keySwitchSignal) {
+        private Pod(int start, int end, String durationFingerprint, String mediaFingerprint, boolean strongAdSignal, boolean keySwitchSignal, double duration) {
             this.start = start;
             this.end = end;
             this.durationFingerprint = durationFingerprint;
             this.mediaFingerprint = mediaFingerprint;
             this.strongAdSignal = strongAdSignal;
             this.keySwitchSignal = keySwitchSignal;
+            this.duration = duration;
         }
 
         private static Pod create(List<Record> records, int start, int end, String beforeKey, String afterKey) {
@@ -1921,7 +2258,7 @@ public final class M3u8AdFilter {
             if (segments < MIN_SEGMENTS || segments > MAX_SEGMENTS || duration <= 0 || duration > MAX_DURATION_SECONDS) return null;
             boolean keySwitchSignal = hasKeySwitchSignal(beforeKey, podKey, afterKey);
             return new Pod(start, lastSegment + 1, segments + ":" + durationFingerprint,
-                    segments + ":" + mediaFingerprint, strongAdSignal, keySwitchSignal);
+                    segments + ":" + mediaFingerprint, strongAdSignal, keySwitchSignal, duration);
         }
 
         private static boolean hasKeySwitchSignal(String beforeKey, String podKey, String afterKey) {

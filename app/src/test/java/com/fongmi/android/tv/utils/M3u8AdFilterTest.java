@@ -100,6 +100,17 @@ public class M3u8AdFilterTest {
             new RealFixture("station-zuidai.m3u8", null),
             new RealFixture("xuan-an-current.m3u8", null, "/video/adjump/"),
             new RealFixture("xuan-an-episode-01.m3u8", null, "/video/adjump/"),
+            new RealFixture("real-baofeng.m3u8", "https://fengbao12.com/video/wuyajulebu/6136cc9fdba9/index.m3u8", "/video/adjump/"),
+            new RealFixture("real-wujin.m3u8", "https://v7.ppqrrs.com/wjv7/202512/28/DqACqCnNYw90/video/1000k_720/hls/index.m3u8"),
+            new RealFixture("real-jinying.m3u8", "https://hd.kuktxu.com/play/epYzq7ya/index.m3u8"),
+            new RealFixture("real-yinghua.m3u8", "https://vod12.wgslsw.com/20260925/xZhuGXRx3e89/index.m3u8"),
+            new RealFixture("real-ikun.m3u8", "https://bfikuncdn.com/20260403/hqWhc6km/2221kb/hls/index.m3u8", "ApmlGtEG"),
+            new RealFixture("real-guangsu.m3u8", "https://v.gsuus.com/play/hls/dL9ZQjre/index.m3u8"),
+            new RealFixture("real-suoni.m3u8", "https://v13.rstu6.com/202512/28/euH4cprTKr22/video/2000k_1080/hls/index.m3u8"),
+            new RealFixture("real-jisu.m3u8", "https://vv.jisuzyv.com/play/bkRrXmEa/index.m3u8"),
+            new RealFixture("real-feifan.m3u8", "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8", "d49895a5d33dca1ad0fc7c2f93d576f5.ts", "1e3c460e6997af1ef5b5f51eec0ac52d.ts", "5265ca1677b391cd60f381cffa302b4c.ts", "3b126131e12138d0bb1a89fbc715478f.ts", "9dda41b56b8073e7ed1989ff922c6702.ts", "5965cc713fdac2271dbef8afe787a8b7.ts", "36662a9069038c8a6b521016f58afc38.ts", "3d8f875d59f94cb5458c1b5b158275e2.ts", "991d098e685ce2627fcea8e5bbfe2446.ts", "8ee0453bbc476b764cccfc67210825f2.ts", "34b1144372e3a238817780fa7c1d9857.ts", "2f039855adf2b7b6d1f9ef621b3e226b.ts", "94712f4064e1cf99008fd2065e29f0ea.ts", "2f4f240f70f3894d580a04f1c9f2f5c2.ts", "4dcd35d809858d81554034093363162b.ts", "fdae343d8c359eb3805df50aa1b806e5.ts", "423757923ac178ded6ca65c0dc5fe22c.ts", "331542faebc76b2dfbd2842871f63966.ts"),
+            new RealFixture("real-liangzi.m3u8", "https://v.lzcdn31.com/20260704/7983_74f63b6d/2000k/hls/mixed.m3u8"),
+            new RealFixture("real-ruyi.m3u8", "https://svip.ryiplay18.com/20260720/8194_82dad43b/2000k/hls/index.m3u8"),
     };
 
     @Test
@@ -289,6 +300,42 @@ public class M3u8AdFilterTest {
         assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?cust_params=slot%3Dpreroll"));
         assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?type=video#label=ad"));
         assertFalse(M3u8AdFilter.containsAdQueryKey("segment.ts?u=https%3A%2F%2Fcdn.example%2Fmovie%2Fmain-1.ts"));
+    }
+
+    @Test
+    public void identifiesProviderCorrectly() {
+        assertEquals("liangzi", M3u8AdFilter.identifyProvider("https://v.lzcdn31.com/20260704/mixed.m3u8"));
+        assertEquals("feifan", M3u8AdFilter.identifyProvider("https://vip.ffzy-play7.com/20221105/mixed.m3u8"));
+        assertEquals("ikun", M3u8AdFilter.identifyProvider("https://bfikuncdn.com/20260403/index.m3u8"));
+        assertEquals("suoni", M3u8AdFilter.identifyProvider("https://v13.rstu6.com/202512/28/index.m3u8"));
+        assertEquals("baofeng", M3u8AdFilter.identifyProvider("https://s1.fengbao9.com/video/index.m3u8"));
+        assertEquals("changze", M3u8AdFilter.identifyProvider("https://czzy.top/video/index.m3u8"));
+        assertEquals("modu", M3u8AdFilter.identifyProvider("https://bf.modujx11.com/index.m3u8"));
+        assertEquals("hongniu", M3u8AdFilter.identifyProvider("https://hnzy.com/index.m3u8"));
+        assertEquals("kudian", M3u8AdFilter.identifyProvider("https://kudianzy.com/index.m3u8"));
+        assertEquals("unknown", M3u8AdFilter.identifyProvider("https://example.com/index.m3u8"));
+    }
+
+    @Test
+    public void recognizesNewAdKeywordsAndPaths() {
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?kudad=1"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?chaboad=true"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?kaipianad=yes"));
+        assertTrue(M3u8AdFilter.containsAdQueryKey("segment.ts?bet365=ad"));
+
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://cdn.example/movie/main-1.ts")
+                + segment(5.0, "https://cdn.example/kudad/ad-1.ts")
+                + segment(5.0, "https://cdn.example/chaboad/ad-2.ts")
+                + segment(5.0, "https://cdn.example/movie/main-2.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("kudad"));
+        assertFalse(filtered.contains("chaboad"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-2.ts"));
     }
 
     @Test
@@ -892,6 +939,25 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void removesNagasawaChangzeAdSegments() {
+        String playlist = "#EXTM3U\n"
+                + segment(5.0, "https://cdn.example/movie/main-1.ts")
+                + segment(5.0, "https://czzycdn.com/changze/czad01.ts")
+                + segment(5.0, "https://cdn.example/movie/main-2.ts?czad=1")
+                + segment(5.0, "https://cdn.example/movie/changzepiepian/ad.ts")
+                + segment(5.0, "https://cdn.example/movie/main-3.ts")
+                + "#EXT-X-ENDLIST\n";
+
+        String filtered = filter(playlist);
+
+        assertFalse(filtered.contains("czad01.ts"));
+        assertFalse(filtered.contains("czad=1"));
+        assertFalse(filtered.contains("changzepiepian"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-3.ts"));
+    }
+
+    @Test
     public void removesRealRepeatedNineSegmentAdjumpPods() {
         StringBuilder playlist = new StringBuilder("#EXTM3U\n");
         playlist.append(segment(5.0, "https://video.example/main001.ts"));
@@ -1360,6 +1426,82 @@ public class M3u8AdFilterTest {
         // Three separate 5 x 4-second groups contain continuous movie scenes,
         // verified against their first/middle segments and adjacent footage.
         assertEquals(original.trim(), filtered.trim());
+    }
+
+    @Test
+    public void removesRepeatedShortPodWithPathDisparity() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+        for (int i = 1; i <= 20; i++) playlist.append(segment(5.0, "https://cdn.example/movie/main_" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        playlist.append(segment(3.0, "https://ads.example/pod1/ad_1.ts"));
+        playlist.append(segment(4.0, "https://ads.example/pod1/ad_2.ts"));
+        playlist.append(segment(3.0, "https://ads.example/pod1/ad_3.ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 21; i <= 40; i++) playlist.append(segment(5.0, "https://cdn.example/movie/main_" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        playlist.append(segment(3.0, "https://ads.example/pod2/ad_1.ts"));
+        playlist.append(segment(4.0, "https://ads.example/pod2/ad_2.ts"));
+        playlist.append(segment(3.0, "https://ads.example/pod2/ad_3.ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 41; i <= 60; i++) playlist.append(segment(5.0, "https://cdn.example/movie/main_" + i + ".ts"));
+        playlist.append("#EXT-X-ENDLIST\n");
+
+        String filtered = filter(playlist.toString());
+
+        assertFalse(filtered.contains("ads.example"));
+        assertTrue(filtered.contains("main_1.ts"));
+        assertTrue(filtered.contains("main_60.ts"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+    }
+
+    @Test
+    public void removesRepeatedShortPodWithIndexJump() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+        for (int i = 100; i <= 120; i++) playlist.append(segment(5.0, "https://cdn.example/movie/seg_" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        playlist.append(segment(2.5, "https://cdn.example/movie/insert_901.ts"));
+        playlist.append(segment(3.5, "https://cdn.example/movie/insert_902.ts"));
+        playlist.append(segment(4.0, "https://cdn.example/movie/insert_903.ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 121; i <= 140; i++) playlist.append(segment(5.0, "https://cdn.example/movie/seg_" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        playlist.append(segment(2.5, "https://cdn.example/movie/insert_904.ts"));
+        playlist.append(segment(3.5, "https://cdn.example/movie/insert_905.ts"));
+        playlist.append(segment(4.0, "https://cdn.example/movie/insert_906.ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 141; i <= 160; i++) playlist.append(segment(5.0, "https://cdn.example/movie/seg_" + i + ".ts"));
+        playlist.append("#EXT-X-ENDLIST\n");
+
+        String filtered = filter(playlist.toString());
+
+        assertFalse(filtered.contains("insert_"));
+        assertTrue(filtered.contains("seg_100.ts"));
+        assertTrue(filtered.contains("seg_160.ts"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
+    }
+
+    @Test
+    public void removesLongShortAlternatingPatternPods() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n");
+        for (int i = 1; i <= 20; i++) playlist.append(segment(5.0, "https://cdn.example/movie/part1_" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        playlist.append(segment(3.0, "https://promo.example/ad_1.ts"));
+        playlist.append(segment(4.0, "https://promo.example/ad_2.ts"));
+        playlist.append(segment(5.0, "https://promo.example/ad_3.ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 1; i <= 20; i++) playlist.append(segment(5.0, "https://cdn.example/movie/part2_" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        playlist.append(segment(3.0, "https://promo.example/ad_4.ts"));
+        playlist.append(segment(4.0, "https://promo.example/ad_5.ts"));
+        playlist.append(segment(5.0, "https://promo.example/ad_6.ts"));
+        playlist.append("#EXT-X-ENDLIST\n");
+
+        String filtered = filter(playlist.toString());
+
+        assertFalse(filtered.contains("promo.example"));
+        assertTrue(filtered.contains("part1_1.ts"));
+        assertTrue(filtered.contains("part2_20.ts"));
+        assertTrue(filtered.contains("#EXT-X-ENDLIST"));
     }
 
     @Test

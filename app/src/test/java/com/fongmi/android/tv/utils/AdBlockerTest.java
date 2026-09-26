@@ -19,4 +19,11 @@ public class AdBlockerTest {
         assertTrue(AdBlocker.hasDefaultAdSignal("https://cdn.example/clip.m3u8?ad=1"));
         assertTrue(AdBlocker.hasDefaultAdSignal("https://cdn.example/clip.m3u8?placement=pre%72oll"));
     }
+
+    @Test public void nagasawaChangzeAdResourcesAreBlocked() {
+        assertTrue(AdBlocker.hasDefaultAdSignal("https://cdn.example/changze/clip.m3u8"));
+        assertTrue(AdBlocker.hasDefaultAdSignal("https://cdn.example/czzy/clip.m3u8"));
+        assertTrue(AdBlocker.hasDefaultAdSignal("https://cdn.example/czad/clip.m3u8"));
+        assertTrue(AdBlocker.hasDefaultAdSignal("https://cdn.example/clip.m3u8?czad=1"));
+    }
 }
