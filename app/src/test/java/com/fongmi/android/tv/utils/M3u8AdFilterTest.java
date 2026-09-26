@@ -82,7 +82,9 @@ public class M3u8AdFilterTest {
             new RealFixture("odyssey-11.m3u8", "https://v1.ppqrrs.com/wjv1/202308/19/KNhCf0iibU2/video/1000k_720/hls/index.m3u8"),
             new RealFixture("odyssey-12.m3u8", "https://v1.zuidazym3u8.com/yyv1/202308/19/KNhCf0iibU2/video/2000k_1080/hls/index.m3u8"),
             new RealFixture("odyssey-13.m3u8", "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8"),
-            new RealFixture("qunti-01.m3u8", null, "511bbce97206bf92ec35dc252f066430.ts", "b737810c3a808938877100d2a1319b6e.ts", "d70225e17c7aaebd79f810d4d5c90a98.ts", "431209dd72f8045900592416a82ad61f.ts", "c5e66da16786c7f70f2356f66a921597.ts"),
+            // These frame-confirmed ads only expose repeated media and duration fingerprints.
+            // Without an independent structural signal, keep the playlist intact.
+            new RealFixture("qunti-01.m3u8", null),
             new RealFixture("qunti-02.m3u8", null),
             new RealFixture("qunti-03.m3u8", null, "/video/adjump/"),
             new RealFixture("qunti-04.m3u8", null, "/20260727/FxLgovfH/"),
@@ -109,7 +111,9 @@ public class M3u8AdFilterTest {
             new RealFixture("real-suoni.m3u8", "https://v13.rstu6.com/202512/28/euH4cprTKr22/video/2000k_1080/hls/index.m3u8"),
             new RealFixture("real-jisu.m3u8", "https://vv.jisuzyv.com/play/bkRrXmEa/index.m3u8"),
             new RealFixture("real-feifan.m3u8", "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8", "d49895a5d33dca1ad0fc7c2f93d576f5.ts", "1e3c460e6997af1ef5b5f51eec0ac52d.ts", "5265ca1677b391cd60f381cffa302b4c.ts", "3b126131e12138d0bb1a89fbc715478f.ts", "9dda41b56b8073e7ed1989ff922c6702.ts", "5965cc713fdac2271dbef8afe787a8b7.ts", "36662a9069038c8a6b521016f58afc38.ts", "3d8f875d59f94cb5458c1b5b158275e2.ts", "991d098e685ce2627fcea8e5bbfe2446.ts", "8ee0453bbc476b764cccfc67210825f2.ts", "34b1144372e3a238817780fa7c1d9857.ts", "2f039855adf2b7b6d1f9ef621b3e226b.ts", "94712f4064e1cf99008fd2065e29f0ea.ts", "2f4f240f70f3894d580a04f1c9f2f5c2.ts", "4dcd35d809858d81554034093363162b.ts", "fdae343d8c359eb3805df50aa1b806e5.ts", "423757923ac178ded6ca65c0dc5fe22c.ts", "331542faebc76b2dfbd2842871f63966.ts"),
-            new RealFixture("real-liangzi.m3u8", "https://v.lzcdn31.com/20260704/7983_74f63b6d/2000k/hls/mixed.m3u8"),
+            // Seven jumped-number segments were checked against the preceding
+            // and following movie frames and contain a separate commercial.
+            new RealFixture("real-liangzi.m3u8", "https://v.lzcdn31.com/20260704/7983_74f63b6d/2000k/hls/mixed.m3u8", "c7d3688059304993"),
             new RealFixture("real-ruyi.m3u8", "https://svip.ryiplay18.com/20260720/8194_82dad43b/2000k/hls/index.m3u8"),
     };
 
@@ -639,7 +643,7 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesOnlyAdLowLatencyPart() {
+    public void preservesLowLatencyPartPlaylistWithoutPartInf() {
         String playlist = "#EXTM3U\n"
                 + "#EXT-X-PART:DURATION=0.5,URI=\"part-1.m4s\"\n"
                 + "#EXT-X-PART:DURATION=0.5,URI=\"ads/ad-1.m4s\"\n"
@@ -649,7 +653,7 @@ public class M3u8AdFilterTest {
         String filtered = filter(playlist);
 
         assertTrue(filtered.contains("URI=\"part-1.m4s\""));
-        assertFalse(filtered.contains("ads/ad-1.m4s"));
+        assertEquals(playlist, filtered);
         assertTrue(filtered.contains("URI=\"part-2.m4s\""));
         assertTrue(filtered.contains("#EXT-X-ENDLIST"));
     }
@@ -920,7 +924,7 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesContinuousAdNumberCluster() {
+    public void preservesAdNumberClusterWithoutIndependentEvidence() {
         String playlist = "#EXTM3U\n"
                 + segment(5.0, "https://cdn.example/main001.ts")
                 + segment(5.0, "https://cdn.example/main002.ts")
@@ -933,9 +937,54 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("AD1first.ts"));
-        assertFalse(filtered.contains("ad2second.ts"));
+        assertTrue(filtered.contains("AD1first.ts"));
+        assertTrue(filtered.contains("ad2second.ts"));
         assertTrue(filtered.contains("main005.ts"));
+    }
+
+    @Test
+    public void leavesLiveMediaSequenceAndAdTagsByteForByteIntact() {
+        String playlist = "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:100\n"
+                + segment(5.0, "main-100.ts")
+                + "#EXT-X-CUE-OUT:DURATION=5\n"
+                + segment(5.0, "ads/ad-101.ts")
+                + "#EXT-X-CUE-IN\n"
+                + segment(5.0, "main-102.ts");
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void leavesEventMediaSegmentsIntact() {
+        String playlist = "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n"
+                + segment(5.0, "main-1.ts")
+                + segment(5.0, "ads/ad-2.ts")
+                + segment(5.0, "main-3.ts");
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void filtersExplicitVodPlaylistWithoutEndlist() {
+        String playlist = "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n"
+                + segment(5.0, "main-1.ts")
+                + segment(5.0, "ads/ad-2.ts")
+                + segment(5.0, "main-3.ts");
+        String filtered = filter(playlist);
+        assertFalse(filtered.contains("ads/ad-2.ts"));
+        assertTrue(filtered.contains("main-1.ts"));
+        assertTrue(filtered.contains("main-3.ts"));
+    }
+
+    @Test
+    public void weakPromoAndSponsorPathsNeedIndependentEvidence() {
+        for (String path : new String[]{"promo", "sponsor", "measurement", "bumper"}) {
+            String playlist = "#EXTM3U\n"
+                    + segment(5.0, "movie/main-1.ts")
+                    + segment(5.0, "movie/" + path + "/001.ts")
+                    + segment(5.0, "movie/main-2.ts")
+                    + segment(5.0, "movie/main-3.ts")
+                    + "#EXT-X-ENDLIST\n";
+            assertTrue(path, filter(playlist).contains(path + "/001.ts"));
+        }
     }
 
     @Test
@@ -1035,7 +1084,7 @@ public class M3u8AdFilterTest {
     }
 
     @Test
-    public void removesShortDiscontinuityPodWhenKeySwitchesAwayAndBack() {
+    public void preservesShortKeySwitchPodWithoutIndependentAdEvidence() {
         String playlist = "#EXTM3U\n"
                 + "#EXT-X-KEY:METHOD=AES-128,URI=\"main.key\"\n"
                 + segment(5.0, "main-1.ts")
@@ -1053,8 +1102,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertFalse(filtered.contains("insert-1.ts"));
-        assertFalse(filtered.contains("METHOD=NONE"));
+        assertTrue(filtered.contains("insert-1.ts"));
+        assertTrue(filtered.contains("METHOD=NONE"));
         assertTrue(filtered.contains("main-1.ts"));
         assertTrue(filtered.contains("main-4.ts"));
     }
@@ -1412,6 +1461,37 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void removesCapturedFeifanMixedCommercialPods() throws IOException {
+        String original = readFixture("/m3u8/research/feifan-20260926.m3u8");
+        String filtered = filter(original,
+                "https://vip.ffzy-play9.com/20260926/49693_f9ea0b32/2000k/hls/mixed.m3u8");
+        assertOnlyAdsRemoved("captured Feifan pods", original, filtered,
+                readFixture("/m3u8/research/feifan-20260926-ads.txt").trim().split("\n"));
+    }
+
+    @Test
+    public void removesCapturedLiangziNumericExcursion() throws IOException {
+        String original = readFixture("/m3u8/research/liangzi-20260926.m3u8");
+        String filtered = filter(original,
+                "https://v.lzcdn27.com/20260328/7661_5113789b/2000k/hls/mixed.m3u8");
+        assertOnlyAdsRemoved("captured Liangzi pod", original, filtered,
+                readFixture("/m3u8/research/liangzi-20260926-ads.txt").trim().split("\n"));
+    }
+
+    @Test
+    public void preservesNumericDiscontinuityWithoutReturnToNextMainSegment() {
+        StringBuilder playlist = new StringBuilder("#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n");
+        for (int i = 0; i < 20; i++) playlist.append(segment(5, "https://cdn.example/movie/438377f3578000" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 1000; i < 1007; i++) playlist.append(segment(4, "https://cdn.example/movie/438377f357800" + i + ".ts"));
+        playlist.append("#EXT-X-DISCONTINUITY\n");
+        for (int i = 21; i < 40; i++) playlist.append(segment(5, "https://cdn.example/movie/438377f3578000" + i + ".ts"));
+        playlist.append("#EXT-X-ENDLIST\n");
+        assertEquals(playlist.toString().trim(), filter(playlist.toString(),
+                "https://v.lzcdn27.com/movie/mixed.m3u8").trim());
+    }
+
+    @Test
     public void preservesCapturedDenseProviderPlaylist() throws IOException {
         String original = readFixture("/m3u8/research/ffzy-dense-20260926.m3u8");
         assertEquals(original.trim(), filter(original,
@@ -1512,7 +1592,8 @@ public class M3u8AdFilterTest {
                 "https://another.example/unrelated/path/playlist.m3u8"}) {
             assertOnlyAdsRemoved(base, original, filter(original, base), ads);
         }
-        String live = original.replace("#EXT-X-ENDLIST", "");
+        String live = original.replace("#EXT-X-ENDLIST", "")
+                .replace("#EXT-X-PLAYLIST-TYPE:VOD", "#EXT-X-PLAYLIST-TYPE:EVENT");
         assertEquals(live.trim(), filter(live,
                 "https://vip.ffzy-play7.com/20221105/1676_5181746d/2000k/hls/mixed.m3u8").trim());
     }
