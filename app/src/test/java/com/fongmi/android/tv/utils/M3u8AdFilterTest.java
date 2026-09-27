@@ -712,8 +712,8 @@ public class M3u8AdFilterTest {
 
         String filtered = filter(playlist);
 
-        assertTrue(filtered.contains("insert.example/clip-1.ts"));
-        assertTrue(filtered.contains("insert.example/clip-2.ts"));
+        assertFalse(filtered.contains("insert.example/clip-1.ts"));
+        assertFalse(filtered.contains("insert.example/clip-2.ts"));
         assertTrue(filtered.contains("main-8.ts"));
     }
 

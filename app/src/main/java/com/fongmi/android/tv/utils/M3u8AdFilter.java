@@ -909,11 +909,21 @@ public final class M3u8AdFilter {
         if (lower.contains("bfikun") || lower.contains("ikun")) return "ikun";
         if (lower.contains("suoni") || lower.contains("rstu") || lower.contains("snzy") || lower.contains("suonizy")) return "suoni";
         if (lower.contains("bfvvs") || lower.contains("hongniu") || lower.contains("hnzy")) return "hongniu";
-        if (lower.contains("fengbao") || lower.contains("baofeng") || lower.contains("bfzy")) return "baofeng";
+        if (lower.contains("fengbao") || lower.contains("baofeng") || lower.contains("bfzy")
+                || lower.contains("bfbfvip") || lower.contains("bfengbf")) return "baofeng";
+        if (lower.contains("wolong") || lower.startsWith("cdn.wl")) return "wolong";
+        if (lower.contains("jszy") || lower.contains("jisu") || lower.contains("muguacdn")) return "jisu";
+        if (lower.contains("xinsj")) return "xinsj";
+        if (lower.contains("kuaikan")) return "kuaikan";
+        if (lower.contains("ukzy") || lower.contains("ukuapi")) return "uku";
+        if (lower.contains("qihubf") || lower.contains("qhzy")) return "qihu";
+        if (lower.contains("haiwaikan")) return "haiwaikan";
+        if (lower.contains("ryplay")) return "ryplay";
+        if (lower.contains("apiyhzy") || lower.contains("yinghua")) return "yinghua";
         if (lower.contains("czzy")) return "changzhang";
         if (lower.contains("changze")) return "changze";
         if (lower.contains("modu") || lower.contains("modujx")) return "modu";
-        if (lower.contains("kudian") || lower.contains("kdzy")) return "kudian";
+        if (lower.contains("kudian") || lower.contains("kdzy") || lower.contains("kuapi")) return "kudian";
         return "unknown";
     }
 
@@ -1020,17 +1030,26 @@ public final class M3u8AdFilter {
         boolean pathDisparity = hasPathDisparity(records, pod);
         boolean indexJump = hasIndexJump(records, pod);
         boolean repeatedDirectory = hasRepeatedPodDirectory(records, pods, pod);
-        boolean repeatedMediaLocation = matchingMedia >= 2;
+        boolean repeatedMediaLocation = pod.segmentCount >= 2 && matchingMedia >= 2;
         boolean repeatedForeignDirectory = repeatedDirectory && pathDisparity;
+        boolean providerMediaSignature = hasProviderMediaSignature(records, pod, provider);
         if (pod.strongAdSignal) score += 5;
+        // Community rules for qihubf / 快看 / U酷 / iKun consistently mark a
+        // short DISCONTINUITY pod that switches the key to METHOD=NONE, then
+        // returns to encrypted media. Compare key *methods* rather than literal
+        // key lines because the content key URI may legitimately rotate.
+        if (pod.clearKeyExcursionSignal) score += 6;
+        else if (pod.keySwitchSignal) score += 3;
+        // Provider-specific URI fingerprints are useful corroboration, but not
+        // sufficient on their own. They still need structural/repetition evidence.
+        if (providerMediaSignature) score += 4;
         if (repeatedMediaLocation) score += 4;
-        else if (matchingDurations >= 2) score += 2;
+        else if (pod.segmentCount >= 2 && matchingDurations >= 2) score += 2;
         if (repeatedForeignDirectory && !repeatedMediaLocation) score += 1;
-        if (pod.keySwitchSignal) score += 3;
         // A repeated fingerprint only becomes actionable with an independent
         // change in media location or numbering and enough surrounding content.
         if ((repeatedMediaLocation || repeatedForeignDirectory) && pathDisparity && pod.duration <= 30.0) score += 3;
-        else if (matchingDurations >= 2 && longNeighbors && indexJump) score += 4;
+        else if (pod.segmentCount >= 2 && matchingDurations >= 2 && longNeighbors && indexJump) score += 4;
 
         if (shouldUseWeakDiscontinuitySignal(records)) {
             boolean durationAnomaly = hasSegmentDurationAnomaly(records, pod);
@@ -1039,17 +1058,83 @@ public final class M3u8AdFilter {
             boolean hasDisparityOrAnomaly = pathDisparity || indexJump || durationAnomaly;
             if ((longNeighbors || longShortPattern) && hasDisparityOrAnomaly
                     && !((repeatedMediaLocation || repeatedForeignDirectory) && pathDisparity && pod.duration <= 30.0)
-                    && !(matchingDurations >= 2 && longNeighbors && indexJump)) {
+                    && !(pod.segmentCount >= 2 && matchingDurations >= 2 && longNeighbors && indexJump)) {
                 score += 3;
             }
 
-            if ("liangzi".equals(provider) && hasDisparityOrAnomaly) score += 2;
-            if ("feifan".equals(provider) && hasDisparityOrAnomaly && pod.duration <= 25.0) score += 2;
-            if ("ikun".equals(provider) && (pod.keySwitchSignal || pathDisparity)) score += 2;
-            if ("suoni".equals(provider) && hasDisparityOrAnomaly && (pod.duration >= 14.5 && pod.duration <= 16.0)) score += 2;
+            // Public TVBox rules for these sources all describe short blocks
+            // delimited by discontinuities. Do not delete every such block: RFC
+            // 8216 also uses DISCONTINUITY for legitimate codec/timestamp changes.
+            // Require sparse discontinuities, long content neighbours and another
+            // independent anomaly before applying the source-specific boost.
+            if (isKnownStructuralInsertionProvider(provider) && longNeighbors
+                    && hasDisparityOrAnomaly && pod.duration <= 120.0) score += 3;
+            if ("ikun".equals(provider) && (pod.clearKeyExcursionSignal || pod.keySwitchSignal || pathDisparity)) score += 2;
         }
 
         return score;
+    }
+
+    private static boolean isKnownStructuralInsertionProvider(String provider) {
+        return "liangzi".equals(provider)
+                || "feifan".equals(provider)
+                || "suoni".equals(provider)
+                || "baofeng".equals(provider)
+                || "wolong".equals(provider)
+                || "jisu".equals(provider)
+                || "xinsj".equals(provider)
+                || "haiwaikan".equals(provider)
+                || "ryplay".equals(provider);
+    }
+
+    private static boolean hasProviderMediaSignature(List<Record> records, Pod pod, String provider) {
+        if (records == null || pod == null || isEmpty(provider)) return false;
+        int segments = 0;
+        int matches = 0;
+        for (int i = pod.start; i < pod.end; i++) {
+            Record record = records.get(i);
+            if (!record.segment) continue;
+            segments++;
+            if (matchesProviderMediaSignature(record.resolvedUri, provider)) matches++;
+        }
+        if (segments == 0) return false;
+        // The public 量子 rule is a long random [a-z0-9]{18,}.ts filename.
+        // Requiring most of a multi-segment pod to match avoids treating an
+        // ordinary hashed content segment as an ad on its own.
+        if ("liangzi".equals(provider)) return matches >= Math.max(1, (segments + 1) / 2);
+        return matches > 0;
+    }
+
+    private static boolean matchesProviderMediaSignature(String uri, String provider) {
+        if (isEmpty(uri)) return false;
+        String decoded = safeDecode(uri).toLowerCase(Locale.US);
+        String path = stripQueryAndFragment(mediaPathAndQuery(decoded));
+        String stem = filenameStem(decoded).toLowerCase(Locale.US);
+
+        if ("liangzi".equals(provider)) return isLongAlphaNumericStem(stem);
+        if ("suoni".equals(provider)) {
+            return decoded.contains("p1ayer") || path.contains("/video/original") || stem.contains("1o");
+        }
+        if ("jisu".equals(provider) || "xinsj".equals(provider)) {
+            return decoded.contains("muguacdn") || stem.contains("1o");
+        }
+        if ("baofeng".equals(provider) || "ryplay".equals(provider)) {
+            return decoded.contains("adjump") || stem.contains("1o");
+        }
+        return false;
+    }
+
+    private static boolean isLongAlphaNumericStem(String stem) {
+        if (stem == null || stem.length() < 18 || stem.length() > 96) return false;
+        boolean hasLetter = false;
+        boolean hasDigit = false;
+        for (int i = 0; i < stem.length(); i++) {
+            char c = stem.charAt(i);
+            if (c >= 'a' && c <= 'z') hasLetter = true;
+            else if (c >= '0' && c <= '9') hasDigit = true;
+            else return false;
+        }
+        return hasLetter && hasDigit;
     }
 
     private static boolean hasRepeatedPodDirectory(List<Record> records, List<Pod> pods, Pod pod) {
@@ -1823,7 +1908,22 @@ public final class M3u8AdFilter {
 
     private static boolean isExplicitAdSegment(List<String> tags, int uriAdSignals) {
         if (hasExplicitAdTag(tags)) return true;
+        if (hasExplicitAdResourceTag(tags)) return true;
         return (uriAdSignals & URI_STRONG_AD) != 0;
+    }
+
+    private static boolean hasExplicitAdResourceTag(List<String> tags) {
+        if (tags == null || tags.isEmpty()) return false;
+        for (String tag : tags) {
+            if (isEmpty(tag)) continue;
+            String lower = tag.toLowerCase(Locale.US);
+            if (!lower.startsWith("#ext-x-map:")
+                    && !lower.startsWith("#ext-x-part:")
+                    && !lower.startsWith("#ext-x-preload-hint:")) continue;
+            String uri = parseAttributeString(tag, "URI");
+            if (!isEmpty(uri) && isLikelyAdResourceUri(uri)) return true;
+        }
+        return false;
     }
 
     private static boolean hasExplicitAdTag(List<String> tags) {
@@ -2301,25 +2401,33 @@ public final class M3u8AdFilter {
 
     private static class Pod {
 
-        private static final int MIN_SEGMENTS = 3;
-        private static final int MAX_SEGMENTS = 12;
-        private static final double MAX_DURATION_SECONDS = 45;
+        // Some current sources insert only one or two ad segments between
+        // discontinuities; others use longer SSAI blocks. Widen candidate
+        // collection, but keep deletion gated by the multi-signal score above.
+        private static final int MIN_SEGMENTS = 1;
+        private static final int MAX_SEGMENTS = 24;
+        private static final double MAX_DURATION_SECONDS = 120;
 
         private final int start;
         private final int end;
+        private final int segmentCount;
         private final String durationFingerprint;
         private final String mediaFingerprint;
         private final boolean strongAdSignal;
         private final boolean keySwitchSignal;
+        private final boolean clearKeyExcursionSignal;
         private final double duration;
 
-        private Pod(int start, int end, String durationFingerprint, String mediaFingerprint, boolean strongAdSignal, boolean keySwitchSignal, double duration) {
+        private Pod(int start, int end, int segmentCount, String durationFingerprint, String mediaFingerprint,
+                    boolean strongAdSignal, boolean keySwitchSignal, boolean clearKeyExcursionSignal, double duration) {
             this.start = start;
             this.end = end;
+            this.segmentCount = segmentCount;
             this.durationFingerprint = durationFingerprint;
             this.mediaFingerprint = mediaFingerprint;
             this.strongAdSignal = strongAdSignal;
             this.keySwitchSignal = keySwitchSignal;
+            this.clearKeyExcursionSignal = clearKeyExcursionSignal;
             this.duration = duration;
         }
 
@@ -2352,14 +2460,28 @@ public final class M3u8AdFilter {
 
             if (segments < MIN_SEGMENTS || segments > MAX_SEGMENTS || duration <= 0 || duration > MAX_DURATION_SECONDS) return null;
             boolean keySwitchSignal = hasKeySwitchSignal(beforeKey, podKey, afterKey);
-            return new Pod(start, lastSegment + 1, segments + ":" + durationFingerprint,
-                    segments + ":" + mediaFingerprint, strongAdSignal, keySwitchSignal, duration);
+            boolean clearKeyExcursionSignal = hasClearKeyExcursionSignal(beforeKey, podKey, afterKey);
+            return new Pod(start, lastSegment + 1, segments, segments + ":" + durationFingerprint,
+                    segments + ":" + mediaFingerprint, strongAdSignal, keySwitchSignal, clearKeyExcursionSignal, duration);
         }
 
         private static boolean hasKeySwitchSignal(String beforeKey, String podKey, String afterKey) {
             if (isEmpty(podKey)) return false;
             if (podKey.equals(beforeKey)) return false;
             return !isEmpty(beforeKey) && afterKey.equals(beforeKey);
+        }
+
+        private static boolean hasClearKeyExcursionSignal(String beforeKey, String podKey, String afterKey) {
+            String beforeMethod = keyMethod(beforeKey);
+            String podMethod = keyMethod(podKey);
+            String afterMethod = keyMethod(afterKey);
+            if (!"NONE".equals(podMethod) || isEmpty(beforeMethod) || isEmpty(afterMethod)) return false;
+            return !"NONE".equals(beforeMethod) && beforeMethod.equals(afterMethod);
+        }
+
+        private static String keyMethod(String keyLine) {
+            if (isEmpty(keyLine)) return "";
+            return parseAttributeString(keyLine, "METHOD").toUpperCase(Locale.US);
         }
 
         private static String lastKey(List<String> tags) {
