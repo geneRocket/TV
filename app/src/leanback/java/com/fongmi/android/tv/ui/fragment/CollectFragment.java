@@ -43,6 +43,7 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     private CustomScroller mScroller;
     private SiteViewModel mViewModel;
     private String mKeyword;
+    private String mPageToken;
     private String mSiteKey;
 
     public static CollectFragment newInstance(String keyword, String siteKey) {
@@ -94,8 +95,16 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.result().observe(getViewLifecycleOwner(), result -> {
-            if (!isCurrentResult(result)) return;
+            if (!isCurrentResult(result) || mPageToken == null
+                    || !mPageToken.equals(result.getRequestToken())) return;
+            mPageToken = null;
+            if (result.isRequestFailed()) {
+                mScroller.restore(Math.max(1, mScroller.getPage() - 1), true);
+                com.fongmi.android.tv.utils.Notify.show(R.string.vod_load_failed);
+                return;
+            }
             mScroller.endLoading(result);
+            getCollect().setPage(mScroller.getPage());
             List<Vod> items = result.getList();
             if (items == null || items.isEmpty()) return;
             appendCollectItems(items);
@@ -187,6 +196,8 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
 
     private void syncRows() {
         if (mAdapter == null || mAdapter.size() > 0 || getCollect() == null) return;
+        mScroller.restore(getCollect().getPage(), true);
+        mScroller.setEnable(getCollect().getPageCount());
         if ("all".equals(getSiteKey())) {
             appendRows(Collections.emptyList());
         } else {
@@ -219,7 +230,8 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     @Override
     public void onLoadMore(String page) {
         if (getCollect() == null || "all".equals(getCollect().getSite().getKey())) return;
-        mViewModel.searchContent(getCollect().getSite(), getKeyword(), page);
+        mPageToken = com.fongmi.android.tv.model.SearchRequestToken.next("collect-page");
+        mViewModel.searchContent(getCollect().getSite(), getKeyword(), page, mPageToken);
         mScroller.setLoading(true);
     }
 

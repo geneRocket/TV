@@ -19,8 +19,13 @@ public final class PlaybackItem {
     private final List<Sub> subtitles;
     private final long startPosition;
     private final boolean forceLive;
+    private final boolean playWhenReady;
 
     public PlaybackItem(String identity, String url, Map<String, String> headers, String format, Drm drm, List<Sub> subtitles, long startPosition, boolean forceLive) {
+        this(identity, url, headers, format, drm, subtitles, startPosition, forceLive, true);
+    }
+
+    public PlaybackItem(String identity, String url, Map<String, String> headers, String format, Drm drm, List<Sub> subtitles, long startPosition, boolean forceLive, boolean playWhenReady) {
         if (identity == null || identity.isEmpty()) throw new IllegalArgumentException("identity must not be empty");
         if (url == null || url.trim().isEmpty()) throw new IllegalArgumentException("url must not be empty");
         this.identity = identity;
@@ -31,6 +36,7 @@ public final class PlaybackItem {
         this.subtitles = Collections.unmodifiableList(nonNullSubtitles(subtitles));
         this.startPosition = Math.max(startPosition, 0);
         this.forceLive = forceLive;
+        this.playWhenReady = playWhenReady;
     }
 
     public String getIdentity() { return identity; }
@@ -48,6 +54,16 @@ public final class PlaybackItem {
     public long getStartPosition() { return startPosition; }
 
     public boolean isForceLive() { return forceLive; }
+
+    public boolean isPlayWhenReady() { return playWhenReady; }
+
+    public PlaybackItem withFormat(String value) {
+        return new PlaybackItem(identity, url, headers, value, drm, subtitles, startPosition, forceLive, playWhenReady);
+    }
+
+    public PlaybackItem withPlayWhenReady(boolean value) {
+        return new PlaybackItem(identity, url, headers, format, drm, subtitles, startPosition, forceLive, value);
+    }
 
     private static List<Sub> nonNullSubtitles(List<Sub> subtitles) {
         if (subtitles == null || subtitles.isEmpty()) return Collections.emptyList();

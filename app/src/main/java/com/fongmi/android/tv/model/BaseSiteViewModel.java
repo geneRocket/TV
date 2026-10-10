@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.model;
 
+import com.github.catvod.net.HttpCallScope;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -29,7 +30,8 @@ public abstract class BaseSiteViewModel extends ViewModel {
     }
 
     protected void executeAsync(String requestKey, long timeoutMs, Callable<Result> callable, java.util.function.Consumer<Result> poster, java.util.function.Function<Throwable, Result> fallback) {
-        requests.submit(requestKey, callable, timeoutMs, poster, fallback, null);
+        HttpCallScope calls = new HttpCallScope();
+        requests.submit(requestKey, () -> calls.call(callable), timeoutMs, poster, fallback, calls::close);
     }
 
     @Override

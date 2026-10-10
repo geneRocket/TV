@@ -80,6 +80,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
 
     private FragmentVodBinding mBinding;
     private SiteViewModel mViewModel;
+    private String mHomeRequestToken;
     private TypeAdapter mAdapter;
     private Runnable mRunnable;
     private List<String> mHots;
@@ -109,10 +110,26 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     protected void initView() {
         setRecyclerView();
         setAppBarView();
-        setViewModel();
         showProgress();
+        setViewModel();
         initHot();
         getHot();
+    }
+
+    @Override
+    protected void initData() {
+        setSiteText();
+        if (mAdapter.getItemCount() > 0) return;
+        if (mResult != null && getSite().getKey().equals(mResult.getKey())) {
+            setAdapter(mResult);
+        } else if (mHomeRequestToken == null) {
+            Result cached = mViewModel.result().getValue();
+            if (cached != null && getSite().getKey().equals(cached.getKey())) {
+                setAdapter(mResult = cached);
+            } else if (!getSite().isEmpty()) {
+                homeContent();
+            }
+        }
     }
 
     @Override
@@ -166,7 +183,17 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
-        mViewModel.result().observe(getViewLifecycleOwner(), result -> setAdapter(mResult = result));
+        mViewModel.result().observe(getViewLifecycleOwner(), result -> {
+            if (mHomeRequestToken == null || !mHomeRequestToken.equals(result.getRequestToken())
+                    || !getSite().getKey().equals(result.getKey())) return;
+            mHomeRequestToken = null;
+            if (result.isRequestFailed() && hasCurrentHomeContent()) {
+                hideProgress();
+                Notify.show(R.string.vod_load_failed);
+                return;
+            }
+            setAdapter(mResult = result);
+        });
     }
 
     private void initHot() {
@@ -202,10 +229,12 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     }
 
     private void setAdapter(Result result) {
+        String selectedType = mSelectedTypeId;
         mAdapter.addAll(handle(result));
         mBinding.pager.getAdapter().notifyDataSetChanged();
-        int position = mAdapter.indexOf(mSelectedTypeId);
+        int position = mAdapter.indexOf(selectedType);
         mBinding.pager.setCurrentItem(position, false);
+        mSelectedTypeId = mAdapter.getItemCount() == 0 ? null : mAdapter.get(position).getTypeId();
         mAdapter.setActivated(position);
         setFabVisible(position);
         hideProgress();
@@ -308,10 +337,18 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         setSiteText();
         showProgress();
         setFabVisible(0);
-        mSelectedTypeId = null;
-        mAdapter.clear();
-        mViewModel.homeContent();
-        mBinding.pager.setAdapter(new PageAdapter(getChildFragmentManager()));
+        if (!hasCurrentHomeContent()) {
+            mSelectedTypeId = null;
+            mAdapter.clear();
+            mBinding.pager.setAdapter(new PageAdapter(getChildFragmentManager()));
+        }
+        mHomeRequestToken = com.fongmi.android.tv.model.SearchRequestToken.next("home");
+        mViewModel.homeContent(getSite().getKey(), mHomeRequestToken);
+    }
+
+    private boolean hasCurrentHomeContent() {
+        return mResult != null && getSite().getKey().equals(mResult.getKey())
+                && (!mResult.getList().isEmpty() || !mResult.getTypes().isEmpty());
     }
 
     private void setLogo() {
@@ -522,6 +559,12 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         public Fragment getItem(int position) {
             Class type = mAdapter.get(position);
             return TypeFragment.newInstance(getSite().getKey(), type.getTypeId(), type.getStyle(), type.getExtend(true), "1".equals(type.getTypeFlag()));
+        }
+
+        @Override
+        public int getItemPosition(@NonNull Object object) {
+            // Refreshed categories may reorder or change their arguments at any position.
+            return POSITION_NONE;
         }
 
         @Override

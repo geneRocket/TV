@@ -194,6 +194,11 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
             Collect activated = mCollectAdapter.getActivated();
             if (!TextUtils.equals(activated.getSite().getKey(), result.getKey())) return;
             mPageToken = null;
+            if (result.isRequestFailed()) {
+                mScroller.restore(Math.max(1, mScroller.getPage() - 1), true);
+                com.fongmi.android.tv.utils.Notify.show(R.string.vod_load_failed);
+                return;
+            }
             activated.getList().addAll(result.getList());
             activated.setPageCount(result.getPageCount());
             mSearchAdapter.addAll(result.getList());

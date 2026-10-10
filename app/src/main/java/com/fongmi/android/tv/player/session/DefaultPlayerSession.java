@@ -32,7 +32,7 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
         publish(new PlaybackState(sessionId, PlaybackPhase.PREPARING, item, item.getStartPosition(), -1, null));
         if (released || !acceptingEvents || state.getSessionId() != sessionId) return sessionId;
         try {
-            engine.prepare(new EngineRequest(sessionId, item.getUrl(), item.getHeaders(), item.getFormat(), item.getDrm(), item.getSubtitles(), item.getStartPosition(), item.isForceLive()), this);
+            engine.prepare(new EngineRequest(sessionId, item.getUrl(), item.getHeaders(), item.getFormat(), item.getDrm(), item.getSubtitles(), item.getStartPosition(), item.isForceLive(), item.isPlayWhenReady()), this);
         } catch (RuntimeException error) {
             if (!released && acceptingEvents && state.getSessionId() == sessionId
                     && (state.getPhase() != PlaybackPhase.ERROR || state.getError() != error)) {

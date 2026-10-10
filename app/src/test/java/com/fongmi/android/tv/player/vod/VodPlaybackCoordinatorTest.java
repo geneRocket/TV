@@ -580,66 +580,6 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    public void completedEpisodeKeepsPrefetchUntilNextResolveConsumesIt() {
-        ManualResolver resolver = new ManualResolver();
-        FakeEngine engine = new FakeEngine();
-        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
-        ManualScheduler scheduler = new ManualScheduler();
-        coordinator.configureTimeout(scheduler, 10_000);
-        coordinator.play(0, StartPolicy.FRESH);
-        resolver.resolve(resolver.lastRequestId);
-        long id = engine.request.getSessionId();
-        engine.emit(EngineEvent.state(id, EnginePhase.READY, 85_000, 100_000));
-        scheduler.task.run();
-        assertTrue(resolver.prefetched);
-        engine.emit(EngineEvent.state(id, EnginePhase.ENDED, 100_000, 100_000));
-        coordinator.next();
-        assertTrue(resolver.prefetchedAtResolve);
-    }
-
-    @Test
-    public void bufferingCancellationAllowsPrefetchToResume() {
-        ManualResolver resolver = new ManualResolver();
-        FakeEngine engine = new FakeEngine();
-        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
-        ManualScheduler scheduler = new ManualScheduler();
-        coordinator.configureTimeout(scheduler, 10_000);
-        coordinator.play(0, StartPolicy.FRESH);
-        resolver.resolve(resolver.lastRequestId);
-        long id = engine.request.getSessionId();
-        engine.emit(EngineEvent.state(id, EnginePhase.READY, 85_000, 100_000));
-        scheduler.task.run();
-        assertTrue(resolver.prefetched);
-        engine.emit(EngineEvent.state(id, EnginePhase.BUFFERING, 85_000, 100_000));
-        assertFalse(resolver.prefetched);
-        engine.emit(EngineEvent.state(id, EnginePhase.READY, 85_000, 100_000));
-        assertNotNull(scheduler.task);
-        scheduler.task.run();
-        assertTrue(resolver.prefetched);
-    }
-
-    @Test
-    public void cancelledPrefetchTimerCannotReplaceSeekTimer() {
-        ManualResolver resolver = new ManualResolver();
-        FakeEngine engine = new FakeEngine();
-        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
-        ManualScheduler scheduler = new ManualScheduler();
-        coordinator.configureTimeout(scheduler, 10_000);
-        coordinator.play(0, StartPolicy.FRESH);
-        resolver.resolve(resolver.lastRequestId);
-        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 85_000, 100_000));
-        Runnable stale = scheduler.task;
-        coordinator.seekTo(90_000);
-        Runnable current = scheduler.task;
-        assertNotSame(stale, current);
-        stale.run();
-        assertFalse(resolver.prefetched);
-        assertSame(current, scheduler.task);
-        current.run();
-        assertTrue(resolver.prefetched);
-    }
-
-    @Test
     public void reorderedListKeepsCurrentEpisodeForReload() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
@@ -704,7 +644,7 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    public void refreshedListPrefetchesActualNeighborAndRejectsOldTimer() {
+    public void readyStateAndListRefreshDoNotScheduleSpeculativeWork() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
@@ -713,13 +653,11 @@ public class VodPlaybackCoordinatorTest {
         coordinator.play(0, StartPolicy.FRESH);
         resolver.resolve(resolver.lastRequestId);
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 85_000, 100_000));
-        Runnable stale = scheduler.task;
+        org.junit.Assert.assertNull(scheduler.task);
+        long request = resolver.lastRequestId;
         coordinator.setEpisodes(Arrays.asList(episode(2), episode(1), episode(3)));
-        Runnable current = scheduler.task;
-        stale.run();
-        assertFalse(resolver.prefetched);
-        current.run();
-        assertEquals("episode-3", resolver.prefetchedUrl);
+        org.junit.Assert.assertNull(scheduler.task);
+        assertEquals(request, resolver.lastRequestId);
     }
 
     @Test
@@ -800,16 +738,9 @@ public class VodPlaybackCoordinatorTest {
 
         private final Map<Long, Callback> callbacks = new LinkedHashMap<>();
         private long lastRequestId;
-        private boolean prefetched;
-        private String prefetchedUrl;
-        private boolean prefetchedAtResolve;
-
-        @Override public void prefetch(ResolveRequest request) { prefetched = true; prefetchedUrl = request.getEpisodeUrl(); }
-        @Override public void cancelPrefetch() { prefetched = false; }
 
         @Override
         public ResolveHandle resolve(ResolveRequest request, Callback callback) {
-            prefetchedAtResolve = prefetched;
             lastRequestId = request.getRequestId();
             callbacks.put(lastRequestId, callback);
             return new ResolveHandle() {
@@ -851,4 +782,177 @@ public class VodPlaybackCoordinatorTest {
         }
         @Override public void release() {}
     }
+    @Test
+    public void refreshAfterChangingEpisodeDoesNotUsePreviousEpisodeProgress() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 100_000);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 900_000, 1_800_000));
+        coordinator.play(1, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(0, engine.request.getStartPosition());
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 300_000, 1_800_000));
+        coordinator.play(1, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(300_000, engine.request.getStartPosition());
+    }
+    @Test
+    public void refreshPreservesExplicitZeroAndReplayStillStartsAtOpening() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setResumePosition("episode-1", 100_000);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 0, 1_800_000));
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(0, engine.request.getStartPosition());
+        coordinator.setOpening(30_000);
+        coordinator.replay();
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(30_000, engine.request.getStartPosition());
+    }
+    @Test
+    public void pauseDuringResolvePreparesWithoutAutoplay() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.pause();
+        resolver.resolve(resolver.lastRequestId);
+        assertFalse(engine.request.isPlayWhenReady());
+        assertEquals(0, engine.plays);
+        coordinator.play();
+        assertEquals(1, engine.plays);
+    }
+    @Test
+    public void playDuringResolveOverridesEarlierPause() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.pause();
+        coordinator.play();
+        resolver.resolve(resolver.lastRequestId);
+        assertTrue(engine.request.isPlayWhenReady());
+    }
+    @Test
+    public void backgroundGateSurvivesLateResolveAndAutomaticRetry() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.setPlaybackAllowed(false);
+        resolver.resolve(resolver.lastRequestId);
+        assertFalse(engine.request.isPlayWhenReady());
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertFalse(engine.request.isPlayWhenReady());
+        coordinator.play();
+        assertEquals(0, engine.plays);
+        coordinator.setPlaybackAllowed(true);
+        assertEquals(1, engine.plays);
+    }
+    @Test
+    public void refreshRetainsPauseAndSpeedWithoutCallerSnapshot() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.snapshot = new EngineSnapshot(engine.request.getSessionId(), EnginePhase.PAUSED, 200_000, 900_000, 0, false, 1.5f, 0, 0);
+        coordinator.pause();
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(200_000, engine.request.getStartPosition());
+        assertFalse(engine.request.isPlayWhenReady());
+        assertEquals(1.5f, engine.speed, 0);
+    }
+    @Test
+    public void openingChangesApplyToNextEpisodeAndCanBeClearedBeforeReplay() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setOpening(90_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        coordinator.setOpening(30_000);
+        coordinator.next();
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(30_000, engine.request.getStartPosition());
+        coordinator.setOpening(0);
+        coordinator.replay();
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(0, engine.request.getStartPosition());
+    }
+
+    @Test public void changingFilmClearsStoppedProgressAndEpisode() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 900_000, 1_800_000));
+        coordinator.reset();
+        org.junit.Assert.assertNull(coordinator.state().getEpisode());
+        assertEquals(0, coordinator.currentPosition());
+        coordinator.setEpisodes(Collections.singletonList(episode(1)));
+        coordinator.setResumePosition("episode-1", 120_000);
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(120_000, engine.request.getStartPosition());
+    }
+
+    @Test public void playAfterLastEpisodeEndsResolvesReplayAtOpening() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.setOpening(30_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.ENDED, 900_000, 900_000));
+        long oldRequest = resolver.lastRequestId;
+        coordinator.play();
+        assertTrue(resolver.lastRequestId > oldRequest);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(30_000, engine.request.getStartPosition());
+    }
+
+    @Test public void manualPauseDuringReloadOverridesCapturedPlayingState() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        coordinator.reload();
+        coordinator.pause();
+        resolver.resolve(resolver.lastRequestId);
+        assertFalse(engine.request.isPlayWhenReady());
+        coordinator.setPlaybackAllowed(false);
+        coordinator.setPlaybackAllowed(true);
+        assertEquals(0, engine.plays);
+    }
+
+
+    @Test public void recoveryFormatSurvivesSameRouteRetryAndClearsForNextEpisode() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        coordinator.reload("video/mp2t");
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals("video/mp2t", engine.request.getFormat());
+        coordinator.play(0, StartPolicy.RESUME_SAVED);
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals("video/mp2t", engine.request.getFormat());
+        coordinator.next();
+        resolver.resolve(resolver.lastRequestId);
+        org.junit.Assert.assertNull(engine.request.getFormat());
+    }
+
 }

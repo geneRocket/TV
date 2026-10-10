@@ -302,7 +302,9 @@ public final class M3u8AdFilter {
         Set<String> confirmedRepeatedAds = collectRemovedRepeatedMedia(originalRecords, records, repeatedSegments);
         records = filterRepeatedSegments(records, confirmedRepeatedAds);
 
-        String filtered = filterMinorHostSegments(records, content);
+        records = filterMinorHostSegments(records);
+        records = restoreRetainedPlaybackState(originalRecords, records);
+        String filtered = build(records, content.length());
         int filteredSegmentCount = countSegmentsFromString(filtered);
         // Never hand Exo a playlist that the filter has emptied. A false-positive ad rule
         // should leave the original stream playable rather than turn into a playback error.
@@ -589,7 +591,7 @@ public final class M3u8AdFilter {
         return path.endsWith(".m3u8") || path.endsWith(".m3u");
     }
 
-    private static String filterMinorHostSegments(List<Record> records, String original) {
+    private static List<Record> filterMinorHostSegments(List<Record> records) {
         Map<String, Integer> hostCount = new HashMap<>();
         int segmentCount = 0;
 
@@ -600,7 +602,7 @@ public final class M3u8AdFilter {
             hostCount.put(h, hostCount.getOrDefault(h, 0) + 1);
         }
 
-        if (segmentCount < 2 || hostCount.size() < 2) return build(records, original.length());
+        if (segmentCount < 2 || hostCount.size() < 2) return records;
 
         String majorHost = null;
         int majorCount = -1;
@@ -612,17 +614,17 @@ public final class M3u8AdFilter {
             }
         }
 
-        if (majorHost == null) return build(records, original.length());
+        if (majorHost == null) return records;
 
         boolean hasStableMajorHost = (majorCount * 10) >= (segmentCount * 5);
-        if (!hasStableMajorHost) return build(records, original.length());
-        StringBuilder sb = new StringBuilder(original.length());
+        if (!hasStableMajorHost) return records;
+        List<Record> kept = new ArrayList<>(records.size());
         int removed = 0;
 
         for (int index = 0; index < records.size(); index++) {
             Record record = records.get(index);
             if (!record.segment) {
-                appendRecord(sb, record);
+                kept.add(record);
                 continue;
             }
 
@@ -636,14 +638,13 @@ public final class M3u8AdFilter {
                 continue;
             }
 
-            appendRecord(sb, record);
+            kept.add(record);
         }
 
-        if (removed <= 0) return build(records, original.length());
-        if (removed >= segmentCount) return build(records, original.length());
+        if (removed <= 0) return records;
+        if (removed >= segmentCount) return records;
 
-        if (sb.length() > 0) sb.setLength(sb.length() - 1);
-        return sb.toString();
+        return kept;
     }
 
     static int countSegmentsFromString(String content) {
@@ -680,9 +681,6 @@ public final class M3u8AdFilter {
         double cueAdSeconds = 0;
         int cueAdSegments = 0;
 
-        boolean discontinuityAdOpen = false;
-        int discontinuityAdSegments = 0;
-
         boolean pendingAdSignal = false;
         int pendingAdSignalLines = 0;
 
@@ -703,8 +701,6 @@ public final class M3u8AdFilter {
                     cueAdHasClosingTag = false;
                     cueAdSeconds = 0;
                     cueAdSegments = 0;
-                    discontinuityAdOpen = false;
-                    discontinuityAdSegments = 0;
                     pendingAdSignal = false;
                     pendingAdSignalLines = 0;
                     continue;
@@ -767,20 +763,8 @@ public final class M3u8AdFilter {
                 continue;
             }
 
-            if (vod && explicitAd && hasDiscontinuity) {
-                discontinuityAdOpen = true;
-                discontinuityAdSegments = 0;
-            }
-            if (discontinuityAdOpen) {
-                if (!explicitAd && discontinuityAdSegments > 0 && hasDiscontinuity) {
-                    discontinuityAdOpen = false;
-                } else if (++discontinuityAdSegments <= MAX_CONTIGUOUS_AD_SEGMENTS) {
-                    continue;
-                } else {
-                    discontinuityAdOpen = false;
-                }
-            }
-
+            // A discontinuity marks a media/timestamp change, not an ad interval.
+            // URI evidence applies only to this segment; cues delimit full breaks.
             if (explicitAd || adByPendingSignal) {
                 pendingAdSignal = false;
                 pendingAdSignalLines = 0;
@@ -1636,7 +1620,7 @@ public final class M3u8AdFilter {
 
     private static boolean isSegmentTag(String line) {
         return line.startsWith("#EXTINF")
-                || line.startsWith("#EXT-X-DISCONTINUITY")
+                || line.equals("#EXT-X-DISCONTINUITY")
                 || line.startsWith("#EXT-X-PROGRAM-DATE-TIME")
                 || line.startsWith("#EXT-X-KEY:")
                 || line.startsWith("#EXT-X-BYTERANGE")
@@ -2311,6 +2295,38 @@ public final class M3u8AdFilter {
         } catch (Throwable ignored) {
             return 0;
         }
+    }
+
+    /** Replay state changes in their original order before the next retained segment. */
+    private static List<Record> restoreRetainedPlaybackState(List<Record> original, List<Record> kept) {
+        if (original.size() == kept.size()) return kept;
+        Set<Record> retained = new HashSet<>(kept);
+        List<Record> restored = new ArrayList<>(kept.size());
+        List<String> pendingState = new ArrayList<>();
+        for (Record record : original) {
+            if (!record.segment) {
+                if (isPlaybackStateTag(record.line)) pendingState.add(record.line);
+                else if (retained.contains(record)) restored.add(record);
+                continue;
+            }
+            List<String> segmentTags = new ArrayList<>();
+            for (String tag : record.tags) {
+                if (isPlaybackStateTag(tag)) pendingState.add(tag);
+                else segmentTags.add(tag);
+            }
+            if (!retained.contains(record)) continue;
+            List<String> tags = new ArrayList<>(pendingState);
+            tags.addAll(segmentTags);
+            pendingState.clear();
+            restored.add(new Record(true, record.line, record.host, record.resolvedUri, tags,
+                    record.duration, record.adLikeUri, record.explicitAd, record.weakAdNumberUri));
+        }
+        return restored;
+    }
+
+    private static boolean isPlaybackStateTag(String tag) {
+        return tag.startsWith("#EXT-X-KEY:") || tag.startsWith("#EXT-X-MAP:")
+                || tag.equals("#EXT-X-DISCONTINUITY");
     }
 
     private static String build(List<Record> records, int capacity) {

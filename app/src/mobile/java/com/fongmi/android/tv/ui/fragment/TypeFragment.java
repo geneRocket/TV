@@ -158,6 +158,12 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
+        mViewModel.actionResult().observe(getViewLifecycleOwner(), response -> {
+            if (!getKey().equals(response.getKey())) return;
+            if (response.hasMsg()) com.fongmi.android.tv.utils.Notify.show(response.getMsg());
+            else if (response.isRequestFailed()) com.fongmi.android.tv.utils.Notify.show(R.string.vod_load_failed);
+            if (!response.isRequestFailed() && !response.getList().isEmpty()) onRefresh();
+        });
         mViewModel.result().observe(getViewLifecycleOwner(), this::setAdapter);
     }
 

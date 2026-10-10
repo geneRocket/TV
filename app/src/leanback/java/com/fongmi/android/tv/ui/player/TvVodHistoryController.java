@@ -32,12 +32,12 @@ public final class TvVodHistoryController {
 
     public void updateFields(History history, long position, long duration) {
         if (history == null) return;
-        if (position > 0) history.setPosition(position);
+        if (position >= 0) history.setPosition(position);
         if (duration > 0) history.setDuration(duration);
     }
 
     public boolean updateProgress(History history, boolean canCommit, long position, long duration) {
-        if (history == null || !canCommit || position <= 0) return false;
+        if (history == null || !canCommit || position < 0) return false;
         updateFields(history, position, duration);
         return true;
     }
@@ -75,7 +75,9 @@ public final class TvVodHistoryController {
     }
 
     public boolean commitEpisode(History history, String flag, Episode episode, VodPlaybackState state) {
-        if (history == null || Setting.isIncognito() || episode == null || state == null || TextUtils.equals(history.getEpisodeUrl(), episode.getUrl())) return false;
+        if (history == null || Setting.isIncognito() || episode == null || state == null || (TextUtils.equals(history.getEpisodeUrl(), episode.getUrl())
+                && TextUtils.equals(history.getVodFlag(), flag)
+                && TextUtils.equals(history.getVodRemarks(), episode.getName()))) return false;
         history.setEpisodeUrl(episode.getUrl());
         history.setVodRemarks(episode.getName());
         history.setVodFlag(flag);

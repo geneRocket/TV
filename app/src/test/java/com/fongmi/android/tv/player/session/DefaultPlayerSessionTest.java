@@ -214,4 +214,13 @@ public class DefaultPlayerSessionTest {
         @Override public EngineSnapshot snapshot() { return EngineSnapshot.EMPTY; }
         @Override public void release() { releaseCount++; if (releaseError != null) throw releaseError; }
     }
+
+    @Test public void pausedPrepareDoesNotRequestAutoplayFromTheEngine() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        session.prepare(item("episode-1", 120_000).withPlayWhenReady(false));
+        org.junit.Assert.assertFalse(engine.request.isPlayWhenReady());
+        assertEquals(120_000, engine.request.getStartPosition());
+    }
+
 }

@@ -151,31 +151,31 @@ public class OkHttp {
     }
 
     public static Call newCall(String url) {
-        return client().newCall(new Request.Builder().url(url).build());
+        return HttpCallScope.track(client().newCall(new Request.Builder().url(url).build()));
     }
 
     public static Call newCall(OkHttpClient client, String url) {
-        return client.newCall(new Request.Builder().url(url).build());
+        return HttpCallScope.track(client.newCall(new Request.Builder().url(url).build()));
     }
 
     public static Call newCall(String url, Map<String, String> headers) {
-        return client().newCall(new Request.Builder().url(url).headers(Headers.of(headers)).build());
+        return HttpCallScope.track(client().newCall(new Request.Builder().url(url).headers(Headers.of(headers)).build()));
     }
 
     public static Call newCall(String url, Headers headers) {
-        return client().newCall(new Request.Builder().url(url).headers(headers).build());
+        return HttpCallScope.track(client().newCall(new Request.Builder().url(url).headers(headers).build()));
     }
 
     public static Call newCall(String url, Headers headers, ArrayMap<String, String> params) {
-        return client().newCall(new Request.Builder().url(buildUrl(url, params)).headers(headers).build());
+        return HttpCallScope.track(client().newCall(new Request.Builder().url(buildUrl(url, params)).headers(headers).build()));
     }
 
     public static Call newCall(String url, Headers headers, RequestBody body) {
-        return client().newCall(new Request.Builder().url(url).headers(headers).post(body).build());
+        return HttpCallScope.track(client().newCall(new Request.Builder().url(url).headers(headers).post(body).build()));
     }
 
     public static Call newCall(OkHttpClient client, String url, RequestBody body) {
-        return client.newCall(new Request.Builder().url(url).post(body).build());
+        return HttpCallScope.track(client.newCall(new Request.Builder().url(url).post(body).build()));
     }
 
     public static FormBody toBody(ArrayMap<String, String> params) {

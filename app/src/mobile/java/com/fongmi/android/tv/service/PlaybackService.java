@@ -63,6 +63,10 @@ public class PlaybackService extends Service {
         App.get().stopService(new Intent(App.get(), PlaybackService.class));
     }
 
+    public static void stop(PlaybackController owner) {
+        if (player == owner) stop();
+    }
+
     private boolean isNull() {
         return Objects.isNull(player) || Objects.isNull(player.getSession());
     }
@@ -122,7 +126,7 @@ public class PlaybackService extends Service {
         } else {
             if (loadingArtwork.contains(artUri)) return;
             loadingArtwork.add(artUri);
-            CustomTarget<Bitmap> target = getCallback(builder, artUri);
+            CustomTarget<Bitmap> target = getCallback(artUri);
             artworkTargets.add(target);
             ImgUtil.load(artUri, target);
         }
@@ -151,7 +155,7 @@ public class PlaybackService extends Service {
         return builder.build();
     }
 
-    private CustomTarget<Bitmap> getCallback(NotificationCompat.Builder builder, String artUri) {
+    private CustomTarget<Bitmap> getCallback(String artUri) {
         return new CustomTarget<>() {
             @Override
             public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
@@ -159,8 +163,7 @@ public class PlaybackService extends Service {
                 artworkTargets.remove(this);
                 if (destroyed) return;
                 cache.put(artUri, resource);
-                setLargeIcon(builder, resource);
-                Notify.show(builder.build());
+                if (artUri.equals(getArtUri())) Notify.show(buildNotification());
             }
 
             @Override

@@ -19,8 +19,13 @@ public final class EngineRequest {
     private final Drm drm;
     private final long startPosition;
     private final boolean forceLive;
+    private final boolean playWhenReady;
 
     public EngineRequest(long sessionId, String url, Map<String, String> headers, String format, Drm drm, List<Sub> subtitles, long startPosition, boolean forceLive) {
+        this(sessionId, url, headers, format, drm, subtitles, startPosition, forceLive, true);
+    }
+
+    public EngineRequest(long sessionId, String url, Map<String, String> headers, String format, Drm drm, List<Sub> subtitles, long startPosition, boolean forceLive, boolean playWhenReady) {
         if (sessionId <= 0) throw new IllegalArgumentException("sessionId must be positive");
         if (url == null || url.trim().isEmpty()) throw new IllegalArgumentException("url must not be empty");
         this.sessionId = sessionId;
@@ -31,6 +36,7 @@ public final class EngineRequest {
         this.subtitles = Collections.unmodifiableList(new ArrayList<>(subtitles == null ? Collections.emptyList() : subtitles));
         this.startPosition = Math.max(startPosition, 0);
         this.forceLive = forceLive;
+        this.playWhenReady = playWhenReady;
     }
 
     public long getSessionId() { return sessionId; }
@@ -48,4 +54,6 @@ public final class EngineRequest {
     public long getStartPosition() { return startPosition; }
 
     public boolean isForceLive() { return forceLive; }
+
+    public boolean isPlayWhenReady() { return playWhenReady; }
 }

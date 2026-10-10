@@ -66,4 +66,13 @@ public class DefaultPlaybackItemFactoryTest {
         @Override public Map<String, String> getHeaders() { return Collections.emptyMap(); }
         @Override public List<Sub> getSubs() { return subtitles; }
     }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void blocksResolvedAdvertisementAfterNormalizingItsUrl() {
+        DefaultPlaybackItemFactory factory = new DefaultPlaybackItemFactory(() -> null,
+                url -> "https://example.com/ad.mp4", url -> Collections.emptyMap(), headers -> headers,
+                url -> url.endsWith("/ad.mp4"));
+        factory.create(new VodEpisode("episode", "site", "flag", "name", "url"), new TestResult(Collections.emptyList()), 0);
+    }
+
 }

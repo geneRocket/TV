@@ -37,6 +37,22 @@ public final class HistoryRepository {
         return History.prepare(history, key, cid, vod, speed, mark);
     }
 
+    public History prepareDefault(String key, int cid, Vod vod, float speed, String mark) {
+        History history = new History();
+        history.setKey(key);
+        history.setCid(cid);
+        history.setVodName(vod.getVodName());
+        history.setVodPic(vod.getVodPic());
+        history.setSpeed(speed);
+        if (!vod.getVodFlags().isEmpty()) {
+            com.fongmi.android.tv.bean.Flag flag = vod.getVodFlags().get(0);
+            history.setVodFlag(flag.getFlag());
+            if (!flag.getEpisodes().isEmpty()) history.setVodRemarks(flag.getEpisodes().get(0).getName());
+        }
+        if (mark != null && !mark.isEmpty()) history.setVodRemarks(mark);
+        return history;
+    }
+
     public History prepareBestMatch(String key, int cid, Vod vod, float speed, String mark) {
         History prepared = History.prepare(find(key), key, cid, vod, speed, mark);
         History matched = prepared.findBestMatch();

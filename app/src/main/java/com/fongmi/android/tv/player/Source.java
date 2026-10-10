@@ -180,12 +180,31 @@ public class Source {
         return fetch(result.getUrl().v(), result::setParse);
     }
 
+    public String fetchForDownload(Result result) throws Exception {
+        String url = result.getUrl().v();
+        // These wrappers are stateless and do not own playback services.
+        for (int depth = 0; depth < 4; depth++) {
+            Extractor extractor = getExtractor(UrlUtil.uri(url));
+            if (extractor == null) return url;
+            if (!(extractor instanceof Video || extractor instanceof Push
+                    || extractor instanceof Proxy || extractor instanceof Strm)) {
+                throw new com.fongmi.android.tv.exception.ExtractException(com.fongmi.android.tv.utils.ResUtil.getString(com.fongmi.android.tv.R.string.download_unsupported));
+            }
+            result.setParse(0);
+            String next = extractor.fetch(url);
+            if (next.equals(url)) return next;
+            url = next;
+        }
+        throw new com.fongmi.android.tv.exception.ExtractException(com.fongmi.android.tv.utils.ResUtil.getString(com.fongmi.android.tv.R.string.download_unsupported));
+    }
+
     public String fetch(Channel channel) throws Exception {
         return fetch(channel.getCurrent(), channel::setParse);
     }
 
     private String fetch(String url, java.util.function.Consumer<Integer> parseSetter) throws Exception {
         if (TextUtils.isEmpty(url)) return "";
+        com.github.catvod.net.HttpCallScope.throwIfCancelled();
         Extractor extractor = getExtractor(UrlUtil.uri(url));
         if (extractor != null) parseSetter.accept(0);
         prepare(extractor);

@@ -114,30 +114,38 @@ public class SpiderRepository {
             case 3:
                 return Result.fromJson(site.recent().spider().action(action));
             case 4:
-                return Result.fromJson(OkHttp.string(action));
+                return Result.fromJson(call(OkHttp.newCall(action, site.getHeaders())));
             default:
                 return Result.empty();
         }
     }
 
     public Result playerContent(String key, String flag, String id) throws Exception {
+        return playerContent(key, flag, id, false);
+    }
+
+    public Result downloadContent(String key, String flag, String id) throws Exception {
+        return playerContent(key, flag, id, true);
+    }
+
+    private Result playerContent(String key, String flag, String id, boolean download) throws Exception {
         Site site = VodConfig.get().getSite(key);
         if (site.getType() == 3) {
             Spider spider = site.recent().spider();
             String playerContent = spider.playerContent(flag, id, VodConfig.get().getFlags());
-            return preparePlayerResult(key, flag, site, playerContent);
+            return preparePlayerResult(key, flag, site, playerContent, download);
         } else if (site.getType() == 4) {
             ArrayMap<String, String> params = new ArrayMap<>();
             params.put("play", id);
             params.put("flag", flag);
             String playerContent = call(site, params);
-            return preparePlayerResult(key, flag, site, playerContent);
+            return preparePlayerResult(key, flag, site, playerContent, download);
         } else if (site.isEmpty() && "push_agent".equals(key)) {
             Result result = new Result();
             result.setParse(0);
             result.setFlag(flag);
             result.setUrl(Url.create().add(UrlUtil.normalize(id, "")));
-            result.setUrl(UrlUtil.normalize(Source.get().fetch(result), ""));
+            result.setUrl(UrlUtil.normalize((download ? Source.get().fetchForDownload(result) : Source.get().fetch(result)), ""));
             return result;
         } else if (site.isEmpty()) {
             return Result.empty();
@@ -154,20 +162,20 @@ public class SpiderRepository {
             result.setHeader(site.getHeader());
             if (result.getPlayUrl().isEmpty()) result.setPlayUrl(site.getPlayUrl());
             result.setKey(key);
-            result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
+            result.setUrl(UrlUtil.normalize((download ? Source.get().fetchForDownload(result) : Source.get().fetch(result)), site.getApi()));
             if (!"json".equals(type)) result.setParse(Sniffer.isVideoFormat(url.v()) && result.getPlayUrl().isEmpty() ? 0 : 1);
             SpiderDebug.log(result.toString());
             return result;
         }
     }
 
-    private Result preparePlayerResult(String key, String flag, Site site, String content) throws Exception {
+    private Result preparePlayerResult(String key, String flag, Site site, String content, boolean download) throws Exception {
         SpiderDebug.log(content);
         Result result = Result.fromJson(content);
         if (result.getFlag().isEmpty()) result.setFlag(flag);
         result.setHeader(site.getHeader());
         result.getUrl().normalize(site.getApi());
-        result.setUrl(UrlUtil.normalize(Source.get().fetch(result), site.getApi()));
+        result.setUrl(UrlUtil.normalize((download ? Source.get().fetchForDownload(result) : Source.get().fetch(result)), site.getApi()));
         result.setKey(key);
         return result;
     }

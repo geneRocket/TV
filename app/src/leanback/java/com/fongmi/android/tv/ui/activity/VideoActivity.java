@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.activity;
 
+import com.fongmi.android.tv.player.vod.VodHistoryCommitGate;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -370,7 +371,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         @Override public PlaybackRecovery.Action decide(ErrorEvent error) { return mRecovery.next(error, mPlayers, true); }
         @Override public void retry() { onRefresh(); }
         @Override public void toggleDecode() { onDecode(false); }
-        @Override public void reloadExo(ErrorEvent error) { capturePlaybackPosition(); mPlaybackCoordinator.reload(); }
+        @Override public void reloadExo(ErrorEvent error) { capturePlaybackPosition(); mPlaybackCoordinator.reload(mPlayers.getRecoveryFormat(error)); }
         @Override public void switchPlayerAndRetry() { capturePlaybackPosition(); mPlayers.nextPlayer(); replacePlayerSession(); setPlayerView(); setDecodeView(); mPlaybackCoordinator.reload(); }
         @Override public void stopWithError(ErrorEvent error) { VideoActivity.this.stopWithError(error); }
         @Override public boolean mayChangeSource() { return Setting.isChange() && getSite().isChangeable(); }
@@ -398,6 +399,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         clearPartRequest();
         setPartAdapter(Collections.emptyList());
         stopActivePlayback();
+        mFlagAdapter.clear();
+        setEpisodeAdapter(Collections.emptyList());
+        mPlaybackCoordinator.setEpisodes(Collections.emptyList());
+        mHistoryGate.reset();
     }
 
     private void showDetailEmpty() {
@@ -491,6 +496,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private final com.fongmi.android.tv.player.RecoveryWindow mRecoveryWindow = new com.fongmi.android.tv.player.RecoveryWindow(
             com.fongmi.android.tv.utils.AppTaskScheduler.get(), () -> cancelAutomaticRecovery(true));
     private String mRenderedEpisode = "";
+    private final VodHistoryCommitGate mHistoryGate = new VodHistoryCommitGate();
     private VodPlaybackCoordinator mPlaybackCoordinator;
     private Subscription mPlaybackSubscription;
     private SwitchablePlayerSession mPlayerSession;
@@ -997,13 +1003,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         final String historyKey = getHistoryKey();
         final int siteCid = getSiteCid();
         final String mark = getMark();
-        mHistory = HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark);
+        mHistory = HistoryRepository.get().prepareDefault(historyKey, siteCid, item, Setting.getPlaySpeed(), mark);
         mHistoryController.beginLoad();
         mHistoryTasks.submit(TASK_HISTORY,
                 () -> HistoryRepository.get().prepareBestMatch(historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
                 HISTORY_LOAD_TIMEOUT_MS,
                 history -> applyHistory(history, item, historyKey, detailToken),
-                error -> HistoryRepository.get().prepare(null, historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
+                error -> HistoryRepository.get().prepareDefault(historyKey, siteCid, item, Setting.getPlaySpeed(), mark),
                 null);
     }
 
@@ -1053,9 +1059,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mKeyDown.release();
         mSeekGesture.reset();
         StartPolicy policy = mPlaybackIntent.consumeStartPolicy(replay, isSourceSwitching());
+        policy = mPlaybackCoordinator.normalizeStartPolicy(index, policy);
         if (policy != StartPolicy.KEEP_CURRENT_POSITION) mPlayers.clear();
         Source.get().cancelPreloads();
-        mPlaybackCoordinator.setPrefetchReverse(mHistory != null && mHistory.isRevPlay());
         mPlaybackCoordinator.play(index, policy);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         clearDanmakuView();
@@ -1463,7 +1469,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public void onRevPlay(TextView view) {
         if (mHistory == null) return;
         mHistory.setRevPlay(!mHistory.isRevPlay());
-        mPlaybackCoordinator.setPrefetchReverse(mHistory.isRevPlay());
         view.setText(mHistory.getRevPlayText());
         Notify.show(mHistory.getRevPlayHint());
     }
@@ -1646,13 +1651,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void capturePlaybackPosition() {
         long position = getCurrentSwitchPosition();
-        if (mPlaybackCoordinator != null) mPlaybackCoordinator.preserveControls(mPlaybackCoordinator.state().getPhase() == VodPlaybackPhase.PAUSED, mPlayers.getSpeed());
+        if (mPlaybackCoordinator != null) mPlaybackCoordinator.preserveControls(!mPlaybackCoordinator.wantsPlayback(), mPlayers.getSpeed());
         mPlayers.setPosition(position);
         if (mPlaybackCoordinator != null && mEpisodeAdapter != null && mEpisodeAdapter.size() > 0) {
             Episode episode = getEpisode();
             mPlaybackCoordinator.preservePosition(VodEpisode.resumeIdentity(getKey(), getFlag().getFlag(), episode.getName()), position);
         }
-        if (mHistory != null) {
+        if (canCommitCurrentHistory()) {
             mHistory.setPosition(position);
             mHistoryController.saveSnapshot(mHistory);
         }
@@ -1719,6 +1724,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void setOpening(long opening) {
         if (mHistory == null) return;
         mHistory.setOpening(opening);
+        mPlaybackCoordinator.setOpening(opening);
         setPlainTextIfChanged(mBinding.control.opening, opening == 0 ? getString(R.string.play_op) : mPlayers.stringToTime(mHistory.getOpening()));
     }
 
@@ -2209,6 +2215,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void renderPlayback(VodPlaybackState state) {
+        mHistoryGate.onState(state);
         mRecommendations.setReady(state.getPhase() == VodPlaybackPhase.READY && !mSeekGesture.isActive());
         if (state.getPhase() == VodPlaybackPhase.RESOLVING || state.getPhase() == VodPlaybackPhase.BUFFERING) {
             if (mSiteSearch != null) mSiteSearch.cancel();
@@ -2245,7 +2252,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean canCommitCurrentHistory() {
-        return mPlaybackCoordinator != null && mHistoryController.shouldCommit(mPlaybackCoordinator.state().getPhase());
+        return mHistory != null && mPlaybackCoordinator != null
+                && mHistoryGate.canCommit(mPlaybackCoordinator.state())
+                && mHistoryController.shouldCommit(mPlaybackCoordinator.state().getPhase());
     }
 
     private void checkEnded() {
@@ -2712,7 +2721,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public void onSeeking(int time) {
         Source.get().cancelPreloads();
         mSourceSearch.stop();
-        if (mPlaybackCoordinator != null) mPlaybackCoordinator.cancelPrefetch();
         mRecommendations.setReady(false);
         setCenterAction(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         updateCenterProgress(mSeekGesture.preview(mPlayers.getPosition(), mPlayers.getDuration(), time), mPlayers.getDuration());
@@ -2818,6 +2826,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         super.onResume();
         setBackground(false);
         mPlayers.activateAsCurrentPlayer();
+        mPlaybackCoordinator.setPlaybackAllowed(true);
         mClock.start();
         boolean needInit = mPlayers.isRelease()
                 || (mPlayers.isExo() && mPlayers.exo() == null)
@@ -2843,7 +2852,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setBackground(true);
         mPlaybackState.clear();
         saveHistoryNow();
-        mPlayers.pause();
+        mPlaybackCoordinator.setPlaybackAllowed(false);
         mClock.stop();
         stopDisplayTrafficPolling();
     }
@@ -2916,7 +2925,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (mVodResolver != null) mVodResolver.close();
         mPlayers.release();
         clearArtworkTarget();
-        Source.get().stop();
         RefreshEvent.history();
         App.removeCallbacks(mR1, mR2, mR3, mR4, mR5, mR6, mR8);
     }

@@ -103,10 +103,21 @@ public class Result implements Parcelable {
     private Drm drm;
 
     public static Result objectFrom(String str) {
+        return objectFrom(str, App.gson());
+    }
+
+    static Result objectFrom(String str, com.google.gson.Gson gson) {
         try {
-            return App.gson().fromJson(str, Result.class);
+            Result decoded = gson.fromJson(str, Result.class);
+            if (decoded == null) {
+                decoded = empty();
+                decoded.setRequestFailed(true);
+            }
+            return decoded;
         } catch (Exception e) {
-            return empty();
+            Result failed = empty();
+            failed.setRequestFailed(true);
+            return failed;
         }
     }
 
@@ -119,7 +130,9 @@ public class Result implements Parcelable {
         try {
             return new Persister().read(Result.class, str, false).trans();
         } catch (Exception e) {
-            return empty();
+            Result failed = empty();
+            failed.setRequestFailed(true);
+            return failed;
         }
     }
 

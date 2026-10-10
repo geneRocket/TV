@@ -41,7 +41,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
                 .build();
         player.setAudioAttributes(AudioAttributes.DEFAULT, !playWithOthers);
         player.setHandleAudioBecomingNoisy(true);
-        player.setPlayWhenReady(true);
+        player.setPlayWhenReady(false);
         player.addListener(this);
         view.setPlayer(player);
     }
@@ -60,7 +60,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
         this.pendingStartSeek = requestedStartPosition > 0;
         this.pendingReady = true;
         MediaItem item = ExoUtil.getMediaItem(request.getHeaders(), UrlUtil.uri(request.getUrl()), request.getFormat(), request.getDrm(), request.getSubtitles(), decode, request.isForceLive());
-        player.setPlayWhenReady(true);
+        player.setPlayWhenReady(request.isPlayWhenReady());
         player.setMediaItem(item, request.getStartPosition());
         if (requestedStartPosition > 0) player.seekTo(requestedStartPosition);
         player.prepare();

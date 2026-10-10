@@ -201,6 +201,11 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
     }
 
     public void setMediaSource(MediaSource source, long position) {
+        setMediaSource(source, position, true);
+    }
+
+    public void setMediaSource(MediaSource source, long position, boolean playWhenReady) {
+        mTargetState = playWhenReady ? STATE_PLAYING : STATE_PAUSED;
         mStartPosition = Math.max(position, 0);
         setVideoURI(source.getUri(), source.getHeaders());
     }
@@ -299,6 +304,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
     }
 
     public void seekTo(long positionMs) {
+        if (!isInPlaybackState()) { mStartPosition = Math.max(positionMs, 0); return; }
         onInfo(mPlayer, IMediaPlayer.MEDIA_INFO_BUFFERING_START, 0);
         mPlayer.seekTo(positionMs);
     }
@@ -478,7 +484,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         mPlayer.setOption(player, "overlay-format", IjkMediaPlayer.SDL_FCC_RV32);
         mPlayer.setOption(player, "reconnect", 1);
         mPlayer.setOption(player, "soundtouch", 1);
-        mPlayer.setOption(player, "start-on-prepared", 1);
+        mPlayer.setOption(player, "start-on-prepared", mTargetState == STATE_PLAYING ? 1 : 0);
         mPlayer.setOption(player, "subtitle", 1);
         mPlayer.setOption(format, "protocol_whitelist", "async,cache,crypto,file,http,https,pipe,rtmp,rtp,tcp,tls,udp,data,ijkinject,ijklongurl,ijksegment,ijkhttphook,ijklivehook,ijktcphook,ijkurlhook,ijkmediadatasource");
         if (url.contains("rtsp") || url.contains("udp") || url.contains("rtp")) {

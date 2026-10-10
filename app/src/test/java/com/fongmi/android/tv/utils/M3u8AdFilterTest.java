@@ -1796,6 +1796,86 @@ public class M3u8AdFilterTest {
         return "#EXTINF:" + duration + ",\n" + uri + "\n";
     }
 
+    @Test
+    public void removingAdPreservesRotatedExplicitIvKeyForFollowingContent() {
+        String playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:5\n"
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"a.key\",IV=0x1\n"
+                + segment(5, "main0.ts")
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"b.key\",IV=0x2\n"
+                + segment(5, "ads/ad.ts")
+                + segment(5, "main1.ts") + segment(5, "main2.ts")
+                + "#EXT-X-ENDLIST\n";
+        assertOnlyAdsRemoved("key rotation", playlist, filter(playlist), "ads/ad.ts");
+    }
+
+    @Test
+    public void removingAdPreservesInlineMapForFollowingFragments() {
+        String playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:5\n"
+                + "#EXT-X-MAP:URI=\"init-a.mp4\"\n" + segment(5, "main0.m4s")
+                + "#EXTINF:5,\n#EXT-X-MAP:URI=\"init-b.mp4\"\nads/ad.m4s\n"
+                + segment(5, "main1.m4s") + segment(5, "main2.m4s")
+                + "#EXT-X-ENDLIST\n";
+        assertOnlyAdsRemoved("map transition", playlist, filter(playlist), "ads/ad.m4s");
+    }
+
+    @Test
+    public void preservesRequiredStandaloneMapEvenWhenItsPathLooksLikeAnAd() {
+        String playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:5\n"
+                + "#EXT-X-MAP:URI=\"ads/init.mp4\"\n"
+                + segment(5, "main0.m4s") + segment(5, "main1.m4s")
+                + segment(5, "main2.m4s") + "#EXT-X-ENDLIST\n";
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
+    }
+
+    @Test
+    public void removingAdPreservesMapEncryptionBeforeMediaKeyReset() {
+        String playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:5\n"
+                + segment(5, "main0.m4s")
+                + "#EXT-X-KEY:METHOD=AES-128,URI=\"init.key\",IV=0x1\n"
+                + "#EXTINF:5,\n#EXT-X-MAP:URI=\"init-b.mp4\"\nads/ad.m4s\n"
+                + "#EXT-X-KEY:METHOD=NONE\n" + segment(5, "main1.m4s")
+                + segment(5, "main2.m4s") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertOnlyAdsRemoved("map encryption", playlist, filtered, "ads/ad.m4s");
+        assertTrue(filtered.indexOf("init.key") < filtered.indexOf("init-b.mp4"));
+        assertTrue(filtered.indexOf("init-b.mp4") < filtered.indexOf("METHOD=NONE"));
+    }
+
+    @Test
+    public void removingCueBreakPreservesTimestampBoundaryBeforeNextContent() {
+        String playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:5\n"
+                + segment(5, "main0.ts")
+                + "#EXT-X-DISCONTINUITY\n#EXT-X-CUE-OUT:5\n"
+                + segment(5, "ads/ad.ts") + "#EXT-X-CUE-IN\n"
+                + segment(5, "main1.ts") + segment(5, "main2.ts")
+                + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertOnlyAdsRemoved("timestamp boundary", playlist, filtered, "ads/ad.ts");
+        assertTrue(filtered.indexOf("main0.ts") < filtered.indexOf("#EXT-X-DISCONTINUITY"));
+        assertTrue(filtered.indexOf("#EXT-X-DISCONTINUITY") < filtered.indexOf("main1.ts"));
+    }
+
+    @Test
+    public void removingPrerollPreservesDiscontinuitySequenceHeader() {
+        String playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:5\n"
+                + "#EXT-X-DISCONTINUITY-SEQUENCE:7\n"
+                + segment(5, "ads/ad.ts") + segment(5, "main0.ts")
+                + segment(5, "main1.ts") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertOnlyAdsRemoved("discontinuity sequence", playlist, filtered, "ads/ad.ts");
+        assertTrue(filtered.contains("#EXT-X-DISCONTINUITY-SEQUENCE:7"));
+    }
+
+    @Test
+    public void explicitAdAtDiscontinuityDoesNotDeleteFollowingNormalSegments() {
+        String playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:5\n"
+                + segment(5, "main0.ts") + "#EXT-X-DISCONTINUITY\n"
+                + segment(5, "ads/ad.ts") + segment(5, "main1.ts")
+                + segment(5, "main2.ts") + "#EXT-X-DISCONTINUITY\n"
+                + segment(5, "main3.ts") + "#EXT-X-ENDLIST\n";
+        assertOnlyAdsRemoved("unbounded URI evidence", playlist, filter(playlist), "ads/ad.ts");
+    }
+
     private static String filter(String playlist) {
         return filter(playlist, "https://video.example/live.m3u8");
     }

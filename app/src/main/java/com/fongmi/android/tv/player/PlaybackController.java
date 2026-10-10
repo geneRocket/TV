@@ -262,13 +262,18 @@ public class PlaybackController {
         this.format = format;
     }
 
-    public void recoverExo(ErrorEvent error) {
+    public String getRecoveryFormat(ErrorEvent error) {
         int code = error.getCode();
         if (code == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
                 || code >= PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
                 && code <= PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED) {
-            setFormat(ExoUtil.getMimeType(code));
+            return ExoUtil.getMimeType(code);
         }
+        return format;
+    }
+
+    public void recoverExo(ErrorEvent error) {
+        setFormat(getRecoveryFormat(error));
         setMediaSource();
     }
 
@@ -801,6 +806,8 @@ public class PlaybackController {
         }
         if (playbackSession == null || playbackSession.state() != state) return;
         PlaybackPhase phase = state.getPhase();
+        mediaSession.setActive(isCurrent() && phase != PlaybackPhase.IDLE && phase != PlaybackPhase.STOPPED
+                && phase != PlaybackPhase.ERROR && phase != PlaybackPhase.RELEASED);
         switch (phase) {
             case IDLE:
             case STOPPED:

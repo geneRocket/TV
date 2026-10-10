@@ -5,6 +5,8 @@
     <string name="app_exit">Press back again to exit</string>
 
     <!-- Vod -->
+    <string name="vod_load_failed">Couldn’t load videos</string>
+    <string name="download_unsupported">This playback protocol cannot be downloaded directly</string>
     <string name="vod_last">Last seen <xliff:g name="name">%s</xliff:g></string>
 
     <!-- Live -->

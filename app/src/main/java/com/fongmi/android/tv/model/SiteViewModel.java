@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.model;
 
+import com.github.catvod.net.HttpCallScope;
 import android.text.TextUtils;
 
 import androidx.lifecycle.LiveData;
@@ -32,13 +33,15 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     private static final int CANCELLED_SEARCH_TOKEN_LIMIT = 128;
 
-    private final MutableLiveData<Episode> ep;
-    private final MutableLiveData<Episode> episode;
+    private final OneShotLiveData<Episode> ep;
+    private final OneShotLiveData<Episode> episode;
     private final MutableLiveData<Result> search;
-    private final MutableLiveData<Result> action;
+    private final OneShotLiveData<Result> action;
     private final MutableLiveData<Danmu> danmaku;
-    private final MutableLiveData<Result> download;
+    private final OneShotLiveData<Result> download;
     private final TaskScope downloadRequests;
+    private volatile boolean cleared;
+    private final ConcurrentHashMap<String, Set<HttpCallScope>> searchScopes = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Set<Call>> activeSearchCalls = new ConcurrentHashMap<>();
     private final Set<String> cancelledSearchTokens = ConcurrentHashMap.newKeySet();
     private final ConcurrentLinkedDeque<String> cancelledSearchTokenOrder = new ConcurrentLinkedDeque<>();
@@ -49,12 +52,12 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     public SiteViewModel() {
         super();
-        this.ep = new MutableLiveData<>();
-        this.episode = new MutableLiveData<>();
+        this.ep = new OneShotLiveData<>();
+        this.episode = new OneShotLiveData<>();
         this.search = new MutableLiveData<>();
-        this.action = new MutableLiveData<>();
+        this.action = new OneShotLiveData<>();
         this.danmaku = new MutableLiveData<>();
-        this.download = new MutableLiveData<>();
+        this.download = new OneShotLiveData<>();
         this.downloadRequests = new TaskScope(ThreadPools.newSingle("site-download"), AppTaskScheduler.get(), error -> ThreadPools.log(error, "Download request failed."));
     }
 
@@ -114,8 +117,19 @@ public class SiteViewModel extends BaseSiteViewModel {
         submitDownloadRequest(key, flag, id);
     }
 
+    public void cancelDownload() {
+        downloadRequests.cancel(REQUEST_DOWNLOAD);
+        download.discard();
+    }
+
+    public void discardPlaybackCommands() {
+        cancelDownload();
+        ep.discard();
+        episode.discard();
+    }
+
     public void action(String key, String action) {
-        executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> SpiderRepository.get().action(key, action), this.action::setValue, this::requestFallback);
+        executeAsync(REQUEST_ACTION, Constant.TIMEOUT_PARSE_DEF, () -> SpiderRepository.get().action(key, action), data -> this.action.setValue(withHomeRequest(data, key, "")), this::requestFallback);
     }
 
     public void searchContent(Site site, String keyword, boolean quick) throws Throwable {
@@ -128,17 +142,19 @@ public class SiteViewModel extends BaseSiteViewModel {
 
     public void searchContent(Site site, String keyword, String page, String token) {
         String query = keyword == null ? "" : keyword.trim();
+        String requestToken = TextUtils.isEmpty(token) ? SearchRequestToken.next("page") : token;
         executeAsync(REQUEST_SEARCH_PAGE, Constant.TIMEOUT_VOD,
                 () -> SpiderRepository.get().searchContent(site, Trans.t2s(query), false, page,
-                        call -> trackSearchCall(token, call)), data -> {
-            if (cancelledSearchTokens.contains(token)) return;
+                        call -> trackSearchCall(requestToken, call)), data -> {
+            if (cancelledSearchTokens.contains(requestToken)) return;
             Result res = java.util.Objects.requireNonNullElseGet(data, Result::empty);
             res.setKey(site.getKey());
             res.setKeyword(query);
-            res.setRequestToken(token);
-            finishSearch(token);
+            res.setRequestPage(page);
+            res.setRequestToken(requestToken);
+            finishSearch(requestToken);
             this.result.setValue(res);
-        }, this::requestFallback);
+        }, this::categoryFallback);
     }
 
     public void cancelSearchPage(String token) {
@@ -150,9 +166,25 @@ public class SiteViewModel extends BaseSiteViewModel {
         String original = keyword == null ? "" : keyword.trim();
         String query = Trans.t2s(original);
         throwIfInterrupted();
-        Result result = SpiderRepository.get().searchContent(site, query, quick, "1", call -> trackSearchCall(token, call));
+        HttpCallScope calls = new HttpCallScope();
+        String ownerToken = token == null ? "" : token;
+        searchScopes.compute(ownerToken, (key, scopes) -> {
+            if (scopes == null) scopes = ConcurrentHashMap.newKeySet();
+            scopes.add(calls);
+            return scopes;
+        });
+        if (cleared || cancelledSearchTokens.contains(ownerToken)) calls.close();
+        Result result;
+        try {
+            result = calls.call(() -> SpiderRepository.get().searchContent(site, query, quick, "1", call -> trackSearchCall(ownerToken, call)));
+        } finally {
+            searchScopes.computeIfPresent(ownerToken, (key, scopes) -> {
+                scopes.remove(calls);
+                return scopes.isEmpty() ? null : scopes;
+            });
+        }
         throwIfInterrupted();
-        post(site, result, original, token);
+        post(site, result, original, ownerToken);
     }
 
     private void trackSearchCall(String token, Call call) {
@@ -165,7 +197,11 @@ public class SiteViewModel extends BaseSiteViewModel {
             removeSearchCall(token, call);
             return;
         }
-        activeSearchCalls.computeIfAbsent(token, key -> ConcurrentHashMap.newKeySet()).add(call);
+        activeSearchCalls.compute(token, (key, calls) -> {
+            if (calls == null) calls = ConcurrentHashMap.newKeySet();
+            calls.add(call);
+            return calls;
+        });
         if (cancelledSearchTokens.contains(token)) {
             removeSearchCall(token, call);
             call.cancel();
@@ -173,15 +209,17 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     private void removeSearchCall(String token, Call call) {
-        Set<Call> calls = activeSearchCalls.get(token);
-        if (calls == null) return;
-        calls.remove(call);
-        if (calls.isEmpty()) activeSearchCalls.remove(token, calls);
+        activeSearchCalls.computeIfPresent(token, (key, calls) -> {
+            calls.remove(call);
+            return calls.isEmpty() ? null : calls;
+        });
     }
 
     public void cancelSearch(String token) {
         if (token == null) return;
         markSearchCancelled(token);
+        Set<HttpCallScope> scopes = searchScopes.remove(token);
+        if (scopes != null) for (HttpCallScope scope : scopes) scope.close();
         Set<Call> calls = activeSearchCalls.remove(token);
         if (calls == null) return;
         for (Call call : calls) call.cancel();
@@ -202,25 +240,28 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     private void post(Site site, Result result, String keyword, String token) {
-        if (result.getList().isEmpty() || cancelledSearchTokens.contains(token)) return;
+        if (cleared || result.getList().isEmpty() || cancelledSearchTokens.contains(token)) return;
         result.setKey(site.getKey());
         result.setKeyword(keyword);
         result.setRequestToken(token);
         App.post(() -> {
-            if (!cancelledSearchTokens.contains(token)) this.search.setValue(result);
+            if (!cleared && !cancelledSearchTokens.contains(token)) this.search.setValue(result);
         });
     }
 
     private void submitDownloadRequest(String key, String flag, String id) {
-        Callable<Result> request = () -> SpiderRepository.get().playerContent(key, flag, id);
+        HttpCallScope calls = new HttpCallScope();
+        Callable<Result> request = () -> calls.call(() -> SpiderRepository.get().downloadContent(key, flag, id));
         downloadRequests.submit(REQUEST_DOWNLOAD, request, Constant.TIMEOUT_PLAY,
                 data -> download.setValue(withRequest(data, key, id, flag, "")),
                 this::requestRequestFallback,
-                Source.get()::stop);
+                calls::close);
     }
 
     private Result requestFallback(Throwable error) {
-        return error instanceof ExtractException ? Result.error(error.getMessage()) : Result.empty();
+        Result failed = error instanceof ExtractException ? Result.error(error.getMessage()) : Result.empty();
+        failed.setRequestFailed(true);
+        return failed;
     }
 
     private Result categoryFallback(Throwable error) {
@@ -236,7 +277,9 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     private Result requestRequestFallback(Throwable error) {
-        return error instanceof ExtractException ? Result.error(error.getMessage()) : emptyRequestResult();
+        Result failed = error instanceof ExtractException ? Result.error(error.getMessage()) : emptyRequestResult();
+        failed.setRequestFailed(true);
+        return failed;
     }
 
     private Result withRequest(Result result, String key, String id, String flag, String token) {
@@ -276,11 +319,13 @@ public class SiteViewModel extends BaseSiteViewModel {
     }
 
     private void throwIfInterrupted() throws InterruptedException {
-        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+        if (cleared || Thread.currentThread().isInterrupted()) throw new InterruptedException();
     }
 
     @Override
     protected void onCleared() {
+        cleared = true;
+        for (String token : searchScopes.keySet()) cancelSearch(token);
         for (String token : activeSearchCalls.keySet()) cancelSearch(token);
         activeSearchCalls.clear();
         cancelledSearchTokens.clear();

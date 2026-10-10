@@ -42,12 +42,12 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         this.requestedStartPosition = request.getStartPosition();
         this.listener = listener;
         this.phase = EnginePhase.PREPARING;
-        this.playWhenReady = true;
+        this.playWhenReady = request.isPlayWhenReady();
         this.pendingStartSeek = requestedStartPosition > 0;
         this.pendingReady = true;
         App.post(readyFallback, READY_FALLBACK_MS);
-        player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), request.getStartPosition());
-        if (phase == EnginePhase.PREPARING) player.start();
+        player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), request.getStartPosition(), playWhenReady);
+        if (phase == EnginePhase.PREPARING) { if (playWhenReady) player.start(); else player.pause(); }
     }
 
     @Override public void play() {
@@ -72,8 +72,14 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     @Override public void seekTo(long position) {
         requireActive();
+        requestedStartPosition = Math.max(position, 0);
+        if (pendingReady) {
+            pendingStartSeek = true;
+            player.seekTo(requestedStartPosition);
+            return;
+        }
         pendingStartSeek = false;
-        player.seekTo(Math.max(position, 0));
+        player.seekTo(requestedStartPosition);
     }
 
     @Override
@@ -100,7 +106,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     @Override
     public EngineSnapshot snapshot() {
-        boolean starting = phase == EnginePhase.PREPARING;
+        boolean starting = pendingReady || pendingStartSeek || phase == EnginePhase.PREPARING;
         long position = starting ? requestedStartPosition : player.getCurrentPosition();
         long buffered = starting ? requestedStartPosition : player.getBufferedPosition();
         return new EngineSnapshot(sessionId, phase, position, player.getDuration(), buffered, player.isPlaying(), player.getSpeed(), videoWidth, videoHeight);
