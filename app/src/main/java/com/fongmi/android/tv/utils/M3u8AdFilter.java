@@ -25,6 +25,8 @@ public final class M3u8AdFilter {
     private static final int MAX_CONTIGUOUS_AD_SEGMENTS = 240;
     private static final int MAX_UNBOUNDED_CUE_AD_SEGMENTS = 20;
     private static final int MAX_LOG_CONTENT_CHARS = 8000;
+    private static final java.util.regex.Pattern ISO_DATE_TIME = java.util.regex.Pattern.compile(
+            "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.(\\d{1,9}))?(Z|[+-]\\d{2}:?\\d{2})$");
     private static final int URI_AD_LIKE = 1;
     private static final int URI_STRONG_AD = 1 << 1;
     // Frame-verified on 2026-09-26; see m3u8/research/README.md. Match these
@@ -296,6 +298,7 @@ public final class M3u8AdFilter {
         int originalSegmentCount = countSegments(records);
         List<Record> originalRecords = records;
         Set<String> repeatedSegments = collectRepeatedSegments(records);
+        records = filterTimedAdRanges(records);
         records = filterAdTagSegments(records, baseUrl, vod);
         records = filterRepeatedDiscontinuityPods(records, baseUrl, vod);
         if (vod) records = filterShortAdClusters(records);
@@ -480,6 +483,8 @@ public final class M3u8AdFilter {
         Map<String, Integer> mediaGroupCounts = countMediaGroups(lines);
         int variants = 0;
         int adVariants = 0;
+        int regularVariants = 0;
+        int adRegularVariants = 0;
 
         for (int i = 0; i < lines.length; i++) {
             String line = trimLineEnd(lines[i]).trim();
@@ -522,12 +527,14 @@ public final class M3u8AdFilter {
             if (uriIndex < 0) continue;
 
             variants++;
+            regularVariants++;
             String uri = trimLineEnd(lines[uriIndex]).trim();
 
             if (isLikelyAdPlaylistUri(uri, baseUrl)) {
                 remove[i] = true;
                 remove[uriIndex] = true;
                 adVariants++;
+                adRegularVariants++;
             }
         }
 
@@ -535,6 +542,7 @@ public final class M3u8AdFilter {
         for (boolean value : remove) changed |= value;
         if (!changed) return content;
         if (variants > 0 && adVariants >= variants) return content;
+        if (regularVariants > 0 && adRegularVariants >= regularVariants) return content;
 
         StringBuilder sb = new StringBuilder(content.length());
         for (int i = 0; i < lines.length; i++) {
@@ -583,7 +591,10 @@ public final class M3u8AdFilter {
         String resolved = resolveUri(baseUrl, uri).toLowerCase(Locale.US).trim();
         int hash = resolved.indexOf('#');
         if (hash >= 0) resolved = resolved.substring(0, hash);
-        return isLikelyPlaylistResource(resolved) && isAdLikeUri(resolved);
+        // STREAM-INF/MEDIA already establish that this URI is a playlist.
+        // Extensionless endpoints still require a strong, rather than generic promo, signal.
+        return (isLikelyPlaylistResource(resolved) && isAdLikeUri(resolved))
+                || isStrongAdLikeUri(resolved);
     }
 
     private static boolean isLikelyPlaylistResource(String uri) {
@@ -670,6 +681,106 @@ public final class M3u8AdFilter {
         }
 
         return count;
+    }
+
+    private static List<Record> filterTimedAdRanges(List<Record> records) {
+        Map<String, TimedAdRange> byId = new HashMap<>();
+        for (Record record : records) {
+            if (record.segment || !record.line.startsWith("#EXT-X-DATERANGE:")) continue;
+            String id = parseAttributeString(record.line, "ID");
+            if (!isEmpty(id)) byId.computeIfAbsent(id, ignored -> new TimedAdRange()).update(record.line);
+        }
+        List<TimedAdRange> ranges = new ArrayList<>();
+        for (TimedAdRange range : byId.values()) if (range.isBoundedAd()) ranges.add(range);
+        if (ranges.isEmpty()) return records;
+
+        List<Record> kept = new ArrayList<>(records.size());
+        double time = Double.NaN;
+        for (Record record : records) {
+            if (!record.segment) {
+                if (record.line.equals("#EXT-X-DISCONTINUITY")) time = Double.NaN;
+                if (record.line.startsWith("#EXT-X-PROGRAM-DATE-TIME:")) time = parseProgramTime(record.line);
+                kept.add(record);
+                continue;
+            }
+            // Never extrapolate a wall-clock anchor through a timestamp discontinuity.
+            if (hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) time = Double.NaN;
+            String anchor = lastTag(record.tags, "#EXT-X-PROGRAM-DATE-TIME:");
+            if (!isEmpty(anchor)) time = parseProgramTime(anchor);
+            double end = time + record.duration * 1000;
+            boolean ad = false;
+            if (!Double.isNaN(time) && record.duration > 0) {
+                for (TimedAdRange range : ranges) {
+                    // A partly overlapping segment can also contain primary content.
+                    if (time >= range.start && end <= range.endTime()) { ad = true; break; }
+                }
+            }
+            if (!ad) kept.add(record);
+            time = record.duration > 0 ? end : Double.NaN;
+        }
+        return countSegments(kept) == 0 ? records : kept;
+    }
+
+    private static double parseProgramTime(String line) {
+        long value = parseDateTime(line.substring(line.indexOf(':') + 1));
+        return value == Long.MIN_VALUE ? Double.NaN : value;
+    }
+
+    private static long parseDateTime(String value) {
+        java.util.regex.Matcher match = ISO_DATE_TIME.matcher(value);
+        if (!match.matches()) return Long.MIN_VALUE;
+        String fraction = match.group(2) == null ? "000" : (match.group(2) + "000").substring(0, 3);
+        String zone = "Z".equals(match.group(3)) ? "+0000" : match.group(3).replace(":", "");
+        String normalized = match.group(1) + "." + fraction + zone;
+        java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US);
+        format.setLenient(false);
+        java.text.ParsePosition position = new java.text.ParsePosition(0);
+        java.util.Date date = format.parse(normalized, position);
+        return date != null && position.getIndex() == normalized.length() ? date.getTime() : Long.MIN_VALUE;
+    }
+
+    private static final class TimedAdRange {
+        long start = Long.MIN_VALUE;
+        long end = Long.MIN_VALUE;
+        double duration;
+        boolean ad;
+        boolean interstitial;
+        boolean invalid;
+
+        void update(String line) {
+            String clazz = parseAttributeString(line, "CLASS");
+            interstitial |= clazz.equalsIgnoreCase("com.apple.hls.interstitial");
+            ad |= containsStrongAdKeyword(clazz)
+                    || containsStrongAdKeyword(parseAttributeString(line, "X-CONTENT-TYPE"))
+                    || !isEmpty(parseAttributeString(line, "SCTE35-OUT"))
+                    || !isEmpty(parseAttributeString(line, "X-AD-ID"));
+            String startText = parseAttributeString(line, "START-DATE");
+            if (!isEmpty(startText)) {
+                long parsed = parseDateTime(startText);
+                invalid |= parsed == Long.MIN_VALUE || (start != Long.MIN_VALUE && start != parsed);
+                start = parsed;
+            }
+            String endText = parseAttributeString(line, "END-DATE");
+            if (!isEmpty(endText)) {
+                long parsed = parseDateTime(endText);
+                invalid |= parsed == Long.MIN_VALUE || (end != Long.MIN_VALUE && end != parsed);
+                end = parsed;
+            }
+            String durationText = parseAttributeString(line, "DURATION");
+            if (!isEmpty(durationText)) {
+                double parsed = parseDouble(durationText) * 1000;
+                invalid |= !Double.isFinite(parsed) || parsed <= 0 || (duration > 0 && duration != parsed);
+                duration = parsed;
+            }
+        }
+
+        double endTime() { return end != Long.MIN_VALUE ? end : start + duration; }
+
+        boolean isBoundedAd() {
+            return ad && !interstitial && !invalid && start != Long.MIN_VALUE
+                    && (end != Long.MIN_VALUE || duration > 0) && endTime() > start
+                    && (end == Long.MIN_VALUE || duration <= 0 || Math.abs(end - start - duration) < 1);
+        }
     }
 
     private static List<Record> filterAdTagSegments(List<Record> records, String baseUrl, boolean vod) {
@@ -1612,7 +1723,9 @@ public final class M3u8AdFilter {
         // interval state, rather than merely marking that single segment as an ad.
         List<String> segmentTags = new ArrayList<>();
         for (String tag : tags) {
-            if (isCueOutTag(tag) || isCueInTag(tag)) records.add(Record.plain(tag));
+            if (isCueOutTag(tag) || isCueInTag(tag) || tag.startsWith("#EXT-X-DATERANGE:")) {
+                records.add(Record.plain(tag));
+            }
             else segmentTags.add(tag);
         }
         records.add(Record.segment(segmentTags, uri, resolveHostFromResolved(resolved), resolved, duration));
@@ -2303,20 +2416,39 @@ public final class M3u8AdFilter {
         Set<Record> retained = new HashSet<>(kept);
         List<Record> restored = new ArrayList<>(kept.size());
         List<String> pendingState = new ArrayList<>();
+        double time = Double.NaN;
+        boolean needsTimeAnchor = false;
         for (Record record : original) {
             if (!record.segment) {
+                if (record.line.equals("#EXT-X-DISCONTINUITY")) time = Double.NaN;
+                if (record.line.startsWith("#EXT-X-PROGRAM-DATE-TIME:")) time = parseProgramTime(record.line);
                 if (isPlaybackStateTag(record.line)) pendingState.add(record.line);
                 else if (retained.contains(record)) restored.add(record);
                 continue;
             }
+            if (hasTagPrefix(record.tags, "#EXT-X-DISCONTINUITY")) time = Double.NaN;
+            String anchor = lastTag(record.tags, "#EXT-X-PROGRAM-DATE-TIME:");
+            if (!isEmpty(anchor)) time = parseProgramTime(anchor);
+            double nextTime = record.duration > 0 ? time + record.duration * 1000 : Double.NaN;
             List<String> segmentTags = new ArrayList<>();
             for (String tag : record.tags) {
                 if (isPlaybackStateTag(tag)) pendingState.add(tag);
                 else segmentTags.add(tag);
             }
-            if (!retained.contains(record)) continue;
+            if (!retained.contains(record)) {
+                needsTimeAnchor = !Double.isNaN(nextTime);
+                time = nextTime;
+                continue;
+            }
             List<String> tags = new ArrayList<>(pendingState);
+            if (needsTimeAnchor && isEmpty(anchor) && !Double.isNaN(time)) {
+                java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                format.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                tags.add("#EXT-X-PROGRAM-DATE-TIME:" + format.format(new java.util.Date(Math.round(time))));
+            }
             tags.addAll(segmentTags);
+            time = nextTime;
+            needsTimeAnchor = false;
             pendingState.clear();
             restored.add(new Record(true, record.line, record.host, record.resolvedUri, tags,
                     record.duration, record.adLikeUri, record.explicitAd, record.weakAdNumberUri));

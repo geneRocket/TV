@@ -1876,6 +1876,130 @@ public class M3u8AdFilterTest {
         assertOnlyAdsRemoved("unbounded URI evidence", playlist, filter(playlist), "ads/ad.ts");
     }
 
+    @Test
+    public void removesOpaqueSegmentsInsideConfirmedDateRangeUsingProgramTime() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=10\n");
+        assertOnlyAdsRemoved("dated ad", playlist, filter(playlist), "opaque1.ts", "opaque2.ts");
+    }
+
+    @Test
+    public void dateRangePositionDoesNotDetermineWhichSegmentsAreAds() {
+        String playlist = timedPlaylist("") + "#EXT-X-DATERANGE:ID=\"break\",X-CONTENT-TYPE=\"ADVERTISEMENT\",START-DATE=\"2026-10-11T00:00:05Z\",END-DATE=\"2026-10-11T00:00:15Z\"\n";
+        assertOnlyAdsRemoved("late range", playlist, filter(playlist), "opaque1.ts", "opaque2.ts");
+    }
+
+    @Test
+    public void combinesDateRangeUpdatesByIdAndSupportsTimezoneOffsets() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T08:00:05.000+08:00\"\n")
+                + "#EXT-X-DATERANGE:ID=\"break\",START-DATE=\"2026-10-11T00:00:05Z\",END-DATE=\"2026-10-11T00:00:15Z\"\n";
+        assertOnlyAdsRemoved("range update", playlist, filter(playlist), "opaque1.ts", "opaque2.ts");
+    }
+
+    @Test
+    public void preservesContentPartlyOverlappingAnAdDateRange() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:06Z\",DURATION=8\n");
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
+    }
+
+    @Test
+    public void ignoresUnconfirmedOrInvalidDateRangeBounds() {
+        for (String attrs : new String[]{
+                "START-DATE=\"2026-10-11T00:00:05Z\",PLANNED-DURATION=10",
+                "START-DATE=\"2026-02-30T00:00:05Z\",DURATION=10",
+                "START-DATE=\"2026-10-11T00:00:05Z\",END-DATE=\"2026-10-11T00:00:15Z\",DURATION=5",
+                "START-DATE=\"2026-10-11T00:00:05Z\",DURATION=1e308"}) {
+            String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\"," + attrs + "\n");
+            assertEquals(attrs, mediaEntries(playlist), mediaEntries(filter(playlist)));
+        }
+    }
+
+    @Test
+    public void conflictingRangeUpdatesDoNotRemoveContent() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=10\n")
+                + "#EXT-X-DATERANGE:ID=\"break\",START-DATE=\"2026-10-11T00:00:10Z\",DURATION=10\n";
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
+    }
+
+    @Test
+    public void appleExternalInterstitialDoesNotRemovePrimaryMediaAtMatchingTime() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"ad\",CLASS=\"com.apple.hls.interstitial\",X-CONTENT-TYPE=\"ADVERTISEMENT\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=10,X-ASSET-URI=\"https://ads.example/ad.m3u8\"\n");
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
+    }
+
+    @Test
+    public void chapterIdAloneDoesNotMakeATimedRangeAnAd() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"ad-chapter\",CLASS=\"chapter\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=10\n");
+        assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
+    }
+
+    @Test
+    public void requiresNewTimeAnchorAfterDiscontinuityForDateRangeFiltering() {
+        String playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:5\n"
+                + "#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=15\n"
+                + "#EXT-X-PROGRAM-DATE-TIME:2026-10-11T00:00:00Z\n"
+                + segment(5, "main0.ts") + segment(5, "opaque1.ts")
+                + "#EXT-X-DISCONTINUITY\n" + segment(5, "main-reset.ts")
+                + "#EXT-X-PROGRAM-DATE-TIME:2026-10-11T00:00:15Z\n"
+                + segment(5, "opaque2.ts") + segment(5, "main3.ts") + "#EXT-X-ENDLIST\n";
+        assertOnlyAdsRemoved("new anchor", playlist, filter(playlist), "opaque1.ts", "opaque2.ts");
+    }
+
+    @Test
+    public void datedAdFilteringRetainsSequenceDerivedEncryptionProtection() {
+        String playlist = timedPlaylist("#EXT-X-KEY:METHOD=AES-128,URI=\"key\"\n"
+                + "#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=10\n");
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void inlineDateRangeDoesNotMarkItsFollowingSegmentByPosition() {
+        String playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:5\n"
+                + "#EXT-X-PROGRAM-DATE-TIME:2026-10-11T00:00:00Z\n#EXTINF:5,\n"
+                + "#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=5\n"
+                + "main0.ts\n" + segment(5, "opaque1.ts") + segment(5, "main2.ts") + "#EXT-X-ENDLIST\n";
+        assertOnlyAdsRemoved("inline range", playlist, filter(playlist), "opaque1.ts");
+    }
+
+    @Test
+    public void removesExtensionlessStrongAdVariantsButPreservesWeakNames() {
+        String playlist = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nplay/main?id=1\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=1000\nplay/ads?id=2\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=1000\nplay/promo?id=3\n";
+        String filtered = M3u8AdFilter.filterAdVariantPlaylists(playlist, "https://cdn.example/master");
+        assertFalse(filtered.contains("play/ads"));
+        assertTrue(filtered.contains("play/main"));
+        assertTrue(filtered.contains("play/promo"));
+    }
+
+    @Test
+    public void keepsLastRegularVariantEvenWhenNonAdIFrameVariantExists() {
+        String playlist = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nplay/ads\n"
+                + "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,URI=\"frames/main\"\n";
+        assertEquals(playlist, M3u8AdFilter.filterAdVariantPlaylists(playlist, "https://cdn.example/master"));
+    }
+
+    @Test
+    public void removedDatedAdsPreserveOriginalWallClockTimeOfRemainingMedia() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=10\n");
+        String filtered = filter(playlist);
+        assertTrue(filtered.contains("#EXT-X-PROGRAM-DATE-TIME:2026-10-11T00:00:15.000Z\n#EXTINF:5.0,\nmain3.ts"));
+    }
+
+    @Test
+    public void removedDatedPrerollTransfersAdjustedAnchorToFirstContentSegment() {
+        String playlist = timedPlaylist("#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:00Z\",DURATION=5\n");
+        String filtered = filter(playlist);
+        assertOnlyAdsRemoved("dated preroll", playlist, filtered, "main0.ts");
+        assertTrue(filtered.contains("#EXT-X-PROGRAM-DATE-TIME:2026-10-11T00:00:05.000Z"));
+    }
+
+    private static String timedPlaylist(String range) {
+        return "#EXTM3U\n#EXT-X-TARGETDURATION:5\n" + range
+                + "#EXT-X-PROGRAM-DATE-TIME:2026-10-11T00:00:00Z\n"
+                + segment(5, "main0.ts") + segment(5, "opaque1.ts")
+                + segment(5, "opaque2.ts") + segment(5, "main3.ts") + "#EXT-X-ENDLIST\n";
+    }
+
     private static String filter(String playlist) {
         return filter(playlist, "https://video.example/live.m3u8");
     }

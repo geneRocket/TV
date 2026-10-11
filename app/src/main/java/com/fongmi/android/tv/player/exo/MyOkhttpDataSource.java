@@ -347,7 +347,7 @@ public class MyOkhttpDataSource extends BaseDataSource implements HttpDataSource
             }
             // Large or malformed responses can advertise an m3u8 MIME type. Keep playback
             // available and skip filtering instead of allocating an unbounded byte array.
-            byte[] filtered = bodyBytes == null ? null : filterM3u8Safely(bodyBytes, dataSpec.uri.toString());
+            byte[] filtered = bodyBytes == null ? null : filterM3u8Safely(bodyBytes, response.request().url().toString());
             if (bodyBytes == null) {
                 // readM3u8ForFilter restores the original stream when the safety limit is hit.
             } else if (filtered == bodyBytes) {
