@@ -16,6 +16,7 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.ActivitySettingBinding;
@@ -393,7 +394,7 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         Notify.progress(getActivity());
         Setting.putDoh(doh.toString());
         mBinding.dohText.setText(doh.getName());
-        VodConfig.load(Config.vod(), getCallback());
+        VodConfig.reload(getCallback());
     }
 
     private void onProxy(View view) {
@@ -412,7 +413,7 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         FileUtil.clearCache(new Callback() {
             @Override
             public void success() {
-                VodConfig.get().getConfig().json("").save();
+                App.execute(() -> ConfigRepository.get().clearSelectedCache(0));
                 setCacheText();
             }
         });
@@ -423,8 +424,9 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
             @Override
             public void success() {
                 setCacheText();
-                Config config = VodConfig.get().getConfig().json("").save();
-                if (!config.isEmpty()) setConfig(config);
+                type = 0;
+                Notify.progress(getActivity());
+                VodConfig.reload(getCallback());
             }
         });
         return true;

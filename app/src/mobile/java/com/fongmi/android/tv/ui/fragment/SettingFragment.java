@@ -391,7 +391,7 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
         Notify.progress(getActivity());
         Setting.putDoh(doh.toString());
         mBinding.dohText.setText(doh.getName());
-        VodConfig.load(Config.vod(), getCallback());
+        VodConfig.reload(getCallback());
     }
 
     private void onProxy(View view) {
@@ -410,7 +410,7 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
         FileUtil.clearCache(new Callback() {
             @Override
             public void success() {
-                VodConfig.get().getConfig().json("").save();
+                App.execute(() -> ConfigRepository.get().clearSelectedCache(0));
                 setCacheText();
             }
         });
@@ -421,8 +421,9 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
             @Override
             public void success() {
                 setCacheText();
-                Config config = VodConfig.get().getConfig().json("").save();
-                if (!config.isEmpty()) setConfig(config);
+                type = 0;
+                Notify.progress(getActivity());
+                VodConfig.reload(getCallback());
             }
         });
         return true;

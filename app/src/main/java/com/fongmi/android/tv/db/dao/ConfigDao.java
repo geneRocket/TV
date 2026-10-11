@@ -34,6 +34,16 @@ public abstract class ConfigDao extends BaseDao<Config> {
     @Query("DELETE FROM Config WHERE type = :type")
     public abstract void delete(int type);
 
+    @Query("UPDATE Config SET home = :home WHERE id = :id")
+    public abstract void updateHome(int id, String home);
+
+    @Query("UPDATE Config SET `parse` = :parse WHERE id = :id")
+    public abstract void updateParse(int id, String parse);
+
+    // Refresh payload only; metadata may have changed while the request was in flight.
+    @Query("UPDATE Config SET json = :json, time = :time WHERE id = :id AND url = :url AND type = :type AND time <= :started")
+    public abstract int updateCache(int id, String url, int type, String json, long time, long started);
+
     @Query("SELECT count(*) FROM Config WHERE type = :type")
     public abstract int countByType(int type);
 }

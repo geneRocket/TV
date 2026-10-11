@@ -33,6 +33,14 @@ public class Config {
     private static final Map<String, Config> URL_CACHE = new ConcurrentHashMap<>();
     private static final Map<Integer, List<Config>> TYPE_CACHE = new ConcurrentHashMap<>();
 
+    public static void cacheContent(Config item, String text, long started) {
+        int changed = AppDatabase.get().getConfigDao().updateCache(item.getId(), item.getUrl(), item.getType(), text, System.currentTimeMillis(), started);
+        if (changed > 0) {
+            // Read the persisted metadata instead of republishing the caller's old snapshot.
+            cache(AppDatabase.get().getConfigDao().findById(item.getId()));
+        }
+    }
+
     public static void clearCache() {
         ID_CACHE.clear();
         URL_CACHE.clear();
@@ -370,17 +378,30 @@ public class Config {
         });
     }
 
+    private static Config selected(int type) {
+        String url = Prefers.getString("config_" + type);
+        if (TextUtils.isEmpty(url)) return null;
+        Config item = AppDatabase.get().getConfigDao().find(url, type);
+        return item == null ? null : copy(cache(item));
+    }
+
     public static Config vod() {
+        Config selected = selected(0);
+        if (selected != null) return selected;
         Config item = TYPE_CACHE.containsKey(0) && !TYPE_CACHE.get(0).isEmpty() ? TYPE_CACHE.get(0).get(0) : AppDatabase.get().getConfigDao().findOne(0);
         return item == null ? copy(create(0)) : copy(cache(item));
     }
 
     public static Config live() {
+        Config selected = selected(1);
+        if (selected != null) return selected;
         Config item = TYPE_CACHE.containsKey(1) && !TYPE_CACHE.get(1).isEmpty() ? TYPE_CACHE.get(1).get(0) : AppDatabase.get().getConfigDao().findOne(1);
         return item == null ? copy(create(1)) : copy(cache(item));
     }
 
     public static Config wall() {
+        Config selected = selected(2);
+        if (selected != null) return selected;
         Config item = TYPE_CACHE.containsKey(2) && !TYPE_CACHE.get(2).isEmpty() ? TYPE_CACHE.get(2).get(0) : AppDatabase.get().getConfigDao().findOne(2);
         return item == null ? copy(create(2)) : copy(cache(item));
     }
@@ -434,10 +455,30 @@ public class Config {
         return cache(this);
     }
 
+    public void saveHome(String home) {
+        setHome(home);
+        if (!isEmpty()) {
+            AppDatabase.get().getConfigDao().updateHome(getId(), home);
+            cache(AppDatabase.get().getConfigDao().findById(getId()));
+        }
+    }
+
+    public void saveParse(String parse) {
+        setParse(parse);
+        if (!isEmpty()) {
+            AppDatabase.get().getConfigDao().updateParse(getId(), parse);
+            cache(AppDatabase.get().getConfigDao().findById(getId()));
+        }
+    }
+
     public Config save() {
         if (isEmpty()) return this;
         AppDatabase.get().getConfigDao().update(this);
         return cache(this);
+    }
+
+    public void activate() {
+        if (!isEmpty()) Prefers.put("config_" + getType(), getUrl());
     }
 
     public Config update() {

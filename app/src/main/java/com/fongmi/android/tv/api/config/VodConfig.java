@@ -57,6 +57,7 @@ public class VodConfig {
     private Map<String, Parse> parseMap = new HashMap<>();
     private boolean loadLive = true;
     private boolean persistCache = true;
+    private final ConfigLoadTask loads = new ConfigLoadTask();
     private Config config = new Config();
     private Parse parse;
     private String wall;
@@ -150,7 +151,12 @@ public class VodConfig {
     }
 
     public static void reload(Callback callback) {
-        get().submit(() -> get().reset().config(Config.vod()).loadConfig(callback));
+        get().submit(() -> {
+            List<Config> configs = ConfigRepository.get().selected(0);
+            VodConfig target = get().reset().config(configs.get(0));
+            if (configs.size() == 1) target.loadConfig(callback);
+            else target.setPersistCache(false).loadConfigs(configs, callback);
+        });
     }
 
     /** Clears shared state after already queued configuration work has finished. */
@@ -159,7 +165,7 @@ public class VodConfig {
     }
 
     private void submit(Runnable task) {
-        ThreadPools.executeLatestConfig("vod-config", () -> {
+        loads.submit("vod-config", () -> {
             synchronized (this) {
                 task.run();
             }
@@ -216,7 +222,8 @@ public class VodConfig {
             setLoadUrls(Collections.singletonList(config.getUrl()));
             checkJson(Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject(), callback);
         } catch (Throwable e) {
-            if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
+            ConfigLoadTask.check();
+            if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) ConfigLoadTask.post(() -> callback.error(""));
             else loadCache(callback, e);
             ThreadPools.log(e, "VOD config operation failed.");
         }
@@ -244,10 +251,12 @@ public class VodConfig {
                 mergeConfig(merged, result.object, result.config);
                 success++;
             } catch (Throwable e) {
+                ConfigLoadTask.check();
                 error = e;
                 ThreadPools.log(e, "VOD config operation failed.");
             }
         }
+        ConfigLoadTask.check();
         setLoadUrls(urls);
         if (success > 0) {
             parseConfig(merged, callback);
@@ -255,7 +264,7 @@ public class VodConfig {
         else if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
         else {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
-            App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+            ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
         }
     }
 
@@ -263,7 +272,7 @@ public class VodConfig {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
         try {
-            return OrderedParallelMapper.map(ThreadPools.config(), unique, item -> loadConfigResult(item, cache), error -> ThreadPools.log(error, "VOD config operation failed."));
+            return OrderedParallelMapper.map(ThreadPools.config(), unique, ConfigLoadTask.bind(item -> loadConfigResult(item, cache)), error -> ThreadPools.log(error, "VOD config operation failed."));
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             return Collections.emptyList();
@@ -273,11 +282,12 @@ public class VodConfig {
     private ConfigResult loadConfigResult(Config item, boolean cache) {
         try {
             if (cache && !TextUtils.isEmpty(item.getJson())) {
-                if (!item.isCache()) ThreadPools.config().execute(() -> { try { cacheConfig(item, loadObject(item.getUrl(), 0)); } catch (Throwable ignored) {} });
+                if (!item.isCache()) ConfigLoadTask.background(() -> { try { cacheConfig(item, loadObject(item.getUrl(), 0)); } catch (Throwable ignored) {} });
                 return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
             }
             return ConfigResult.success(item, loadObject(item.getUrl(), 0), true);
         } catch (Throwable e) {
+            ConfigLoadTask.check();
             if (!TextUtils.isEmpty(item.getJson())) {
                 try {
                     return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
@@ -314,7 +324,8 @@ public class VodConfig {
 
     private void cacheConfig(Config item, JsonObject object) {
         if (item == null || object == null || TextUtils.isEmpty(item.getUrl())) return;
-        item.json(object.toString()).time(System.currentTimeMillis()).save();
+        ConfigLoadTask.check();
+        Config.cacheContent(item, object.toString(), ConfigLoadTask.startedAt());
     }
 
     private void setLoadUrls(List<String> urls) {
@@ -347,6 +358,7 @@ public class VodConfig {
             try {
                 return loadObject(item.getUrl(), depth);
             } catch (Throwable e) {
+                ConfigLoadTask.check();
                 error = e;
                 ThreadPools.log(e, "VOD config operation failed.");
             }
@@ -403,16 +415,21 @@ public class VodConfig {
     }
 
     private void loadCache(Callback callback, Throwable e) {
-        if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
-        else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
+        if (!TextUtils.isEmpty(config.getJson())) {
+            setPersistCache(false);
+            checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
+        }
+        else ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
     }
 
     private void loadConfigCache(Callback callback) {
         if (config.isEmpty()) config = Config.vod();
         if (!TextUtils.isEmpty(config.getJson())) {
             Config target = config;
+            boolean expired = !config.isCache();
+            setPersistCache(false);
             parseConfig(config.getJson(), callback);
-            if (!config.isCache()) ThreadPools.config().execute(() -> {
+            if (expired) ConfigLoadTask.background(() -> {
                 try {
                     JsonObject object = loadObject(target.getUrl(), 0);
                     cacheConfig(target, object);
@@ -425,8 +442,9 @@ public class VodConfig {
     }
 
     private void checkJson(JsonObject object, Callback callback) {
+        ConfigLoadTask.check();
         if (object.has("msg") && callback != null) {
-            App.post(() -> callback.error(object.get("msg").getAsString()));
+            ConfigLoadTask.post(() -> callback.error(object.get("msg").getAsString()));
         } else if (object.has("urls")) {
             parseDepot(object, callback);
         } else {
@@ -437,7 +455,7 @@ public class VodConfig {
     private void parseDepot(JsonObject object, Callback callback) {
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
         if (items.isEmpty()) {
-            if (callback != null) App.post(() -> callback.error(ResUtil.getString(R.string.error_config_parse)));
+            if (callback != null) ConfigLoadTask.post(() -> callback.error(ResUtil.getString(R.string.error_config_parse)));
             return;
         }
         ConfigRepository.get().delete(config.getUrl());
@@ -451,17 +469,19 @@ public class VodConfig {
                 checkJson(loaded, callback);
                 return;
             } catch (Throwable e) {
+                ConfigLoadTask.check();
                 error = e;
                 ThreadPools.log(e, "VOD config operation failed.");
             }
         }
         Throwable cause = error == null ? new Throwable("No valid config") : error;
-        if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+        if (callback != null) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
     }
 
     private JsonObject loadDepotObject(Config target) throws Throwable {
         if (!TextUtils.isEmpty(target.getJson())) {
-            if (!target.isCache()) ThreadPools.config().execute(() -> refreshDepotCache(target));
+            setPersistCache(false);
+            if (!target.isCache()) ConfigLoadTask.background(() -> refreshDepotCache(target));
             return Json.parse(target.getJson()).getAsJsonObject();
         }
         JsonObject loaded = loadObject(target.getUrl(), 0);
@@ -480,13 +500,15 @@ public class VodConfig {
         try {
             parseConfig(Json.parse(text).getAsJsonObject(), callback);
         } catch (Throwable e) {
+            ConfigLoadTask.check();
             ThreadPools.log(e, "VOD config operation failed.");
-            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
+            if (callback != null) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
 
     private synchronized void parseConfig(JsonObject object, Callback callback) {
         try {
+            ConfigLoadTask.check();
             if (object.has("urls")) {
                 parseDepot(object, callback);
                 return;
@@ -499,17 +521,19 @@ public class VodConfig {
             String notice = Json.safeString(object, "notice");
             config.logo(Json.safeString(object, "logo"));
             if (persistCache) config.json(object.toString()).update();
+            config.activate();
             postSuccess(callback, notice);
         } catch (Throwable e) {
+            ConfigLoadTask.check();
             ThreadPools.log(e, "VOD config operation failed.");
-            if (callback != null) App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
+            if (callback != null) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
         }
     }
 
     private void postSuccess(Callback callback, String notice) {
         if (callback == null) return;
-        if (TextUtils.isEmpty(notice)) App.post(callback::success);
-        else App.post(() -> callback.success(notice));
+        if (TextUtils.isEmpty(notice)) ConfigLoadTask.post(callback::success);
+        else ConfigLoadTask.post(() -> callback.success(notice));
     }
 
     private void initSite(JsonObject object) {
@@ -805,16 +829,16 @@ public class VodConfig {
     public void setParse(Parse parse) {
         this.parse = parse;
         this.parse.setActivated(true);
-        config.parse(parse.getName()).save();
+        config.saveParse(parse.getName());
         for (Parse item : getParses()) item.setActivated(parse);
     }
 
     public void setHome(Site home) {
         this.home = home;
         this.home.setActivated(true);
-        config.home(isScopedSiteKey(home.getKey()) && siteCid(home.getKey(), config.getId()) != config.getId() ? home.getKey() : rawSiteKey(home.getKey())).save();
+        config.saveHome(isScopedSiteKey(home.getKey()) && siteCid(home.getKey(), config.getId()) != config.getId() ? home.getKey() : rawSiteKey(home.getKey()));
         for (Site item : getSites()) item.setActivated(home);
-        ThreadPools.config().execute(() -> {
+        ConfigLoadTask.background(() -> {
             try {
                 String api = home.getApi();
                 if (api.startsWith("http")) {

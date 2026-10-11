@@ -285,8 +285,8 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         FileUtil.clearCache(new Callback() {
             @Override
             public void success() {
-                Config config = VodConfig.get().getConfig().json("").save();
-                if (!config.isEmpty()) setConfig(config, ResUtil.getString(R.string.config_refreshed));
+                Notify.progress(getActivity());
+                VodConfig.reload(getCallback(ResUtil.getString(R.string.config_refreshed)));
             }
         });
         return true;
