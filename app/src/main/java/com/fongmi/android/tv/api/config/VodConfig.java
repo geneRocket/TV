@@ -226,7 +226,9 @@ public class VodConfig {
         try {
             if (config.isEmpty()) config = Config.vod();
             setLoadUrls(Collections.singletonList(config.getUrl()));
-            checkJson(Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject(), callback);
+            JsonObject object = Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject();
+            if (!object.has("urls")) ConfigPayloadValidator.vod(object);
+            checkJson(object, callback);
         } catch (Throwable e) {
             ConfigLoadTask.check();
             if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) ConfigLoadTask.post(() -> callback.error(""));
@@ -384,6 +386,7 @@ public class VodConfig {
     private void cacheConfig(Config item, JsonObject object) {
         if (item == null || object == null || TextUtils.isEmpty(item.getUrl())) return;
         ConfigLoadTask.check();
+        ConfigPayloadValidator.vod(object);
         Config.cacheContent(item, object.toString(), ConfigLoadTask.startedAt());
     }
 
@@ -405,7 +408,10 @@ public class VodConfig {
         if (depth > 5) throw new IllegalStateException("Too many redirects.");
         JsonObject object = Json.parse(Decoder.getJson(url)).getAsJsonObject();
         if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
-        if (!object.has("urls")) return object;
+        if (!object.has("urls")) {
+            ConfigPayloadValidator.vod(object);
+            return object;
+        }
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
         if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
         return loadDepot(items, depth + 1);
@@ -572,6 +578,7 @@ public class VodConfig {
                 parseDepot(object, callback);
                 return;
             }
+            ConfigPayloadValidator.vod(object);
             initSite(object);
             initParse(object);
             initOther(object);

@@ -5,6 +5,7 @@ import android.system.Os;
 import android.util.Base64;
 
 import com.fongmi.android.tv.utils.BoundedCache;
+import com.fongmi.android.tv.utils.RemoteContentValidator;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Path;
@@ -83,7 +84,9 @@ public class Module {
     }
 
     public String getCached(String name) {
-        return cache.get(name);
+        String content = cache.get(name);
+        if (content != null && isRemote(name)) refresh(name);
+        return content;
     }
 
     public boolean isRemote(String name) {
@@ -116,6 +119,7 @@ public class Module {
                 byte[] data = response.body().bytes();
                 if (data.length == 0) return cache(url);
                 String content = new String(data, StandardCharsets.UTF_8);
+                if (RemoteContentValidator.isHtml(content)) return cache(url);
                 if (cacheable) write(file, data);
                 return content;
             }

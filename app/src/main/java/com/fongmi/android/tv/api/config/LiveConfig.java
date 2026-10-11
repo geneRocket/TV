@@ -181,7 +181,8 @@ public class LiveConfig {
     private void loadConfig(Callback callback) {
         try {
             if (config.isEmpty()) config(Config.live());
-            parseConfig(Decoder.getJson(config.getUrl()), callback);
+            parseConfigOrThrow(Decoder.getJson(config.getUrl()));
+            if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
             if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) ConfigLoadTask.post(() -> callback.error(""));
@@ -382,13 +383,18 @@ public class LiveConfig {
     private void cacheConfig(Config item, String text) {
         if (item == null || TextUtils.isEmpty(text) || TextUtils.isEmpty(item.getUrl())) return;
         ConfigLoadTask.check();
+        if (Json.invalid(text)) validateText(item.getUrl(), text);
+        else ConfigPayloadValidator.live(Json.parse(text).getAsJsonObject());
         Config.cacheContent(item, text, ConfigLoadTask.startedAt());
     }
 
     private JsonObject loadObject(JsonObject object, int depth) throws Throwable {
         if (depth > 5) throw new IllegalStateException("Too many redirects.");
         if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
-        if (!object.has("urls")) return object;
+        if (!object.has("urls")) {
+            ConfigPayloadValidator.live(object);
+            return object;
+        }
         List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
         if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
         return loadDepot(items, depth + 1);
@@ -568,10 +574,24 @@ public class LiveConfig {
         }
     }
 
+    private void validateText(String url, String text) {
+        Live candidate = new Live(parseName(url), url).sync();
+        LiveParser.text(candidate, text);
+        requireChannels(candidate);
+    }
+
+    private void requireChannels(Live live) {
+        for (Group group : live.getGroups()) {
+            for (Channel channel : group.getChannel()) if (!channel.getUrls().isEmpty()) return;
+        }
+        throw new IllegalStateException("Invalid live playlist; keeping cached configuration");
+    }
+
     private void parseTextOrThrow(String text) throws Throwable {
         ConfigLoadTask.check();
         Live live = new Live(parseName(config.getUrl()), config.getUrl()).sync();
         LiveParser.text(live, text);
+        requireChannels(live);
         lives.add(live);
         liveMap.put(live.getName(), live);
         setHome(live, true);
@@ -581,6 +601,7 @@ public class LiveConfig {
 
     private void parseConfigOrThrow(JsonObject object) throws Throwable {
         ConfigLoadTask.check();
+        ConfigPayloadValidator.live(object);
         initLive(object);
         initOther(object);
         preloadJars(object);
