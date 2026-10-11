@@ -104,11 +104,12 @@ public class JarLoader {
         }
     }
 
-    private File download(String url) {
+    private File download(String url, String md5) {
         try {
             try (Response response = OkHttp.newCall(url).execute()) {
-                if (!response.isSuccessful()) return Path.jar(url);
-                return response.body() == null ? Path.jar(url) : Path.write(Path.jar(url), response.body().bytes());
+                if (!response.isSuccessful() || response.body() == null) return Path.jar(url);
+                JarCache.replace(Path.jar(url), response.body().bytes(), md5);
+                return Path.jar(url);
             }
         } catch (Exception e) {
             return Path.jar(url);
@@ -139,7 +140,7 @@ public class JarLoader {
             } else if (jarUrl.startsWith("img+")) {
                 load(key, Decoder.getSpider(jarUrl));
             } else if (jarUrl.startsWith("http")) {
-                load(key, download(jarUrl));
+                load(key, download(jarUrl, md5));
             } else if (jarUrl.startsWith("file")) {
                 load(key, Path.local(jarUrl));
             } else {
@@ -153,7 +154,7 @@ public class JarLoader {
         try {
             String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
             if (md5.length() > 0 && Util.equals(jarUrl, md5)) return;
-            download(jarUrl);
+            download(jarUrl, md5);
         } catch (Throwable ignored) {
         }
     }
