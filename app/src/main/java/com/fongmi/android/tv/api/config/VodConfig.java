@@ -15,8 +15,10 @@ import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.repository.SiteRepository;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.OrderedParallelMapper;
+import com.fongmi.android.tv.utils.CacheFirstLoader;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -57,6 +59,8 @@ public class VodConfig {
     private Map<String, Parse> parseMap = new HashMap<>();
     private boolean loadLive = true;
     private boolean persistCache = true;
+    private final Map<Integer, JsonObject> loadedObjects = new HashMap<>();
+    private List<Config> selectedConfigs = new ArrayList<>();
     private final ConfigLoadTask loads = new ConfigLoadTask();
     private Config config = new Config();
     private Parse parse;
@@ -197,6 +201,8 @@ public class VodConfig {
     public synchronized VodConfig clear() {
         this.wall = null;
         this.home = null;
+        this.loadedObjects.clear();
+        this.selectedConfigs.clear();
         this.parse = null;
         this.ads.clear();
         this.doh.clear();
@@ -239,6 +245,7 @@ public class VodConfig {
     }
 
     private void loadConfigs(List<Config> configs, Callback callback, boolean cache) {
+        selectedConfigs = new ArrayList<>(configs);
         List<String> urls = new ArrayList<>();
         JsonObject merged = new JsonObject();
         Throwable error = null;
@@ -247,6 +254,7 @@ public class VodConfig {
             try {
                 if (result.error != null) throw result.error;
                 if (result.cacheable) cacheConfig(result.config, result.object);
+                loadedObjects.put(result.config.getId(), result.object.deepCopy());
                 urls.add(result.config.getUrl());
                 mergeConfig(merged, result.object, result.config);
                 success++;
@@ -257,7 +265,7 @@ public class VodConfig {
             }
         }
         ConfigLoadTask.check();
-        setLoadUrls(urls);
+        setLoadUrls(cache ? getConfigUrls(configs) : urls);
         if (success > 0) {
             parseConfig(merged, callback);
         }
@@ -271,20 +279,71 @@ public class VodConfig {
     private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
+        if (cache) return CacheFirstLoader.load(unique, this::readCachedConfig,
+                item -> !item.isCache(), item -> ConfigLoadTask.background(() -> refreshDepotCache(item)),
+                this::fetchMissingConfig, () -> loadConfigResults(unique, false));
         try {
-            return OrderedParallelMapper.map(ThreadPools.config(), unique, ConfigLoadTask.bind(item -> loadConfigResult(item, cache)), error -> ThreadPools.log(error, "VOD config operation failed."));
+            return OrderedParallelMapper.map(ThreadPools.config(), unique, ConfigLoadTask.bind(this::loadConfigResult), error -> ThreadPools.log(error, "VOD config operation failed."));
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             return Collections.emptyList();
         }
     }
 
-    private ConfigResult loadConfigResult(Config item, boolean cache) {
-        try {
-            if (cache && !TextUtils.isEmpty(item.getJson())) {
-                if (!item.isCache()) ConfigLoadTask.background(() -> { try { cacheConfig(item, loadObject(item.getUrl(), 0)); } catch (Throwable ignored) {} });
-                return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
+    private void fetchMissingConfig(Config item) {
+        ConfigLoadTask.background(() -> {
+            ConfigResult result = loadConfigResult(item);
+            ConfigLoadTask.check();
+            if (result.error != null) {
+                ThreadPools.log(result.error, "Missing config fetch failed.");
+                return;
             }
+            if (result.cacheable) cacheConfig(item, result.object);
+            ConfigLoadTask.continueLoad(() -> appendMissingConfig(result));
+        });
+    }
+
+    private synchronized void appendMissingConfig(ConfigResult result) {
+        ConfigLoadTask.check();
+        try {
+            loadedObjects.put(result.config.getId(), result.object.deepCopy());
+            JsonObject added = new JsonObject();
+            mergeConfig(added, result.object, result.config);
+            initSite(added);
+            Map<Integer, Integer> order = new HashMap<>();
+            for (int index = 0; index < selectedConfigs.size(); index++) order.put(selectedConfigs.get(index).getId(), index);
+            sites.sort(java.util.Comparator.comparingInt(site -> order.getOrDefault(siteCid(site.getKey(), config.getId()), Integer.MAX_VALUE)));
+            initParse(added);
+            JsonObject merged = new JsonObject();
+            for (Config item : selectedConfigs) {
+                JsonObject object = loadedObjects.get(item.getId());
+                if (object != null) mergeConfig(merged, object, item);
+            }
+            // Rebuild global rules in selection order while retaining existing Site instances.
+            flags.clear();
+            initOther(merged);
+            preloadJars(added);
+            if (loadLive && merged.has("lives") && LiveConfig.get().needSync(result.config.getUrl())) LiveConfig.get().parse(merged);
+            ConfigLoadTask.post(RefreshEvent::config);
+        } catch (Throwable error) {
+            ConfigLoadTask.check();
+            ThreadPools.log(error, "Missing config load failed.");
+        }
+    }
+
+    private ConfigResult readCachedConfig(Config item) {
+        ConfigLoadTask.check();
+        if (TextUtils.isEmpty(item.getJson())) return null;
+        try {
+            return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
+        } catch (Throwable error) {
+            ConfigLoadTask.check();
+            return null;
+        }
+    }
+
+    private ConfigResult loadConfigResult(Config item) {
+        try {
             return ConfigResult.success(item, loadObject(item.getUrl(), 0), true);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -647,7 +706,7 @@ public class VodConfig {
     }
 
     private void initOther(JsonObject object) {
-        if (parses.size() > 0) {
+        if (parses.size() > 0 && !parseMap.containsKey(Parse.god().getName())) {
             Parse god = Parse.god();
             parses.add(0, god);
             parseMap.put(god.getName(), god);

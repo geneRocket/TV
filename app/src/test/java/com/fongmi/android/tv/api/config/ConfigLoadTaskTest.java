@@ -75,4 +75,23 @@ public class ConfigLoadTaskTest {
             session.cancel(); finish.countDown(); executor.shutdownNow(); client.connectionPool().evictAll();
         }
     }
+    @Test public void missingConfigContinuationRunsAfterTheInitialWorkerFinishes() {
+        ConfigLoadTask.Session session = new ConfigLoadTask.Session();
+        java.util.List<Runnable> pending = new java.util.ArrayList<>();
+        AtomicInteger appended = new AtomicInteger();
+        session.run(() -> ConfigLoadTask.continueLoad(appended::incrementAndGet, pending::add));
+        assertEquals(0, appended.get());
+        pending.get(0).run();
+        assertEquals(1, appended.get());
+    }
+
+    @Test public void switchingConfigDiscardsAnAlreadyQueuedMissingConfigContinuation() {
+        ConfigLoadTask.Session session = new ConfigLoadTask.Session();
+        java.util.List<Runnable> pending = new java.util.ArrayList<>();
+        AtomicInteger appended = new AtomicInteger();
+        session.run(() -> ConfigLoadTask.continueLoad(appended::incrementAndGet, pending::add));
+        session.cancel();
+        pending.get(0).run();
+        assertEquals(0, appended.get());
+    }
 }

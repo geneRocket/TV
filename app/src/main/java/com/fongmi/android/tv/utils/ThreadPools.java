@@ -20,6 +20,7 @@ public final class ThreadPools {
     private static final ConcurrencyBudget BUDGET = ConcurrencyBudget.current();
     private static final ExecutorService GENERAL = createQueued("general", BUDGET.general);
     private static final ExecutorService CONFIG = createQueued("config", BUDGET.config);
+    private static final ExecutorService CONFIG_REFRESH = createQueued("config-refresh", 2);
     private static final ExecutorService CONFIG_LOAD = createQueued("config-load", 1);
     private static final ExecutorService LOADER = createQueued("loader", BUDGET.loader);
     private static final ExecutorService RECOMMEND = createQueued("recommend", 1);
@@ -65,6 +66,10 @@ public final class ThreadPools {
             log(error, "General executor is shut down; task was rejected.");
             return false;
         }
+    }
+
+    public static ExecutorService configRefresh() {
+        return CONFIG_REFRESH;
     }
 
     public static ExecutorService configLoad() {

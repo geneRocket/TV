@@ -41,7 +41,20 @@ public final class ConfigLoadTask {
 
     public static void background(Runnable task) {
         Session session = CURRENT.get();
-        ThreadPools.config().execute(() -> {
+        ThreadPools.configRefresh().execute(() -> {
+            if (session == null) task.run();
+            else session.run(task);
+        });
+    }
+
+    /** Resume on the state owner without cancelling the current configuration generation. */
+    static void continueLoad(Runnable task) {
+        continueLoad(task, ThreadPools.configLoad());
+    }
+
+    static void continueLoad(Runnable task, java.util.concurrent.Executor executor) {
+        Session session = CURRENT.get();
+        executor.execute(() -> {
             if (session == null) task.run();
             else session.run(task);
         });
