@@ -26,6 +26,13 @@ public final class CategoryRequest {
         return new CategoryRequest(key, typeId, page, extend);
     }
 
+    public boolean sameContent(CategoryRequest other) {
+        return other != null
+                && TextUtils.equals(key, other.key)
+                && TextUtils.equals(typeId, other.typeId)
+                && TextUtils.equals(extend, other.extend);
+    }
+
     public boolean matches(Result result) {
         return result != null
                 && TextUtils.equals(key, result.getKey())

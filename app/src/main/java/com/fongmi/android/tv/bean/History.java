@@ -474,6 +474,7 @@ public class History {
     }
 
     public static boolean isNewerOrBetterSameVersion(History item, History old) {
+        if (item == null) return false;
         if (old == null) return true;
         if (item.getCreateTime() != old.getCreateTime()) return item.getCreateTime() > old.getCreateTime();
         if (old.getPosition() <= 0 && item.getPosition() > 0) return true;

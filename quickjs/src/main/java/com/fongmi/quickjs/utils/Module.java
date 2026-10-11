@@ -29,6 +29,8 @@ import okhttp3.Headers;
 
 public class Module {
 
+    private static final Object CACHE_WRITE_LOCK = new Object();
+
     private static final long CACHE_TTL = 15 * 60 * 1000L;
     private static final long RETRY_INTERVAL = 60 * 1000L;
     private static final int REFRESH_THREADS = 5;
@@ -40,6 +42,8 @@ public class Module {
     private final BoundedCache<String, Long> attempts;
     private final Set<String> refreshing;
     private final ExecutorService executor;
+    private volatile boolean closed;
+    private final ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<String>> downloads = new ConcurrentHashMap<>();
 
     private static class Loader {
         static volatile Module INSTANCE = new Module();
@@ -47,6 +51,18 @@ public class Module {
 
     public static Module get() {
         return Loader.INSTANCE;
+    }
+
+    public static void clearCache(Runnable clearDisk) {
+        synchronized (CACHE_WRITE_LOCK) {
+            Module old = Loader.INSTANCE;
+            old.closed = true;
+            old.executor.shutdownNow();
+            old.cache.clear();
+            old.attempts.clear();
+            try { clearDisk.run(); }
+            finally { Loader.INSTANCE = new Module(); }
+        }
     }
 
     public Module() {
@@ -79,7 +95,9 @@ public class Module {
             return cached;
         }
         String content = load(name);
-        if (!content.isEmpty()) cache.put(name, content);
+        synchronized (CACHE_WRITE_LOCK) {
+            if (!closed && !content.isEmpty()) cache.put(name, content);
+        }
         return content;
     }
 
@@ -110,6 +128,27 @@ public class Module {
     }
 
     private String download(String url) {
+        if (closed) return "";
+        java.util.concurrent.CompletableFuture<String> pending = new java.util.concurrent.CompletableFuture<>();
+        java.util.concurrent.CompletableFuture<String> previous = downloads.putIfAbsent(url, pending);
+        if (previous != null) {
+            try { return previous.get(); }
+            catch (InterruptedException error) { Thread.currentThread().interrupt(); return cache(url); }
+            catch (java.util.concurrent.ExecutionException error) { return cache(url); }
+        }
+        try {
+            String content = downloadContent(url);
+            pending.complete(content);
+            return content;
+        } catch (Throwable error) {
+            pending.completeExceptionally(error);
+            throw error;
+        } finally {
+            downloads.remove(url, pending);
+        }
+    }
+
+    private String downloadContent(String url) {
         try {
             Uri uri = Uri.parse(url);
             File file = file(url);
@@ -120,7 +159,10 @@ public class Module {
                 if (data.length == 0) return cache(url);
                 String content = new String(data, StandardCharsets.UTF_8);
                 if (RemoteContentValidator.isHtml(content)) return cache(url);
-                if (cacheable) write(file, data);
+                synchronized (CACHE_WRITE_LOCK) {
+                    if (closed) return "";
+                    if (cacheable) write(file, data);
+                }
                 return content;
             }
         } catch (Exception e) {
@@ -129,6 +171,7 @@ public class Module {
     }
 
     private void refresh(String url) {
+        if (closed) return;
         File file = file(url);
         long now = System.currentTimeMillis();
         if (file.exists() && now - file.lastModified() < CACHE_TTL) return;
@@ -140,7 +183,9 @@ public class Module {
             executor.execute(() -> {
                 try {
                     String content = download(url);
-                    if (!content.isEmpty()) cache.put(url, content);
+                    synchronized (CACHE_WRITE_LOCK) {
+                        if (!closed && !content.isEmpty()) cache.put(url, content);
+                    }
                 } finally {
                     refreshing.remove(url);
                 }

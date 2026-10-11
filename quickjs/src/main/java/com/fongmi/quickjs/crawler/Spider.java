@@ -61,7 +61,7 @@ public class Spider extends com.github.catvod.crawler.Spider {
     }
 
     private <T> Future<T> submit(Callable<T> callable) {
-        return executor.submit(callable);
+        return executor.submit(com.github.catvod.net.HttpCallScope.bind(callable));
     }
 
     private Object call(String func, Object... args) throws Exception {

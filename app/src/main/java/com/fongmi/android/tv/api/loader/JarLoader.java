@@ -40,7 +40,7 @@ public class JarLoader {
         locks = new ConcurrentHashMap<>();
     }
 
-    public void clear() {
+    public synchronized void clear() {
         for (Spider spider : spiders.values()) ThreadPools.loader().execute(spider::destroy);
         loaders.clear();
         methods.clear();
@@ -49,8 +49,14 @@ public class JarLoader {
         recent = null;
     }
 
-    public void clear(String key) {
+    public synchronized void clear(String key) {
         ConcurrentHashMap<String, Boolean> jars = new ConcurrentHashMap<>();
+        for (String lockKey : locks.keySet()) {
+            if (lockKey.length() > 32 && lockKey.substring(32).equals(key)) {
+                locks.remove(lockKey);
+                jars.put(lockKey.substring(0, 32), true);
+            }
+        }
         spiders.entrySet().removeIf(entry -> {
             Spider spider = entry.getValue();
             if (spider == null || !key.equals(spider.siteKey)) return false;
@@ -73,15 +79,28 @@ public class JarLoader {
         this.recent = recent;
     }
 
-    private void load(String key, File file) {
+    private synchronized Object lockFor(String key) {
+        return locks.computeIfAbsent(key, k -> new Object());
+    }
+
+    private synchronized boolean ownsLock(String key, Object lock) {
+        return locks.get(key) == lock;
+    }
+
+    private void load(String key, File file, Object lock) {
         if (Thread.interrupted()) return;
+        if (!ownsLock(key, lock)) return;
         if (!file.exists()) return;
         file.setReadOnly();
         String cachePath = Path.jar().getAbsolutePath();
         DexClassLoader loader = new DexClassLoader(file.getAbsolutePath(), cachePath, cachePath, App.get().getClassLoader());
         invokeInit(loader);
-        putProxy(key, loader);
-        loaders.put(key, loader);
+        Method proxy = getProxy(loader);
+        synchronized (this) {
+            if (!ownsLock(key, lock)) return;
+            if (proxy != null) methods.put(key, proxy);
+            loaders.put(key, loader);
+        }
     }
 
     private void invokeInit(DexClassLoader loader) {
@@ -94,14 +113,14 @@ public class JarLoader {
         }
     }
 
-    private void putProxy(String key, DexClassLoader loader) {
+    private Method getProxy(DexClassLoader loader) {
         try {
             Class<?> clz = loader.loadClass("com.github.catvod.spider.Proxy");
-            Method method = clz.getMethod("proxy", Map.class);
-            methods.put(key, method);
+            return clz.getMethod("proxy", Map.class);
         } catch (Throwable e) {
             e.printStackTrace();
         }
+        return null;
     }
 
     private File download(String url, String md5) {
@@ -122,30 +141,33 @@ public class JarLoader {
         String[] texts = jar.split(";md5;");
         String md5Url = texts.length > 1 ? texts[1].trim() : "";
         String jarUrl = texts[0];
+        Object lock = lockFor(key);
         
         File file = Path.jar(jarUrl);
         if (file.exists() && file.length() > 0) {
-            synchronized (locks.computeIfAbsent(key, k -> new Object())) {
-                if (!loaders.containsKey(key)) load(key, file);
+            synchronized (lock) {
+                if (!ownsLock(key, lock)) return;
+                if (!loaders.containsKey(key)) load(key, file, lock);
             }
             if (jarUrl.startsWith("http")) ThreadPools.loader().execute(() -> checkUpdate(jarUrl, md5Url));
             return;
         }
 
-        synchronized (locks.computeIfAbsent(key, k -> new Object())) {
+        synchronized (lock) {
+            if (!ownsLock(key, lock)) return;
             if (loaders.containsKey(key)) return;
             String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
             if (md5.length() > 0 && Util.equals(jarUrl, md5)) {
-                load(key, Path.jar(jarUrl));
+                load(key, Path.jar(jarUrl), lock);
             } else if (jarUrl.startsWith("img+")) {
-                load(key, Decoder.getSpider(jarUrl));
+                load(key, Decoder.getSpider(jarUrl), lock);
             } else if (jarUrl.startsWith("http")) {
-                load(key, download(jarUrl, md5));
+                load(key, download(jarUrl, md5), lock);
             } else if (jarUrl.startsWith("file")) {
-                load(key, Path.local(jarUrl));
+                load(key, Path.local(jarUrl), lock);
             } else {
                 String converted = UrlUtil.convert(jarUrl);
-                if (!jarUrl.equals(converted)) parseJar(key, converted);
+                if (ownsLock(key, lock) && !jarUrl.equals(converted)) parseJar(key, converted);
             }
         }
     }
@@ -175,7 +197,9 @@ public class JarLoader {
         String spKey = jaKey + key;
         Spider spider = spiders.get(spKey);
         if (spider != null) return spider;
-        synchronized (locks.computeIfAbsent(spKey, k -> new Object())) {
+        Object lock = lockFor(spKey);
+        synchronized (lock) {
+            if (!ownsLock(spKey, lock)) return new SpiderNull();
             spider = spiders.get(spKey);
             if (spider != null) return spider;
             try {
@@ -187,7 +211,14 @@ public class JarLoader {
                 spider = (Spider) loader.loadClass("com.github.catvod.spider." + spiderName).newInstance();
                 spider.siteKey = key;
                 spider.init(App.get(), ext);
-                spiders.put(spKey, spider);
+                synchronized (this) {
+                    if (!ownsLock(spKey, lock)) {
+                        Spider discarded = spider;
+                        ThreadPools.loader().execute(discarded::destroy);
+                        return new SpiderNull();
+                    }
+                    spiders.put(spKey, spider);
+                }
                 return spider;
             } catch (Throwable e) {
                 e.printStackTrace();

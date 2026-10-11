@@ -645,6 +645,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void getDetail(Vod item) {
+        capturePlaybackPosition();
+        mViewModel.discardPlaybackCommands();
         getIntent().putExtra("key", item.getSiteKey());
         getIntent().putExtra("pic", item.getVodPic());
         getIntent().putExtra("id", item.getVodId());
@@ -655,6 +657,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.reset();
         if (mPlaybackCoordinator != null) mPlaybackCoordinator.stop();
         else mPlayers.stop();
+        mHistoryGate.reset();
+        mFlagAdapter.addAll(new ArrayList<>());
+        setEpisodeAdapter(new ArrayList<>());
+        mPlaybackCoordinator.setEpisodes(new ArrayList<>());
+        mQualityAdapter.addAll(Result.empty());
         clearDanmakuView();
         getDetail();
     }

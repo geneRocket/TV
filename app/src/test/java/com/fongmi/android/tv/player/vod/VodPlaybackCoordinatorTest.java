@@ -521,7 +521,9 @@ public class VodPlaybackCoordinatorTest {
         Runnable deadline = scheduler.task;
         resolver.resolve(resolver.lastRequestId);
         assertTrue(deadline == scheduler.task);
+        int stopsBeforeTimeout = engine.stops;
         deadline.run();
+        assertEquals(stopsBeforeTimeout + 1, engine.stops);
         assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 0, 100));
         assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
@@ -761,6 +763,7 @@ public class VodPlaybackCoordinatorTest {
         private float speed;
         private int pauses;
         private int plays;
+        private int stops;
         private long seekPosition;
         private Listener listener;
         private EngineSnapshot snapshot = EngineSnapshot.EMPTY;
@@ -773,7 +776,7 @@ public class VodPlaybackCoordinatorTest {
         @Override public void play() { plays++; }
         @Override public void pause() { pauses++; }
         @Override public void seekTo(long position) { seekPosition = position; }
-        @Override public void stop() {}
+        @Override public void stop() { stops++; }
         @Override public void setSpeed(float speed) { this.speed = speed; }
         @Override public void setTrack(Track track) {}
         @Override public EngineSnapshot snapshot() {

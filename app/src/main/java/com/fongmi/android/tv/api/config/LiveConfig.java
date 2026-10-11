@@ -324,9 +324,12 @@ public class LiveConfig {
             if (Json.invalid(item.getJson())) {
                 Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
                 LiveParser.text(live, item.getJson());
+                requireChannels(live);
                 return ConfigResult.live(item, live);
             }
-            return ConfigResult.json(item, Json.parse(item.getJson()).getAsJsonObject(), false);
+            JsonObject object = Json.parse(item.getJson()).getAsJsonObject();
+            ConfigPayloadValidator.live(object);
+            return ConfigResult.json(item, object, false);
         } catch (Throwable error) {
             ConfigLoadTask.check();
             return null;
@@ -345,17 +348,8 @@ public class LiveConfig {
             return ConfigResult.json(item, loadObject(Json.parse(text).getAsJsonObject(), 0), true);
         } catch (Throwable e) {
             ConfigLoadTask.check();
-            if (!TextUtils.isEmpty(item.getJson())) {
-                try {
-                    if (Json.invalid(item.getJson())) {
-                        Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
-                        LiveParser.text(live, item.getJson());
-                        return ConfigResult.live(item, live);
-                    }
-                    return ConfigResult.json(item, Json.parse(item.getJson()).getAsJsonObject(), false);
-                } catch (Throwable ignored) {
-                }
-            }
+            ConfigResult cached = readCachedConfig(item);
+            if (cached != null) return cached;
             return ConfigResult.error(item, e);
         }
     }

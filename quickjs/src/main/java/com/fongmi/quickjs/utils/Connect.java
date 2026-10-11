@@ -26,7 +26,7 @@ public class Connect {
 
     public static Call to(String url, Req req) {
         OkHttpClient client = OkHttp.client(req.isRedirect(), req.getTimeout());
-        return client.newCall(getRequest(url, req, Headers.of(req.getHeader())));
+        return com.github.catvod.net.HttpCallScope.track(client.newCall(getRequest(url, req, Headers.of(req.getHeader()))));
     }
 
     public static JSObject success(QuickJSContext ctx, Req req, Response res) {

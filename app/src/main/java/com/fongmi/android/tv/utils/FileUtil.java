@@ -148,7 +148,7 @@ public class FileUtil {
 
     public static void clearCache(Callback callback) {
         App.execute(() -> {
-            Path.clear(Path.cache());
+            com.fongmi.quickjs.utils.Module.clearCache(() -> Path.clear(Path.cache()));
             if (callback != null) App.post(callback::success);
         });
     }

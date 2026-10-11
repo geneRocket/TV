@@ -39,6 +39,13 @@ public class Req {
         return buffer == null ? 0 : buffer;
     }
 
+    public boolean canUseModuleCache() {
+        return getBuffer() == 0 && isRedirect()
+                && (method == null || method.isEmpty() || method.equalsIgnoreCase("get"))
+                && (headers == null || headers.isJsonNull()
+                || (headers.isJsonObject() && headers.getAsJsonObject().size() == 0));
+    }
+
     public Integer getRedirect() {
         return redirect == null ? 1 : redirect;
     }

@@ -46,17 +46,17 @@ public class VodConfig {
 
     private List<Doh> doh = new ArrayList<>();
     private List<Rule> rules = new ArrayList<>();
-    private List<Site> sites = new ArrayList<>();
-    private List<Parse> parses = new ArrayList<>();
-    private List<String> flags = new ArrayList<>();
+    private final List<Site> sites = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<Parse> parses = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile List<String> flags = new ArrayList<>();
     private List<String> ads = new ArrayList<>();
     private List<Header> headers = new ArrayList<>();
     private List<Proxy> proxy = new ArrayList<>();
     private List<String> hosts = new ArrayList<>();
     private List<String> ruleHosts = new ArrayList<>();
     private List<String> loadUrls = new ArrayList<>();
-    private Map<String, Site> siteMap = new HashMap<>();
-    private Map<String, Parse> parseMap = new HashMap<>();
+    private final Map<String, Site> siteMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Parse> parseMap = new java.util.concurrent.ConcurrentHashMap<>();
     private boolean loadLive = true;
     private boolean persistCache = true;
     private final Map<Integer, JsonObject> loadedObjects = new HashMap<>();
@@ -215,7 +215,7 @@ public class VodConfig {
         this.siteMap.clear();
         this.parseMap.clear();
         this.sites.clear();
-        this.flags.clear();
+        this.flags = new ArrayList<>();
         this.parses.clear();
         this.loadLive = true;
         BaseLoader.get().clear();
@@ -322,7 +322,6 @@ public class VodConfig {
                 if (object != null) mergeConfig(merged, object, item);
             }
             // Rebuild global rules in selection order while retaining existing Site instances.
-            flags.clear();
             initOther(merged);
             preloadJars(added);
             if (loadLive && merged.has("lives") && LiveConfig.get().needSync(result.config.getUrl())) LiveConfig.get().parse(merged);
@@ -337,7 +336,9 @@ public class VodConfig {
         ConfigLoadTask.check();
         if (TextUtils.isEmpty(item.getJson())) return null;
         try {
-            return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
+            JsonObject object = Json.parse(item.getJson()).getAsJsonObject();
+            ConfigPayloadValidator.vod(object);
+            return ConfigResult.success(item, object, false);
         } catch (Throwable error) {
             ConfigLoadTask.check();
             return null;
@@ -349,13 +350,8 @@ public class VodConfig {
             return ConfigResult.success(item, loadObject(item.getUrl(), 0), true);
         } catch (Throwable e) {
             ConfigLoadTask.check();
-            if (!TextUtils.isEmpty(item.getJson())) {
-                try {
-                    return ConfigResult.success(item, Json.parse(item.getJson()).getAsJsonObject(), false);
-                } catch (Throwable ignored) {
-                    // Fall through to the original fetch error.
-                }
-            }
+            ConfigResult cached = readCachedConfig(item);
+            if (cached != null) return cached;
             return ConfigResult.error(item, e);
         }
     }
@@ -816,11 +812,11 @@ public class VodConfig {
     }
 
     public List<Site> getSites() {
-        return sites == null ? Collections.emptyList() : sites;
+        return new ArrayList<>(sites);
     }
 
     public List<Parse> getParses() {
-        return parses == null ? Collections.emptyList() : parses;
+        return new ArrayList<>(parses);
     }
 
     public List<Parse> getParses(int type) {
@@ -841,7 +837,7 @@ public class VodConfig {
     }
 
     private void setFlags(List<String> flags) {
-        this.flags.addAll(flags);
+        this.flags = new ArrayList<>(flags);
     }
 
     public List<String> getAds() {

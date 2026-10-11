@@ -92,13 +92,19 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         timeoutTask = () -> {
             synchronized (VodPlaybackCoordinator.this) {
                 if (closed || expected != requestId || timer != timeoutGeneration || timeoutTask == null) return;
+                long position = state.getPosition();
+                try { position = currentPosition(); }
+                catch (RuntimeException ignored) { }
                 clearTimeout();
-                requestId++;
+                long timedOutRequest = ++requestId;
                 pendingRequestId = 0;
                 acceptingSession = false;
                 cancelResolve();
+                try { session.stop(); }
+                catch (RuntimeException error) { ThreadPools.log(error, "Timed out playback stop failed."); }
+                if (closed || timedOutRequest != requestId) return;
                 publish(new VodPlaybackState(VodPlaybackPhase.ERROR, state.getEpisode(), state.getEpisodeIndex(),
-                        state.getPosition(), state.getDuration(), new java.util.concurrent.TimeoutException("Playback timed out")));
+                        position, state.getDuration(), new java.util.concurrent.TimeoutException("Playback timed out")));
             }
         };
         timeoutScheduler.post(timeoutTask, timeoutMillis);

@@ -53,6 +53,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private List<Page<VodAdapter, Set<String>>> mPages;
     private Set<String> mVodKeys;
     private CategoryRequest mRequest;
+    private CategoryRequest mLoadedRequest;
+    private int mLoadedPage = 1;
+    private boolean mLoadedMore;
     private Page<VodAdapter, Set<String>> mPage;
     private Result mHomeResult;
     private String mHomeToken;
@@ -168,6 +171,8 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     }
 
     private void getHome() {
+        mScroller.reset();
+        mScroller.setLoading(true);
         mHomeResult = null;
         mHomeToken = "home:" + (++mHomeTokenSeed);
         mViewModel.homeContent(getKey(), mHomeToken);
@@ -182,6 +187,8 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private void getVideo(String typeId, String page) {
         mRequest = CategoryRequest.create(getKey(), typeId, page, mExtends);
         if ("1".equals(page)) {
+            mScroller.reset();
+            mScroller.setLoading(true);
             mLastRequestFailed = false;
             mBinding.progressLayout.setEmptyText(R.string.error_empty);
             if (!mBinding.swipeLayout.isRefreshing()) mBinding.progressLayout.showProgress();
@@ -199,7 +206,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private void setAdapter(Result result) {
         if (!isCurrentResult(result)) return;
         boolean first = mScroller.first();
-        boolean failed = first && result != null && result.isRequestFailed();
+        boolean failed = result.isRequestFailed();
         // Do not discard the current list until a replacement request has succeeded. This keeps
         // a pull-to-refresh failure from turning a previously usable page into an empty screen.
         if (first && !failed) {
@@ -216,6 +223,16 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         if (size > 0) addVideo(result, items);
         if (failed && visibleCount > 0) Notify.show(R.string.error_load_retry);
         mScroller.endLoading(result);
+        if (failed && first && mRequest != null && mRequest.sameContent(mLoadedRequest)) {
+            mScroller.restore(mLoadedPage, mLoadedMore);
+        } else if (failed && first) {
+            // A new filter must replace the old list before any later page is appended.
+            mScroller.restore(1, false);
+        } else if (!failed) {
+            mLoadedRequest = mRequest;
+            mLoadedPage = mScroller.getPage();
+            mLoadedMore = !mScroller.isDisable();
+        }
         checkPosition(first);
         checkMore(size);
     }
@@ -355,6 +372,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         mHomeResult = null;
         mHomeToken = null;
         mScroller.restore(page.getPage(), page.isEnable());
+        mLoadedRequest = CategoryRequest.create(getKey(), getTypeId(), String.valueOf(page.getPage()), mExtends);
+        mLoadedPage = page.getPage();
+        mLoadedMore = page.isEnable();
         mBinding.swipeLayout.setRefreshing(false);
         mBinding.progressLayout.showContent(false, mAdapter.getItemCount());
         checkPosition(false);

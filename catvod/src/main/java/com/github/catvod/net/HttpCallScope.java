@@ -33,6 +33,28 @@ public final class HttpCallScope implements AutoCloseable {
     }
 
     public <T> T call(Callable<T> request) throws Exception {
+        try { return attach(request); }
+        finally { close(); }
+    }
+
+    /** Carry request cancellation into runtime worker threads without closing its owner. */
+    public static <T> Callable<T> bind(Callable<T> request) {
+        HttpCallScope owner = CURRENT.get();
+        return () -> owner == null ? request.call() : owner.attach(request);
+    }
+
+    public static <T> java.util.function.Consumer<T> bindConsumer(java.util.function.Consumer<T> callback) {
+        HttpCallScope owner = CURRENT.get();
+        return value -> {
+            if (owner == null) { callback.accept(value); return; }
+            try { owner.attach(() -> { callback.accept(value); return null; }); }
+            catch (InterruptedException ignored) { /* Owner cancellation discards late callbacks. */ }
+            catch (RuntimeException error) { throw error; }
+            catch (Exception error) { throw new IllegalStateException(error); }
+        };
+    }
+
+    private <T> T attach(Callable<T> request) throws Exception {
         synchronized (this) {
             if (closed) throw new InterruptedException("Request cancelled");
         }
@@ -41,7 +63,6 @@ public final class HttpCallScope implements AutoCloseable {
         try { return request.call(); }
         finally {
             if (previous == null) CURRENT.remove(); else CURRENT.set(previous);
-            close();
         }
     }
 

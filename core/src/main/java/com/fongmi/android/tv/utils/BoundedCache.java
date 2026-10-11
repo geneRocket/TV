@@ -53,6 +53,11 @@ public final class BoundedCache<K, V> {
         return weight;
     }
 
+    public synchronized void clear() {
+        values.clear();
+        weight = 0;
+    }
+
     private int weigh(V value) {
         return Math.max(0, weigher.applyAsInt(value));
     }

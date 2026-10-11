@@ -6,6 +6,14 @@ import static org.junit.Assert.assertEquals;
 
 public class HistoryTest {
 
+    @Test public void absentBestMatchDoesNotReplaceExistingHistory() {
+        History existing = new History();
+        existing.setPosition(120_000);
+        org.junit.Assert.assertFalse(History.isNewerOrBetterSameVersion(null, existing));
+        org.junit.Assert.assertFalse(History.isNewerOrBetterSameVersion(null, null));
+        org.junit.Assert.assertTrue(History.isNewerOrBetterSameVersion(existing, null));
+    }
+
     @Test
     public void asyncSnapshotDoesNotWaitForDatabaseWriteLock() throws Exception {
         java.lang.reflect.Field field = History.class.getDeclaredField("WRITE_LOCK");

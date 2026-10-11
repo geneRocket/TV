@@ -67,6 +67,9 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private boolean mOpen;
     private Page<ArrayObjectAdapter, ArrayObjectAdapter> mPage;
     private CategoryRequest mRequest;
+    private CategoryRequest mLoadedRequest;
+    private int mLoadedPage = 1;
+    private boolean mLoadedMore;
     private final Runnable mFilterRefresh = this::getVideo;
 
     public static VodFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, ArrayList<Filter> filters, boolean folder, boolean open) {
@@ -186,11 +189,21 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
             if (!isCurrentRequest(result)) return;
             boolean first = "1".equals(result.getRequestPage());
             int size = result.getList().size();
-            if (first || size > 0) addVideo(result);
+            if (!result.isRequestFailed() && (first || size > 0)) addVideo(result);
             mScroller.endLoading(result);
+            if (result.isRequestFailed() && first && mRequest != null && mRequest.sameContent(mLoadedRequest)) {
+                mScroller.restore(mLoadedPage, mLoadedMore);
+            } else if (result.isRequestFailed() && first) {
+                // A new filter must replace the old list before any later page is appended.
+                mScroller.restore(1, false);
+            } else if (!result.isRequestFailed()) {
+                mLoadedRequest = mRequest;
+                mLoadedPage = mScroller.getPage();
+                mLoadedMore = !mScroller.isDisable();
+            }
             checkPosition(first);
             checkMore(size);
-            if (first && size == 0 && result.isRequestFailed()) Notify.show(R.string.vod_load_failed);
+            if (result.isRequestFailed()) Notify.show(R.string.vod_load_failed);
             hideProgress();
         });
     }
@@ -226,19 +239,24 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void scheduleFilterRefresh() {
+        mRequest = null;
+        mViewModel.cancelCategoryContent();
+        mScroller.setLoading(true);
         App.removeCallbacks(mFilterRefresh);
         App.post(mFilterRefresh, 180);
     }
 
     private void getVideo() {
+        App.removeCallbacks(mFilterRefresh);
         mScroller.reset();
         requestVideo(getTypeId(), "1");
     }
 
     private void requestVideo(String typeId, String page) {
         boolean first = "1".equals(page);
+        if (first) mScroller.reset();
+        mScroller.setLoading(true);
         mRequest = CategoryRequest.create(getKey(), typeId, page, mExtends);
-        if (first) mLast = null;
         if (first) showProgress();
         mViewModel.categoryContent(getKey(), typeId, page, true, mExtends);
     }
@@ -251,6 +269,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         Style style = result.getStyle(getStyle());
         List<Vod> items = result.getList();
         if (result.getRequestPage().equals("1")) {
+            mLast = null;
             int start = mOpen ? mFilters.size() : 0;
             if (style.isList()) setItems(start, items);
             else updateRows(start, items, style);
@@ -431,19 +450,26 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void openFolder(Vod item) {
+        App.removeCallbacks(mFilterRefresh);
         Page<ArrayObjectAdapter, ArrayObjectAdapter> page = Page.get(item, getFolderRowPosition(item), getFolderChildPosition(item), mAdapter, mLast, mScroller.getPage(), !mScroller.isDisable());
         mPages.add(page);
+        mLast = null;
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(mAdapter.getPresenterSelector())));
         mBinding.recycler.setMoveTop(false);
+        if (mOpen) showFilter();
         requestVideo(item.getVodId(), "1");
     }
 
     private void restorePage(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
+        App.removeCallbacks(mFilterRefresh);
         mViewModel.cancelCategoryContent();
         mRequest = null;
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = page.getAdapter()));
         mLast = page.getExtra();
         mScroller.restore(page.getPage(), page.isEnable());
+        mLoadedRequest = CategoryRequest.create(getKey(), getTypeId(), String.valueOf(page.getPage()), mExtends);
+        mLoadedPage = page.getPage();
+        mLoadedMore = page.isEnable();
         checkPosition(false);
         restoreChildPosition(page);
         hideProgress();

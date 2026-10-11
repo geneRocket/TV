@@ -62,8 +62,14 @@ public class Global {
         }
     }
 
-    private void submit(Runnable runnable) {
-        if (!executor.isShutdown()) executor.submit(runnable);
+    private boolean submit(Runnable runnable) {
+        try {
+            if (executor.isShutdown()) return false;
+            executor.submit(runnable);
+            return true;
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            return false;
+        }
     }
 
     @Keep
@@ -114,7 +120,7 @@ public class Global {
     public JSObject req(String url, JSObject options) {
         try {
             Req req = Req.objectFrom(options.stringify());
-            String cached = req.getBuffer() == 0 && req.getMethod().equalsIgnoreCase("get") ? Module.get().getCached(url) : null;
+            String cached = req.canUseModuleCache() ? Module.get().getCached(url) : null;
             if (cached != null) return Connect.success(ctx, cached);
             try (Response res = Connect.to(url, req).execute()) {
                 return Connect.success(ctx, req, res);
@@ -187,23 +193,25 @@ public class Global {
     }
 
     private Callback getCallback(JSFunction complete, Req req) {
+        java.util.function.Consumer<Response> delivery = com.github.catvod.net.HttpCallScope.bindConsumer(
+                response -> complete.call(response == null ? Connect.error(ctx) : Connect.success(ctx, req, response)));
         return new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response res) {
-                submit(() -> {
+                if (!submit(() -> {
                     try (Response response = res) {
-                        complete.call(Connect.success(ctx, req, response));
+                        delivery.accept(response);
                     } finally {
                         complete.release();
                     }
-                });
+                })) res.close();
             }
 
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 submit(() -> {
-                    complete.call(Connect.error(ctx));
-                    complete.release();
+                    try { delivery.accept(null); }
+                    finally { complete.release(); }
                 });
             }
         };
