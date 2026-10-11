@@ -482,6 +482,7 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
             case CONFIG:
                 setAppBarView();
                 setLogo();
+                if (!getSite().isEmpty() && (mResult == null || !getSite().getKey().equals(mResult.getKey()))) homeContent();
                 break;
         }
     }

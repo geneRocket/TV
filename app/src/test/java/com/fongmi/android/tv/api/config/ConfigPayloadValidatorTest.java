@@ -11,6 +11,24 @@ public class ConfigPayloadValidatorTest {
         return JsonParser.parseString(text).getAsJsonObject();
     }
 
+    @Test public void cachedDepotRemainsUsable() {
+        ConfigPayloadValidator.cachedVod(json("{\"urls\":[{\"url\":\"https://example.com/config\"}]}"));
+        ConfigPayloadValidator.cachedLive(json("{\"urls\":[{\"url\":\"file:///playlist\"}]}"));
+    }
+
+    @Test public void invalidCachedPayloadsCannotBlockNetworkFallback() {
+        for (String text : new String[]{"{}", "{\"urls\":[]}", "{\"urls\":[{}]}", "{\"urls\":[{\"url\":false}]}"}) {
+            try {
+                ConfigPayloadValidator.cachedVod(json(text));
+                fail("Invalid cache accepted");
+            } catch (IllegalStateException expected) { }
+            try {
+                ConfigPayloadValidator.cachedLive(json(text));
+                fail("Invalid cache accepted");
+            } catch (IllegalStateException expected) { }
+        }
+    }
+
     @Test public void acceptsSourcesAndExplicitEmptyLists() {
         ConfigPayloadValidator.vod(json("{\"sites\":[{\"key\":\"a\",\"api\":\"a.js\"}],\"ads\":null}"));
         ConfigPayloadValidator.vod(json("{\"video\":{\"sites\":[]},\"lives\":[]}"));

@@ -8,6 +8,28 @@ final class ConfigPayloadValidator {
     private static final String[] VOD_ARRAYS = {"sites", "lives", "parses", "rules", "flags", "ads", "headers", "proxy", "hosts", "doh"};
     private static final String[] LIVE_ARRAYS = {"lives", "rules", "ads", "headers", "proxy", "hosts"};
 
+    static void cachedVod(JsonObject object) {
+        if (!depot(object)) vod(object);
+    }
+
+    static void cachedLive(JsonObject object) {
+        if (!depot(object)) live(object);
+    }
+
+    private static boolean depot(JsonObject object) {
+        rejectMessage(object);
+        if (!object.has("urls")) return false;
+        JsonElement urls = object.get("urls");
+        if (!urls.isJsonArray() || urls.getAsJsonArray().isEmpty()) throw invalid();
+        for (JsonElement entry : urls.getAsJsonArray()) {
+            if (!entry.isJsonObject()) throw invalid();
+            JsonElement url = entry.getAsJsonObject().get("url");
+            if (url == null || !url.isJsonPrimitive() || !url.getAsJsonPrimitive().isString()
+                    || url.getAsString().trim().isEmpty()) throw invalid();
+        }
+        return true;
+    }
+
     static void vod(JsonObject object) {
         rejectMessage(object);
         JsonObject root = object;

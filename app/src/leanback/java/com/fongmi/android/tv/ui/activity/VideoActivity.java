@@ -2826,7 +2826,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         super.onResume();
         setBackground(false);
         mPlayers.activateAsCurrentPlayer();
-        mPlaybackCoordinator.setPlaybackAllowed(true);
         mClock.start();
         boolean needInit = mPlayers.isRelease()
                 || (mPlayers.isExo() && mPlayers.exo() == null)
@@ -2837,8 +2836,10 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             setPlayerView();
             setDecodeView();
             hideInfoAndCenter();
+            mPlaybackCoordinator.setPlaybackAllowed(true);
             mPlaybackCoordinator.reload();
         } else {
+            mPlaybackCoordinator.setPlaybackAllowed(true);
             reconcilePlaybackUiState();
             if (mResumeOnForeground) onPlay();
         }

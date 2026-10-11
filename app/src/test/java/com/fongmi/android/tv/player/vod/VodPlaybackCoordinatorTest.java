@@ -34,6 +34,41 @@ import static org.junit.Assert.assertSame;
 public class VodPlaybackCoordinatorTest {
 
     @Test
+    public void lifecycleGateDoesNotCommandExternallyReleasedDelegate() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession delegate = new DefaultPlayerSession(engine);
+        com.fongmi.android.tv.player.session.SwitchablePlayerSession session =
+                new com.fongmi.android.tv.player.session.SwitchablePlayerSession(delegate);
+        VodPlaybackCoordinator coordinator = new VodPlaybackCoordinator(resolver,
+                (episode, result, position) -> new PlaybackItem(episode.getIdentity(), episode.getResolverUrl(), Collections.emptyMap(), null, null, Collections.emptyList(), position, false), session);
+        coordinator.setEpisodes(Collections.singletonList(new VodEpisode("episode-1", "site", "flag", "第1集", "episode-1")));
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        coordinator.setPlaybackAllowed(false);
+        int pauses = engine.pauses;
+        delegate.release();
+
+        coordinator.setPlaybackAllowed(true);
+        coordinator.play();
+        coordinator.pause();
+        coordinator.setPlaybackAllowed(false);
+        assertEquals(0, engine.plays);
+        assertEquals(pauses, engine.pauses);
+
+        FakeEngine replacement = new FakeEngine();
+        session.replace(new DefaultPlayerSession(replacement));
+        coordinator.play();
+        coordinator.setPlaybackAllowed(true);
+        coordinator.reload();
+        resolver.resolve(resolver.lastRequestId);
+        assertTrue(replacement.request.isPlayWhenReady());
+        assertEquals(VodPlaybackPhase.PREPARING, coordinator.state().getPhase());
+        coordinator.close();
+    }
+
+
+    @Test
     public void lateResolveFromPreviousEpisodeIsIgnored() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();

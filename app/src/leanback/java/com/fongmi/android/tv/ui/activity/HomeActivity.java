@@ -681,6 +681,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         switch (event.getType()) {
             case CONFIG:
                 setLogo();
+                if (!VodConfig.get().getHome().isEmpty() && (mResult == null || !TextUtils.equals(mResult.getKey(), getKey()))) homeContent();
                 if (fragment != null && fragment.inited) {
                     fragment.getHistory();
                     fragment.getKeep();

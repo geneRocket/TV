@@ -56,6 +56,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private CategoryRequest mLoadedRequest;
     private int mLoadedPage = 1;
     private boolean mLoadedMore;
+    private HashMap<String, String> mLoadedExtends = new HashMap<>();
     private Page<VodAdapter, Set<String>> mPage;
     private Result mHomeResult;
     private String mHomeToken;
@@ -230,6 +231,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
             mScroller.restore(1, false);
         } else if (!failed) {
             mLoadedRequest = mRequest;
+            mLoadedExtends = new HashMap<>(mExtends);
             mLoadedPage = mScroller.getPage();
             mLoadedMore = !mScroller.isDisable();
         }
@@ -335,7 +337,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         if (item.isAction()) {
             mViewModel.action(getKey(), item.getAction());
         } else if (item.isFolder()) {
-            Page<VodAdapter, Set<String>> page = Page.get(item, findPosition(), mAdapter, new HashSet<>(mVodKeys), mScroller.getPage(), !mScroller.isDisable());
+            Page<VodAdapter, Set<String>> page = Page.<VodAdapter, Set<String>>get(item, findPosition(), mAdapter, new HashSet<>(mVodKeys), mLoadedPage, mLoadedMore).context(mLoadedExtends, false);
             mPages.add(page);
             setStyle(getStyle());
             getVideo(item.getVodId(), "1");
@@ -372,9 +374,15 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         mHomeResult = null;
         mHomeToken = null;
         mScroller.restore(page.getPage(), page.isEnable());
-        mLoadedRequest = CategoryRequest.create(getKey(), getTypeId(), String.valueOf(page.getPage()), mExtends);
+        mLoadedRequest = CategoryRequest.create(getKey(), getTypeId(), String.valueOf(page.getPage()), page.getExtend());
+        mLoadedExtends = new HashMap<>(page.getExtend());
         mLoadedPage = page.getPage();
         mLoadedMore = page.isEnable();
+        if (!page.getExtend().equals(mExtends)) {
+            mPage = null;
+            getVideo();
+            return;
+        }
         mBinding.swipeLayout.setRefreshing(false);
         mBinding.progressLayout.showContent(false, mAdapter.getItemCount());
         checkPosition(false);

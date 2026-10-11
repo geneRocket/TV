@@ -252,6 +252,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         requireOpen();
         if (playbackAllowed == allowed) return;
         playbackAllowed = allowed;
+        // Another playback owner can release the delegate before Activity teardown/recreation.
+        if (session.state().getPhase() == PlaybackPhase.RELEASED) return;
         if (!allowed) session.pause();
         else if (acceptingSession && playWhenReady) session.play();
     }
@@ -365,6 +367,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         if (closed || !acceptingSession || playback == null || playback.getItem() == null || state.getEpisode() == null) return;
         if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return;
         if (state.getPhase() == VodPlaybackPhase.RESOLVING && playback.getPhase() != PlaybackPhase.PREPARING) return;
+        if (playback.getPhase() == PlaybackPhase.RELEASED) acceptingSession = false;
         publish(new VodPlaybackState(map(playback.getPhase()), state.getEpisode(), state.getEpisodeIndex(), playback.getPosition(), playback.getDuration(), playback.getError()));
     }
 

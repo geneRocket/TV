@@ -49,8 +49,8 @@ import java.util.Set;
 
 public class LiveConfig {
 
-    private List<Live> lives = new ArrayList<>();
-    private Map<String, Live> liveMap = new HashMap<>();
+    private final List<Live> lives = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final Map<String, Live> liveMap = new java.util.concurrent.ConcurrentHashMap<>();
     private List<Rule> rules = new ArrayList<>();
     private List<String> ads = new ArrayList<>();
     private List<Header> headers = new ArrayList<>();
@@ -238,9 +238,20 @@ public class LiveConfig {
         if (home == null) setHome(live, true);
     }
 
+    private boolean hasUsableCachedConfig(Config item) {
+        if (TextUtils.isEmpty(item.getJson())) return false;
+        try {
+            if (Json.invalid(item.getJson())) validateText(item.getUrl(), item.getJson());
+            else ConfigPayloadValidator.cachedLive(Json.parse(item.getJson()).getAsJsonObject());
+            return true;
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
     private void loadConfigCache(Callback callback) {
         if (config.isEmpty()) config(Config.live());
-        if (!TextUtils.isEmpty(config.getJson())) {
+        if (hasUsableCachedConfig(config)) {
             Config target = config;
             boolean expired = !config.isCache();
             setPersistCache(false);
@@ -263,7 +274,7 @@ public class LiveConfig {
     }
 
     private void loadCache(Callback callback, Throwable e) {
-        if (!TextUtils.isEmpty(config.getJson())) {
+        if (hasUsableCachedConfig(config)) {
             setPersistCache(false);
             parseConfig(config.getJson(), callback);
         }
@@ -521,7 +532,7 @@ public class LiveConfig {
     }
 
     private String loadDepotConfig(Config target) throws Throwable {
-        if (!TextUtils.isEmpty(target.getJson())) {
+        if (hasUsableCachedConfig(target)) {
             setPersistCache(false);
             if (!target.isCache()) ConfigLoadTask.background(() -> refreshDepotCache(target));
             return target.getJson();
@@ -777,7 +788,7 @@ public class LiveConfig {
     }
 
     public List<Live> getLives() {
-        return lives == null ? lives = new ArrayList<>() : lives;
+        return new ArrayList<>(lives);
     }
 
     public Config getConfig() {

@@ -2,6 +2,10 @@ package com.fongmi.android.tv.bean;
 
 import androidx.annotation.Nullable;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
 public class Page<A, E> {
 
     private final String vodId;
@@ -12,6 +16,8 @@ public class Page<A, E> {
     private final E extra;
     private final boolean enable;
     private final int page;
+    private Map<String, String> extend = Collections.emptyMap();
+    private boolean filterOpen;
 
     public static <A, E> Page<A, E> get(Vod vod, int position, A adapter, E extra, int page, boolean enable) {
         return new Page<>(vod, position, -1, adapter, extra, page, enable);
@@ -31,6 +37,16 @@ public class Page<A, E> {
         this.page = page;
         this.enable = enable;
     }
+
+    public Page<A, E> context(Map<String, String> extend, boolean filterOpen) {
+        this.extend = Collections.unmodifiableMap(new HashMap<>(extend));
+        this.filterOpen = filterOpen;
+        return this;
+    }
+
+    public Map<String, String> getExtend() { return extend; }
+
+    public boolean isFilterOpen() { return filterOpen; }
 
     public String getVodId() {
         return vodId;

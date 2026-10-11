@@ -70,6 +70,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     private CategoryRequest mLoadedRequest;
     private int mLoadedPage = 1;
     private boolean mLoadedMore;
+    private HashMap<String, String> mLoadedExtends = new HashMap<>();
     private final Runnable mFilterRefresh = this::getVideo;
 
     public static VodFragment newInstance(String key, String typeId, Style style, HashMap<String, String> extend, ArrayList<Filter> filters, boolean folder, boolean open) {
@@ -198,6 +199,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
                 mScroller.restore(1, false);
             } else if (!result.isRequestFailed()) {
                 mLoadedRequest = mRequest;
+                mLoadedExtends = new HashMap<>(mExtends);
                 mLoadedPage = mScroller.getPage();
                 mLoadedMore = !mScroller.isDisable();
             }
@@ -451,7 +453,7 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
 
     private void openFolder(Vod item) {
         App.removeCallbacks(mFilterRefresh);
-        Page<ArrayObjectAdapter, ArrayObjectAdapter> page = Page.get(item, getFolderRowPosition(item), getFolderChildPosition(item), mAdapter, mLast, mScroller.getPage(), !mScroller.isDisable());
+        Page<ArrayObjectAdapter, ArrayObjectAdapter> page = Page.get(item, getFolderRowPosition(item), getFolderChildPosition(item), mAdapter, mLast, mLoadedPage, mLoadedMore).context(mLoadedExtends, mOpen);
         mPages.add(page);
         mLast = null;
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(mAdapter.getPresenterSelector())));
@@ -466,10 +468,20 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
         mRequest = null;
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = page.getAdapter()));
         mLast = page.getExtra();
+        if (mOpen != page.isFilterOpen()) {
+            if (mOpen) showFilter();
+            else hideFilter();
+        }
         mScroller.restore(page.getPage(), page.isEnable());
-        mLoadedRequest = CategoryRequest.create(getKey(), getTypeId(), String.valueOf(page.getPage()), mExtends);
+        mLoadedRequest = CategoryRequest.create(getKey(), getTypeId(), String.valueOf(page.getPage()), page.getExtend());
+        mLoadedExtends = new HashMap<>(page.getExtend());
         mLoadedPage = page.getPage();
         mLoadedMore = page.isEnable();
+        if (!page.getExtend().equals(mExtends)) {
+            mPage = null;
+            getVideo();
+            return;
+        }
         checkPosition(false);
         restoreChildPosition(page);
         hideProgress();
@@ -498,7 +510,8 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void restoreChildPosition(Page<ArrayObjectAdapter, ArrayObjectAdapter> page) {
-        mBinding.recycler.setSelectedPosition(page.getPosition(), new ViewHolderTask() {
+        int rowPosition = Math.max(0, page.getPosition() + (mOpen ? mFilters.size() : 0) - (page.isFilterOpen() ? mFilters.size() : 0));
+        mBinding.recycler.setSelectedPosition(rowPosition, new ViewHolderTask() {
             @Override
             public void run(RecyclerView.ViewHolder holder) {
                 if (page.getChildPosition() < 0 || !(holder instanceof ItemBridgeAdapter.ViewHolder) || !(((ItemBridgeAdapter.ViewHolder) holder).getViewHolder() instanceof ListRowPresenter.ViewHolder)) {

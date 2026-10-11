@@ -476,16 +476,26 @@ public class VodConfig {
     }
 
     private void loadCache(Callback callback, Throwable e) {
-        if (!TextUtils.isEmpty(config.getJson())) {
+        if (hasUsableCachedConfig(config)) {
             setPersistCache(false);
             checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
         }
         else ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
     }
 
+    private boolean hasUsableCachedConfig(Config item) {
+        if (TextUtils.isEmpty(item.getJson())) return false;
+        try {
+            ConfigPayloadValidator.cachedVod(Json.parse(item.getJson()).getAsJsonObject());
+            return true;
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
     private void loadConfigCache(Callback callback) {
         if (config.isEmpty()) config = Config.vod();
-        if (!TextUtils.isEmpty(config.getJson())) {
+        if (hasUsableCachedConfig(config)) {
             Config target = config;
             boolean expired = !config.isCache();
             setPersistCache(false);
@@ -540,7 +550,7 @@ public class VodConfig {
     }
 
     private JsonObject loadDepotObject(Config target) throws Throwable {
-        if (!TextUtils.isEmpty(target.getJson())) {
+        if (hasUsableCachedConfig(target)) {
             setPersistCache(false);
             if (!target.isCache()) ConfigLoadTask.background(() -> refreshDepotCache(target));
             return Json.parse(target.getJson()).getAsJsonObject();
@@ -714,8 +724,8 @@ public class VodConfig {
             parses.add(0, god);
             parseMap.put(god.getName(), god);
         }
-        if (home == null) setHome(sites.isEmpty() ? new Site() : sites.get(0));
-        if (parse == null) setParse(parses.isEmpty() ? new Parse() : parses.get(0));
+        if ((home == null || home.isEmpty()) && !sites.isEmpty()) setHome(sites.get(0));
+        if ((parse == null || parse.isEmpty()) && !parses.isEmpty()) setParse(parses.get(0));
         setHeaders(Header.arrayFrom(object.get("headers")));
         setProxy(Proxy.arrayFrom(object.get("proxy")));
         setHosts(Json.safeListString(object, "hosts"));
