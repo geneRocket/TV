@@ -985,8 +985,11 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isVodPlaylist(String content) {
-        return content.contains("#EXT-X-ENDLIST")
-                || content.contains("#EXT-X-PLAYLIST-TYPE:VOD");
+        for (String line : content.split("\n")) {
+            String tag = line.trim();
+            if (tag.equals("#EXT-X-ENDLIST") || tag.equals("#EXT-X-PLAYLIST-TYPE:VOD")) return true;
+        }
+        return false;
     }
 
     public static String identifyProvider(String url) {

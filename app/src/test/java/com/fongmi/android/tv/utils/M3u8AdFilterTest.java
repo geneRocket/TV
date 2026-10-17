@@ -993,6 +993,34 @@ public class M3u8AdFilterTest {
         assertEquals(playlist, filter(playlist));
     }
 
+    @Test public void endlistMentionInCommentDoesNotDisableLiveProtection() {
+        String playlist = "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:100\n"
+                + "# Encoder will add #EXT-X-ENDLIST when the event ends\n"
+                + segment(5, "main-100.ts") + segment(5, "ads/ad-101.ts") + segment(5, "main-102.ts");
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test public void endlistMentionInSegmentTitleDoesNotDisableLiveProtection() {
+        String playlist = "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:100\n"
+                + "#EXTINF:5,Title mentions #EXT-X-ENDLIST\nmain-100.ts\n"
+                + segment(5, "ads/ad-101.ts") + segment(5, "main-102.ts");
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test public void endlistMentionInUriDoesNotDisableLiveProtection() {
+        String playlist = "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:100\n"
+                + segment(5, "main-100.ts#EXT-X-ENDLIST")
+                + segment(5, "ads/ad-101.ts") + segment(5, "main-102.ts");
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test public void vodMentionInCommentDoesNotChangeEventPlaylistType() {
+        String playlist = "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n"
+                + "# This stream is not #EXT-X-PLAYLIST-TYPE:VOD\n"
+                + segment(5, "main-100.ts") + segment(5, "ads/ad-101.ts") + segment(5, "main-102.ts");
+        assertEquals(playlist, filter(playlist));
+    }
+
     @Test
     public void filtersExplicitVodPlaylistWithoutEndlist() {
         String playlist = "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n"
