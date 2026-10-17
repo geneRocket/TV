@@ -241,7 +241,7 @@ public class LiveParser {
             if (format != null) channel.setFormat(format);
             if (origin != null) channel.setOrigin(origin);
             if (referer != null) channel.setReferer(referer);
-            if (header != null) channel.setHeader(header);
+            if (header != null) channel.setHeader(new HashMap<>(header));
             if (key != null && type != null) channel.setDrm(Drm.create(key, type));
             return this;
         }
