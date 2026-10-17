@@ -1059,7 +1059,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private void stopService() {
-        PlaybackService.stop();
+        PlaybackService.stop(mPlayers);
     }
 
     @Override
