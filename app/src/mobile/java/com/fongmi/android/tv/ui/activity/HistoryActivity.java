@@ -11,7 +11,8 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.repository.VodEntryResolver;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.databinding.ActivityHistoryBinding;
@@ -31,6 +32,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     private ActivityHistoryBinding mBinding;
     private HistoryAdapter mAdapter;
     private int mHistoryRequestId;
+    private final VodEntryResolver mEntryResolver = new VodEntryResolver(() -> !isFinishing() && !isDestroyed());
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, HistoryActivity.class));
@@ -107,11 +109,15 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemClick(History item) {
-        if (VodConfig.get().hasSite(item.getSiteKey())) {
-            VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
-        } else {
-            CollectActivity.start(this, item.getVodName());
-        }
+        mEntryResolver.open(item.getCid(), item.getSiteKey(),
+                () -> VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic()),
+                () -> CollectActivity.start(this, item.getVodName()), Notify::show);
+    }
+
+    @Override
+    protected void onPause() {
+        mEntryResolver.cancel();
+        super.onPause();
     }
 
     @Override
