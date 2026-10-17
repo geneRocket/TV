@@ -32,4 +32,5 @@ dependencies {
     implementation 'io.github.carguo:gsyvideoplayer-arm64:' + gsyIjkVersion
     implementation 'io.github.carguo:gsyvideoplayer-armv7a:' + gsyIjkVersion
     implementation 'io.github.carguo:gsyvideoplayer-x86:' + gsyIjkVersion
+    testImplementation 'junit:junit:4.13.2'
 }
