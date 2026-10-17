@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.DocumentBuilder;
 
 @Root(name = "i", strict = false)
 public class Danmu {
@@ -48,6 +49,7 @@ public class Danmu {
     }
 
     public static Danmu fromXml(String str) {
+        if (str != null && str.contains("<!DOCTYPE")) return new Danmu();
         try {
             return new Persister().read(Danmu.class, str);
         } catch (Exception e) {
@@ -60,15 +62,22 @@ public class Danmu {
         danmu.data = new ArrayList<>();
         if (TextUtils.isEmpty(str) || !str.trim().startsWith("<")) return danmu;
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-            Document document = factory.newDocumentBuilder().parse(new InputSource(new StringReader(str)));
+            Document document = parseXmlDocument(str);
             collectXml(document.getDocumentElement(), danmu.data);
         } catch (Exception ignored) {
         }
         return danmu;
+    }
+
+    static Document parseXmlDocument(String str) throws Exception {
+        // Android's DOM parser does not support the Xerces disallow-doctype feature.
+        // DTDs are not part of the supported comment formats; reject them before parsing.
+        if (str.contains("<!DOCTYPE")) throw new IllegalArgumentException("Unsupported XML document type");
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setExpandEntityReferences(false);
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
+        return builder.parse(new InputSource(new StringReader(str)));
     }
 
     private static Danmu fromJson(String str) {
