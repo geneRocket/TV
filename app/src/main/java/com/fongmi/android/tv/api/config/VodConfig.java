@@ -135,7 +135,15 @@ public class VodConfig {
     }
 
     public static void load(Config config, Callback callback) {
+        saveSelection(config);
         get().submit(() -> get().reset().config(config).loadConfig(callback));
+    }
+
+    static void saveSelection(Config config) {
+        // Empty configs ask loadConfig to use the existing default configuration.
+        if (config == null || config.getUrl().isEmpty()) return;
+        Setting.putVodConfigUrls(config.getUrl());
+        Setting.putVodConfigDesc(config.getDesc());
     }
 
     public static void loadCached(Config config, Callback callback) {
