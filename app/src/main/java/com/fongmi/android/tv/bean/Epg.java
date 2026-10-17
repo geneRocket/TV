@@ -10,8 +10,10 @@ import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
 
 import java.text.SimpleDateFormat;
+import java.text.ParsePosition;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 
@@ -110,8 +112,9 @@ public class Epg {
 
     private long parse(List<SimpleDateFormat> formats, String value) {
         for (SimpleDateFormat format : formats) {
-            long time = Util.format(format, value);
-            if (time > 0) return time;
+            ParsePosition position = new ParsePosition(0);
+            Date time = format.parse(value, position);
+            if (time != null && position.getIndex() == value.length() && time.getTime() > 0) return time.getTime();
         }
         return 0;
     }
