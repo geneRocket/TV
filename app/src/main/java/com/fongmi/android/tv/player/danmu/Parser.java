@@ -17,7 +17,6 @@ import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -32,8 +31,11 @@ import master.flame.danmaku.danmaku.model.android.Danmakus;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.danmaku.util.DanmakuUtils;
 import okhttp3.Headers;
+import okhttp3.Call;
+import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class Parser extends BaseDanmakuParser {
 
@@ -63,16 +65,22 @@ public class Parser extends BaseDanmakuParser {
     private String request(String path) {
         String url = UrlUtil.stripTag(UrlUtil.normalize(path, ""));
         Map<String, String> headers = UrlUtil.getTagHeaders(path);
-        try (Response response = OkHttp.client(Constant.TIMEOUT_PLAY).newCall(new Request.Builder().url(url).headers(Headers.of(headers)).build()).execute()) {
-            if (!response.isSuccessful() || response.body() == null) return "";
-            if (response.body().contentLength() > MAX_CONTENT_BYTES) return "";
-            return readLimited(response.body().byteStream());
+        try {
+            return request(OkHttp.client(Constant.TIMEOUT_PLAY).newCall(new Request.Builder().url(url).headers(Headers.of(headers)).build()));
         } catch (IOException e) {
             return "";
         }
     }
 
-    private String readLimited(InputStream input) throws IOException {
+    static String request(Call call) throws IOException {
+        try (Response response = call.execute()) {
+            if (!response.isSuccessful() || response.body() == null) return "";
+            if (response.body().contentLength() > MAX_CONTENT_BYTES) return "";
+            return readLimited(response.body().byteStream(), response.body().contentType());
+        }
+    }
+
+    private static String readLimited(InputStream input, MediaType contentType) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         byte[] buffer = new byte[8192];
         int total = 0;
@@ -82,7 +90,9 @@ public class Parser extends BaseDanmakuParser {
             if (total > MAX_CONTENT_BYTES) return "";
             output.write(buffer, 0, read);
         }
-        return output.toString(StandardCharsets.UTF_8.name());
+        try (ResponseBody body = ResponseBody.create(contentType, output.toByteArray())) {
+            return body.string();
+        }
     }
 
     @Override
