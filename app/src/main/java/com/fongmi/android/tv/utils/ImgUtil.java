@@ -23,10 +23,9 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Site;
-import com.github.catvod.utils.Json;
-import com.google.common.net.HttpHeaders;
 
 import java.util.Map;
+import java.util.TreeMap;
 
 import jahirfiquitiva.libs.textdrawable.TextDrawable;
 import okhttp3.Headers;
@@ -132,17 +131,20 @@ public class ImgUtil {
         url = normalizeUrl(url, site);
         if (url.startsWith("data:")) return url;
         LazyHeaders.Builder builder = new LazyHeaders.Builder();
-        String headers = getParam(url, TAG_HEADERS);
-        String cookie = getParam(url, TAG_COOKIE);
-        String referer = getParam(url, TAG_REFERER);
-        String userAgent = getParam(url, TAG_USER_AGENT);
-        addHeaders(builder, site == null ? null : site.getHeaders());
-        if (!TextUtils.isEmpty(headers)) addHeader(builder, headers);
-        if (!TextUtils.isEmpty(cookie)) builder.addHeader(HttpHeaders.COOKIE, cookie);
-        if (!TextUtils.isEmpty(referer)) builder.addHeader(HttpHeaders.REFERER, referer);
-        if (!TextUtils.isEmpty(userAgent)) builder.addHeader(HttpHeaders.USER_AGENT, userAgent);
+        for (Map.Entry<String, String> entry : imageHeaders(url, site == null ? null : site.getHeaders()).entrySet()) {
+            builder.setHeader(entry.getKey(), entry.getValue());
+        }
         url = stripParam(url);
         return TextUtils.isEmpty(url) ? null : new GlideUrl(url, builder.build());
+    }
+
+    static Map<String, String> imageHeaders(String url, Headers siteHeaders) {
+        Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (siteHeaders != null) {
+            for (String name : siteHeaders.names()) headers.put(UrlUtil.fixHeader(name), siteHeaders.get(name));
+        }
+        headers.putAll(UrlUtil.getTagHeaders(url));
+        return headers;
     }
 
     private static String normalizeUrl(String url, Site site) {
@@ -169,14 +171,6 @@ public class ImgUtil {
                 ? url.substring(0, comma).trim() : url;
     }
 
-    private static String getParam(String url, String tag) {
-        int start = url.indexOf(tag);
-        if (start < 0) return "";
-        start += tag.length();
-        int end = findNextTag(url, start);
-        return (end < 0 ? url.substring(start) : url.substring(start, end)).trim();
-    }
-
     private static String stripParam(String url) {
         int index = findFirstTag(url);
         return index < 0 ? url : url.substring(0, index);
@@ -189,28 +183,6 @@ public class ImgUtil {
             if (found >= 0 && (index < 0 || found < index)) index = found;
         }
         return index;
-    }
-
-    private static int findNextTag(String url, int start) {
-        int index = -1;
-        for (String tag : new String[]{TAG_HEADERS, TAG_COOKIE, TAG_REFERER, TAG_USER_AGENT}) {
-            int found = url.indexOf(tag, start);
-            if (found >= 0 && (index < 0 || found < index)) index = found;
-        }
-        return index;
-    }
-
-    private static void addHeader(LazyHeaders.Builder builder, String header) {
-        try {
-            Map<String, String> map = Json.toMap(Json.parse(header));
-            for (Map.Entry<String, String> entry : map.entrySet()) builder.addHeader(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
-        } catch (Exception ignored) {
-        }
-    }
-
-    private static void addHeaders(LazyHeaders.Builder builder, Headers headers) {
-        if (headers == null) return;
-        for (String name : headers.names()) builder.addHeader(UrlUtil.fixHeader(name), headers.get(name));
     }
 
     private static RequestListener<Bitmap> getListener(ImageView view) {
