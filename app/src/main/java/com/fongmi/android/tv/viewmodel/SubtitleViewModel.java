@@ -145,6 +145,7 @@ public class SubtitleViewModel extends ViewModel {
         try {
             int seq = nextSearchRequest(requestSeq, expected);
             if (seq < 0) return;
+            if (expected < 0) cancelSubtitleResolve();
             int currentPage = Math.max(1, page);
             String keyword = title == null ? "" : title.trim();
             cancelCall(currentSearchCall);
@@ -336,6 +337,7 @@ public class SubtitleViewModel extends ViewModel {
 
     private synchronized void getSearchResultSubtitleUrlsFromAssrt(Subtitle subtitle) {
         try {
+            cancelSubtitleResolve();
             int seq = requestSeq.incrementAndGet();
             cancelCall(currentSearchCall);
             if (subtitle == null || TextUtils.isEmpty(subtitle.getUrl())) {
@@ -420,9 +422,9 @@ public class SubtitleViewModel extends ViewModel {
         }
     }
 
-    private void getSubtitleUrlFromAssrt(Subtitle subtitle, SubtitleLoader subtitleLoader) {
-        int seq = resolveSeq.incrementAndGet();
-        cancelCall(currentResolveCall);
+    private synchronized void getSubtitleUrlFromAssrt(Subtitle subtitle, SubtitleLoader subtitleLoader) {
+        cancelSubtitleResolve();
+        int seq = resolveSeq.get();
         if (subtitle == null || TextUtils.isEmpty(subtitle.getUrl()) || subtitleLoader == null) return;
         Request request = assrtRequest(subtitle.getUrl(), ASSRT_BASE_URL);
         Call call = subtitleClient.newCall(request);
@@ -432,7 +434,7 @@ public class SubtitleViewModel extends ViewModel {
             public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
                 ThreadPools.log(e, "Subtitle resolve failed.");
-                if (seq == resolveSeq.get()) subtitleLoader.loadSubtitle(subtitle);
+                if (seq == resolveSeq.get()) postResolvedSubtitle(seq, subtitle, null, subtitleLoader);
             }
 
             @Override
@@ -440,12 +442,24 @@ public class SubtitleViewModel extends ViewModel {
                 try (Response res = response) {
                     if (seq != resolveSeq.get()) return;
                     String location = normalizeAssrtLocation(res.request().url().toString(), res.header("location"));
-                    subtitle.setUrl(TextUtils.isEmpty(location) ? subtitle.getUrl() : location);
-                    if (seq != resolveSeq.get()) return;
-                    subtitleLoader.loadSubtitle(subtitle);
+                    postResolvedSubtitle(seq, subtitle, location, subtitleLoader);
                 }
             }
         });
+    }
+
+    void postResolvedSubtitle(int sequence, Subtitle subtitle, String location, SubtitleLoader loader) {
+        scheduler.post(() -> {
+            if (sequence != resolveSeq.get()) return;
+            if (location != null && !location.isEmpty()) subtitle.setUrl(location);
+            loader.loadSubtitle(subtitle);
+        }, 0);
+    }
+
+    public synchronized void cancelSubtitleResolve() {
+        resolveSeq.incrementAndGet();
+        cancelCall(currentResolveCall);
+        currentResolveCall = null;
     }
 
     private Request assrtRequest(String url, String referer) {
@@ -488,10 +502,9 @@ public class SubtitleViewModel extends ViewModel {
     @Override
     protected synchronized void onCleared() {
         requestSeq.incrementAndGet();
-        resolveSeq.incrementAndGet();
+        cancelSubtitleResolve();
         cancelCall(currentSearchCall);
         cancelCall(currentFallbackSearchCall);
-        cancelCall(currentResolveCall);
         super.onCleared();
     }
 
