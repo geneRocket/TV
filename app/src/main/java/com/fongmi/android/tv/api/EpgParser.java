@@ -24,6 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -34,6 +35,30 @@ public class EpgParser {
     private static final ThreadLocal<SimpleDateFormat> FORMAT_TIME = ThreadLocal.withInitial(() -> new SimpleDateFormat("HH:mm", Locale.getDefault()));
     private static final ThreadLocal<SimpleDateFormat> FORMAT_DATE = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()));
     private static final ThreadLocal<SimpleDateFormat> FORMAT_FULL = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyyMMddHHmmss Z", Locale.getDefault()));
+    private static final ThreadLocal<FormatContext> FORMAT_CONTEXT = new ThreadLocal<>();
+
+    static void refreshFormats() {
+        Locale locale = Locale.getDefault();
+        TimeZone zone = TimeZone.getDefault();
+        FormatContext previous = FORMAT_CONTEXT.get();
+        if (previous != null && previous.locale.equals(locale) && previous.zone.equals(zone)) return;
+        FORMAT_TIME.set(createFormat("HH:mm", locale, zone));
+        FORMAT_DATE.set(createFormat("yyyy-MM-dd", locale, zone));
+        FORMAT_FULL.set(createFormat("yyyyMMddHHmmss Z", locale, zone));
+        FORMAT_CONTEXT.set(new FormatContext(locale, zone));
+    }
+
+    private static SimpleDateFormat createFormat(String pattern, Locale locale, TimeZone zone) {
+        SimpleDateFormat format = new SimpleDateFormat(pattern, locale);
+        format.setTimeZone((TimeZone) zone.clone());
+        return format;
+    }
+
+    private static final class FormatContext {
+        final Locale locale;
+        final TimeZone zone;
+        FormatContext(Locale locale, TimeZone zone) { this.locale = locale; this.zone = zone; }
+    }
 
     public static boolean start(Live live) throws Exception {
         List<String> xmls = live.getEpgXml();
@@ -63,6 +88,7 @@ public class EpgParser {
     }
 
     public static Epg getEpg(String xml, String key) throws Exception {
+        refreshFormats();
         Tv tv = new Persister().read(Tv.class, xml, false);
         Epg epg = Epg.create(key, FORMAT_DATE.get().format(getDate(tv)));
         for (Tv.Programme programme : tv.getProgramme()) {
@@ -85,9 +111,13 @@ public class EpgParser {
     }
 
     private static boolean isToday(long millis) {
-        Calendar calendar = Calendar.getInstance();
+        return isToday(millis, new FormatContext(Locale.getDefault(), TimeZone.getDefault()));
+    }
+
+    private static boolean isToday(long millis, FormatContext context) {
+        Calendar calendar = Calendar.getInstance(context.zone, context.locale);
         calendar.setTimeInMillis(millis);
-        Calendar today = Calendar.getInstance();
+        Calendar today = Calendar.getInstance(context.zone, context.locale);
         return calendar.get(Calendar.YEAR) == today.get(Calendar.YEAR) && calendar.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR);
     }
 
@@ -107,6 +137,8 @@ public class EpgParser {
     }
 
     private static void readXml(Live live, File file) throws Exception {
+        refreshFormats();
+        FormatContext context = FORMAT_CONTEXT.get();
         Map<String, Channel> liveChannelMap = prepareLiveChannels(live);
         Tv tv = new Persister().read(Tv.class, file, false);
         Map<String, List<Tv.Channel>> xmlChannelMap = tv.getChannel().stream().collect(Collectors.groupingBy(Tv.Channel::getId));
@@ -119,8 +151,8 @@ public class EpgParser {
             Date startDate = parse(programme.getStart());
             Date endDate = parse(programme.getStop());
             if (startDate == null || endDate == null) continue;
-            boolean startToday = startDate != null && isToday(startDate.getTime());
-            boolean endToday = endDate != null && isToday(endDate.getTime());
+            boolean startToday = startDate != null && isToday(startDate.getTime(), context);
+            boolean endToday = endDate != null && isToday(endDate.getTime(), context);
             if (!startToday && !endToday) continue;
             String key = channel.getTvgId();
             epgMap.computeIfAbsent(key, k -> Epg.create(k, today)).getList().add(getEpgData(startDate, endDate, programme));
