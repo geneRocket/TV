@@ -168,33 +168,41 @@ public class Local implements Process {
         return Nano.success(info.toString());
     }
 
+    private long[] parseRange(String header, long fileLen) {
+        if (header == null || !header.startsWith("bytes=")) return null;
+        String range = header.substring("bytes=".length()).trim();
+        // Ignore malformed or multipart ranges instead of claiming an unrelated partial response.
+        if (!range.matches("(?:[0-9]+-[0-9]*|-[0-9]+)")) return null;
+        int minus = range.indexOf('-');
+        String start = range.substring(0, minus);
+        String end = range.substring(minus + 1);
+        if (start.isEmpty()) {
+            long suffix = rangeNumber(end);
+            if (suffix == 0) return new long[]{fileLen, -1};
+            if (fileLen == 0) return null;
+            return new long[]{Math.max(fileLen - suffix, 0), fileLen - 1};
+        }
+        long first = rangeNumber(start);
+        long last = end.isEmpty() ? Long.MAX_VALUE : rangeNumber(end);
+        if (last < first) return null;
+        return new long[]{first, Math.min(last, fileLen - 1)};
+    }
+
+    private long rangeNumber(String digits) {
+        long result = 0;
+        for (int i = 0; i < digits.length(); i++) {
+            int digit = digits.charAt(i) - '0';
+            if (result > (Long.MAX_VALUE - digit) / 10) return Long.MAX_VALUE;
+            result = result * 10 + digit;
+        }
+        return result;
+    }
+
     private NanoHTTPD.Response getFile(Map<String, String> header, File file, String mime) throws Exception {
         long fileLen = file.length();
-        long startFrom = 0;
-        long endAt = -1;
-        String range = header.get("range");
-        if (range != null && range.startsWith("bytes=")) {
-            range = range.substring("bytes=".length()).trim();
-            int minus = range.indexOf('-');
-            try {
-                if (minus >= 0) {
-                    String start = range.substring(0, minus).trim();
-                    String end = range.substring(minus + 1).trim();
-                    if (!start.isEmpty()) startFrom = Long.parseLong(start);
-                    if (!end.isEmpty()) endAt = Long.parseLong(end);
-                    if (start.isEmpty() && !end.isEmpty()) {
-                        long suffixLen = Long.parseLong(end);
-                        if (suffixLen > 0) {
-                            startFrom = Math.max(fileLen - suffixLen, 0);
-                            endAt = fileLen - 1;
-                        }
-                    }
-                }
-            } catch (NumberFormatException ignored) {
-                startFrom = 0;
-                endAt = -1;
-            }
-        }
+        long[] range = parseRange(header.get("range"), fileLen);
+        long startFrom = range == null ? 0 : range[0];
+        long endAt = range == null ? -1 : range[1];
         NanoHTTPD.Response res;
         String ifRange = header.get("if-range");
         String etag = Integer.toHexString((file.getAbsolutePath() + file.lastModified() + "" + file.length()).hashCode());
