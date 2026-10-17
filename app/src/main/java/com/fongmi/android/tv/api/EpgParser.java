@@ -8,6 +8,7 @@ import com.fongmi.android.tv.bean.Tv;
 import com.fongmi.android.tv.utils.Download;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.github.catvod.utils.Path;
+import com.github.catvod.net.HttpCallScope;
 import com.github.catvod.utils.Trans;
 
 import org.simpleframework.xml.core.Persister;
@@ -92,8 +93,17 @@ public class EpgParser {
 
     private static void readGzip(Live live, File file, boolean refresh) throws Exception {
         File xml = Path.epg(file.getName() + ".xml");
-        if (!xml.exists() || refresh) FileUtil.extractGzip(file, xml);
+        prepareGzip(file, xml, refresh);
         readXml(live, xml);
+    }
+
+    static void prepareGzip(File file, File xml, boolean refresh) throws IOException {
+        if (xml.exists() && !refresh && xml.lastModified() >= file.lastModified()) return;
+        if (FileUtil.tryExtractGzip(file, xml)) return;
+        HttpCallScope.throwIfCancelled();
+        // Keep the working XML, but force the next attempt to fetch a new archive.
+        file.delete();
+        throw new IOException("Unable to decompress EPG cache");
     }
 
     private static void readXml(Live live, File file) throws Exception {

@@ -80,7 +80,11 @@ public class FileUtil {
     }
 
     public static void extractGzip(File target, File path) {
-        if (target == null || path == null) return;
+        tryExtractGzip(target, path);
+    }
+
+    public static boolean tryExtractGzip(File target, File path) {
+        if (target == null || path == null) return false;
         File staged = null;
         try {
             ensureParent(path);
@@ -89,8 +93,10 @@ public class FileUtil {
                 copy(is, os, MAX_ZIP_BYTES);
             }
             if (!staged.renameTo(path)) throw new IOException("Cannot replace decompressed file");
+            return true;
         } catch (Exception e) {
             ThreadPools.log(e, "Extract gzip failed.");
+            return false;
         } finally {
             if (staged != null && staged.exists()) staged.delete();
         }
