@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.IOException;
-import java.io.InterruptedIOException;
 import java.util.Map;
 
 import okhttp3.Headers;
@@ -86,11 +85,12 @@ public class Download {
         File staged = File.createTempFile("download-", ".tmp", parent);
         try {
             try (BufferedInputStream input = new BufferedInputStream(is); FileOutputStream os = new FileOutputStream(staged)) {
+                HttpCallScope.throwIfCancelled();
                 byte[] buffer = new byte[64 * 1024];
                 int readBytes;
                 long totalBytes = 0;
                 while ((readBytes = input.read(buffer)) != -1) {
-                    if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
+                    HttpCallScope.throwIfCancelled();
                     totalBytes += readBytes;
                     os.write(buffer, 0, readBytes);
                     int progress = Math.min(100, (int) (totalBytes / length * 100.0));
@@ -100,7 +100,7 @@ public class Download {
                     }
                 }
             }
-            if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
+            HttpCallScope.throwIfCancelled();
             if (!staged.renameTo(file)) throw new IOException("Cannot replace downloaded file");
         } finally {
             if (staged.exists()) staged.delete();
