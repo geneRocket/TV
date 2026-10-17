@@ -36,6 +36,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import okhttp3.Call;
+import okhttp3.HttpUrl;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -418,7 +419,7 @@ public class SubtitleViewModel extends ViewModel {
             public void onResponse(Call call, Response response) throws IOException {
                 try (Response res = response) {
                     if (seq != resolveSeq.get()) return;
-                    String location = normalizeAssrtLocation(res.header("location"));
+                    String location = normalizeAssrtLocation(res.request().url().toString(), res.header("location"));
                     subtitle.setUrl(TextUtils.isEmpty(location) ? subtitle.getUrl() : location);
                     if (seq != resolveSeq.get()) return;
                     subtitleLoader.loadSubtitle(subtitle);
@@ -448,10 +449,11 @@ public class SubtitleViewModel extends ViewModel {
         return base + "/" + href;
     }
 
-    private String normalizeAssrtLocation(String location) {
-        if (TextUtils.isEmpty(location)) return "";
-        String url = assrtUrl(ASSRT_BASE_URL, location.trim());
-        return url.startsWith("http://") || url.startsWith("https://") ? url : "";
+    static String normalizeAssrtLocation(String requestUrl, String location) {
+        if (requestUrl == null || location == null || location.trim().isEmpty()) return "";
+        HttpUrl base = HttpUrl.parse(requestUrl);
+        HttpUrl target = base == null ? null : base.resolve(location.trim());
+        return target == null ? "" : target.toString();
     }
 
     private String encode(String value) {
