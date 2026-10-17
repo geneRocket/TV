@@ -35,7 +35,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
 import com.fongmi.android.tv.utils.TaskScope;
 
 import okhttp3.Call;
@@ -58,7 +57,6 @@ public class LiveViewModel extends ViewModel {
     private final TaskScope urlTasks;
     private final ExecutorService executor;
     private final ExecutorService urlExecutor;
-    private final AtomicReference<Call> epgCall = new AtomicReference<>();
 
     public LiveViewModel() {
         this.defaultTimeZone = TimeZone.getDefault();
@@ -119,21 +117,17 @@ public class LiveViewModel extends ViewModel {
         Map<String, String> headers = UrlUtil.getTagHeaders(url);
         Request request = new Request.Builder().url(UrlUtil.stripTag(url)).headers(Headers.of(headers)).build();
         Call call = OkHttp.client(timeout).newCall(request);
-        Call previous = epgCall.getAndSet(call);
-        if (previous != null) previous.cancel();
+        return requestString(call);
+    }
+
+    String requestString(Call call) throws Exception {
+        HttpCallScope.track(call);
         if (Thread.currentThread().isInterrupted()) call.cancel();
         try (Response response = call.execute()) {
             if (!response.isSuccessful()) throw new IOException(response.code() + " " + response.message());
             ResponseBody body = response.body();
             return body == null ? "" : body.string();
-        } finally {
-            epgCall.compareAndSet(call, null);
         }
-    }
-
-    private void cancelEpgCall() {
-        Call call = epgCall.getAndSet(null);
-        if (call != null) call.cancel();
     }
 
     public void getUrl(Channel item) {
@@ -213,7 +207,8 @@ public class LiveViewModel extends ViewModel {
     }
 
     private void submitEpg(java.util.concurrent.Callable<Epg> task) {
-        tasks.submit("epg", task, Constant.TIMEOUT_EPG, epg::setValue, error -> new Epg(), this::cancelEpgCall);
+        HttpCallScope calls = new HttpCallScope();
+        tasks.submit("epg", () -> calls.call(task), Constant.TIMEOUT_EPG, epg::setValue, error -> new Epg(), calls::close);
     }
 
     private void submitUrl(java.util.concurrent.Callable<Channel> task, java.util.function.Function<Throwable, Channel> fallback) {
@@ -241,7 +236,6 @@ public class LiveViewModel extends ViewModel {
         super.onCleared();
         tasks.close();
         urlTasks.close();
-        cancelEpgCall();
         ThreadPools.shutdown(executor);
         ThreadPools.shutdown(urlExecutor);
     }
