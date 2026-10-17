@@ -430,7 +430,7 @@ public class LiveConfig {
     }
 
     static void mergeLives(JsonObject target, JsonObject source) {
-        if (!source.has("lives")) return;
+        if (!source.has("lives") || source.get("lives").isJsonNull()) return;
         String spider = Json.safeString(source, "spider");
         JsonArray lives = source.getAsJsonArray("lives");
         if (!target.has("lives")) target.add("lives", new JsonArray());
@@ -445,7 +445,7 @@ public class LiveConfig {
     }
 
     private void appendArray(JsonObject target, JsonObject source, String key) {
-        if (!source.has(key)) return;
+        if (!source.has(key) || source.get(key).isJsonNull()) return;
         if (!target.has(key)) target.add(key, new JsonArray());
         JsonArray targetArray = target.getAsJsonArray(key);
         for (JsonElement element : source.getAsJsonArray(key)) targetArray.add(element.deepCopy());
@@ -676,7 +676,7 @@ public class LiveConfig {
         setHeaders(Header.arrayFrom(object.get("headers")));
         setProxy(Proxy.arrayFrom(object.get("proxy")));
         setHosts(Json.safeListString(object, "hosts"));
-        setRules(Rule.arrayFrom(object.getAsJsonArray("rules")));
+        setRules(Rule.arrayFrom(object.get("rules")));
         VodConfig.refreshNetwork();
         setAds(Json.safeListString(object, "ads"));
     }

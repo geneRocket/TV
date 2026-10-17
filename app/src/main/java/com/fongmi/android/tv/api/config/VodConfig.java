@@ -478,7 +478,7 @@ public class VodConfig {
 
     private void mergeSites(JsonObject target, JsonObject source, Config config) {
         String spider = Json.safeString(source, "spider");
-        JsonArray sites = source.has("sites") ? source.getAsJsonArray("sites") : new JsonArray();
+        List<JsonElement> sites = Json.safeListElement(source, "sites");
         if (!target.has("sites")) target.add("sites", new JsonArray());
         JsonArray targetSites = target.getAsJsonArray("sites");
         for (JsonElement element : sites) {
@@ -493,7 +493,7 @@ public class VodConfig {
     }
 
     private void appendArray(JsonObject target, JsonObject source, String key) {
-        if (!source.has(key)) return;
+        if (!source.has(key) || source.get(key).isJsonNull()) return;
         if (!target.has(key)) target.add(key, new JsonArray());
         JsonArray targetArray = target.getAsJsonArray(key);
         for (JsonElement element : source.getAsJsonArray(key)) targetArray.add(element.deepCopy());
@@ -618,7 +618,7 @@ public class VodConfig {
             initParse(object);
             initOther(object);
             preloadJars(object);
-            if (loadLive && object.has("lives")) initLive(object);
+            if (loadLive && object.has("lives") && !object.get("lives").isJsonNull()) initLive(object);
             String notice = Json.safeString(object, "notice");
             config.logo(Json.safeString(object, "logo"));
             if (persistCache) config.json(object.toString()).update();
@@ -767,8 +767,8 @@ public class VodConfig {
         setHeaders(Header.arrayFrom(object.get("headers")));
         setProxy(Proxy.arrayFrom(object.get("proxy")));
         setHosts(Json.safeListString(object, "hosts"));
-        setRules(Rule.arrayFrom(object.getAsJsonArray("rules")));
-        setDoh(Doh.arrayFrom(object.getAsJsonArray("doh")));
+        setRules(Rule.arrayFrom(object.get("rules")));
+        setDoh(Doh.arrayFrom(object.get("doh")));
         refreshNetwork();
         setFlags(Json.safeListString(object, "flags"));
         setWall(Json.safeString(object, "wallpaper"));

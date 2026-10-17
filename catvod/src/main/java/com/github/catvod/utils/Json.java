@@ -46,7 +46,7 @@ public class Json {
 
     public static List<String> safeListString(JsonObject obj, String key) {
         List<String> result = new ArrayList<>();
-        if (!obj.has(key)) return result;
+        if (!obj.has(key) || obj.get(key).isJsonNull()) return result;
         if (obj.get(key).isJsonObject()) result.add(safeString(obj, key));
         else for (JsonElement opt : obj.getAsJsonArray(key)) result.add(opt.getAsString());
         return result;
@@ -54,7 +54,7 @@ public class Json {
 
     public static List<JsonElement> safeListElement(JsonObject obj, String key) {
         List<JsonElement> result = new ArrayList<>();
-        if (!obj.has(key)) return result;
+        if (!obj.has(key) || obj.get(key).isJsonNull()) return result;
         if (obj.get(key).isJsonObject()) {
             result.add(obj.get(key).getAsJsonObject());
         } else {
