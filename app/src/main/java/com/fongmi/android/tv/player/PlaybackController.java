@@ -82,6 +82,7 @@ public class PlaybackController {
     private Drm drm;
     private Sub sub;
     private boolean forceLive;
+    private boolean replay;
     private int timeout;
     private long activeSessionId;
 
@@ -331,6 +332,7 @@ public class PlaybackController {
         drm = null;
         url = null;
         forceLive = false;
+        replay = false;
     }
 
     public String stringToTime(long time) {
@@ -569,7 +571,8 @@ public class PlaybackController {
     public void start(Channel channel, int timeout) {
         ensureSession();
         String url = getChannelUrl(channel);
-        boolean forceLive = isLikelyLive(url, channel.getFormat());
+        replay = channel.isReplay();
+        boolean forceLive = shouldForceLive(url, channel.getFormat(), replay);
         this.timeout = timeout;
         this.forceLive = forceLive;
         if (channel.hasMsg()) {
@@ -585,6 +588,7 @@ public class PlaybackController {
 
     public void start(Result result, boolean useParse, int timeout) {
         ensureSession();
+        replay = false;
         this.timeout = timeout;
         this.forceLive = false;
         if (result.hasErrorMsg()) {
@@ -643,7 +647,7 @@ public class PlaybackController {
 
     private void setMediaSource(Channel channel, int timeout) {
         String url = getChannelUrl(channel);
-        boolean forceLive = isLikelyLive(url, channel.getFormat());
+        boolean forceLive = shouldForceLive(url, channel.getFormat(), channel.isReplay());
         setMediaSource(channel.getHeaders(), url, channel.getFormat(), channel.getDrm(), new ArrayList<>(), timeout, forceLive);
     }
 
@@ -841,7 +845,15 @@ public class PlaybackController {
         return item == null ? "" : item.getIdentity();
     }
 
-    private boolean isLikelyLive(String url, String format) {
+    static boolean shouldForceLive(String url, String format, boolean replay) {
+        return resolveLiveFlag(isLikelyLive(url, format), replay, false);
+    }
+
+    static boolean resolveLiveFlag(boolean hint, boolean replay, boolean timelineLive) {
+        return !replay && (hint || timelineLive);
+    }
+
+    private static boolean isLikelyLive(String url, String format) {
         if (url == null) return false;
         String value = url.toLowerCase(Locale.US);
         String type = format == null ? "" : format.toLowerCase(Locale.US);
@@ -853,7 +865,7 @@ public class PlaybackController {
     }
 
     private void updateLiveDecision() {
-        if (exo() != null) forceLive = forceLive || exo().isCurrentMediaItemLive();
+        forceLive = resolveLiveFlag(forceLive, replay, exo() != null && exo().isCurrentMediaItemLive());
     }
 
     private void dispatchPlaybackError(Throwable throwable) {

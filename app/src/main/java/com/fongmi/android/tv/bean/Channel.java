@@ -66,11 +66,16 @@ public class Channel {
     private Drm drm;
 
     private boolean selected;
+    private transient boolean replay;
     private Group group;
     private String url;
     private String msg;
     private Epg data;
     private int line;
+
+    public boolean isReplay() { return replay; }
+
+    public void setReplay(boolean replay) { this.replay = replay; }
 
     public static Channel objectFrom(JsonElement element) {
         return App.gson().fromJson(element, Channel.class);

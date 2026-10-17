@@ -132,6 +132,7 @@ public class LiveViewModel extends ViewModel {
 
     public void getUrl(Channel item) {
         Channel request = snapshot(item);
+        request.setReplay(false);
         submitUrl(() -> {
             request.setMsg(null);
             Source.get().stop();
@@ -142,6 +143,7 @@ public class LiveViewModel extends ViewModel {
 
     public void getUrl(Channel item, EpgData data) {
         Channel request = snapshot(item);
+        request.setReplay(true);
         submitUrl(() -> {
             request.setUrl(UrlUtil.normalize(request.getCatchup().format(request.getCurrent(), data), ""));
             return request;
