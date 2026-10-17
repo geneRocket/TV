@@ -24,7 +24,7 @@ public class Setting {
     // region Core Settings
 
     public static String getDoh() {
-        return getPref().getString("doh", "");
+        return Prefers.getString("doh", "");
     }
 
     public static void putDoh(String doh) {
@@ -32,7 +32,7 @@ public class Setting {
     }
 
     public static String getProxy() {
-        return getPref().getString("proxy", "");
+        return Prefers.getString("proxy", "");
     }
 
     public static void putProxy(String proxy) {
@@ -40,7 +40,7 @@ public class Setting {
     }
 
     public static String getUa() {
-        return getPref().getString("ua", "");
+        return Prefers.getString("ua", "");
     }
 
     public static void putUa(String ua) {
@@ -48,7 +48,7 @@ public class Setting {
     }
 
     public static int getQuality() {
-        return getPref().getInt("quality", 2);
+        return Prefers.getInt("quality", 2);
     }
 
     public static void putQuality(int index) {
@@ -60,7 +60,7 @@ public class Setting {
     }
 
     public static int getConfigCache() {
-        return Math.min(getPref().getInt("config_cache", 0), 2);
+        return Math.min(Prefers.getInt("config_cache", 0), 2);
     }
 
     public static void putConfigCache(int value) {
@@ -72,7 +72,7 @@ public class Setting {
     // region Player Settings
 
     public static int getPlayer() {
-        return Math.min(Math.max(getPref().getInt("player", PlayerType.EXO), PlayerType.SYSTEM), PlayerType.EXO);
+        return Math.min(Math.max(Prefers.getInt("player", PlayerType.EXO), PlayerType.SYSTEM), PlayerType.EXO);
     }
 
     public static void putPlayer(int player) {
@@ -80,7 +80,7 @@ public class Setting {
     }
 
     public static int getLivePlayer() {
-        return Math.min(Math.max(getPref().getInt("player_live", getPlayer()), PlayerType.SYSTEM), PlayerType.EXO);
+        return Math.min(Math.max(Prefers.getInt("player_live", getPlayer()), PlayerType.SYSTEM), PlayerType.EXO);
     }
 
     public static void putLivePlayer(int player) {
@@ -88,7 +88,7 @@ public class Setting {
     }
 
     public static int getDecode(int player) {
-        return Math.min(Math.max(getPref().getInt("decode_" + player, DecodeMode.HARDWARE), DecodeMode.SOFTWARE), DecodeMode.HARDWARE);
+        return Math.min(Math.max(Prefers.getInt("decode_" + player, DecodeMode.HARDWARE), DecodeMode.SOFTWARE), DecodeMode.HARDWARE);
     }
 
     public static void putDecode(int player, int decode) {
@@ -96,7 +96,7 @@ public class Setting {
     }
 
     public static int getRender() {
-        return Math.min(Math.max(getPref().getInt("render", 0), 0), 1);
+        return Math.min(Math.max(Prefers.getInt("render", 0), 0), 1);
     }
 
     public static void putRender(int render) {
@@ -104,7 +104,7 @@ public class Setting {
     }
 
     public static boolean isTunnel() {
-        return getPref().getBoolean("exo_tunnel", false);
+        return Prefers.getBoolean("exo_tunnel", false);
     }
 
     public static void putTunnel(boolean tunnel) {
@@ -112,7 +112,7 @@ public class Setting {
     }
 
     public static boolean isPlayWithOthers() {
-        return getPref().getBoolean("play_with_others", false);
+        return Prefers.getBoolean("play_with_others", false);
     }
 
     public static void putPlayWithOthers(boolean value) {
@@ -120,7 +120,7 @@ public class Setting {
     }
 
     public static int getBuffer() {
-        return Math.min(Math.max(getPref().getInt("exo_buffer", 0), 1), 15);
+        return Math.min(Math.max(Prefers.getInt("exo_buffer", 0), 1), 15);
     }
 
     public static void putBuffer(int value) {
@@ -148,7 +148,7 @@ public class Setting {
     }
 
     public static int getLoudness() {
-        return getPref().getInt("loudness", LOUDNESS_DEFAULT);
+        return Prefers.getInt("loudness", LOUDNESS_DEFAULT);
     }
 
     public static void putLoudness(int value) {
@@ -164,7 +164,7 @@ public class Setting {
     }
 
     public static int getRtsp() {
-        return Math.min(Math.max(getPref().getInt("rtsp", 0), 0), 1);
+        return Math.min(Math.max(Prefers.getInt("rtsp", 0), 0), 1);
     }
 
     public static void putRtsp(int value) {
@@ -172,7 +172,7 @@ public class Setting {
     }
 
     public static int getHttp() {
-        return Math.min(Math.max(getPref().getInt("exo_http", 1), 0), 1);
+        return Math.min(Math.max(Prefers.getInt("exo_http", 1), 0), 1);
     }
 
     public static void putHttp(int value) {
@@ -180,7 +180,7 @@ public class Setting {
     }
 
     public static int getBackground() {
-        return getPref().getInt("background", 2);
+        return Prefers.getInt("background", 2);
     }
 
     public static void putBackground(int value) {
@@ -192,7 +192,7 @@ public class Setting {
     // region Danmaku Settings
 
     public static boolean isDanmu() {
-        return getPref().getBoolean("danmu", true);
+        return Prefers.getBoolean("danmu", true);
     }
 
     public static void putDanmu(boolean value) {
@@ -200,7 +200,7 @@ public class Setting {
     }
 
     public static int getDanmuSpeed() {
-        return Math.min(Math.max(getPref().getInt("danmu_speed", 2), 0), 3);
+        return Math.min(Math.max(Prefers.getInt("danmu_speed", 2), 0), 3);
     }
 
     public static void putDanmuSpeed(int value) {
@@ -216,7 +216,7 @@ public class Setting {
     }
 
     public static int getDanmuLine(int def) {
-        return Math.min(Math.max(getPref().getInt("danmu_line", def), 1), 15);
+        return Math.min(Math.max(Prefers.getInt("danmu_line", def), 1), 15);
     }
 
     public static void putDanmuLine(int line) {
@@ -224,7 +224,7 @@ public class Setting {
     }
 
     public static int getDanmuAlpha() {
-        return Math.min(Math.max(getPref().getInt("danmu_alpha", 90), 10), 100);
+        return Math.min(Math.max(Prefers.getInt("danmu_alpha", 90), 10), 100);
     }
 
     public static void putDanmuAlpha(int alpha) {
@@ -232,7 +232,7 @@ public class Setting {
     }
 
     public static boolean isDanmuLoad() {
-        return getPref().getBoolean("danmu_load", true);
+        return Prefers.getBoolean("danmu_load", true);
     }
 
     public static void putDanmuLoad(boolean value) {
@@ -244,7 +244,7 @@ public class Setting {
     // region VOD & Live Settings
 
     public static String getVodConfigUrls() {
-        return getPref().getString("vod_config_urls", "");
+        return Prefers.getString("vod_config_urls", "");
     }
 
     public static void putVodConfigUrls(String urls) {
@@ -252,7 +252,7 @@ public class Setting {
     }
 
     public static String getVodConfigDesc() {
-        return getPref().getString("vod_config_desc", "");
+        return Prefers.getString("vod_config_desc", "");
     }
 
     public static void putVodConfigDesc(String desc) {
@@ -260,7 +260,7 @@ public class Setting {
     }
 
     public static String getLiveConfigUrls() {
-        return getPref().getString("live_config_urls", "");
+        return Prefers.getString("live_config_urls", "");
     }
 
     public static void putLiveConfigUrls(String urls) {
@@ -268,7 +268,7 @@ public class Setting {
     }
 
     public static String getLiveConfigDesc() {
-        return getPref().getString("live_config_desc", "");
+        return Prefers.getString("live_config_desc", "");
     }
 
     public static void putLiveConfigDesc(String desc) {
@@ -276,7 +276,7 @@ public class Setting {
     }
 
     public static String getKeep() {
-        return getPref().getString("keep", "");
+        return Prefers.getString("keep", "");
     }
 
     public static void putKeep(String keep) {
@@ -284,7 +284,7 @@ public class Setting {
     }
 
     public static String getHot() {
-        return getPref().getString("hot", "");
+        return Prefers.getString("hot", "");
     }
 
     public static void putHot(String hot) {
@@ -292,7 +292,7 @@ public class Setting {
     }
 
     public static boolean isBootLive() {
-        return getPref().getBoolean("boot_live", false);
+        return Prefers.getBoolean("boot_live", false);
     }
 
     public static void putBootLive(boolean value) {
@@ -300,7 +300,7 @@ public class Setting {
     }
 
     public static int getLiveScale() {
-        return Math.min(Math.max(getPref().getInt("scale_live", getScale()), 0), 4);
+        return Math.min(Math.max(Prefers.getInt("scale_live", getScale()), 0), 4);
     }
 
     public static void putLiveScale(int index) {
@@ -308,7 +308,7 @@ public class Setting {
     }
 
     public static boolean isInvert() {
-        return getPref().getBoolean("invert", false);
+        return Prefers.getBoolean("invert", false);
     }
 
     public static void putInvert(boolean value) {
@@ -316,7 +316,7 @@ public class Setting {
     }
 
     public static boolean isAcross() {
-        return getPref().getBoolean("across", true);
+        return Prefers.getBoolean("across", true);
     }
 
     public static void putAcross(boolean value) {
@@ -324,7 +324,7 @@ public class Setting {
     }
 
     public static boolean isChange() {
-        return getPref().getBoolean("change", true);
+        return Prefers.getBoolean("change", true);
     }
 
     public static void putChange(boolean value) {
@@ -336,11 +336,11 @@ public class Setting {
     }
 
     public static int getHomeMenuKey() {
-        return getPref().getInt("home_menu_key", 0);
+        return Prefers.getInt("home_menu_key", 0);
     }
 
     public static int getHomeUI() {
-        return getPref().getInt("home_ui", 1);
+        return Prefers.getInt("home_ui", 1);
     }
 
     public static void putHomeUI(int value) {
@@ -348,7 +348,7 @@ public class Setting {
     }
 
     public static boolean isHomeHistory() {
-        return getPref().getBoolean("home_history", true);
+        return Prefers.getBoolean("home_history", true);
     }
 
     public static void putHomeHistory(boolean value) {
@@ -356,7 +356,7 @@ public class Setting {
     }
 
     public static String getHomeButtons(String def) {
-        return getPref().getString("home_buttons", def);
+        return Prefers.getString("home_buttons", def);
     }
 
     public static void putHomeButtons(String value) {
@@ -364,7 +364,7 @@ public class Setting {
     }
 
     public static String getHomeButtonsSorted(String def) {
-        return getPref().getString("home_buttons_sorted", def);
+        return Prefers.getString("home_buttons_sorted", def);
     }
 
     public static void putHomeButtonsSorted(String value) {
@@ -376,7 +376,7 @@ public class Setting {
     // region Display Settings
 
     public static boolean isDisplaySpeed() {
-        return getPref().getBoolean("display_speed", false);
+        return Prefers.getBoolean("display_speed", false);
     }
 
     public static void putDisplaySpeed(boolean value) {
@@ -384,7 +384,7 @@ public class Setting {
     }
 
     public static boolean isDisplayTime() {
-        return getPref().getBoolean("display_time", false);
+        return Prefers.getBoolean("display_time", false);
     }
 
     public static void putDisplayTime(boolean value) {
@@ -392,7 +392,7 @@ public class Setting {
     }
 
     public static boolean isDisplayVideoTitle() {
-        return getPref().getBoolean("display_video_title", false);
+        return Prefers.getBoolean("display_video_title", false);
     }
 
     public static void putDisplayVideoTitle(boolean value) {
@@ -400,7 +400,7 @@ public class Setting {
     }
 
     public static boolean isDisplayDuration() {
-        return getPref().getBoolean("display_duration", false);
+        return Prefers.getBoolean("display_duration", false);
     }
 
     public static void putDisplayDuration(boolean value) {
@@ -408,7 +408,7 @@ public class Setting {
     }
 
     public static boolean isDisplayMiniProgress() {
-        return getPref().getBoolean("display_mini_progress", false);
+        return Prefers.getBoolean("display_mini_progress", false);
     }
 
     public static void putDisplayMiniProgress(boolean value) {
@@ -420,7 +420,7 @@ public class Setting {
     // region Misc Settings
 
     public static int getReset() {
-        return getPref().getInt("reset", 0);
+        return Prefers.getInt("reset", 0);
     }
 
     public static void putReset(int reset) {
@@ -428,7 +428,7 @@ public class Setting {
     }
 
     public static boolean isCaption() {
-        return getPref().getBoolean("caption", false);
+        return Prefers.getBoolean("caption", false);
     }
 
     public static boolean hasCaption() {
@@ -440,7 +440,7 @@ public class Setting {
     }
 
     public static boolean isRemoveAd() {
-        return getPref().getBoolean("remove_ad", false);
+        return Prefers.getBoolean("remove_ad", false);
     }
 
     public static void putRemoveAd(boolean value) {
@@ -464,7 +464,7 @@ public class Setting {
     }
 
     public static int getLanguage() {
-        return getPref().getInt("language", LanguageUtil.locale());
+        return Prefers.getInt("language", LanguageUtil.locale());
     }
 
     public static void putLanguage(int lang) {
@@ -472,7 +472,7 @@ public class Setting {
     }
 
     public static int getBackupMode() {
-        return getPref().getInt("backup_mode", 1);
+        return Prefers.getInt("backup_mode", 1);
     }
 
     public static void putBackupMode(int mode) {
@@ -480,7 +480,7 @@ public class Setting {
     }
 
     public static int getParseWebView() {
-        return getPref().getInt("parse_webview", 0);
+        return Prefers.getInt("parse_webview", 0);
     }
 
     public static void putParseWebView(int value) {
@@ -488,7 +488,7 @@ public class Setting {
     }
 
     public static boolean isAggregatedSearch() {
-        return getPref().getBoolean("aggregated_search", false);
+        return Prefers.getBoolean("aggregated_search", false);
     }
 
     public static void putAggregatedSearch(boolean value) {
@@ -496,7 +496,7 @@ public class Setting {
     }
 
     public static int getWall() {
-        return getPref().getInt("wall", 1);
+        return Prefers.getInt("wall", 1);
     }
 
     public static void putWall(int index) {
@@ -504,7 +504,7 @@ public class Setting {
     }
 
     public static boolean isIncognito() {
-        return getPref().getBoolean("incognito", false);
+        return Prefers.getBoolean("incognito", false);
     }
 
     public static void putIncognito(boolean value) {
@@ -512,7 +512,7 @@ public class Setting {
     }
 
     public static int getScale() {
-        return Math.min(Math.max(getPref().getInt("scale", 0), 0), 4);
+        return Math.min(Math.max(Prefers.getInt("scale", 0), 0), 4);
     }
 
     public static void putScale(int value) {
@@ -520,7 +520,7 @@ public class Setting {
     }
 
     public static int getEpisode() {
-        return getPref().getInt("episode", 0);
+        return Prefers.getInt("episode", 0);
     }
 
     public static void putEpisode(int index) {
@@ -528,7 +528,7 @@ public class Setting {
     }
 
     public static int getFlag() {
-        return Math.min(Math.max(getPref().getInt("flag", 0), 0), 1);
+        return Math.min(Math.max(Prefers.getInt("flag", 0), 0), 1);
     }
 
     public static void putFlag(int value) {
@@ -536,7 +536,7 @@ public class Setting {
     }
 
     public static int getFullscreenMenuKey() {
-        return getPref().getInt("fullscreen_menu_key", 0);
+        return Prefers.getInt("fullscreen_menu_key", 0);
     }
 
     public static void putFullscreenMenuKey(int index) {
@@ -544,7 +544,7 @@ public class Setting {
     }
 
     public static int getSmallWindowBackKey() {
-        return getPref().getInt("small_window_back_key", 0);
+        return Prefers.getInt("small_window_back_key", 0);
     }
 
     public static void putSmallWindowBackKey(int value) {
@@ -552,7 +552,7 @@ public class Setting {
     }
 
     public static boolean isHomeSiteLock() {
-        return getPref().getBoolean("home_site_lock", false);
+        return Prefers.getBoolean("home_site_lock", false);
     }
 
     public static void putHomeSiteLock(boolean value) {
@@ -560,7 +560,7 @@ public class Setting {
     }
 
     public static boolean isHomeDisplayName() {
-        return getPref().getBoolean("home_display_name", false);
+        return Prefers.getBoolean("home_display_name", false);
     }
 
     public static void putHomeDisplayName(boolean value) {
@@ -568,7 +568,7 @@ public class Setting {
     }
 
     public static String getThunderCacheDir() {
-        return getPref().getString("thunder_cache_dir", "");
+        return Prefers.getString("thunder_cache_dir", "");
     }
 
     public static void putThunderCacheDir(String value) {
@@ -576,7 +576,7 @@ public class Setting {
     }
 
     public static int getSize() {
-        return getPref().getInt("size", 2);
+        return Prefers.getInt("size", 2);
     }
 
     public static void putSize(int index) {
@@ -584,7 +584,7 @@ public class Setting {
     }
 
     public static int getViewType(int def) {
-        return getPref().getInt("viewType", def);
+        return Prefers.getInt("viewType", def);
     }
 
     public static void putViewType(int type) {
@@ -592,7 +592,7 @@ public class Setting {
     }
 
     public static String getKeyword() {
-        return getPref().getString("keyword", "");
+        return Prefers.getString("keyword", "");
     }
 
     public static void putKeyword(String keyword) {
@@ -612,7 +612,7 @@ public class Setting {
     }
 
     public static boolean isZhuyin() {
-        return getPref().getBoolean("zhuyin", false);
+        return Prefers.getBoolean("zhuyin", false);
     }
 
     public static void putZhuyin(boolean value) {
@@ -620,7 +620,7 @@ public class Setting {
     }
 
     public static int getSiteMode() {
-        return getPref().getInt("site_mode", 1);
+        return Prefers.getInt("site_mode", 1);
     }
 
     public static void putSiteMode(int value) {
@@ -628,7 +628,7 @@ public class Setting {
     }
 
     public static boolean isSiteSearch() {
-        return getPref().getBoolean("site_search", false);
+        return Prefers.getBoolean("site_search", false);
     }
 
     public static void putSiteSearch(boolean value) {
@@ -636,7 +636,7 @@ public class Setting {
     }
 
     public static int getSyncMode() {
-        return getPref().getInt("sync_mode", 0);
+        return Prefers.getInt("sync_mode", 0);
     }
 
     public static void putSyncMode(int value) {
@@ -644,7 +644,7 @@ public class Setting {
     }
 
     public static boolean getUpdate() {
-        return getPref().getBoolean("update", true);
+        return Prefers.getBoolean("update", true);
     }
 
     public static void putUpdate(boolean value) {
