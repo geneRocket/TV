@@ -1925,8 +1925,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         Iterator<Vod> iterator = items.iterator();
         while (iterator.hasNext()) {
             Vod item = iterator.next();
-            SearchSorter.prepare(item, keyword);
-            if (item.getScore() < SOURCE_MIN_SCORE) iterator.remove();
+            if (!SearchSorter.isSourceCandidate(item, keyword, mSiteSearch.isAutomatic(), SOURCE_MIN_SCORE)) iterator.remove();
         }
         mQuickAdapter.addAllSorted(items, SearchSorter.comparator(keyword, ""));
         if (mSiteSearch.shouldSelectFirst()) {

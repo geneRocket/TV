@@ -18,8 +18,9 @@ import java.util.regex.Pattern;
 public final class SearchSorter {
 
     private static final Pattern TITLE_SEPARATORS = Pattern.compile("[\\p{P}\\p{Z}\\s]+");
-    private static final Pattern TITLE_QUALITY = Pattern.compile("(?i)[\\p{P}\\p{Z}\\s]+(?:4k|8k|2160p|1080p|720p|uhd|hdr|蓝光|超清|高清|原盘|完整版)(?:[\\p{P}\\p{Z}\\s]+.*)?$");
-    private static final Pattern TITLE_YEAR = Pattern.compile("[\\p{P}\\p{Z}\\s]+(?:19|20)\\d{2}$");
+    private static final String QUALITY_LABEL = "(?:4k|8k|2160p|1080p|720p|uhd|hdr|蓝光|超清|高清|原盘|完整版)";
+    private static final Pattern TITLE_QUALITY = Pattern.compile("(?i)[\\p{P}\\p{Z}\\s&&[^\\p{Pe}\\p{Pf}]]+" + QUALITY_LABEL
+            + "(?:[\\p{P}\\p{Z}\\s]+" + QUALITY_LABEL + ")*[\\p{P}\\p{Z}\\s]*$");
     private static final Pattern TITLE_BRACKETED_YEAR = Pattern.compile("[\\p{Z}\\s]*[（(\\[【{][\\p{Z}\\s]*(?:19|20)\\d{2}[\\p{Z}\\s]*[）)\\]】}][\\p{Z}\\s]*$");
 
     private SearchSorter() {
@@ -81,13 +82,22 @@ public final class SearchSorter {
         return !normalizedSource.isEmpty() && normalizedSource.equals(normalizedTarget);
     }
 
+    /** Automatic replacement requires the same title; manual suggestions retain fuzzy ranking. */
+    public static boolean isSourceCandidate(Vod item, String keyword, boolean automatic, double minimumScore) {
+        if (item == null) return false;
+        prepare(item, keyword);
+        return automatic ? matchesTitle(item.getVodName(), keyword) : item.getScore() >= minimumScore;
+    }
+
     private static String normalizeTitle(String value) {
         if (value == null) return "";
         String normalized = value.toLowerCase(Locale.ROOT).trim();
-        boolean qualityRemoved = TITLE_QUALITY.matcher(normalized).find();
-        if (qualityRemoved) normalized = TITLE_QUALITY.matcher(normalized).replaceFirst("").trim();
-        if (qualityRemoved) normalized = TITLE_YEAR.matcher(normalized).replaceFirst("").trim();
-        normalized = TITLE_BRACKETED_YEAR.matcher(normalized).replaceFirst("").trim();
+        String previous;
+        do {
+            previous = normalized;
+            normalized = TITLE_BRACKETED_YEAR.matcher(normalized).replaceFirst("").trim();
+            normalized = TITLE_QUALITY.matcher(normalized).replaceFirst("").trim();
+        } while (!normalized.equals(previous));
         return TITLE_SEPARATORS.matcher(normalized).replaceAll(" ").trim();
     }
 

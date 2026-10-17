@@ -22,6 +22,7 @@ public final class TvVodSourceSearch {
         boolean accepts(Result result);
         String expectedKeyword();
         String sourceSwitchKeyword();
+        boolean automatic();
         String sourceKey(Vod vod);
         void mergeCandidates(List<Vod> items, String requestToken);
         void cancelEmptyFallback();
@@ -55,9 +56,9 @@ public final class TvVodSourceSearch {
         String keyword = port.sourceSwitchKeyword();
         for (Vod item : items) {
             if (item == null) continue;
-            SearchSorter.prepare(item, keyword);
+            if (!SearchSorter.isSourceCandidate(item, keyword, port.automatic(), MIN_SCORE)) continue;
             String sourceKey = port.sourceKey(item);
-            if (item.getScore() >= MIN_SCORE && !TextUtils.isEmpty(sourceKey) && candidateKeys.add(sourceKey)) accepted.add(item);
+            if (!TextUtils.isEmpty(sourceKey) && candidateKeys.add(sourceKey)) accepted.add(item);
         }
         if (accepted.isEmpty()) return;
         port.mergeCandidates(accepted, result.getRequestToken());

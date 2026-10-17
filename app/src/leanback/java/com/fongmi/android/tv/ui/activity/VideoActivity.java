@@ -309,6 +309,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         @Override public boolean accepts(Result result) { return mSiteSearch.accepts(result); }
         @Override public String expectedKeyword() { return Objects.toString(mBinding.part.getTag(), "").trim(); }
         @Override public String sourceSwitchKeyword() { return getSourceSwitchKeyword(); }
+        @Override public boolean automatic() { return mSiteSearch.isAutomatic(); }
         @Override public String sourceKey(Vod vod) { return getSourceKey(vod); }
         @Override public void mergeCandidates(List<Vod> items, String token) { mergeQuickItems(items, token); }
         @Override public void cancelEmptyFallback() { App.removeCallbacks(mR4); }
