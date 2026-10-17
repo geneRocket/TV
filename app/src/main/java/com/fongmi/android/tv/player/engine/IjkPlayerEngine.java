@@ -21,8 +21,6 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     private boolean pendingStartSeek;
     private boolean pendingReady;
     private boolean released;
-    private int videoWidth;
-    private int videoHeight;
 
     public IjkPlayerEngine(IjkVideoView view, int playerType, int render, int decode) {
         this.player = view.render(render).decode(decode);
@@ -109,7 +107,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         boolean starting = pendingReady || pendingStartSeek || phase == EnginePhase.PREPARING;
         long position = starting ? requestedStartPosition : player.getCurrentPosition();
         long buffered = starting ? requestedStartPosition : player.getBufferedPosition();
-        return new EngineSnapshot(sessionId, phase, position, player.getDuration(), buffered, player.isPlaying(), player.getSpeed(), videoWidth, videoHeight);
+        return new EngineSnapshot(sessionId, phase, position, player.getDuration(), buffered, player.isPlaying(), player.getSpeed(), player.getVideoWidth(), player.getVideoHeight());
     }
 
     @Override
@@ -169,12 +167,6 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     @Override
     public void onBufferingUpdate(IMediaPlayer mp, int percent) {
-    }
-
-    @Override
-    public void onVideoSizeChanged(IMediaPlayer mp, int width, int height, int sar_num, int sar_den) {
-        this.videoWidth = width;
-        this.videoHeight = height;
     }
 
     @Override
