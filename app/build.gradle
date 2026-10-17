@@ -190,6 +190,7 @@ tasks.register('verifyRefactor') {
             ':chaquo:testPythonBridge',
             ':quickjs:testDebugUnitTest',
             ':ijkplayer:testDebugUnitTest',
+            ':thunder:testDebugUnitTest',
             'testLeanbackJavaArm64_v8aDebugUnitTest',
             'testMobileJavaArm64_v8aDebugUnitTest',
             'lintLeanbackJavaArm64_v8aDebug',

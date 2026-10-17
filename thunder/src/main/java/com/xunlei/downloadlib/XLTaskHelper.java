@@ -48,7 +48,7 @@ public class XLTaskHelper {
 
     private void deleteFile(File file) {
         if (file.isDirectory()) for (File f : Path.list(file)) deleteFile(f);
-        if (file.isFile() && !file.getAbsolutePath().endsWith(".torrent")) Path.clear(file);
+        if (!file.getAbsolutePath().endsWith(".torrent")) file.delete();
     }
 
     public synchronized GetTaskId parse(String url, File savePath) {

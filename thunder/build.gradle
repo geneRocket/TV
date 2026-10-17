@@ -15,4 +15,5 @@ android {
 
 dependencies {
     implementation project(':catvod')
+    testImplementation 'junit:junit:4.13.2'
 }
