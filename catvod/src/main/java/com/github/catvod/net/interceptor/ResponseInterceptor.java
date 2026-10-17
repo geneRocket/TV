@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.zip.Inflater;
-import java.util.zip.InflaterInputStream;
 
 import okhttp3.Interceptor;
 import okhttp3.HttpUrl;
@@ -22,7 +21,11 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okio.BufferedSource;
+import okio.Buffer;
+import okio.InflaterSource;
 import okio.Okio;
+import okio.Source;
+import okio.Timeout;
 
 public class ResponseInterceptor implements Interceptor {
 
@@ -48,7 +51,7 @@ public class ResponseInterceptor implements Interceptor {
     public Response intercept(@NonNull Chain chain) throws IOException {
         Request request = check(chain.request());
         Response response = chain.proceed(request);
-        if ("deflate".equals(response.header(HttpHeaders.CONTENT_ENCODING))) response = deflate(response);
+        if ("deflate".equalsIgnoreCase(response.header(HttpHeaders.CONTENT_ENCODING))) response = deflate(response);
         String location = response.code() == 406 ? redirectMap.remove(request.url().toString()) : null;
         if (location != null) {
             response.close();
@@ -78,7 +81,37 @@ public class ResponseInterceptor implements Interceptor {
     private Response deflate(Response response) {
         ResponseBody body = response.body();
         if (body == null) return response;
-        InflaterInputStream is = new InflaterInputStream(body.byteStream(), new Inflater(true));
+        BufferedSource compressed = body.source();
+        BufferedSource decoded = Okio.buffer(new Source() {
+            private InflaterSource inflater;
+            private boolean closed;
+
+            @Override public long read(Buffer sink, long byteCount) throws IOException {
+                if (byteCount < 0) throw new IllegalArgumentException("byteCount < 0");
+                if (closed) throw new IOException("closed");
+                if (byteCount == 0) return 0;
+                if (inflater == null) {
+                    // Detect on first read, so closing an unused redirect never waits for its body.
+                    boolean zlib = false;
+                    if (compressed.request(2)) {
+                        int cmf = compressed.getBuffer().getByte(0) & 0xff;
+                        int flg = compressed.getBuffer().getByte(1) & 0xff;
+                        zlib = (cmf & 0x0f) == 8 && (cmf >> 4) <= 7 && ((cmf << 8) | flg) % 31 == 0;
+                    }
+                    inflater = new InflaterSource(compressed, new Inflater(!zlib));
+                }
+                return inflater.read(sink, byteCount);
+            }
+
+            @Override public Timeout timeout() { return compressed.timeout(); }
+
+            @Override public void close() throws IOException {
+                if (closed) return;
+                closed = true;
+                if (inflater == null) compressed.close();
+                else inflater.close();
+            }
+        });
         return response.newBuilder().removeHeader(HttpHeaders.CONTENT_ENCODING).removeHeader(HttpHeaders.CONTENT_LENGTH).body(new ResponseBody() {
             @Nullable
             @Override
@@ -94,7 +127,7 @@ public class ResponseInterceptor implements Interceptor {
             @NonNull
             @Override
             public BufferedSource source() {
-                return Okio.buffer(Okio.source(is));
+                return decoded;
             }
         }).build();
     }
