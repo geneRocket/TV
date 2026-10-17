@@ -59,4 +59,25 @@ public class EpisodeMatcherTest {
     public void differentExplicitSeasonsDoNotMatch() {
         assertEquals(-1, EpisodeMatcher.find(Collections.singletonList("S02E03"), "S01E03", true, -1));
     }
+
+    @Test
+    public void missingEpisodeCannotMatchDigitsInsideAnotherEpisode() {
+        assertEquals(-1, EpisodeMatcher.find(Arrays.asList("112", "113"), "12", true, -1));
+    }
+
+    @Test
+    public void shorterCandidateCannotMatchDigitsInsideTargetEpisode() {
+        assertEquals(-1, EpisodeMatcher.find(Arrays.asList("12", "13"), "112", true, -1));
+    }
+
+    @Test
+    public void seasonEpisodePrefixCannotSelectADifferentEpisode() {
+        assertEquals(-1, EpisodeMatcher.find(Arrays.asList("S01E030", "S01E040"), "S01E03", true, -1));
+    }
+
+    @Test
+    public void fuzzyNumberMatchStillAcceptsNonNumericLabels() {
+        assertEquals(0, EpisodeMatcher.find(Arrays.asList("12（备用）", "13（备用）"), "12", true, -1));
+        assertEquals(0, EpisodeMatcher.find(Arrays.asList("12", "13"), "12（备用）", true, -1));
+    }
 }

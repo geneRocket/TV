@@ -64,11 +64,24 @@ public final class EpisodeMatcher {
         int match = -1;
         for (int i = 0; i < names.size(); i++) {
             String name = normalize(names.get(i));
-            if (name.isEmpty() || !name.contains(target) && !target.contains(name)) continue;
+            if (name.isEmpty() || !containsAtNumberBoundary(name, target) && !containsAtNumberBoundary(target, name)) continue;
             if (match != -1) return -1;
             match = i;
         }
         return match;
+    }
+
+    private static boolean containsAtNumberBoundary(String value, String part) {
+        for (int from = 0; from <= value.length() - part.length();) {
+            int start = value.indexOf(part, from);
+            if (start < 0) return false;
+            int end = start + part.length();
+            boolean joinsBefore = start > 0 && Character.isDigit(part.charAt(0)) && Character.isDigit(value.charAt(start - 1));
+            boolean joinsAfter = end < value.length() && Character.isDigit(part.charAt(part.length() - 1)) && Character.isDigit(value.charAt(end));
+            if (!joinsBefore && !joinsAfter) return true;
+            from = start + 1;
+        }
+        return false;
     }
 
     private static String normalize(String value) {
