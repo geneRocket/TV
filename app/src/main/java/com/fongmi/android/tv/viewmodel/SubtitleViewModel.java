@@ -22,7 +22,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -383,33 +382,9 @@ public class SubtitleViewModel extends ViewModel {
                             }
                             if (seq == requestSeq.get()) setSearchListData(seq, data, true, false);
                         } else {//有的字幕 不一定是压缩包
-                            Element item = doc.selectFirst(".download a#btn_download");
-                            if (item == null) {
-                                if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
-                                return;
-                            }
-                            String href = item.attr("href");
-                            if (TextUtils.isEmpty(href)) {
-                                if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
-                                return;
-                            }
-                            String h2 = href.toLowerCase();
-                            if (h2.endsWith("srt") || h2.endsWith("ass") || h2.endsWith("scc") || h2.endsWith("ttml")) {
-                                String url = assrtUrl(ASSRT_DOWNLOAD_URL, href);
-                                Subtitle one = new Subtitle();
-                                String title = href.substring(href.lastIndexOf("/") + 1);
-                                try {
-                                    one.setName(URLDecoder.decode(title, StandardCharsets.UTF_8.name()));
-                                } catch (IllegalArgumentException e) {
-                                    one.setName(title);
-                                }
-                                one.setUrl(url);
-                                one.setIsZip(false);
-                                data.add(one);
-                                if (seq == requestSeq.get()) setSearchListData(seq, data, true, false);
-                            } else {
-                                if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
-                            }
+                            Subtitle one = parseDirectSubtitle(doc, res.request().url().toString());
+                            if (one != null) data.add(one);
+                            if (seq == requestSeq.get()) setSearchListData(seq, one == null ? null : data, true, false);
                         }
                     } catch (Throwable th) {
                         ThreadPools.log(th, "Subtitle detail parse failed.");
@@ -420,6 +395,30 @@ public class SubtitleViewModel extends ViewModel {
         } catch (Exception e) {
             ThreadPools.log(e, "Subtitle detail init failed.");
         }
+    }
+
+    static Subtitle parseDirectSubtitle(Document document, String pageUrl) {
+        Element item = document.selectFirst(".download a#btn_download");
+        if (item == null) return null;
+        String href = item.attr("href");
+        if (href.isEmpty()) return null;
+        HttpUrl page = pageUrl == null ? null : HttpUrl.parse(pageUrl);
+        HttpUrl url = page == null ? null : page.resolve(href);
+        if (url == null) return null;
+        String name = url.pathSegments().get(url.pathSegments().size() - 1);
+        String file = name.toLowerCase(Locale.ROOT);
+        String lower = href.toLowerCase(Locale.ROOT);
+        boolean knownFile = file.endsWith(".srt") || file.endsWith(".ass") || file.endsWith(".ssa")
+                || file.endsWith(".vtt") || file.endsWith(".ttml") || file.endsWith(".xml")
+                || file.endsWith(".dfxp") || file.endsWith(".scc");
+        // Preserve existing query-based download endpoints such as ?format=srt.
+        boolean legacyEndpoint = lower.endsWith("srt") || lower.endsWith("ass") || lower.endsWith("scc") || lower.endsWith("ttml");
+        if (!knownFile && !legacyEndpoint) return null;
+        Subtitle subtitle = new Subtitle();
+        subtitle.setUrl(url.toString());
+        subtitle.setName(name);
+        subtitle.setIsZip(false);
+        return subtitle;
     }
 
     private synchronized void getSubtitleUrlFromAssrt(Subtitle subtitle, SubtitleLoader subtitleLoader) {
@@ -475,8 +474,8 @@ public class SubtitleViewModel extends ViewModel {
                 .build();
     }
 
-    private String assrtUrl(String base, String href) {
-        if (TextUtils.isEmpty(href)) return "";
+    private static String assrtUrl(String base, String href) {
+        if (href == null || href.isEmpty()) return "";
         if (href.startsWith("http://") || href.startsWith("https://")) return href;
         if (href.startsWith("//")) return "https:" + href;
         if (href.startsWith("/")) return base + href;
