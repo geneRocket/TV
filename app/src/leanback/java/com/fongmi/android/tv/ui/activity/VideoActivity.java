@@ -210,7 +210,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
         @Override public void clearPlaybackOverlay() { hideInfoAndCenter(); }
         @Override public void showProgress() { VideoActivity.this.showProgress(); }
-        @Override public void stopContentSearch() { mSourceSearch.stop(); }
+        @Override public void stopContentSearch() { mSourceSearch.finish(); }
         @Override public void clearPlaybackTimeout() { VideoActivity.this.clearPlaybackTimeout(); }
         @Override public void updateMetadata() { setMetadata(); }
         @Override public void resetRecovery() { mRecovery.reset(); }
@@ -2515,7 +2515,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             clearSourceSwitch();
         } else if (!mSiteSearch.isAutomatic()) {
             boolean empty = !mSourceCandidates.hasItems();
-            mSourceSearch.stop();
+            mSourceSearch.finish();
             if (empty) Notify.show(R.string.play_switch_empty);
         }
     }

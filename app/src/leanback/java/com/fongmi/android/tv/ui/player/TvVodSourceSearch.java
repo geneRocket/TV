@@ -90,8 +90,13 @@ public final class TvVodSourceSearch {
         port.startSearch(sites, keyword, automatic, port::onSearchSettled);
     }
 
-    public void stop() {
+    /** Stops result delivery while retaining discovered sources for later recovery. */
+    public void finish() {
         port.cancelSearch();
+    }
+
+    public void stop() {
+        finish();
         port.clearCandidates();
         candidateKeys.clear();
     }
