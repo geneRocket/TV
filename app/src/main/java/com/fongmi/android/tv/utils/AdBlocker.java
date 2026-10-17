@@ -129,13 +129,13 @@ public final class AdBlocker {
 
     private static String normalizeRule(String rule) {
         if (rule == null) return "";
-        String value = rule.trim().toLowerCase(Locale.US);
-        if (value.startsWith("regex:")) value = value.substring(6).trim();
-        return value;
+        String value = rule.trim();
+        if (value.regionMatches(true, 0, "regex:", 0, 6)) return value.substring(6).trim();
+        return value.toLowerCase(Locale.US);
     }
 
     private static boolean isRegexRule(String rule) {
-        if (TextUtils.isEmpty(rule)) return false;
+        if (rule == null || rule.isEmpty()) return false;
         return rule.trim().toLowerCase(Locale.US).startsWith("regex:");
     }
 
@@ -143,7 +143,7 @@ public final class AdBlocker {
         if (ads.isEmpty()) return Collections.emptyList();
         List<Pattern> patterns = new ArrayList<>(ads.size());
         for (String ad : ads) {
-            if (TextUtils.isEmpty(ad)) continue;
+            if (ad == null || ad.isEmpty()) continue;
             if (hostOnly != isHostRule(ad)) continue;
             if (!isRegexRule(ad)) continue;
             try {
@@ -195,11 +195,11 @@ public final class AdBlocker {
     }
 
     private static boolean isHostRule(String rule) {
-        return !TextUtils.isEmpty(rule) && !isUrlRule(rule);
+        return rule != null && !rule.isEmpty() && !isUrlRule(rule);
     }
 
     private static boolean isUrlRule(String rule) {
-        if (TextUtils.isEmpty(rule)) return false;
+        if (rule == null || rule.isEmpty()) return false;
         String value = rule.trim();
         return value.contains("://")
                 || value.startsWith("/")
