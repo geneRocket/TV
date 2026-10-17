@@ -10,6 +10,8 @@ import androidx.lifecycle.ViewModel;
 import com.fongmi.android.tv.bean.Subtitle;
 import com.fongmi.android.tv.bean.SubtitleData;
 import com.fongmi.android.tv.utils.ThreadPools;
+import com.fongmi.android.tv.utils.AppTaskScheduler;
+import com.fongmi.android.tv.utils.TaskScheduler;
 import com.github.catvod.net.OkHttp;
 
 import org.jsoup.Jsoup;
@@ -58,22 +60,28 @@ public class SubtitleViewModel extends ViewModel {
     private final AtomicInteger requestSeq;
     private final AtomicInteger resolveSeq;
     private final OkHttpClient subtitleClient;
+    private final TaskScheduler scheduler;
     private volatile Call currentSearchCall;
     private volatile Call currentFallbackSearchCall;
     private volatile Call currentResolveCall;
 
     public SubtitleViewModel() {
-        searchResult = new MutableLiveData<>();
-        requestSeq = new AtomicInteger();
-        resolveSeq = new AtomicInteger();
-        subtitleClient = OkHttp.client().newBuilder()
+        this(OkHttp.client().newBuilder()
                 .readTimeout(15, TimeUnit.SECONDS)
                 .writeTimeout(15, TimeUnit.SECONDS)
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .followRedirects(false)
                 .followSslRedirects(false)
                 .retryOnConnectionFailure(true)
-                .build();
+                .build(), AppTaskScheduler.get());
+    }
+
+    SubtitleViewModel(OkHttpClient client, TaskScheduler scheduler) {
+        searchResult = new MutableLiveData<>();
+        requestSeq = new AtomicInteger();
+        resolveSeq = new AtomicInteger();
+        subtitleClient = client;
+        this.scheduler = scheduler;
     }
 
     public LiveData<SubtitleData> searchResults() {
@@ -92,25 +100,37 @@ public class SubtitleViewModel extends ViewModel {
         getSubtitleUrlFromAssrt(subtitle, subtitleLoader);
     }
 
-    private void setSearchListData(List<Subtitle> data, boolean isNew, boolean isZip) {
-        setSearchListData(data, isNew, isZip, false);
+    private void setSearchListData(int seq, List<Subtitle> data, boolean isNew, boolean isZip) {
+        setSearchListData(seq, data, isNew, isZip, false);
     }
 
-    private void setSearchListData(List<Subtitle> data, boolean isNew, boolean isZip, boolean hasNext) {
+    private void setSearchListData(int seq, List<Subtitle> data, boolean isNew, boolean isZip, boolean hasNext) {
+        setSearchListData(seq, data, isNew, isZip, hasNext, null);
+    }
+
+    private void setSearchListData(int seq, List<Subtitle> data, boolean isNew, boolean isZip, boolean hasNext, Integer total) {
         try {
             SubtitleData subtitleData = new SubtitleData();
             subtitleData.setSubtitleList(data);
             subtitleData.setIsNew(isNew);
             subtitleData.setIsZip(isZip);
             subtitleData.setHasNext(hasNext);
-            searchResult.postValue(subtitleData);
+            postSearchResult(seq, subtitleData, total);
         } catch (Throwable e) {
             ThreadPools.log(e, "Subtitle data update failed.");
-            searchResult.postValue(null);
+            postSearchResult(seq, null, null);
         }
     }
 
     private int pagesTotal = -1;
+
+    void postSearchResult(int sequence, SubtitleData data, Integer total) {
+        scheduler.post(() -> {
+            if (sequence != requestSeq.get()) return;
+            if (total != null) pagesTotal = total;
+            searchResult.setValue(data);
+        }, 0);
+    }
 
     private void searchResultFromAssrt(String title, int page, boolean simplified) {
         searchResultFromAssrt(title, page, simplified, -1);
@@ -130,11 +150,11 @@ public class SubtitleViewModel extends ViewModel {
             cancelCall(currentSearchCall);
             cancelCall(currentFallbackSearchCall);
             if (TextUtils.isEmpty(keyword)) {
-                if (seq == requestSeq.get()) setSearchListData(new ArrayList<>(), true, true);
+                if (seq == requestSeq.get()) setSearchListData(seq, new ArrayList<>(), true, true);
                 return;
             }
             if (pagesTotal > 0 && currentPage > pagesTotal) {
-                if (seq == requestSeq.get()) setSearchListData(new ArrayList<>(), currentPage <= 1, true);
+                if (seq == requestSeq.get()) setSearchListData(seq, new ArrayList<>(), currentPage <= 1, true);
                 return;
             }
             if (currentPage == 1) pagesTotal = -1;//第一页时 重置页大小
@@ -170,8 +190,8 @@ public class SubtitleViewModel extends ViewModel {
                             searchResultFromSubtitlesWebsite(fallback, currentPage, seq);
                             return;
                         }
-                        pagesTotal = parsePagesTotal(doc);
-                        setSearchListData(data, currentPage <= 1, true, hasNextPage(doc, currentPage));
+                        int total = parsePagesTotal(doc);
+                        setSearchListData(seq, data, currentPage <= 1, true, hasNextPage(doc, currentPage, total), total);
                     } catch (Throwable th) {
                         ThreadPools.log(th, "Subtitle search parse failed.");
                         if (seq == requestSeq.get()) searchResultFromSubtitlesWebsite(keyword, currentPage, seq);
@@ -187,7 +207,7 @@ public class SubtitleViewModel extends ViewModel {
         if (seq != requestSeq.get()) return;
         String keyword = title == null ? "" : title.trim();
         if (TextUtils.isEmpty(keyword)) {
-            setSearchListData(new ArrayList<>(), true, false);
+            setSearchListData(seq, new ArrayList<>(), true, false);
             return;
         }
         String url = SUBTITLES_WEBSITE_API + "/search/subtitles?title=" + encode(keyword) + "&format=srt";
@@ -198,21 +218,21 @@ public class SubtitleViewModel extends ViewModel {
             public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
                 ThreadPools.log(e, "Fallback subtitle search failed.");
-                if (seq == requestSeq.get()) setSearchListData(null, page <= 1, false);
+                if (seq == requestSeq.get()) setSearchListData(seq, null, page <= 1, false);
             }
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
                 try (Response res = response; ResponseBody body = res.body()) {
                     if (!res.isSuccessful() || body == null) {
-                        if (seq == requestSeq.get()) setSearchListData(null, page <= 1, false);
+                        if (seq == requestSeq.get()) setSearchListData(seq, null, page <= 1, false);
                         return;
                     }
                     List<Subtitle> data = parseSubtitlesWebsiteResults(new JSONObject(body.string()), keyword);
-                    if (seq == requestSeq.get()) setSearchListData(data, true, false, false);
+                    if (seq == requestSeq.get()) setSearchListData(seq, data, true, false, false);
                 } catch (Throwable th) {
                     ThreadPools.log(th, "Fallback subtitle search parse failed.");
-                    if (seq == requestSeq.get()) setSearchListData(null, page <= 1, false);
+                    if (seq == requestSeq.get()) setSearchListData(seq, null, page <= 1, false);
                 }
             }
         });
@@ -281,8 +301,8 @@ public class SubtitleViewModel extends ViewModel {
         return -1;
     }
 
-    private boolean hasNextPage(Document doc, int currentPage) {
-        if (pagesTotal > 0) return currentPage < pagesTotal;
+    private boolean hasNextPage(Document doc, int currentPage, int total) {
+        if (total > 0) return currentPage < total;
         for (Element item : doc.select(".pagelinkcard a, .pagination a")) {
             String text = item.text().trim();
             if (text.contains("下一") || text.equalsIgnoreCase("next") || text.equals(">")) return !item.hasClass("disabled");
@@ -319,7 +339,7 @@ public class SubtitleViewModel extends ViewModel {
             int seq = requestSeq.incrementAndGet();
             cancelCall(currentSearchCall);
             if (subtitle == null || TextUtils.isEmpty(subtitle.getUrl())) {
-                if (seq == requestSeq.get()) setSearchListData(null, true, true);
+                if (seq == requestSeq.get()) setSearchListData(seq, null, true, true);
                 return;
             }
             String url = subtitle.getUrl();
@@ -330,14 +350,14 @@ public class SubtitleViewModel extends ViewModel {
                 public void onFailure(Call call, IOException e) {
                     if (call.isCanceled()) return;
                     ThreadPools.log(e, "Subtitle detail search failed.");
-                    if (seq == requestSeq.get()) setSearchListData(null, true, true);
+                    if (seq == requestSeq.get()) setSearchListData(seq, null, true, true);
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
                     try (Response res = response; ResponseBody body = res.body()) {
                         if (!res.isSuccessful() || body == null) {
-                            if (seq == requestSeq.get()) setSearchListData(null, true, false);
+                            if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
                             return;
                         }
                         String content = body.string();
@@ -359,16 +379,16 @@ public class SubtitleViewModel extends ViewModel {
                                     data.add(one);
                                 }
                             }
-                            if (seq == requestSeq.get()) setSearchListData(data, true, false);
+                            if (seq == requestSeq.get()) setSearchListData(seq, data, true, false);
                         } else {//有的字幕 不一定是压缩包
                             Element item = doc.selectFirst(".download a#btn_download");
                             if (item == null) {
-                                if (seq == requestSeq.get()) setSearchListData(null, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
                                 return;
                             }
                             String href = item.attr("href");
                             if (TextUtils.isEmpty(href)) {
-                                if (seq == requestSeq.get()) setSearchListData(null, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
                                 return;
                             }
                             String h2 = href.toLowerCase();
@@ -384,14 +404,14 @@ public class SubtitleViewModel extends ViewModel {
                                 one.setUrl(url);
                                 one.setIsZip(false);
                                 data.add(one);
-                                if (seq == requestSeq.get()) setSearchListData(data, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(seq, data, true, false);
                             } else {
-                                if (seq == requestSeq.get()) setSearchListData(null, true, false);
+                                if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
                             }
                         }
                     } catch (Throwable th) {
                         ThreadPools.log(th, "Subtitle detail parse failed.");
-                        if (seq == requestSeq.get()) setSearchListData(null, true, false);
+                        if (seq == requestSeq.get()) setSearchListData(seq, null, true, false);
                     }
                 }
             });
