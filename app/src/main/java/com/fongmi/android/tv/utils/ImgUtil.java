@@ -26,6 +26,8 @@ import com.fongmi.android.tv.bean.Site;
 
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import jahirfiquitiva.libs.textdrawable.TextDrawable;
 import okhttp3.Headers;
@@ -36,6 +38,7 @@ public class ImgUtil {
     private static final String TAG_COOKIE = "@Cookie=";
     private static final String TAG_REFERER = "@Referer=";
     private static final String TAG_USER_AGENT = "@User-Agent=";
+    private static final Pattern COMMA_IMAGE_SEPARATOR = Pattern.compile(",\\s*(?=https?://)");
 
     private static ObjectKey getSignature(String url) {
         return new ObjectKey(url + "_" + Setting.getQuality());
@@ -165,10 +168,9 @@ public class ImgUtil {
             int index = url.indexOf(separator);
             if (index > 0 && (!"&&".equals(separator) || index < end)) return url.substring(0, index).trim();
         }
-        int comma = url.indexOf(",");
-        int nextHttp = url.indexOf("http", Math.max(comma, 0) + 1);
-        return comma > 0 && comma < end && nextHttp > comma && nextHttp < end
-                ? url.substring(0, comma).trim() : url;
+        Matcher comma = COMMA_IMAGE_SEPARATOR.matcher(url);
+        return comma.find() && comma.start() > 0 && comma.start() < end
+                ? url.substring(0, comma.start()).trim() : url;
     }
 
     private static String stripParam(String url) {

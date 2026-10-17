@@ -7,6 +7,21 @@ import okhttp3.Headers;
 import static org.junit.Assert.assertEquals;
 
 public class ImgUtilTest {
+    @Test public void coordinateCommasBeforeAProxyTargetAreNotImageSeparators() {
+        String image = "https://images.example.com/resize?size=300,450&url=https://cdn.example.com/poster.jpg";
+        assertEquals(image, ImgUtil.firstPic(image));
+    }
+
+    @Test public void coordinateCommasInAProxyPathAreNotImageSeparators() {
+        String image = "https://images.example.com/resize/300,450/https://cdn.example.com/poster.jpg";
+        assertEquals(image, ImgUtil.firstPic(image));
+    }
+
+    @Test public void imageListsPreserveCommasInsideTheirFirstUrl() {
+        String image = "https://images.example.com/resize?size=300,450&url=https://cdn.example.com/poster.jpg";
+        assertEquals(image, ImgUtil.firstPic(image + ", https://cdn.example.com/second.jpg"));
+    }
+
     @Test public void imageSpecificCookieReplacesTheSiteCookie() {
         Headers site = new Headers.Builder().add("Cookie", "site=old").add("X-Site", "retained").build();
         Map<String, String> headers = ImgUtil.imageHeaders("https://example.com/poster.jpg@Cookie=image=new", site);
