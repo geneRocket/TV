@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ExtractorsFactory;
+import androidx.media3.extractor.text.SubtitleParser;
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
 import androidx.media3.extractor.ts.TsExtractor;
 
@@ -27,12 +28,13 @@ import java.util.Map;
 public class MediaSourceFactory implements MediaSource.Factory {
 
     private final DefaultMediaSourceFactory defaultMediaSourceFactory;
+    private final SubtitleParser.Factory subtitleParserFactory = new CharsetSubtitleParserFactory();
     private ExtractorsFactory extractorsFactory;
     private DrmSessionManagerProvider drmSessionManagerProvider;
     private LoadErrorHandlingPolicy loadErrorHandlingPolicy;
 
     public MediaSourceFactory() {
-        defaultMediaSourceFactory = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(App.get(), new MyOkhttpDataSource.Factory(OkHttp.client())), getExtractorsFactory());
+        defaultMediaSourceFactory = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(App.get(), new MyOkhttpDataSource.Factory(OkHttp.client())), getExtractorsFactory(), subtitleParserFactory);
     }
 
     @NonNull
@@ -94,7 +96,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     private ExtractorsFactory getExtractorsFactory() {
-        if (extractorsFactory == null) extractorsFactory = new DefaultExtractorsFactory().setSubtitleParserFactory(new CharsetSubtitleParserFactory()).setConstantBitrateSeekingEnabled(true).setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS).setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * 3);
+        if (extractorsFactory == null) extractorsFactory = new DefaultExtractorsFactory().setSubtitleParserFactory(subtitleParserFactory).setConstantBitrateSeekingEnabled(true).setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS).setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * 3);
         return extractorsFactory;
     }
 
@@ -102,6 +104,6 @@ public class MediaSourceFactory implements MediaSource.Factory {
         HttpDataSource.Factory httpFactory = new MyOkhttpDataSource.Factory(OkHttp.client());
         if (headers != null && !headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
         DataSource.Factory upstreamFactory = new DefaultDataSource.Factory(App.get(), httpFactory);
-        return new DefaultMediaSourceFactory(upstreamFactory, getExtractorsFactory());
+        return new DefaultMediaSourceFactory(upstreamFactory, getExtractorsFactory(), subtitleParserFactory);
     }
 }

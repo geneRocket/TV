@@ -53,7 +53,7 @@ public final class CharsetSubtitleParserFactory implements SubtitleParser.Factor
         return Objects.equals(format.sampleMimeType, MimeTypes.APPLICATION_SUBRIP) || Objects.equals(format.sampleMimeType, MimeTypes.TEXT_SSA) || Objects.equals(format.sampleMimeType, MimeTypes.TEXT_VTT);
     }
 
-    private static byte[] convertToUtf8(byte[] data, int offset, int length) {
+    static byte[] convertToUtf8(byte[] data, int offset, int length) {
         Charset charset = detectCharset(data, offset, length);
         if (charset == null || StandardCharsets.UTF_8.equals(charset)) {
             byte[] copy = new byte[length];
