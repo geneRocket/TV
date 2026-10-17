@@ -24,6 +24,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.server.Nano;
+import com.fongmi.android.tv.server.SyncPulls;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.Notify;
@@ -60,7 +61,7 @@ public class Action implements Process {
         if ("file".equals(param)) onFile(params);
         else if ("push".equals(param)) onPush(params);
         else if ("cast".equals(param)) onCast(params);
-        else if ("sync".equals(param)) onSync(params);
+        else if ("sync".equals(param)) onSync(params, session.getRemoteIpAddress());
         else if ("search".equals(param)) onSearch(params);
         else if ("setting".equals(param)) onSetting(params);
         else if ("refresh".equals(param)) onRefresh(params);
@@ -114,7 +115,7 @@ public class Action implements Process {
         CastEvent.post(ConfigRepository.get().find(config), device, history);
     }
 
-    private void onSync(Map<String, String> params) {
+    private void onSync(Map<String, String> params, String peer) {
         boolean keep = Objects.equals(params.get("type"), "keep");
         boolean force = Objects.equals(params.get("force"), "true");
         boolean history = Objects.equals(params.get("type"), "history");
@@ -125,8 +126,9 @@ public class Action implements Process {
             else if (keep) sendKeep(device);
         }
         if (mode.equals("0") || mode.equals("1")) {
-            if (history) syncHistory(params, force);
-            else if (keep) syncKeep(params, force);
+            String callbackPeer = params.get("device") == null ? peer : "";
+            if (history) syncHistory(params, force, callbackPeer);
+            else if (keep) syncKeep(params, force, callbackPeer);
         }
     }
 
@@ -167,12 +169,18 @@ public class Action implements Process {
     }
 
     public void syncHistory(Map<String, String> params, boolean force) {
-        Config config = ConfigRepository.get().find(Config.objectFrom(params.get("config")));
+        syncHistory(params, force, "");
+    }
+
+    private void syncHistory(Map<String, String> params, boolean force, String peer) {
+        Config incoming = Config.objectFrom(params.get("config"));
+        Config config = ConfigRepository.get().find(incoming);
         List<History> targets = HistoryRepository.get().listFromJson(params.get("targets"));
+        boolean replace = SyncPulls.get().consume(peer, "history", incoming.getUrl()) || force;
         if (VodConfig.get().getConfig().equals(config)) {
-            HistoryRepository.get().sync(config.getId(), targets, force);
+            HistoryRepository.get().sync(config.getId(), targets, replace);
         } else {
-            VodConfig.load(config, getCallback(config.getId(), targets, force));
+            VodConfig.load(config, getCallback(config.getId(), targets, replace));
         }
     }
 
@@ -192,13 +200,14 @@ public class Action implements Process {
         };
     }
 
-    private void syncKeep(Map<String, String> params, boolean force) {
+    private void syncKeep(Map<String, String> params, boolean force, String peer) {
         List<Keep> targets = KeepRepository.get().listFromJson(params.get("targets"));
         List<Config> configs = Config.arrayFrom(params.get("configs"));
+        boolean replace = SyncPulls.get().consume(peer, "keep", "") || force;
         if (TextUtils.isEmpty(VodConfig.getUrl()) && configs.size() > 0) {
-            VodConfig.load(ConfigRepository.get().find(configs.get(0)), getCallback(configs, targets, force));
+            VodConfig.load(ConfigRepository.get().find(configs.get(0)), getCallback(configs, targets, replace));
         } else {
-            KeepRepository.get().sync(configs, targets, force);
+            KeepRepository.get().sync(configs, targets, replace);
         }
     }
 

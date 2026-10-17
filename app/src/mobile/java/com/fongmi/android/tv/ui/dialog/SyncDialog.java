@@ -27,6 +27,7 @@ import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
 import com.fongmi.android.tv.event.ScanEvent;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.server.SyncPulls;
 import com.fongmi.android.tv.ui.activity.ScanActivity;
 import com.fongmi.android.tv.ui.adapter.DeviceAdapter;
 import com.fongmi.android.tv.utils.Notify;
@@ -58,6 +59,8 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     private DeviceAdapter adapter;
     private ScanTask scanTask;
     private Call activeCall;
+    private SyncPulls.Ticket activePull;
+    private String syncConfigUrl = "";
     private String type;
 
     public static SyncDialog create() {
@@ -71,9 +74,11 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     public SyncDialog history() {
+        Config config = Config.vod();
+        syncConfigUrl = config.getUrl();
         body.add("device", DeviceRepository.get().current().toString());
-        body.add("config", Config.vod().toString());
-        body.add("targets", App.gson().toJson(HistoryRepository.get().all()));
+        body.add("config", config.toString());
+        body.add("targets", App.gson().toJson(HistoryRepository.get().all(config.getId())));
         return type("history");
     }
 
@@ -172,30 +177,42 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     public boolean onLongClick(Device item) {
         String mode = binding.mode.getTag().toString();
         if (mode.equals("0")) return false;
-        if (mode.equals("2") && type.equals("keep")) KeepRepository.get().deleteAll();
-        if (mode.equals("2") && type.equals("history")) HistoryRepository.get().deleteLoaded();
-        enqueue(OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s&force=true", item.getIp(), binding.mode.getTag().toString(), type), body.build()));
+        SyncPulls.Ticket pull = mode.equals("2") ? SyncPulls.get().begin(item.getIp(), type, syncConfigUrl) : null;
+        enqueue(OkHttp.newCall(client, String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=%s&force=true", item.getIp(), binding.mode.getTag().toString(), type), body.build()), pull);
         return true;
     }
 
     private void enqueue(Call call) {
-        Call previous = activeCall;
-        if (previous != null) previous.cancel();
-        activeCall = call;
-        call.enqueue(getCallback(call));
+        enqueue(call, null);
     }
 
-    private Callback getCallback(Call request) {
+    private void enqueue(Call call, SyncPulls.Ticket pull) {
+        Call previous = activeCall;
+        if (previous != null) previous.cancel();
+        if (activePull != null) activePull.close();
+        activePull = pull;
+        activeCall = call;
+        call.enqueue(getCallback(call, pull));
+    }
+
+    private Callback getCallback(Call request, SyncPulls.Ticket pull) {
         return new Callback() {
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) {
                 try (Response ignored = response) {
+                    if (!response.isSuccessful()) {
+                        onFailure(call, new IOException(response.code() + " " + response.message()));
+                        return;
+                    }
                     App.post(() -> { if (binding != null && activeCall == request) onSuccess(); });
+                } finally {
+                    if (pull != null) pull.close();
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                if (pull != null) pull.close();
                 App.post(() -> { if (binding != null && activeCall == request) Notify.show(e.getMessage()); });
             }
         };
@@ -208,6 +225,8 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
         scanTask = null;
         Call call = activeCall;
         activeCall = null;
+        if (activePull != null) activePull.close();
+        activePull = null;
         if (call != null) call.cancel();
         App.removeCallbacks(refreshDevices);
         binding = null;
