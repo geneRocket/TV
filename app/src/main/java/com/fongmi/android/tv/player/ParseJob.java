@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -155,7 +156,7 @@ public class ParseJob implements ParseCallback {
         String url = Json.safeString(object, "url");
         JsonObject data = object.getAsJsonObject("data");
         if (url.isEmpty()) url = Json.safeString(data, "url");
-        checkResult(getHeader(object), url, item.getName(), error);
+        checkResult(responseHeaders(object, parse.getHeaders()), url, item.getName(), error);
     }
 
     private String requestString(String url, Map<String, String> headers) throws Exception {
@@ -264,8 +265,9 @@ public class ParseJob implements ParseCallback {
         });
     }
 
-    private Map<String, String> getHeader(JsonObject object) {
-        Map<String, String> headers = new HashMap<>(parse.getHeaders());
+    static Map<String, String> responseHeaders(JsonObject object, Map<String, String> configured) {
+        Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        putHeaders(headers, configured);
         if (object.has("header") && object.get("header").isJsonObject()) putHeaders(headers, Json.toMap(object.get("header")));
         JsonObject data = object.has("data") && object.get("data").isJsonObject() ? object.getAsJsonObject("data") : null;
         if (data != null && data.has("header") && data.get("header").isJsonObject()) putHeaders(headers, Json.toMap(data.get("header")));
@@ -273,12 +275,12 @@ public class ParseJob implements ParseCallback {
         return headers;
     }
 
-    private void putHeaders(Map<String, String> target, Map<String, String> source) {
+    private static void putHeaders(Map<String, String> target, Map<String, String> source) {
         for (Map.Entry<String, String> entry : source.entrySet()) target.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
     }
 
     static Map<String, String> mergeHeaders(Map<String, String> configured, Map<String, String> source) {
-        Map<String, String> headers = new HashMap<>();
+        Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<String, String> entry : configured.entrySet()) headers.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
         for (Map.Entry<String, String> entry : source.entrySet()) headers.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
         return headers;
