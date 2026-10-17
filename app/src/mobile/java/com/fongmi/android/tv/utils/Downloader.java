@@ -24,12 +24,14 @@ public class Downloader {
     }
 
     public void start(Activity activity) {
-        if (result == null || result.isRequestFailed() || result.getRealUrl().isEmpty()) {
+        if (result == null || result.isRequestFailed()) {
+            Notify.show(com.fongmi.android.tv.R.string.vod_load_failed);
+        } else if (result.hasErrorMsg()) {
+            Notify.show(result.getMsg());
+        } else if (result.getRealUrl().isEmpty()) {
             Notify.show(com.fongmi.android.tv.R.string.vod_load_failed);
         } else if (!result.getRealUrl().startsWith("http")) {
             Notify.show(com.fongmi.android.tv.R.string.download_unsupported);
-        } else if (result.hasErrorMsg()) {
-            Notify.show(result.getMsg());
         }  else {
             download(activity);
         }
@@ -41,7 +43,9 @@ public class Downloader {
     }
 
     private void download(Activity activity, Map<String, String> headers, String url) {
-        IDMUtil.downloadFile(activity, UrlUtil.fixDownloadUrl(url), title, headers, false, false);
+        if (!IDMUtil.downloadFile(activity, UrlUtil.fixDownloadUrl(url), title, headers, false, false)) {
+            Notify.show(com.fongmi.android.tv.R.string.download_launch_failed);
+        }
     }
 
     private void clear() {

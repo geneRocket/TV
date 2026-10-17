@@ -7,6 +7,7 @@
     <!-- Vod -->
     <string name="vod_load_failed">Couldn’t load videos</string>
     <string name="download_unsupported">This playback protocol cannot be downloaded directly</string>
+    <string name="download_launch_failed">Could not open the downloader. Check that 1DM is installed and up to date.</string>
     <string name="vod_last">Last seen <xliff:g name="name">%s</xliff:g></string>
 
     <!-- Live -->

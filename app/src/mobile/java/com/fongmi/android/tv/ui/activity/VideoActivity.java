@@ -384,6 +384,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mHistory = null;
         mHistoryGate.reset();
         mViewModel.discardPlaybackCommands();
+        Notify.dismiss();
         mFlagAdapter.addAll(new ArrayList<>());
         setEpisodeAdapter(new ArrayList<>());
         mQualityAdapter.addAll(Result.empty());
@@ -647,6 +648,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void getDetail(Vod item) {
         capturePlaybackPosition();
         mViewModel.discardPlaybackCommands();
+        Notify.dismiss();
         getIntent().putExtra("key", item.getSiteKey());
         getIntent().putExtra("pic", item.getVodPic());
         getIntent().putExtra("id", item.getVodId());
@@ -805,6 +807,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void setDownload(Result result) {
+        Notify.dismiss();
         if (result == null || result.isRequestFailed()) {
             Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.vod_load_failed));
             return;

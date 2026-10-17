@@ -7,6 +7,7 @@
     <!-- Vod -->
     <string name="vod_load_failed">影片載入失敗</string>
     <string name="download_unsupported">此播放協定無法直接下載</string>
+    <string name="download_launch_failed">無法開啟下載器，請確認已安裝並更新 1DM。</string>
     <string name="vod_last">上次看到<xliff:g name="name">%s</xliff:g></string>
 
     <!-- Live -->
