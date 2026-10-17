@@ -1,17 +1,37 @@
 import json
 import os
 import inspect
+import hashlib
+import sys
+from importlib.util import module_from_spec, spec_from_loader
 from importlib.machinery import SourceFileLoader
 
 import requests
 
 
-def spider(cache, api):
-    name = os.path.basename(api)
-    path = cache + '/' + name
+def spider(cache, api, key=""):
+    identity = hashlib.sha256(((key or "") + "\0" + api).encode("utf-8")).hexdigest()
+    name = "_tv_spider_" + identity
+    path = os.path.join(cache, identity + ".py")
     download(path, api)
-    name = name.split('.')[0]
-    return SourceFileLoader(name, path).load_module().Spider()
+    loader = SourceFileLoader(name, path)
+    module = module_from_spec(spec_from_loader(name, loader))
+    previous = sys.modules.get(name)
+    sys.modules[name] = module
+    try:
+        # Always compile the downloaded bytes: a same-size refresh within one second
+        # must not reuse a timestamp-based .pyc. A fresh module also isolates old instances.
+        exec(loader.source_to_code(loader.get_data(path), path), module.__dict__)
+        instance = module.Spider()
+        module.__dict__["_tv_spider_owner"] = id(instance)
+        return instance
+    except BaseException:
+        if sys.modules.get(name) is module:
+            if previous is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
+        raise
 
 
 def download(path, api):
@@ -98,7 +118,13 @@ def localProxy(ru, param):
 
 
 def destroy(ru):
-    ru.destroy()
+    try:
+        ru.destroy()
+    finally:
+        for name, module in list(sys.modules.items()):
+            if name.startswith("_tv_spider_") and module is not None:
+                if module.__dict__.get("_tv_spider_owner") == id(ru):
+                    sys.modules.pop(name, None)
 
 
 def action(ru, action):

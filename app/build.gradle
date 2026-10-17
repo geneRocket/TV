@@ -187,6 +187,7 @@ tasks.register('verifyRefactor') {
     description = 'Runs the regression checks required by the app refactor.'
     dependsOn(
             ':core:test',
+            ':chaquo:testPythonBridge',
             'testLeanbackJavaArm64_v8aDebugUnitTest',
             'testMobileJavaArm64_v8aDebugUnitTest',
             'lintLeanbackJavaArm64_v8aDebug',

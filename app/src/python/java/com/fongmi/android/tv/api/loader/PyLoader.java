@@ -39,12 +39,17 @@ public class PyLoader {
     }
 
     private Spider createSpider(String key, String api, String ext) {
+        Spider spider = null;
         try {
-            Spider spider = loader.spider(App.get(), api);
+            spider = loader.spider(App.get(), key, api);
             spider.siteKey = key;
             spider.init(App.get(), ext);
             return spider;
         } catch (Throwable e) {
+            if (spider != null) {
+                try { spider.destroy(); }
+                catch (Throwable ignored) { }
+            }
             e.printStackTrace();
             return null;
         }

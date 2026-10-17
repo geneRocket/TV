@@ -3,6 +3,8 @@ plugins {
     id 'com.chaquo.python'
 }
 
+def pythonExecutable = providers.gradleProperty('pythonExecutable').getOrElse('/Users/wuwenjun/.pyenv/shims/python3.8')
+
 android {
     namespace 'com.fongmi.chaquo'
 
@@ -13,7 +15,7 @@ android {
         minSdk 24
         targetSdk 28
         python {
-            buildPython("/Users/wuwenjun/.pyenv/shims/python3.8")
+            buildPython(pythonExecutable)
             version "3.8"
             pip {
                 install "lxml"
@@ -51,4 +53,11 @@ android {
 
 dependencies {
     implementation project(':catvod')
+}
+
+tasks.register('testPythonBridge', Exec) {
+    group = 'verification'
+    description = 'Checks Python spider module isolation without Android or network access.'
+    workingDir projectDir
+    commandLine pythonExecutable, '-B', '-m', 'unittest', 'discover', '-s', 'src/test/python', '-v'
 }
