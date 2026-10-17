@@ -105,7 +105,7 @@ public class Epg {
         for (EpgData item : getList()) {
             item.setStartTime(parse(formats, getDate().concat(item.getStart())));
             item.setEndTime(parse(formats, getDate().concat(item.getEnd())));
-            if (item.getEndTime() < item.getStartTime()) item.checkDay();
+            if (item.getEndTime() > 0 && item.getEndTime() < item.getStartTime()) item.checkDay(formats.get(0).getTimeZone());
             item.trans();
         }
     }

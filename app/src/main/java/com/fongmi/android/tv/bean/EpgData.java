@@ -13,6 +13,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.TimeZone;
 
 public class EpgData {
 
@@ -109,7 +110,11 @@ public class EpgData {
     }
 
     public void checkDay() {
-        Calendar cal = Calendar.getInstance();
+        checkDay(TimeZone.getDefault());
+    }
+
+    public void checkDay(TimeZone timeZone) {
+        Calendar cal = Calendar.getInstance(timeZone);
         cal.setTimeInMillis(getEndTime());
         cal.add(Calendar.DAY_OF_MONTH, 1);
         setEndTime(cal.getTimeInMillis());
