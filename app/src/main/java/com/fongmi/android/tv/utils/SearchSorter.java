@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.function.Supplier;
 
 public final class SearchSorter {
 
@@ -87,6 +88,15 @@ public final class SearchSorter {
         if (item == null) return false;
         prepare(item, keyword);
         return automatic ? matchesTitle(item.getVodName(), keyword) : item.getScore() >= minimumScore;
+    }
+
+    /** Polls the existing candidate pool for an automatic handoff, not a manual click. */
+    public static Vod pollMatchingSource(Supplier<Vod> poll, String title) {
+        Vod item;
+        while ((item = poll.get()) != null) {
+            if (matchesTitle(item.getVodName(), title)) return item;
+        }
+        return null;
     }
 
     private static String normalizeTitle(String value) {

@@ -293,7 +293,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
 
         @Override public Vod nextPlayableSite() {
-            Vod item = mSourceCandidates.next(getCurrentBrokenKey());
+            Vod item = SearchSorter.pollMatchingSource(() -> mSourceCandidates.next(getCurrentBrokenKey()), getSourceSwitchKeyword());
             syncQuickItems();
             return item;
         }

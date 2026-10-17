@@ -1970,7 +1970,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void nextSite() {
-        Vod item = mQuickAdapter.poll(mBroken, getBrokenKey());
+        Vod item = SearchSorter.pollMatchingSource(() -> mQuickAdapter.poll(mBroken, getBrokenKey()), mBinding.name.getText().toString());
         if (item == null) {
             if (!mSiteSearch.isActive() || !mSiteSearch.hasPending()) showEmpty();
             return;

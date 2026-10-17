@@ -2,10 +2,15 @@ package com.fongmi.android.tv.utils;
 
 import org.junit.Test;
 import com.fongmi.android.tv.bean.Vod;
+import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Queue;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 
 public class SearchSorterTest {
 
@@ -72,6 +77,35 @@ public class SearchSorterTest {
         assertFalse(SearchSorter.matchesTitle("流浪地球.2019.2160p.UHD", "流浪地球"));
         assertTrue(SearchSorter.matchesTitle("群体 (2026)【1080P HDR】", "群体"));
         assertTrue(SearchSorter.matchesTitle("群体 4K (2026)", "群体"));
+    }
+
+    @Test public void automaticHandoffSkipsFuzzyCandidatesLeftByManualSearch() {
+        Vod sequel = vod("流浪地球2");
+        Vod sameMovie = vod("流浪地球 (2019) 4K");
+        Vod unrelated = vod("另一部电影");
+        assertTrue(SearchSorter.isSourceCandidate(sequel, "流浪地球", false, .5));
+        Queue<Vod> pending = new ArrayDeque<>(Arrays.asList(sequel, sameMovie, unrelated));
+        assertSame(sameMovie, SearchSorter.pollMatchingSource(pending::poll, "流浪地球"));
+        assertEquals(1, pending.size());
+        assertSame(unrelated, pending.peek());
+    }
+
+    @Test public void automaticHandoffExhaustsSimilarTitlesWithoutOpeningAnotherWork() {
+        Queue<Vod> pending = new ArrayDeque<>(Arrays.asList(vod("群体恶行"), vod("群体2")));
+        assertNull(SearchSorter.pollMatchingSource(pending::poll, "群体"));
+        assertTrue(pending.isEmpty());
+    }
+
+    @Test public void automaticHandoffAcceptsTheFirstSameTitleWithMetadata() {
+        Vod sameMovie = vod("群体 (2026)【1080P】");
+        Queue<Vod> pending = new ArrayDeque<>(Arrays.asList(sameMovie, vod("群体")));
+        assertSame(sameMovie, SearchSorter.pollMatchingSource(pending::poll, "群体"));
+        assertEquals(1, pending.size());
+    }
+
+    @Test public void automaticHandoffHandlesAnEmptyCandidatePool() {
+        Queue<Vod> pending = new ArrayDeque<>();
+        assertNull(SearchSorter.pollMatchingSource(pending::poll, "群体"));
     }
 
     private Vod vod(String title) {
