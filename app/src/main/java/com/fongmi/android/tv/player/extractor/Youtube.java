@@ -27,6 +27,8 @@ import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
+import okhttp3.HttpUrl;
+
 public class Youtube implements Source.Extractor {
 
     private static final String MPD = "<MPD xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xmlns='urn:mpeg:dash:schema:mpd:2011' xsi:schemaLocation='urn:mpeg:dash:schema:mpd:2011 DASH-MPD.xsd' type='static' mediaPresentationDuration='PT%sS' minBufferTime='PT1.500S' profiles='urn:mpeg:dash:profile:isoff-on-demand:2011'>\n" + "<Period duration='PT%sS' start='PT0S'>\n" + "%s\n" + "%s\n" + "</Period>\n" + "</MPD>";
@@ -43,8 +45,15 @@ public class Youtube implements Source.Extractor {
 
     @Override
     public String fetch(String url) throws Exception {
-        StreamInfo info = StreamInfo.getInfo(url);
+        StreamInfo info = StreamInfo.getInfo(playbackUrl(url));
         return isLive(info) ? getLive(info) : getMpd(info);
+    }
+
+    static String playbackUrl(String url) {
+        HttpUrl link = HttpUrl.parse(url);
+        // NewPipe otherwise classifies watch links containing list as playlists.
+        return link == null || link.queryParameter("list") == null ? url
+                : link.newBuilder().removeAllQueryParameters("list").build().toString();
     }
 
     private boolean isLive(StreamInfo info) {
