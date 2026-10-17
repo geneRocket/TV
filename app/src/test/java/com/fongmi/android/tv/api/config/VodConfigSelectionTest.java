@@ -53,14 +53,89 @@ public class VodConfigSelectionTest {
         if (contextField != null) contextField.set(init, previousContext);
     }
 
+    @Test public void startingALoadDoesNotReplaceTheSelectionBeforeSuccess() {
+        values.put("vod_config_urls", "https://working.example/config");
+        values.put("vod_config_desc", "Working selection");
+
+        new VodConfig.Selection(config("https://broken.example/config", "Unverified selection"));
+
+        assertEquals("https://working.example/config", Setting.getVodConfigUrls());
+        assertEquals("Working selection", Setting.getVodConfigDesc());
+    }
+
+    @Test public void successfulDepotResolutionCommitsTheActuallyLoadedChild() {
+        VodConfig.Selection selection = new VodConfig.Selection(config("https://depot.example/list", "Depot"));
+        selection.commit(config("https://child.example/config", "Resolved selection"));
+
+        assertEquals("https://child.example/config", Setting.getVodConfigUrls());
+        assertEquals("Resolved selection", Setting.getVodConfigDesc());
+    }
+
+    @Test public void emptyConfigCompletionKeepsTheExistingMultiSelection() {
+        String urls = "https://old.example/one\nhttps://old.example/two";
+        values.put("vod_config_urls", urls);
+        values.put("vod_config_desc", "Existing selection");
+        VodConfig.Selection selection = new VodConfig.Selection(config("", ""));
+        selection.commit(config("https://old.example/one", "Fallback"));
+
+        assertEquals(urls, Setting.getVodConfigUrls());
+        assertEquals("Existing selection", Setting.getVodConfigDesc());
+    }
+
+    private Config config(String url, String description) {
+        Config config = new Config() {
+            @Override public String getDesc() { return description; }
+        };
+        config.setUrl(url);
+        return config;
+    }
+
+    @Test public void newerManualSelectionSurvivesOlderLoadCompletion() {
+        VodConfig.Selection old = new VodConfig.Selection(config("https://older.example/config", "Older"));
+        Setting.putVodConfigUrls("https://newer.example/config");
+        Setting.putVodConfigDesc("Newer");
+        old.commit(config("https://older.example/config", "Older"));
+        assertEquals("https://newer.example/config", Setting.getVodConfigUrls());
+        assertEquals("Newer", Setting.getVodConfigDesc());
+    }
+
+    @Test public void newerPendingLoadWinsEvenIfOlderCompletionArrivesFirst() {
+        values.put("vod_config_urls", "https://working.example/config");
+        VodConfig.Selection old = new VodConfig.Selection(config("https://older.example/config", "Older"));
+        VodConfig.Selection newer = new VodConfig.Selection(config("https://newer.example/config", "Newer"));
+        old.commit(config("https://older.example/config", "Older"));
+        assertEquals("https://working.example/config", Setting.getVodConfigUrls());
+        newer.commit(config("https://newer.example/config", "Newer"));
+        assertEquals("https://newer.example/config", Setting.getVodConfigUrls());
+    }
+
+    @Test public void returningToOriginalUrlStillInvalidatesOlderCompletion() {
+        values.put("vod_config_urls", "https://original.example/config");
+        VodConfig.Selection old = new VodConfig.Selection(config("https://older.example/config", "Older"));
+        Setting.putVodConfigUrls("https://other.example/config");
+        Setting.putVodConfigUrls("https://original.example/config");
+        old.commit(config("https://older.example/config", "Older"));
+        assertEquals("https://original.example/config", Setting.getVodConfigUrls());
+    }
+
+    @Test public void newerDescriptionIntentAlsoInvalidatesOlderCompletion() {
+        values.put("vod_config_urls", "https://original.example/config");
+        VodConfig.Selection old = new VodConfig.Selection(config("https://older.example/config", "Older"));
+        Setting.putVodConfigDesc("Newer selection being prepared");
+        old.commit(config("https://older.example/config", "Older"));
+        assertEquals("https://original.example/config", Setting.getVodConfigUrls());
+        assertEquals("Newer selection being prepared", Setting.getVodConfigDesc());
+    }
+
     @Test public void emptyConfigFallbackKeepsTheExistingEnabledSelection() {
         String urls = "https://old.example/one\nhttps://old.example/two";
         values.put("vod_config_urls", urls);
         values.put("vod_config_desc", "Existing selection");
 
-        VodConfig.saveSelection(new Config() {
+        Config empty = new Config() {
             @Override public String getDesc() { return ""; }
-        });
+        };
+        new VodConfig.Selection(empty).commit(empty);
 
         assertEquals(urls, Setting.getVodConfigUrls());
         assertEquals("Existing selection", Setting.getVodConfigDesc());
@@ -75,7 +150,7 @@ public class VodConfigSelectionTest {
         };
         incoming.setUrl("https://new.example/config");
 
-        VodConfig.saveSelection(incoming);
+        new VodConfig.Selection(incoming).commit(incoming);
 
         assertEquals(Collections.singletonList(incoming.getUrl()), ConfigUrlParser.parse(Setting.getVodConfigUrls()));
         assertEquals("Remote selection", Setting.getVodConfigDesc());

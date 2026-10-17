@@ -64,6 +64,7 @@ public class VodConfig {
     private List<Config> selectedConfigs = new ArrayList<>();
     private final ConfigLoadTask loads = new ConfigLoadTask();
     private Config config = new Config();
+    private Selection selection;
     private Parse parse;
     private String wall;
     private Site home;
@@ -135,15 +136,28 @@ public class VodConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        saveSelection(config);
-        get().submit(() -> get().reset().config(config).loadConfig(callback));
+        Selection selection = new Selection(config);
+        get().submit(() -> {
+            VodConfig target = get().reset().config(config);
+            target.selection = selection;
+            target.loadConfig(callback);
+        });
     }
 
-    static void saveSelection(Config config) {
-        // Empty configs ask loadConfig to use the existing default configuration.
-        if (config == null || config.getUrl().isEmpty()) return;
-        Setting.putVodConfigUrls(config.getUrl());
-        Setting.putVodConfigDesc(config.getDesc());
+    static final class Selection {
+        private final boolean explicit;
+        private final long generation;
+
+        Selection(Config requested) {
+            explicit = requested != null && !requested.getUrl().isEmpty();
+            generation = Setting.beginVodConfigSelection();
+        }
+
+        void commit(Config loaded) {
+            if (explicit && loaded != null && !loaded.getUrl().isEmpty()) {
+                Setting.commitVodConfigSelection(generation, loaded.getUrl(), loaded.getDesc());
+            }
+        }
     }
 
     public static void loadCached(Config config, Callback callback) {
@@ -213,6 +227,7 @@ public class VodConfig {
     }
 
     public synchronized VodConfig clear() {
+        this.selection = null;
         this.wall = null;
         this.home = null;
         this.loadedObjects.clear();
@@ -607,6 +622,8 @@ public class VodConfig {
             String notice = Json.safeString(object, "notice");
             config.logo(Json.safeString(object, "logo"));
             if (persistCache) config.json(object.toString()).update();
+            ConfigLoadTask.check();
+            if (selection != null) selection.commit(config);
             config.activate();
             postSuccess(callback, notice);
         } catch (Throwable e) {

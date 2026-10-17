@@ -12,6 +12,7 @@ import com.github.catvod.utils.Prefers;
 public class Setting {
 
     public static final int LOUDNESS_DEFAULT = 1000;
+    private static long vodSelectionGeneration;
 
     private static SharedPreferences getPref() {
         return Prefers.getPrefers();
@@ -247,16 +248,29 @@ public class Setting {
         return Prefers.getString("vod_config_urls", "");
     }
 
-    public static void putVodConfigUrls(String urls) {
+    public static synchronized void putVodConfigUrls(String urls) {
         getEditor().putString("vod_config_urls", urls).apply();
+        vodSelectionGeneration++;
     }
 
     public static String getVodConfigDesc() {
         return Prefers.getString("vod_config_desc", "");
     }
 
-    public static void putVodConfigDesc(String desc) {
+    public static synchronized void putVodConfigDesc(String desc) {
         getEditor().putString("vod_config_desc", desc).apply();
+        vodSelectionGeneration++;
+    }
+
+    public static synchronized long beginVodConfigSelection() {
+        return ++vodSelectionGeneration;
+    }
+
+    public static synchronized boolean commitVodConfigSelection(long generation, String urls, String desc) {
+        if (generation != vodSelectionGeneration) return false;
+        getEditor().putString("vod_config_urls", urls).putString("vod_config_desc", desc).apply();
+        vodSelectionGeneration++;
+        return true;
     }
 
     public static String getLiveConfigUrls() {
