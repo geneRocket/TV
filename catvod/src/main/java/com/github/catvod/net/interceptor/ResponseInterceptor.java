@@ -48,7 +48,7 @@ public class ResponseInterceptor implements Interceptor {
     public Response intercept(@NonNull Chain chain) throws IOException {
         Request request = check(chain.request());
         Response response = chain.proceed(request);
-        if ("deflate".equals(response.header(HttpHeaders.CONTENT_ENCODING))) return deflate(response);
+        if ("deflate".equals(response.header(HttpHeaders.CONTENT_ENCODING))) response = deflate(response);
         String location = response.code() == 406 ? redirectMap.remove(request.url().toString()) : null;
         if (location != null) {
             response.close();
