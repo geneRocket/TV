@@ -80,4 +80,20 @@ public class EpisodeMatcherTest {
         assertEquals(0, EpisodeMatcher.find(Arrays.asList("12（备用）", "13（备用）"), "12", true, -1));
         assertEquals(0, EpisodeMatcher.find(Arrays.asList("12", "13"), "12（备用）", true, -1));
     }
+
+    @Test
+    public void ambiguousEpisodeAcrossSeasonsCannotBeChosenByZeroPadding() {
+        assertEquals(-1, EpisodeMatcher.find(Arrays.asList("S01E3", "S02E03"), "03", true, -1));
+    }
+
+    @Test
+    public void nonStrictAmbiguousEpisodeUsesActivatedPosition() {
+        assertEquals(0, EpisodeMatcher.find(Arrays.asList("S01E3", "S02E03"), "03", false, 0));
+    }
+
+    @Test
+    public void explicitSeasonResolvesOtherwiseAmbiguousEpisode() {
+        assertEquals(0, EpisodeMatcher.find(Arrays.asList("S01E3", "S02E03"), "S01E03", true, -1));
+        assertEquals(1, EpisodeMatcher.find(Arrays.asList("S01E3", "S02E03"), "S02E03", true, -1));
+    }
 }

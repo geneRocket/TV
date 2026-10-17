@@ -8,6 +8,8 @@ import java.util.regex.Pattern;
 
 public final class EpisodeMatcher {
 
+    private static final int AMBIGUOUS = -2;
+
     private static final Pattern SEASON_EPISODE = Pattern.compile("(?i)(?:^|\\b)S(?:EASON)?\\s*0*(\\d{1,3})\\s*[-._ ]*E(?:P(?:ISODE)?)?\\s*0*(\\d{1,4})(?:\\b|$)");
     private static final Pattern CHINESE_EPISODE = Pattern.compile("第?\\s*0*(\\d{1,4})\\s*[集話话期]");
     private static final Pattern CHINESE_NUMBER_EPISODE = Pattern.compile("第?\\s*([零〇一二兩两三四五六七八九十百千]+)\\s*[集話话期]");
@@ -25,13 +27,11 @@ public final class EpisodeMatcher {
         if (!normalizedTarget.isEmpty()) {
             for (int i = 0; i < names.size(); i++) if (normalize(names.get(i)).equals(normalizedTarget)) return i;
             EpisodeNumber targetNumber = numberOf(target);
-            if (targetNumber != null) {
-                int numberMatch = uniqueNumber(names, targetNumber);
-                if (numberMatch != -1) return numberMatch;
-            }
+            int numberMatch = targetNumber == null ? -1 : uniqueNumber(names, targetNumber);
+            if (numberMatch >= 0) return numberMatch;
             int partMatch = uniquePart(names, partOf(normalizedTarget));
             if (partMatch != -1) return partMatch;
-            int fuzzy = uniqueContains(names, normalizedTarget);
+            int fuzzy = numberMatch == AMBIGUOUS ? -1 : uniqueContains(names, normalizedTarget);
             if (fuzzy != -1) return fuzzy;
         }
         if (strict) return -1;
@@ -42,7 +42,7 @@ public final class EpisodeMatcher {
         int match = -1;
         for (int i = 0; i < names.size(); i++) {
             if (!target.matches(numberOf(names.get(i)))) continue;
-            if (match != -1) return -1;
+            if (match != -1) return AMBIGUOUS;
             match = i;
         }
         return match;
