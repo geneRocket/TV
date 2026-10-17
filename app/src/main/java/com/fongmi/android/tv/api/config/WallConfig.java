@@ -1,11 +1,12 @@
 package com.fongmi.android.tv.api.config;
 
 import android.graphics.Bitmap;
-import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.RequestManager;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.request.FutureTarget;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
@@ -14,17 +15,17 @@ import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.Download;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ThreadPools;
-import com.github.catvod.net.OkHttp;
+import com.github.catvod.net.HttpCallScope;
 import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
 import java.io.FileOutputStream;
-
-import okhttp3.Response;
+import java.io.IOException;
 
 public class WallConfig {
 
@@ -94,12 +95,11 @@ public class WallConfig {
 
     private void loadConfig(Callback callback) {
         try {
-            if (config.isEmpty()) config(Config.wall());
-            File file = write(FileUtil.getWall(0));
-            if (file.exists() && file.length() > 0) refresh(0);
-            else config(ConfigRepository.get().find(VodConfig.get().getWall(), 2));
-            App.post(callback::success);
+            if (config == null || config.isEmpty()) config(Config.wall());
+            write(FileUtil.getWall(0));
             config.update();
+            refresh(0);
+            App.post(callback::success);
         } catch (Throwable e) {
             App.post(() -> callback.error(Notify.getError(R.string.error_config_parse, e)));
             config(ConfigRepository.get().find(VodConfig.get().getWall(), 2));
@@ -107,29 +107,46 @@ public class WallConfig {
         }
     }
 
-    private File write(File file) throws Exception {
-        if (getUrl().startsWith("file")) Path.copy(Path.local(getUrl()), file);
-        else if (getUrl().startsWith("assets")) Path.copy(Asset.open(getUrl()), file);
-        else if (getUrl().startsWith("http")) {
-            try (Response response = OkHttp.newCall(getUrl()).execute()) {
-                if (response.body() != null) Path.write(file, response.body().bytes());
-            }
-        }
-        return resize(file);
-    }
-
-    private File resize(File file) {
-        Bitmap bitmap = null;
+    File write(File file) throws Exception {
+        HttpCallScope.throwIfCancelled();
+        File parent = file.getAbsoluteFile().getParentFile();
+        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) throw new IOException("Cannot create wallpaper directory");
+        File staged = File.createTempFile("wallpaper-", ".tmp", parent);
         try {
-            bitmap = Glide.with(App.get()).asBitmap().load(file).centerCrop().override(ResUtil.getScreenWidth(), ResUtil.getScreenHeight()).skipMemoryCache(true).diskCacheStrategy(DiskCacheStrategy.NONE).submit().get();
-            try (FileOutputStream output = new FileOutputStream(file)) {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, output);
-            }
-            return file;
-        } catch (Exception e) {
+            readSource(staged);
+            if (staged.length() == 0) throw new IOException("Empty wallpaper source");
+            HttpCallScope.throwIfCancelled();
+            resize(staged);
+            HttpCallScope.throwIfCancelled();
+            if (staged.length() == 0) throw new IOException("Empty processed wallpaper");
+            if (!staged.renameTo(file)) throw new IOException("Cannot replace wallpaper");
             return file;
         } finally {
-            if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+            if (staged.exists()) staged.delete();
+        }
+    }
+
+    void readSource(File file) throws Exception {
+        String url = getUrl();
+        if (url.startsWith("file")) {
+            if (!Path.tryCopy(Path.local(url), file)) throw new IOException("Cannot read wallpaper file");
+        } else if (url.startsWith("assets")) {
+            if (!Path.tryCopy(Asset.open(url), file)) throw new IOException("Cannot read wallpaper asset");
+        } else if (url.startsWith("http")) Download.create(url, file).sync();
+        else throw new IOException("Unsupported wallpaper source");
+    }
+
+    File resize(File file) throws Exception {
+        RequestManager manager = Glide.with(App.get());
+        FutureTarget<Bitmap> target = manager.asBitmap().load(file).centerCrop().override(ResUtil.getScreenWidth(), ResUtil.getScreenHeight()).skipMemoryCache(true).diskCacheStrategy(DiskCacheStrategy.NONE).submit();
+        try {
+            Bitmap bitmap = target.get();
+            try (FileOutputStream output = new FileOutputStream(file)) {
+                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 100, output)) throw new IOException("Cannot encode wallpaper");
+            }
+            return file;
+        } finally {
+            manager.clear(target);
         }
     }
 
