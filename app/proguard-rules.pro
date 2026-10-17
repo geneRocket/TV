@@ -38,6 +38,9 @@
 
 # CatVod
 -keep class com.github.catvod.Proxy { *; }
+# Separately compiled spiders reference these host APIs by their original descriptors.
+-keep,includedescriptorclasses class com.github.catvod.net.OkHttp { public *; }
+-keep,includedescriptorclasses class com.github.catvod.utils.Path { public *; }
 -keep class com.github.catvod.bean.** { *; }
 -keep class com.github.catvod.crawler.** { *; }
 -keep class * extends com.github.catvod.crawler.Spider { *; }
