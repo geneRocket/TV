@@ -96,4 +96,8 @@ public final class HistoryRepository {
     public void cancelPendingWrites() {
         History.cancelPendingWrites();
     }
+
+    public void withWritesPaused(Runnable action) {
+        History.withWritesPaused(action);
+    }
 }

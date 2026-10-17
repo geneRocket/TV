@@ -49,6 +49,12 @@ public class ParseAdapter extends RecyclerView.Adapter<ParseAdapter.ViewHolder> 
         return getItemCount() == 0;
     }
 
+    public void refresh() {
+        mItems.clear();
+        mItems.addAll(VodConfig.get().getParses());
+        notifyDataSetChanged();
+    }
+
     @Override
     public int getItemCount() {
         return mItems.size();

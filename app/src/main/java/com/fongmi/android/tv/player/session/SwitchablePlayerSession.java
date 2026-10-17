@@ -90,6 +90,7 @@ public final class SwitchablePlayerSession implements PlayerSession {
         if (released || next == null) return;
         state = next;
         for (PlaybackObserver observer : new LinkedHashSet<>(observers)) {
+            if (state != next) break;
             try {
                 observer.onPlaybackState(next);
             } catch (RuntimeException ignored) {

@@ -406,6 +406,11 @@ public class Result implements Parcelable {
         return getMsg().length() > 0;
     }
 
+    /** Code zero (including an omitted code) is the spider error-message convention. */
+    public boolean hasErrorMsg() {
+        return getCode() == 0 && msg != null && !msg.isEmpty();
+    }
+
     public String getRealUrl() {
         return UrlUtil.stripTag(getPlayUrl() + getUrl().v());
     }

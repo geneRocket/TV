@@ -56,6 +56,10 @@ public class WallConfig {
         get().submit(get()::clear);
     }
 
+    public static void reload() {
+        get().submit(() -> get().config(Config.wall()));
+    }
+
     private void submit(Runnable task) {
         ThreadPools.configLoad().execute(() -> {
             synchronized (this) {

@@ -162,13 +162,14 @@ public class Keep {
 
     private static Keep cache(Keep item) {
         if (item == null) return null;
+        Keep snapshot = copy(item);
         if (item.getType() == 1) {
-            LIVE_CACHE.put(item.getKey(), item);
+            LIVE_CACHE.put(item.getKey(), snapshot);
             LIVE_MISSES.remove(item.getKey());
             trimCache(LIVE_CACHE);
         } else {
             String key = vodCacheKey(item.getCid(), item.getKey());
-            VOD_CACHE.put(key, item);
+            VOD_CACHE.put(key, snapshot);
             VOD_MISSES.remove(key);
             trimCache(VOD_CACHE);
         }
@@ -196,7 +197,7 @@ public class Keep {
         if (item == null) return null;
         Keep copy = new Keep();
         copy.setKey(item.getKey());
-        copy.setSiteName(item.getSiteName());
+        copy.setSiteName(item.siteName);
         copy.setVodPic(item.getVodPic());
         copy.setVodName(item.getVodName());
         copy.setCreateTime(item.getCreateTime());
@@ -297,6 +298,7 @@ public class Keep {
     }
 
     public void save(int cid) {
+        if (getType() == 0) setKey(History.keyForConfig(getKey(), cid));
         setCid(cid);
         AppDatabase.get().getKeepDao().insertOrUpdate(this);
         cache(this);
@@ -326,6 +328,7 @@ public class Keep {
             for (Config config : configs) {
                 if (target.getCid() == config.getId()) {
                     target.save(ConfigRepository.get().find(config).getId());
+                    break;
                 }
             }
         }

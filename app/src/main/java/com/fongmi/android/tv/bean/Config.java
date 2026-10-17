@@ -143,7 +143,7 @@ public class Config {
     }
 
     private static Config cache(Config item) {
-        if (item == null || item.isEmpty()) return item;
+        if (item == null || item.getUrl().isEmpty()) return item;
         Config old = ID_CACHE.get(item.getId());
         if (old != null) {
             String oldKey = cacheKey(old.getUrl(), old.getType());
@@ -151,14 +151,15 @@ public class Config {
             if (!oldKey.equals(newKey)) URL_CACHE.remove(oldKey);
             if (old.getType() != item.getType()) TYPE_CACHE.remove(old.getType());
         }
-        ID_CACHE.put(item.getId(), item);
-        URL_CACHE.put(cacheKey(item.getUrl(), item.getType()), item);
+        Config snapshot = copy(item);
+        ID_CACHE.put(item.getId(), snapshot);
+        URL_CACHE.put(cacheKey(item.getUrl(), item.getType()), snapshot);
         TYPE_CACHE.remove(item.getType());
         return item;
     }
 
     private static List<Config> cache(int type, List<Config> items) {
-        List<Config> cached = new ArrayList<>(items);
+        List<Config> cached = copy(items);
         for (Config item : cached) cache(item);
         TYPE_CACHE.put(type, cached);
         return cached;
@@ -385,24 +386,32 @@ public class Config {
         return item == null ? null : copy(cache(item));
     }
 
+    static Config firstCached(int type) {
+        List<Config> items = TYPE_CACHE.get(type);
+        return items == null || items.isEmpty() ? null : items.get(0);
+    }
+
     public static Config vod() {
         Config selected = selected(0);
         if (selected != null) return selected;
-        Config item = TYPE_CACHE.containsKey(0) && !TYPE_CACHE.get(0).isEmpty() ? TYPE_CACHE.get(0).get(0) : AppDatabase.get().getConfigDao().findOne(0);
+        Config item = firstCached(0);
+        if (item == null) item = AppDatabase.get().getConfigDao().findOne(0);
         return item == null ? copy(create(0)) : copy(cache(item));
     }
 
     public static Config live() {
         Config selected = selected(1);
         if (selected != null) return selected;
-        Config item = TYPE_CACHE.containsKey(1) && !TYPE_CACHE.get(1).isEmpty() ? TYPE_CACHE.get(1).get(0) : AppDatabase.get().getConfigDao().findOne(1);
+        Config item = firstCached(1);
+        if (item == null) item = AppDatabase.get().getConfigDao().findOne(1);
         return item == null ? copy(create(1)) : copy(cache(item));
     }
 
     public static Config wall() {
         Config selected = selected(2);
         if (selected != null) return selected;
-        Config item = TYPE_CACHE.containsKey(2) && !TYPE_CACHE.get(2).isEmpty() ? TYPE_CACHE.get(2).get(0) : AppDatabase.get().getConfigDao().findOne(2);
+        Config item = firstCached(2);
+        if (item == null) item = AppDatabase.get().getConfigDao().findOne(2);
         return item == null ? copy(create(2)) : copy(cache(item));
     }
 

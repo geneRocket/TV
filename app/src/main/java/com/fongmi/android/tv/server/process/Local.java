@@ -96,7 +96,7 @@ public class Local implements Process {
         if (target.isDirectory()) return false;
         File staged = new File(target.getPath() + ".upload-" + System.nanoTime());
         Path.clear(staged);
-        if (!Path.copy(source, staged)) {
+        if (!Path.tryCopy(source, staged)) {
             Path.clear(staged);
             return false;
         }
@@ -106,11 +106,8 @@ public class Local implements Process {
     }
 
     private boolean replace(File source, File target) {
-        Path.clear(target);
-        if (source.renameTo(target)) return true;
-        if (!Path.copy(source, target)) return false;
-        Path.clear(source);
-        return true;
+        // The staged upload is in the target directory. Keep the old file if replacement fails.
+        return source.renameTo(target);
     }
 
     private NanoHTTPD.Response newFolder(Map<String, String> params) {

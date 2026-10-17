@@ -113,8 +113,8 @@ public class PlaybackService extends Service {
         Bitmap b2 = Bitmap.createScaledBitmap(b1, 1, 1, true);
         builder.setColor(b2.getPixel(0, 0));
         builder.setLargeIcon(art);
-        b2.recycle();
-        b1.recycle();
+        if (b2 != art && b2 != b1) b2.recycle();
+        if (b1 != art) b1.recycle();
     }
 
     private void setArtwork(NotificationCompat.Builder builder) {
@@ -128,7 +128,7 @@ public class PlaybackService extends Service {
             loadingArtwork.add(artUri);
             CustomTarget<Bitmap> target = getCallback(artUri);
             artworkTargets.add(target);
-            ImgUtil.load(artUri, target);
+            ImgUtil.loadThumbnail(artUri, target);
         }
     }
 
@@ -160,10 +160,17 @@ public class PlaybackService extends Service {
             @Override
             public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
                 loadingArtwork.remove(artUri);
-                artworkTargets.remove(this);
-                if (destroyed) return;
-                cache.put(artUri, resource);
-                if (artUri.equals(getArtUri())) Notify.show(buildNotification());
+                try {
+                    if (destroyed) return;
+                    // The cache must own its pixels after Glide releases the completed request.
+                    Bitmap artwork = resource.copy(Bitmap.Config.ARGB_8888, false);
+                    if (artwork == null) return;
+                    cache.put(artUri, artwork);
+                    if (artUri.equals(getArtUri())) Notify.show(buildNotification());
+                } finally {
+                    // Glide cannot clear a request from inside its delivery callback.
+                    App.post(() -> Glide.with(App.get()).clear(this));
+                }
             }
 
             @Override

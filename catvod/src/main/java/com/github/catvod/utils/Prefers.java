@@ -13,6 +13,7 @@ import com.google.gson.reflect.TypeToken;
 
 import java.io.File;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 public class Prefers {
 
@@ -108,15 +109,32 @@ public class Prefers {
 
     public static void restore(File file) {
         try {
-            Gson gson = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LAZILY_PARSED_NUMBER).create();
-            Map<String, Object> map = gson.fromJson(Path.read(file), new TypeToken<Map<String, Object>>() {}.getType());
+            Map<String, Object> map = readBackup(file);
             SharedPreferences.Editor editor = getPrefers().edit();
             boolean changed = false;
-            for (Map.Entry<String, ?> entry : map.entrySet()) changed |= put(editor, entry.getKey(), convert(entry));
+            for (Map.Entry<String, ?> entry : map.entrySet()) changed |= put(editor, entry.getKey(), entry.getValue());
             if (changed) editor.apply();
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public static boolean validateBackup(File file) {
+        try {
+            readBackup(file);
+            return true;
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
+    private static Map<String, Object> readBackup(File file) {
+        Gson gson = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LAZILY_PARSED_NUMBER).create();
+        Map<String, Object> map = gson.fromJson(Path.read(file), new TypeToken<Map<String, Object>>() {}.getType());
+        if (map == null) throw new IllegalArgumentException("Invalid backup preferences");
+        Map<String, Object> converted = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : map.entrySet()) converted.put(entry.getKey(), convert(entry));
+        return converted;
     }
 
     private static Object convert(Map.Entry<String, ?> entry) {

@@ -449,6 +449,7 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
     }
 
     private void initConfig() {
+        WallConfig.reload();
         LiveConfig.reload(new Callback());
         VodConfig.reload(getCallback());
     }
@@ -457,6 +458,9 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
     public void restore(File file) {
         PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
             if (allGranted) AppDatabase.restore(file, new Callback() {
+                @Override
+                public void error(String msg) { Notify.show(msg); }
+
                 @Override
                 public void success() {
                     Notify.progress(getActivity());

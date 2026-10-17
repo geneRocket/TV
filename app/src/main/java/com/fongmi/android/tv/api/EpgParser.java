@@ -7,7 +7,6 @@ import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Tv;
 import com.fongmi.android.tv.utils.Download;
 import com.fongmi.android.tv.utils.FileUtil;
-import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Trans;
 
@@ -17,7 +16,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.AbstractMap;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -27,13 +25,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
+import okio.ByteString;
 
 public class EpgParser {
 
-    private static final SimpleDateFormat FORMAT_TIME = new SimpleDateFormat("HH:mm", Locale.getDefault());
-    private static final SimpleDateFormat FORMAT_DATE = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-    private static final SimpleDateFormat FORMAT_FULL = new SimpleDateFormat("yyyyMMddHHmmss Z", Locale.getDefault());
+    private static final ThreadLocal<SimpleDateFormat> FORMAT_TIME = ThreadLocal.withInitial(() -> new SimpleDateFormat("HH:mm", Locale.getDefault()));
+    private static final ThreadLocal<SimpleDateFormat> FORMAT_DATE = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()));
+    private static final ThreadLocal<SimpleDateFormat> FORMAT_FULL = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyyMMddHHmmss Z", Locale.getDefault()));
 
     public static boolean start(Live live) throws Exception {
         List<String> xmls = live.getEpgXml();
@@ -50,7 +49,7 @@ public class EpgParser {
     }
 
     public static boolean start(Live live, String url) throws Exception {
-        File file = Path.epg(new File(UrlUtil.path(UrlUtil.uri(url))).getName());
+        File file = Path.epg(cacheName(url));
         boolean refresh = shouldRefresh(file);
         if (refresh) Download.create(url, file).sync();
         if (isGzip(file)) readGzip(live, file, refresh);
@@ -58,9 +57,13 @@ public class EpgParser {
         return true;
     }
 
+    static String cacheName(String url) {
+        return ByteString.encodeUtf8(url.trim()).sha256().hex() + ".epg";
+    }
+
     public static Epg getEpg(String xml, String key) throws Exception {
         Tv tv = new Persister().read(Tv.class, xml, false);
-        Epg epg = Epg.create(key, FORMAT_DATE.format(getDate(tv)));
+        Epg epg = Epg.create(key, FORMAT_DATE.get().format(getDate(tv)));
         for (Tv.Programme programme : tv.getProgramme()) {
             EpgData item = getEpgData(programme);
             if (item != null) epg.getList().add(item);
@@ -97,7 +100,7 @@ public class EpgParser {
         Map<String, Channel> liveChannelMap = prepareLiveChannels(live);
         Tv tv = new Persister().read(Tv.class, file, false);
         Map<String, List<Tv.Channel>> xmlChannelMap = tv.getChannel().stream().collect(Collectors.groupingBy(Tv.Channel::getId));
-        String today = FORMAT_DATE.format(new Date());
+        String today = FORMAT_DATE.get().format(new Date());
         Map<String, Epg> epgMap = new HashMap<>();
         Map<String, String> srcMap = new HashMap<>();
         for (Tv.Programme programme : tv.getProgramme()) {
@@ -125,12 +128,20 @@ public class EpgParser {
     }
 
     private static Map<String, Channel> prepareLiveChannels(Live live) {
-        return live.getGroups().stream()
+        List<Channel> channels = live.getGroups().stream()
                 .flatMap(group -> group.getChannel().stream())
-                .flatMap(channel -> Stream.of(channel.getTvgId(), channel.getTvgName(), channel.getName())
-                        .filter(key -> !key.isEmpty())
-                        .map(key -> new AbstractMap.SimpleEntry<>(key, channel)))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue, HashMap::new));
+                .collect(Collectors.toList());
+        Map<String, Channel> index = new HashMap<>();
+        // Register every provider ID before aliases, regardless of playlist order.
+        for (Channel channel : channels) {
+            if (channel.hasTvgId()) index.putIfAbsent(channel.getTvgId(), channel);
+        }
+        for (Channel channel : channels) {
+            for (String alias : new String[]{channel.getTvgId(), channel.getTvgName(), channel.getName()}) {
+                if (!alias.isEmpty()) index.putIfAbsent(alias, channel);
+            }
+        }
+        return index;
     }
 
     private static Channel findTargetChannel(String xmlChannelId, Map<String, Channel> liveChannelMap, Map<String, List<Tv.Channel>> xmlChannelMap) {
@@ -153,7 +164,7 @@ public class EpgParser {
 
     private static Date parse(String value) {
         try {
-            return value == null || value.isEmpty() ? null : FORMAT_FULL.parse(value);
+            return value == null || value.isEmpty() ? null : FORMAT_FULL.get().parse(value);
         } catch (Exception e) {
             return null;
         }
@@ -167,8 +178,8 @@ public class EpgParser {
         if (startDate == null || endDate == null) return null;
         EpgData epgData = new EpgData();
         epgData.setTitle(Trans.s2t(programme.getTitle()));
-        epgData.setStart(FORMAT_TIME.format(startDate));
-        epgData.setEnd(FORMAT_TIME.format(endDate));
+        epgData.setStart(FORMAT_TIME.get().format(startDate));
+        epgData.setEnd(FORMAT_TIME.get().format(endDate));
         epgData.setStartTime(startDate.getTime());
         epgData.setEndTime(endDate == null ? 0 : endDate.getTime());
         if (epgData.getEndTime() < epgData.getStartTime()) epgData.checkDay();
@@ -178,7 +189,7 @@ public class EpgParser {
     private static void merge(Channel channel, Epg epg, String logo) {
         if (epg != null && !epg.getList().isEmpty()) {
             Epg data = channel.getData();
-            if (data.getList().isEmpty()) {
+            if (data.getList().isEmpty() || !data.equal(epg.getDate())) {
                 channel.setData(epg);
             } else {
                 Epg item = Epg.create(channel.getTvgId(), epg.getDate());

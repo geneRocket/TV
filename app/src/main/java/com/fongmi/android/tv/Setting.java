@@ -232,11 +232,11 @@ public class Setting {
     }
 
     public static boolean isDanmuLoad() {
-        return isDanmu();
+        return getPref().getBoolean("danmu_load", true);
     }
 
     public static void putDanmuLoad(boolean value) {
-        putDanmu(value);
+        getEditor().putBoolean("danmu_load", value).apply();
     }
 
     // endregion

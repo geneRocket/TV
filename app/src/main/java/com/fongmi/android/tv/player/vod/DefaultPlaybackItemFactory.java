@@ -6,7 +6,6 @@ import com.fongmi.android.tv.player.PlaybackHeaders;
 import com.fongmi.android.tv.player.session.PlaybackItem;
 import com.fongmi.android.tv.utils.UrlUtil;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,16 +62,6 @@ public final class DefaultPlaybackItemFactory implements PlaybackItemFactory {
     }
 
     private List<Sub> subtitles(List<Sub> values) {
-        List<Sub> result = new ArrayList<>();
-        if (values != null) {
-            for (Sub item : values) if (item != null) result.add(item);
-        }
-        Sub selected = selectedSubtitle.get();
-        if (selected == null || selected.getUrl().isEmpty()) return result;
-        for (Sub item : result) {
-            if (item.getUrl().equals(selected.getUrl())) return result;
-        }
-        result.add(0, selected);
-        return result;
+        return Sub.withSelected(values, selectedSubtitle.get());
     }
 }

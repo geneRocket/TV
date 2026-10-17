@@ -437,6 +437,9 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
         PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
             if (allGranted) AppDatabase.restore(file, new Callback() {
                 @Override
+                public void error(String msg) { Notify.show(msg); }
+
+                @Override
                 public void success() {
                     Notify.progress(getActivity());
                     App.post(() -> {
@@ -455,6 +458,7 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     }
 
     private void initConfig() {
+        WallConfig.reload();
         LiveConfig.reload(new Callback());
         VodConfig.reload(getCallback());
     }

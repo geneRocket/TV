@@ -41,6 +41,8 @@ public class StableDLNARendererService extends DLNARendererService {
     public int onStartCommand(Intent intent, int flags, int startId) {
         int icon = intent == null ? R.drawable.ic_logo : intent.getIntExtra(EXTRA_ICON, R.drawable.ic_logo);
         startForeground(NOTIFICATION_ID, buildNotification(icon));
+        // The parent also publishes a notification and otherwise defaults a missing icon to 0.
+        if (intent != null) intent.putExtra(EXTRA_ICON, icon == 0 ? R.drawable.ic_logo : icon);
         return super.onStartCommand(intent, flags, startId);
     }
 

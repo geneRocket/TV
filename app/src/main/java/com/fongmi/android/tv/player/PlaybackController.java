@@ -568,7 +568,6 @@ public class PlaybackController {
 
     public void start(Channel channel, int timeout) {
         ensureSession();
-        setPlayer(Setting.getLivePlayer());
         String url = getChannelUrl(channel);
         boolean forceLive = isLikelyLive(url, channel.getFormat());
         this.timeout = timeout;
@@ -588,7 +587,7 @@ public class PlaybackController {
         ensureSession();
         this.timeout = timeout;
         this.forceLive = false;
-        if (result.hasMsg()) {
+        if (result.hasErrorMsg()) {
             ErrorEvent.extract(result.getMsg());
         } else if (result.getParse(1) == 1 || result.getJx() == 1) {
             startParse(result, useParse);
@@ -738,27 +737,7 @@ public class PlaybackController {
     }
 
     private List<Sub> checkSub(List<Sub> subs) {
-        if (subs == null) subs = new ArrayList<>();
-        else subs = new ArrayList<>(subs);
-        if (sub == null) return subs;
-
-        // 检查是否已存在相同URL的字幕
-        String subUrl = sub.getUrl();
-        if (TextUtils.isEmpty(subUrl)) return subs;
-        boolean exists = false;
-        for (Sub existingSub : subs) {
-            if (TextUtils.equals(existingSub.getUrl(), subUrl)) {
-                exists = true;
-                break;
-            }
-        }
-
-        // 如果不存在相同URL的字幕，则添加新字幕
-        if (!exists) {
-            subs.add(0, sub);
-        }
-
-        return subs;
+        return Sub.withSelected(subs, sub);
     }
 
     public void setMetadata(String title, String artist, String artUri) {

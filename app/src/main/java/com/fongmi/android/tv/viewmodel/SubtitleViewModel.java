@@ -112,8 +112,18 @@ public class SubtitleViewModel extends ViewModel {
     private int pagesTotal = -1;
 
     private void searchResultFromAssrt(String title, int page, boolean simplified) {
+        searchResultFromAssrt(title, page, simplified, -1);
+    }
+
+    static int nextSearchRequest(AtomicInteger sequence, int expected) {
+        if (expected < 0) return sequence.incrementAndGet();
+        return sequence.compareAndSet(expected, expected + 1) ? expected + 1 : -1;
+    }
+
+    private synchronized void searchResultFromAssrt(String title, int page, boolean simplified, int expected) {
         try {
-            int seq = requestSeq.incrementAndGet();
+            int seq = nextSearchRequest(requestSeq, expected);
+            if (seq < 0) return;
             int currentPage = Math.max(1, page);
             String keyword = title == null ? "" : title.trim();
             cancelCall(currentSearchCall);
@@ -149,16 +159,16 @@ public class SubtitleViewModel extends ViewModel {
                         String content = body.string();
                         Document doc = Jsoup.parse(content);
                         List<Subtitle> data = parseSearchResults(doc, keyword);
+                        if (seq != requestSeq.get()) return;
                         if (data.isEmpty() && currentPage == 1) {
                             String fallback = simplifyKeyword(keyword);
                             if (!simplified && !TextUtils.equals(keyword, fallback)) {
-                                searchResultFromAssrt(fallback, currentPage, true);
+                                searchResultFromAssrt(fallback, currentPage, true, seq);
                                 return;
                             }
                             searchResultFromSubtitlesWebsite(fallback, currentPage, seq);
                             return;
                         }
-                        if (seq != requestSeq.get()) return;
                         pagesTotal = parsePagesTotal(doc);
                         setSearchListData(data, currentPage <= 1, true, hasNextPage(doc, currentPage));
                     } catch (Throwable th) {
@@ -172,7 +182,7 @@ public class SubtitleViewModel extends ViewModel {
         }
     }
 
-    private void searchResultFromSubtitlesWebsite(String title, int page, int seq) {
+    private synchronized void searchResultFromSubtitlesWebsite(String title, int page, int seq) {
         if (seq != requestSeq.get()) return;
         String keyword = title == null ? "" : title.trim();
         if (TextUtils.isEmpty(keyword)) {
@@ -303,7 +313,7 @@ public class SubtitleViewModel extends ViewModel {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[\\s._\\-\\[\\]（）()]+", "");
     }
 
-    private void getSearchResultSubtitleUrlsFromAssrt(Subtitle subtitle) {
+    private synchronized void getSearchResultSubtitleUrlsFromAssrt(Subtitle subtitle) {
         try {
             int seq = requestSeq.incrementAndGet();
             cancelCall(currentSearchCall);
@@ -454,7 +464,7 @@ public class SubtitleViewModel extends ViewModel {
     }
 
     @Override
-    protected void onCleared() {
+    protected synchronized void onCleared() {
         requestSeq.incrementAndGet();
         resolveSeq.incrementAndGet();
         cancelCall(currentSearchCall);

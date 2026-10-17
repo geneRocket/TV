@@ -20,6 +20,7 @@ import com.fongmi.android.tv.player.extractor.Youtube;
 import com.fongmi.android.tv.player.extractor.ZLive;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
+import com.github.catvod.net.HttpCallScope;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +40,6 @@ import java.util.concurrent.TimeoutException;
 
 public class Source {
 
-    private static final int MAX_PRELOAD_TASKS_PER_FLAG = 2;
     private static final int MAX_PARSE_CACHE_SIZE = 64;
 
     private final List<Extractor> extractors;
@@ -77,7 +77,8 @@ public class Source {
         extractors.add(new ZLive());
     }
 
-    private Extractor getExtractor(Uri uri) {
+    private Extractor getExtractor(String url) {
+        Uri uri = UrlUtil.uri(UrlUtil.stripTag(url));
         for (Extractor extractor : extractors) if (extractor.match(uri)) return extractor;
         return null;
     }
@@ -108,7 +109,6 @@ public class Source {
                     replacements.put(i, cached);
                     continue;
                 }
-                if (tasks.size() >= MAX_PRELOAD_TASKS_PER_FLAG) continue;
                 ParseTask task = getTask(episode, i);
                 if (task == null) continue;
                 tasks.add(task);
@@ -118,7 +118,7 @@ public class Source {
                 List<Future<ParsedEpisodes>> futures = new ArrayList<>(tasks.size());
                 for (ParseTask task : tasks) {
                     try {
-                        Future<ParsedEpisodes> submitted = completed.submit(() -> new ParsedEpisodes(task, task.callable.call()));
+                        Future<ParsedEpisodes> submitted = completed.submit(HttpCallScope.bind(() -> new ParsedEpisodes(task, task.callable.call())));
                         futures.add(submitted);
                         preloadTasks.add(submitted);
                         if (generation != preloadGeneration.get()) submitted.cancel(true);
@@ -184,7 +184,7 @@ public class Source {
         String url = result.getUrl().v();
         // These wrappers are stateless and do not own playback services.
         for (int depth = 0; depth < 4; depth++) {
-            Extractor extractor = getExtractor(UrlUtil.uri(url));
+            Extractor extractor = getExtractor(url);
             if (extractor == null) return url;
             if (!(extractor instanceof Video || extractor instanceof Push
                     || extractor instanceof Proxy || extractor instanceof Strm)) {
@@ -205,9 +205,13 @@ public class Source {
     private String fetch(String url, java.util.function.Consumer<Integer> parseSetter) throws Exception {
         if (TextUtils.isEmpty(url)) return "";
         com.github.catvod.net.HttpCallScope.throwIfCancelled();
-        Extractor extractor = getExtractor(UrlUtil.uri(url));
-        if (extractor != null) parseSetter.accept(0);
+        Extractor extractor = getExtractor(url);
         prepare(extractor);
+        return extract(extractor, url, parseSetter);
+    }
+
+    static String extract(Extractor extractor, String url, java.util.function.Consumer<Integer> parseSetter) throws Exception {
+        if (extractor != null) parseSetter.accept(extractor instanceof Video ? 1 : 0);
         return extractor == null ? url : extractor.fetch(url);
     }
 

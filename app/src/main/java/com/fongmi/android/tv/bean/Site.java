@@ -18,7 +18,6 @@ import com.fongmi.android.tv.gson.ExtAdapter;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.crawler.Spider;
-import com.github.catvod.crawler.SpiderNull;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Trans;
 import com.google.gson.JsonElement;
@@ -82,6 +81,9 @@ public class Site implements Parcelable {
     @SerializedName("timeout")
     private Integer timeout;
 
+    @Ignore
+    @SerializedName("playerType")
+    private Integer playerType;
 
     @SerializedName("searchable")
     private Integer searchable;
@@ -109,9 +111,6 @@ public class Site implements Parcelable {
     private boolean activated;
 
     @Ignore
-    private Spider spider;
-
-    @Ignore
     private transient volatile Headers headers;
 
     public static Site objectFrom(JsonElement element) {
@@ -123,7 +122,8 @@ public class Site implements Parcelable {
             Site site = App.gson().fromJson(element, Site.class);
             if (site.getJar().isEmpty()) site.setJar(spider);
             site.setApi(UrlUtil.convert(site.getApi()));
-            site.setExt(UrlUtil.convert(site.getExt()));
+            site.setExt(site.getExt().startsWith("img+")
+                    ? com.fongmi.android.tv.api.Decoder.getExt(site.getExt()) : UrlUtil.convert(site.getExt()));
             return site;
         } catch (Exception e) {
             return new Site();
@@ -206,6 +206,10 @@ public class Site implements Parcelable {
         return timeout == null ? Constant.TIMEOUT_PLAY : Math.max(timeout, 1) * 1000;
     }
 
+    public int getPlayerType() {
+        return playerType == null ? -1 : Math.min(playerType, 2);
+    }
+
     public Integer getSearchable() {
         return searchable == null ? 1 : searchable;
     }
@@ -269,10 +273,6 @@ public class Site implements Parcelable {
 
     public void setActivated(Site item) {
         this.activated = item.equals(this);
-    }
-
-    public void setSpider(Spider spider) {
-        this.spider = spider;
     }
 
     public boolean isHide() {
@@ -350,10 +350,7 @@ public class Site implements Parcelable {
     }
 
     public Spider spider() {
-        if (spider != null && !(spider instanceof SpiderNull)) return spider;
-        Spider result = BaseLoader.get().getSiteSpider(getKey(), getApi(), getExt(), getJar());
-        if (!(result instanceof SpiderNull)) spider = result;
-        return result;
+        return BaseLoader.get().getSiteSpider(getKey(), getApi(), getExt(), getJar());
     }
 
     public static Site find(String key) {
@@ -393,6 +390,7 @@ public class Site implements Parcelable {
         dest.writeString(this.playUrl);
         dest.writeValue(this.type);
         dest.writeValue(this.timeout);
+        dest.writeValue(this.playerType);
         dest.writeValue(this.searchable);
         dest.writeValue(this.changeable);
         dest.writeValue(this.indexs);
@@ -411,6 +409,7 @@ public class Site implements Parcelable {
         this.playUrl = in.readString();
         this.type = (Integer) in.readValue(Integer.class.getClassLoader());
         this.timeout = (Integer) in.readValue(Integer.class.getClassLoader());
+        this.playerType = (Integer) in.readValue(Integer.class.getClassLoader());
         this.searchable = (Integer) in.readValue(Integer.class.getClassLoader());
         this.changeable = (Integer) in.readValue(Integer.class.getClassLoader());
         this.indexs = (Integer) in.readValue(Integer.class.getClassLoader());

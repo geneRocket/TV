@@ -94,17 +94,18 @@ public class UrlUtil {
 
     public static Map<String, String> getTagHeaders(String url) {
         Map<String, String> headers = new LinkedHashMap<>();
+        if (url == null) return headers;
         try {
             String value = getParam(url, TAG_HEADERS);
-            if (!TextUtils.isEmpty(value)) headers.putAll(fixHeaders(Json.toMap(Json.parse(value))));
-            value = getParam(url, TAG_COOKIE);
-            if (!TextUtils.isEmpty(value)) headers.put(HttpHeaders.COOKIE, value);
-            value = getParam(url, TAG_REFERER);
-            if (!TextUtils.isEmpty(value)) headers.put(HttpHeaders.REFERER, value);
-            value = getParam(url, TAG_USER_AGENT);
-            if (!TextUtils.isEmpty(value)) headers.put(HttpHeaders.USER_AGENT, value);
+            if (!value.isEmpty()) headers.putAll(fixHeaders(Json.toMap(Json.parse(value))));
         } catch (Exception ignored) {
         }
+        String value = getParam(url, TAG_COOKIE);
+        if (!value.isEmpty()) headers.put(HttpHeaders.COOKIE, value);
+        value = getParam(url, TAG_REFERER);
+        if (!value.isEmpty()) headers.put(HttpHeaders.REFERER, value);
+        value = getParam(url, TAG_USER_AGENT);
+        if (!value.isEmpty()) headers.put(HttpHeaders.USER_AGENT, value);
         return headers;
     }
 

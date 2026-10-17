@@ -23,6 +23,7 @@ import com.fongmi.android.tv.utils.AppTaskScheduler;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.net.HttpCallScope;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -207,7 +208,8 @@ public class LiveViewModel extends ViewModel {
     }
 
     private void submitLive(java.util.concurrent.Callable<Live> task) {
-        tasks.submit("live", task, Constant.TIMEOUT_LIVE, live::setValue, error -> new Live(), null);
+        HttpCallScope calls = new HttpCallScope();
+        tasks.submit("live", () -> calls.call(task), Constant.TIMEOUT_LIVE, live::setValue, error -> new Live(), calls::close);
     }
 
     private void submitEpg(java.util.concurrent.Callable<Epg> task) {
@@ -215,11 +217,16 @@ public class LiveViewModel extends ViewModel {
     }
 
     private void submitUrl(java.util.concurrent.Callable<Channel> task, java.util.function.Function<Throwable, Channel> fallback) {
-        urlTasks.submit("url", task, Constant.TIMEOUT_PARSE_LIVE, url::setValue, fallback, Source.get()::stop);
+        HttpCallScope calls = new HttpCallScope();
+        urlTasks.submit("url", () -> calls.call(task), Constant.TIMEOUT_PARSE_LIVE, url::setValue, fallback, () -> {
+            calls.close();
+            Source.get().stop();
+        });
     }
 
     private void submitXml(java.util.concurrent.Callable<Boolean> task) {
-        tasks.submit("xml", task, Constant.TIMEOUT_XML, xml::setValue, error -> false, null);
+        HttpCallScope calls = new HttpCallScope();
+        tasks.submit("xml", () -> calls.call(task), Constant.TIMEOUT_XML, xml::setValue, error -> false, calls::close);
     }
 
     private Channel urlFallback(Channel request, Throwable error) {

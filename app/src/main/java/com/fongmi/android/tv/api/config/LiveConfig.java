@@ -421,22 +421,27 @@ public class LiveConfig {
     }
 
     private void mergeConfig(JsonObject target, JsonObject source) {
+        mergeLives(target, source);
+        appendArray(target, source, "rules");
+        appendArray(target, source, "headers");
+        appendArray(target, source, "proxy");
+        appendArray(target, source, "hosts");
+        appendArray(target, source, "ads");
+    }
+
+    static void mergeLives(JsonObject target, JsonObject source) {
+        if (!source.has("lives")) return;
         String spider = Json.safeString(source, "spider");
-        JsonArray lives = source.has("lives") ? source.getAsJsonArray("lives") : new JsonArray();
+        JsonArray lives = source.getAsJsonArray("lives");
         if (!target.has("lives")) target.add("lives", new JsonArray());
         JsonArray targetLives = target.getAsJsonArray("lives");
         for (JsonElement element : lives) {
             JsonObject item = element.getAsJsonObject().deepCopy();
             String api = Json.safeString(item, "api");
             String jar = Json.safeString(item, "jar");
-            if (TextUtils.isEmpty(jar) && api.startsWith("csp_")) item.addProperty("jar", spider);
+            if (jar.isEmpty() && api.startsWith("csp_")) item.addProperty("jar", spider);
             targetLives.add(item);
         }
-        appendArray(target, source, "rules");
-        appendArray(target, source, "headers");
-        appendArray(target, source, "proxy");
-        appendArray(target, source, "hosts");
-        appendArray(target, source, "ads");
     }
 
     private void appendArray(JsonObject target, JsonObject source, String key) {
@@ -618,17 +623,12 @@ public class LiveConfig {
         String spider = Json.safeString(object, "spider");
         Map<String, Live> cache = new HashMap<>();
         for (Live live : LiveRepository.get().all()) cache.put(live.getName(), live);
-        for (JsonElement element : Json.safeListElement(object, "lives")) {
+        for (JsonElement element : liveEntries(object)) {
             Live live = Live.objectFrom(element, spider);
             if (liveMap.containsKey(live.getName())) {
                 Live old = liveMap.get(live.getName());
                 if (old != null) {
-                    if (!old.getUrl().equals(live.getUrl()) || !old.getApi().equals(live.getApi())) old.getGroups().clear();
-                    old.setUrl(live.getUrl());
-                    old.setApi(live.getApi());
-                    old.setExt(live.getExt());
-                    old.setJar(live.getJar());
-                    old.setSpider(null);
+                    updateLive(old, live);
                 }
                 continue;
             }
@@ -641,6 +641,27 @@ public class LiveConfig {
                 setHome(live, true);
             }
         }
+    }
+
+    static void updateLive(Live old, Live live) {
+        if (!old.getUrl().equals(live.getUrl()) || !old.getApi().equals(live.getApi())
+                || !old.getExt().equals(live.getExt()) || !old.getJar().equals(live.getJar())) old.getGroups().clear();
+        old.setUrl(live.getUrl());
+        old.setApi(live.getApi());
+        old.setExt(live.getExt());
+        old.setJar(live.getJar());
+        old.updateMetadata(live);
+    }
+
+    static List<JsonElement> liveEntries(JsonObject object) {
+        List<JsonElement> entries = new ArrayList<>();
+        Set<String> names = new HashSet<>();
+        for (JsonElement element : Json.safeListElement(object, "lives")) {
+            JsonElement name = element.getAsJsonObject().get("name");
+            String key = name == null || name.isJsonNull() ? "" : name.getAsString();
+            if (names.add(key)) entries.add(element);
+        }
+        return entries;
     }
 
     private void preloadJars(JsonObject object) {

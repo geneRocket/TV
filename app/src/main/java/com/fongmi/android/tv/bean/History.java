@@ -66,6 +66,13 @@ public class History {
         }
     }
 
+    public static void withWritesPaused(Runnable action) {
+        synchronized (WRITE_LOCK) {
+            cancelPendingWrites();
+            action.run();
+        }
+    }
+
     @NonNull
     @PrimaryKey
     @SerializedName("key")
@@ -146,17 +153,17 @@ public class History {
         return rawSiteKey.concat(AppDatabase.SYMBOL).concat(stableId).concat(AppDatabase.SYMBOL) + cid;
     }
 
-    private static String rawSiteKey(String key) {
-        if (!isScopedSiteKey(key)) return key == null ? "" : key;
-        return key.substring(key.indexOf('@') + 1);
+    static String keyForConfig(String key, int cid) {
+        if (key == null) return null;
+        int first = key.indexOf(AppDatabase.SYMBOL);
+        if (first < 0) return key;
+        int last = key.lastIndexOf(AppDatabase.SYMBOL);
+        String id = key.substring(first + AppDatabase.SYMBOL.length(), last > first ? last : key.length());
+        return rawSiteKey(key.substring(0, first)) + AppDatabase.SYMBOL + id + AppDatabase.SYMBOL + cid;
     }
 
-    private static boolean isScopedSiteKey(String key) {
-        if (isEmpty(key)) return false;
-        int index = key.indexOf('@');
-        if (index <= 0) return false;
-        for (int i = 0; i < index; i++) if (!Character.isDigit(key.charAt(i))) return false;
-        return true;
+    private static String rawSiteKey(String key) {
+        return VodConfig.rawSiteKey(key);
     }
 
     private static String normalizeKeyName(String name) {
@@ -338,9 +345,9 @@ public class History {
         if (item == null) return null;
         String key = cacheKey(item.getCid(), item.getKey());
         History old = CACHE.get(key);
-        if (old != null && old.getCreateTime() > item.getCreateTime()) return old;
-        if (old != null && old.getCreateTime() == item.getCreateTime() && old.getPosition() > 0 && item.getPosition() <= 0) return old;
-        CACHE.put(key, item);
+        if (old != null && old.getCreateTime() > item.getCreateTime()) return copy(old);
+        if (old != null && old.getCreateTime() == item.getCreateTime() && old.getPosition() > 0 && item.getPosition() <= 0) return copy(old);
+        CACHE.put(key, copy(item));
         trimCache();
         return item;
     }
@@ -460,7 +467,9 @@ public class History {
             History old = merged.get(key);
             if (isNewerOrBetterSameVersion(item, old)) merged.put(key, item);
         }
-        return new ArrayList<>(merged.values());
+        List<History> result = new ArrayList<>(merged.values());
+        result.sort((left, right) -> Long.compare(right.getCreateTime(), left.getCreateTime()));
+        return result;
     }
 
     private static List<History> unique(List<History> items, boolean crossCid) {
@@ -591,6 +600,7 @@ public class History {
 
     public History update(int cid, List<History> items) {
         synchronized (WRITE_LOCK) {
+            setKey(keyForConfig(getKey(), cid));
             setCid(cid);
             merge(items, true);
             return save();

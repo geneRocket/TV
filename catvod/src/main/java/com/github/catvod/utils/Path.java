@@ -202,18 +202,26 @@ public class Path {
     }
 
     public static void move(File in, File out) {
-        if (copy(in, out)) clear(in);
+        if (tryCopy(in, out)) clear(in);
     }
 
-    public static boolean copy(File in, File out) {
+    public static void copy(File in, File out) {
+        tryCopy(in, out);
+    }
+
+    public static void copy(InputStream in, File out) {
+        tryCopy(in, out);
+    }
+
+    public static boolean tryCopy(File in, File out) {
         try {
-            return copy(new FileInputStream(in), out);
+            return tryCopy(new FileInputStream(in), out);
         } catch (Exception ignored) {
             return false;
         }
     }
 
-    public static boolean copy(InputStream in, File out) {
+    public static boolean tryCopy(InputStream in, File out) {
         try (InputStream input = in; FileOutputStream fos = new FileOutputStream(create(out))) {
             int read;
             byte[] buffer = new byte[8192];

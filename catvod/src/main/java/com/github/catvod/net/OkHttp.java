@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
 import okhttp3.ConnectionPool;
+import okhttp3.Dns;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
@@ -50,14 +51,18 @@ public class OkHttp {
         return Loader.INSTANCE;
     }
 
-    public static OkDns dns() {
+    public static Dns dns() {
+        return resolver();
+    }
+
+    public static OkDns resolver() {
         if (get().dns != null) return get().dns;
         return get().dns = new OkDns();
     }
 
     public void setDoh(Doh doh) {
         synchronized (OkHttp.class) {
-            dns().setDoh(doh);
+            resolver().setDoh(doh);
             resetClient();
         }
     }
@@ -97,7 +102,7 @@ public class OkHttp {
     }
 
     public static synchronized void clearConfig() {
-        dns().clear();
+        resolver().clear();
         selector().clear();
         authenticator().clear();
         authInterceptor().clear();

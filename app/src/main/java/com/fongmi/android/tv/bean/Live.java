@@ -15,7 +15,6 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.gson.ExtAdapter;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.Spider;
-import com.github.catvod.crawler.SpiderNull;
 import com.github.catvod.utils.Json;
 import com.google.common.net.HttpHeaders;
 import com.google.gson.JsonElement;
@@ -29,6 +28,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Entity
 public class Live {
@@ -100,6 +100,10 @@ public class Live {
     private JsonElement header;
 
     @Ignore
+    @SerializedName("playerType")
+    private Integer playerType;
+
+    @Ignore
     @SerializedName("catchup")
     private Catchup catchup;
 
@@ -121,9 +125,6 @@ public class Live {
     private boolean activated;
 
     @Ignore
-    private Spider spider;
-
-    @Ignore
     private transient volatile Map<String, String> headers;
 
     @Ignore
@@ -138,7 +139,8 @@ public class Live {
             Live live = App.gson().fromJson(element, Live.class);
             if (live.getJar().isEmpty()) live.setJar(spider);
             live.setApi(UrlUtil.convert(live.getApi()));
-            live.setExt(UrlUtil.convert(live.getExt()));
+            live.setExt(live.getExt().startsWith("img+")
+                    ? com.fongmi.android.tv.api.Decoder.getExt(live.getExt()) : UrlUtil.convert(live.getExt()));
             return live;
         } catch (Exception e) {
             return new Live();
@@ -257,6 +259,10 @@ public class Live {
         return header;
     }
 
+    public int getPlayerType() {
+        return playerType == null ? -1 : Math.min(playerType, 2);
+    }
+
     public Catchup getCatchup() {
         return catchup == null ? new Catchup() : catchup;
     }
@@ -295,10 +301,6 @@ public class Live {
 
     public void setActivated(Live item) {
         this.activated = item.equals(this);
-    }
-
-    public void setSpider(Spider spider) {
-        this.spider = spider;
     }
 
     public int getWidth() {
@@ -362,16 +364,44 @@ public class Live {
         return this;
     }
 
+    public synchronized void updateMetadata(Live source) {
+        if (this == source) return;
+        boolean changed = !Objects.equals(click, source.click) || !Objects.equals(logo, source.logo)
+                || !Objects.equals(epg, source.epg) || !Objects.equals(ua, source.ua)
+                || !Objects.equals(origin, source.origin) || !Objects.equals(referer, source.referer)
+                || !Objects.equals(type, source.type) || !Objects.equals(timeZone, source.timeZone)
+                || !Objects.equals(timeout, source.timeout) || !Objects.equals(header, source.header)
+                || !Objects.equals(playerType, source.playerType) || !Objects.equals(catchup, source.catchup)
+                || !Objects.equals(core, source.core);
+        if (changed) getGroups().clear();
+        click = source.click;
+        logo = source.logo;
+        epg = source.epg;
+        ua = source.ua;
+        origin = source.origin;
+        referer = source.referer;
+        type = source.type;
+        timeZone = source.timeZone;
+        timeout = source.timeout;
+        header = source.header;
+        playerType = source.playerType;
+        catchup = source.catchup;
+        core = source.core;
+        headers = null;
+        if (source.groups != null) {
+            List<Group> incoming = new ArrayList<>(source.groups);
+            getGroups().clear();
+            getGroups().addAll(incoming);
+        }
+    }
+
     public Live recent() {
         BaseLoader.get().setLiveRecent(getName(), getApi(), getExt(), getJar());
         return this;
     }
 
     public Spider spider() {
-        if (spider != null && !(spider instanceof SpiderNull)) return spider;
-        Spider result = BaseLoader.get().getLiveSpider(getName(), getApi(), getExt(), getJar());
-        if (!(result instanceof SpiderNull)) spider = result;
-        return result;
+        return BaseLoader.get().getLiveSpider(getName(), getApi(), getExt(), getJar());
     }
 
     public Map<String, String> getHeaders() {

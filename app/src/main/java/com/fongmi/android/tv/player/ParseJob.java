@@ -85,7 +85,7 @@ public class ParseJob implements ParseCallback {
         if (result.getPlayUrl().startsWith("parse:")) parse = VodConfig.get().getParse(result.getPlayUrl().substring(6));
         if (parse == null || parse.isEmpty()) parse = Parse.get(0, result.getPlayUrl());
         else parse = parse.copy();
-        parse.getExt().setHeader(App.gson().toJsonTree(getMergedHeaders(result.getHeader())));
+        parse.getExt().setHeader(App.gson().toJsonTree(mergeHeaders(parse.getHeaders(), result.getHeaders())));
         parse.setClick(getClick(result));
     }
 
@@ -113,7 +113,7 @@ public class ParseJob implements ParseCallback {
     private Runnable getTask(Result result) {
         return () -> {
             try {
-                doInBackground(result.getKey(), result.getUrl().v(), result.getFlag());
+                doInBackground(result.getKey(), UrlUtil.stripTag(result.getUrl().v()), result.getFlag());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Throwable e) {
@@ -226,7 +226,7 @@ public class ParseJob implements ParseCallback {
     }
 
     private void checkResult(Result result) {
-        result.setHeader(App.gson().toJsonTree(getMergedHeaders(result.getHeader())));
+        result.setHeader(App.gson().toJsonTree(mergeHeaders(parse.getHeaders(), result.getHeaders())));
         if (result.getUrl().isEmpty()) onParseError();
         else if (result.getParse() == 1) startWeb(result.getHeaders(), UrlUtil.convert(result.getUrl().v()));
         else onParseSuccess(result.getHeaders(), result.getUrl().v(), result.getJxFrom());
@@ -277,9 +277,10 @@ public class ParseJob implements ParseCallback {
         for (Map.Entry<String, String> entry : source.entrySet()) target.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
     }
 
-    private Map<String, String> getMergedHeaders(JsonElement header) {
-        Map<String, String> headers = new HashMap<>(parse.getHeaders());
-        if (header != null && header.isJsonObject()) putHeaders(headers, Json.toMap(header));
+    static Map<String, String> mergeHeaders(Map<String, String> configured, Map<String, String> source) {
+        Map<String, String> headers = new HashMap<>();
+        for (Map.Entry<String, String> entry : configured.entrySet()) headers.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
+        for (Map.Entry<String, String> entry : source.entrySet()) headers.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
         return headers;
     }
 

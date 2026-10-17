@@ -2,6 +2,8 @@ package com.fongmi.android.tv.db;
 
 import android.content.Context;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 
 import androidx.annotation.NonNull;
 import androidx.room.Database;
@@ -37,8 +39,11 @@ import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Prefers;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.text.SimpleDateFormat;
 import java.util.Locale;
+import java.util.UUID;
 
 @Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class, Download.class}, version = AppDatabase.VERSION)
 public abstract class AppDatabase extends RoomDatabase {
@@ -57,13 +62,17 @@ public abstract class AppDatabase extends RoomDatabase {
     }
 
     public static void reset() {
-        HistoryRepository.get().cancelPendingWrites();
-        AppDatabase database = instance;
-        if (database != null && database.isOpen()) database.close();
-        instance = null;
-        ConfigRepository.get().clearMemoryCache();
-        HistoryRepository.get().clearMemoryCache();
-        KeepRepository.get().clearMemoryCache();
+        // History writers acquire their write lock before AppDatabase.get().
+        HistoryRepository.get().withWritesPaused(() -> {
+            synchronized (AppDatabase.class) {
+                AppDatabase database = instance;
+                if (database != null && database.isOpen()) database.close();
+                instance = null;
+                ConfigRepository.get().clearMemoryCache();
+                HistoryRepository.get().clearMemoryCache();
+                KeepRepository.get().clearMemoryCache();
+            }
+        });
     }
 
     public static void backup() {
@@ -81,7 +90,11 @@ public abstract class AppDatabase extends RoomDatabase {
                 database.beginTransaction();
                 try {
                     File db = App.get().getDatabasePath(NAME).getAbsoluteFile();
-                    if (!db.exists() || !Path.copy(db, new File(restore, db.getName()))) return;
+                    if (!db.exists() || !Path.tryCopy(db, new File(restore, db.getName()))) return;
+                    // A writer may commit after checkpoint() but before beginTransaction().
+                    // Keep its committed frames with the main file while the write lock is held.
+                    File wal = App.get().getDatabasePath(NAME + "-wal").getAbsoluteFile();
+                    if (wal.exists() && !Path.tryCopy(wal, new File(restore, wal.getName()))) return;
                     Prefers.backup(new File(restore, NAME + "-pref"));
                     String time = Util.format(new SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault()), (new File(restore, db.getName())).lastModified());
                     file = new File(Path.tv(), time + "." + BACKUP_SUFFIX);
@@ -97,35 +110,41 @@ public abstract class AppDatabase extends RoomDatabase {
     public static void restore(File file, com.fongmi.android.tv.impl.Callback callback) {
         App.execute(() -> {
             synchronized (BACKUP_LOCK) {
-                File restore = prepareRestoreDirectory();
-                if (restore == null) return;
-                if (!FileUtil.extractZip(file, restore)) return;
-                File db = new File(restore, NAME);
-                if (!db.exists()) return;
-                File targetDb = App.get().getDatabasePath(db.getName()).getAbsoluteFile();
-                File wal = new File(restore, NAME + "-wal");
-                File shm = new File(restore, NAME + "-shm");
-                File pref = new File(restore, NAME + "-pref");
-                File targetWal = App.get().getDatabasePath(wal.getName()).getAbsoluteFile();
-                File targetShm = App.get().getDatabasePath(shm.getName()).getAbsoluteFile();
-                File stagedDb = new File(targetDb.getPath() + ".restore");
-                File stagedWal = new File(targetWal.getPath() + ".restore");
-                File stagedShm = new File(targetShm.getPath() + ".restore");
-                Path.clear(stagedDb);
-                Path.clear(stagedWal);
-                Path.clear(stagedShm);
-                if (!Path.copy(db, stagedDb)) return;
-                if (wal.exists() && !Path.copy(wal, stagedWal)) return;
-                if (shm.exists() && !Path.copy(shm, stagedShm)) return;
-                reset();
-                Path.clear(targetDb);
-                Path.clear(targetWal);
-                Path.clear(targetShm);
-                if (!replace(stagedDb, targetDb)) return;
-                if (wal.exists() && !replace(stagedWal, targetWal)) return;
-                if (shm.exists() && !replace(stagedShm, targetShm)) return;
-                if (pref.exists()) Prefers.restore(pref);
-                App.post(callback::success);
+                File staging = null;
+                try {
+                    File restore = prepareRestoreDirectory();
+                    if (restore == null || !FileUtil.extractZip(file, restore)) throw new IOException("Cannot extract backup");
+                    File db = new File(restore, NAME);
+                    if (!db.isFile()) throw new IOException("Backup database is missing");
+                    File targetDb = App.get().getDatabasePath(db.getName()).getAbsoluteFile();
+                    File wal = new File(restore, NAME + "-wal");
+                    File pref = new File(restore, NAME + "-pref");
+                    staging = new File(targetDb.getParentFile(), ".restore-" + UUID.randomUUID());
+                    if (!staging.mkdir()) throw new IOException("Cannot stage backup");
+                    File stagedDb = new File(staging, NAME);
+                    File stagedPref = new File(staging, NAME + "-pref");
+                    if (!Path.tryCopy(db, stagedDb)) throw new IOException("Cannot stage database");
+                    if (wal.exists() && !Path.tryCopy(wal, new File(staging, NAME + "-wal"))) throw new IOException("Cannot stage database log");
+                    if (pref.exists() && (!Path.tryCopy(pref, stagedPref) || !Prefers.validateBackup(stagedPref))) throw new IOException("Invalid backup preferences");
+                    validateRestore(stagedDb);
+                    HistoryRepository.get().withWritesPaused(() -> {
+                        synchronized (AppDatabase.class) {
+                            reset();
+                            try {
+                                DatabaseFileSwap.install(stagedDb, targetDb);
+                            } catch (IOException error) {
+                                throw new UncheckedIOException(error);
+                            }
+                            if (stagedPref.exists()) Prefers.restore(stagedPref);
+                        }
+                    });
+                    App.post(callback::success);
+                } catch (Exception error) {
+                    com.fongmi.android.tv.utils.ThreadPools.log(error, "Database restore failed.");
+                    App.post(() -> callback.error(error.getMessage()));
+                } finally {
+                    Path.clear(staging);
+                }
             }
         });
     }
@@ -136,11 +155,25 @@ public abstract class AppDatabase extends RoomDatabase {
         return restore.mkdirs() ? restore : null;
     }
 
-    private static boolean replace(File source, File target) {
-        if (source.renameTo(target)) return true;
-        if (!Path.copy(source, target)) return false;
-        Path.clear(source);
-        return true;
+    private static void validateRestore(File stagedDb) throws IOException {
+        // SQLiteOpenHelper can delete a corrupt file and silently create an empty database.
+        // Check the original bytes first, with corruption recovery explicitly disabled.
+        try (SQLiteDatabase database = SQLiteDatabase.openDatabase(stagedDb.getAbsolutePath(), null,
+                SQLiteDatabase.OPEN_READONLY | SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                ignored -> { throw new SQLiteException("Invalid backup database"); });
+             Cursor cursor = database.rawQuery("PRAGMA quick_check", null)) {
+            if (!cursor.moveToFirst() || !"ok".equals(cursor.getString(0))) throw new IOException("Invalid backup database");
+        }
+        AppDatabase candidate = builder(App.get(), stagedDb.getAbsolutePath()).build();
+        try {
+            SupportSQLiteDatabase database = candidate.getOpenHelper().getWritableDatabase();
+            try (Cursor cursor = database.query("PRAGMA quick_check")) {
+                if (!cursor.moveToFirst() || !"ok".equals(cursor.getString(0))) throw new IOException("Invalid backup database");
+            }
+            if (!checkpoint(database)) throw new IOException("Cannot checkpoint backup database");
+        } finally {
+            candidate.close();
+        }
     }
 
     private static boolean checkpoint(SupportSQLiteDatabase database) {
@@ -154,7 +187,11 @@ public abstract class AppDatabase extends RoomDatabase {
     }
 
     private static AppDatabase create(Context context) {
-        return Room.databaseBuilder(context, AppDatabase.class, NAME)
+        return builder(context, NAME).fallbackToDestructiveMigration().build();
+    }
+
+    private static RoomDatabase.Builder<AppDatabase> builder(Context context, String name) {
+        return Room.databaseBuilder(context, AppDatabase.class, name)
                 .addMigrations(MIGRATION_11_12)
                 .addMigrations(MIGRATION_12_13)
                 .addMigrations(MIGRATION_13_14)
@@ -175,7 +212,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(MIGRATION_28_29)
                 .addMigrations(MIGRATION_29_30)
                 .addMigrations(MIGRATION_30_31)
-                .allowMainThreadQueries().fallbackToDestructiveMigration().build();
+                .allowMainThreadQueries();
     }
 
     public abstract KeepDao getKeepDao();

@@ -38,6 +38,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Set;
 
 import okhttp3.HttpUrl;
@@ -47,7 +48,7 @@ public class VodConfig {
     private List<Doh> doh = new ArrayList<>();
     private List<Rule> rules = new ArrayList<>();
     private final List<Site> sites = new java.util.concurrent.CopyOnWriteArrayList<>();
-    private final List<Parse> parses = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile List<Parse> parses = Collections.emptyList();
     private volatile List<String> flags = new ArrayList<>();
     private List<String> ads = new ArrayList<>();
     private List<Header> headers = new ArrayList<>();
@@ -56,7 +57,7 @@ public class VodConfig {
     private List<String> ruleHosts = new ArrayList<>();
     private List<String> loadUrls = new ArrayList<>();
     private final Map<String, Site> siteMap = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<String, Parse> parseMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile Map<String, Parse> parseMap = Collections.emptyMap();
     private boolean loadLive = true;
     private boolean persistCache = true;
     private final Map<Integer, JsonObject> loadedObjects = new HashMap<>();
@@ -104,11 +105,16 @@ public class VodConfig {
     }
 
     public static boolean isScopedSiteKey(String key) {
-        if (TextUtils.isEmpty(key)) return false;
+        if (key == null || key.isEmpty()) return false;
         int index = key.indexOf('@');
         if (index <= 0) return false;
         for (int i = 0; i < index; i++) if (!Character.isDigit(key.charAt(i))) return false;
-        return true;
+        try {
+            Integer.parseInt(key.substring(0, index));
+            return true;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
     }
 
     public static int siteCid(String key, int fallbackCid) {
@@ -213,10 +219,10 @@ public class VodConfig {
         this.ruleHosts.clear();
         this.loadUrls.clear();
         this.siteMap.clear();
-        this.parseMap.clear();
+        this.parseMap = Collections.emptyMap();
         this.sites.clear();
         this.flags = new ArrayList<>();
-        this.parses.clear();
+        this.parses = Collections.emptyList();
         this.loadLive = true;
         BaseLoader.get().clear();
         return this;
@@ -315,13 +321,13 @@ public class VodConfig {
             Map<Integer, Integer> order = new HashMap<>();
             for (int index = 0; index < selectedConfigs.size(); index++) order.put(selectedConfigs.get(index).getId(), index);
             sites.sort(java.util.Comparator.comparingInt(site -> order.getOrDefault(siteCid(site.getKey(), config.getId()), Integer.MAX_VALUE)));
-            initParse(added);
             JsonObject merged = new JsonObject();
             for (Config item : selectedConfigs) {
                 JsonObject object = loadedObjects.get(item.getId());
                 if (object != null) mergeConfig(merged, object, item);
             }
-            // Rebuild global rules in selection order while retaining existing Site instances.
+            // Rebuild parser priority and global rules while retaining existing Site instances.
+            initParse(merged);
             initOther(merged);
             preloadJars(added);
             if (loadLive && merged.has("lives") && LiveConfig.get().needSync(result.config.getUrl())) LiveConfig.get().parse(merged);
@@ -431,8 +437,8 @@ public class VodConfig {
     private void mergeConfig(JsonObject target, JsonObject source, Config config) {
         JsonObject root = source.has("video") ? source.getAsJsonObject("video") : source;
         mergeSites(target, root, config);
-        appendArray(target, source, "lives");
-        if (root != source) appendArray(target, root, "lives");
+        LiveConfig.mergeLives(target, source);
+        if (root != source) LiveConfig.mergeLives(target, root);
         appendArray(target, root, "parses");
         appendArray(target, root, "rules");
         appendArray(target, root, "doh");
@@ -619,26 +625,21 @@ public class VodConfig {
         for (Site s : SiteRepository.get().all()) cache.put(s.getKey(), s);
         for (JsonElement element : elements) {
             Site site = Site.objectFrom(element, spider);
-            if (!site.isEmpty() && !isScopedSiteKey(site.getKey())) site.setKey(siteKey(config.getId(), site.getKey()));
-            if (siteMap.containsKey(site.getKey())) {
-                Site old = siteMap.get(site.getKey());
-                if (old != null) {
-                    old.setApi(site.getApi());
-                    old.setExt(site.getExt());
-                    old.setJar(site.getJar());
-                    old.setSpider(null);
-                }
-                continue;
-            }
-            site.setJar(parseJar(site, spider));
-            sites.add(site.trans().sync(cache));
-            siteMap.put(site.getKey(), site);
+            addSite(site, spider, cache);
         }
         for (Site site : sites) {
             if (site.getKey().equals(config.getHome()) || site.getKey().equals(siteKey(config.getId(), config.getHome()))) {
                 setHome(site);
             }
         }
+    }
+
+    void addSite(Site site, String spider, Map<String, Site> cache) {
+        if (!site.isEmpty() && !isScopedSiteKey(site.getKey())) site.setKey(siteKey(config.getId(), site.getKey()));
+        if (siteMap.containsKey(site.getKey())) return;
+        site.setJar(parseJar(site, spider));
+        sites.add(site.trans().sync(cache));
+        siteMap.put(site.getKey(), site);
     }
 
     private void preloadJars(JsonObject object) {
@@ -708,22 +709,34 @@ public class VodConfig {
     }
 
     private void initParse(JsonObject object) {
+        List<Parse> entries = new ArrayList<>();
         for (JsonElement element : Json.safeListElement(object, "parses")) {
-            Parse parse = Parse.objectFrom(element);
-            if (parse.getName().equals(config.getParse()) && parse.getType() > 1) setParse(parse);
-            if (!parseMap.containsKey(parse.getName())) {
-                parses.add(parse);
-                parseMap.put(parse.getName(), parse);
-            }
+            entries.add(Parse.objectFrom(element));
         }
+        setParses(entries, Parse.god());
+    }
+
+    void setParses(List<Parse> entries, Parse god) {
+        boolean retainSelection = parse != null;
+        String selected = retainSelection ? parse.getName() : config.getParse();
+        Map<String, Parse> ordered = new LinkedHashMap<>();
+        for (Parse parse : entries) {
+            ordered.putIfAbsent(parse.getName(), parse);
+        }
+        List<Parse> updated = new ArrayList<>(ordered.values());
+        if (!updated.isEmpty() && !ordered.containsKey(god.getName())) {
+            updated.add(0, god);
+            ordered.put(god.getName(), god);
+        }
+        parses = updated;
+        parseMap = ordered;
+        Parse restored = ordered.get(selected);
+        if (restored != null && (retainSelection || restored.getType() > 1)) setParse(restored);
+        else if (!updated.isEmpty()) setParse(updated.get(0));
+        else parse = null;
     }
 
     private void initOther(JsonObject object) {
-        if (parses.size() > 0 && !parseMap.containsKey(Parse.god().getName())) {
-            Parse god = Parse.god();
-            parses.add(0, god);
-            parseMap.put(god.getName(), god);
-        }
         if ((home == null || home.isEmpty()) && !sites.isEmpty()) setHome(sites.get(0));
         if ((parse == null || parse.isEmpty()) && !parses.isEmpty()) setParse(parses.get(0));
         setHeaders(Header.arrayFrom(object.get("headers")));
@@ -775,8 +788,8 @@ public class VodConfig {
         OkHttp.authenticator().addAll(LiveConfig.get().getProxy());
         OkHttp.selector().addProxyAll(get().getProxy());
         OkHttp.selector().addProxyAll(LiveConfig.get().getProxy());
-        OkHttp.dns().addAll(get().getHosts());
-        OkHttp.dns().addAll(LiveConfig.get().getHosts());
+        OkHttp.resolver().addAll(get().getHosts());
+        OkHttp.resolver().addAll(LiveConfig.get().getHosts());
         OkHttp.selector().addAll(get().getRuleHosts());
         OkHttp.selector().addAll(LiveConfig.get().getRuleHosts());
     }
@@ -899,10 +912,11 @@ public class VodConfig {
     }
 
     public void setParse(Parse parse) {
-        this.parse = parse;
+        Parse current = parseMap.get(parse.getName());
+        this.parse = current == null ? parse : current;
         this.parse.setActivated(true);
-        config.saveParse(parse.getName());
-        for (Parse item : getParses()) item.setActivated(parse);
+        config.saveParse(this.parse.getName());
+        for (Parse item : getParses()) item.setActivated(this.parse);
     }
 
     public void setHome(Site home) {

@@ -29,7 +29,7 @@ public class ZLive implements Source.Extractor {
         if (!init) init();
         Uri uri = Uri.parse(url);
         String uuid = uri.getLastPathSegment();
-        String server = uri.getHost();
+        String server = uri.getAuthority();
         if (uuid == null || server == null || server.isEmpty()) throw new ExtractException("Invalid zlive url");
         OkHttp.string(String.format("http://127.0.0.1:%s/stream/open?uuid=%s", PORT, uuid));
         return String.format("http://127.0.0.1:%s/stream/live?uuid=%s&server=%s&group=5850&mac=00:00:00:00:00:00&dir=%s", PORT, uuid, server, Path.cache());

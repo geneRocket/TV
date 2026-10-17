@@ -18,6 +18,7 @@ import com.github.catvod.utils.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,10 +28,10 @@ public class LiveParser {
     private static final Pattern CATCHUP_SOURCE = Pattern.compile("catchup-source=\"(.*?)\"");
     private static final Pattern CATCHUP = Pattern.compile("catchup=\"(.*?)\"");
     private static final Pattern TVG_NAME = Pattern.compile("tvg-name=\"(.*?)\"");
+    private static final Pattern TVG_ID = Pattern.compile("tvg-id=\"(.*?)\"");
     private static final Pattern TVG_LOGO = Pattern.compile("tvg-logo=\"(.*?)\"");
     private static final Pattern TVG_URL = Pattern.compile("x-tvg-url=\"(.*?)\"");
     private static final Pattern GROUP = Pattern.compile("group-title=\"(.*?)\"");
-    private static final Pattern NAME = Pattern.compile(",(.*?)$");
 
     private static String extract(String line, Pattern pattern) {
         Matcher matcher = pattern.matcher(line);
@@ -38,11 +39,31 @@ public class LiveParser {
         return "";
     }
 
-    private static String extractValue(String line, String token) {
+    static String channelName(String line) {
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char value = line.charAt(i);
+            if (value == '"' && (i == 0 || line.charAt(i - 1) != '\\')) quoted = !quoted;
+            if (value == ',' && !quoted) return line.substring(i + 1).trim();
+        }
+        return "";
+    }
+
+    static void channelMetadata(Channel channel, String line) {
+        channel.setTvgId(extract(line, TVG_ID));
+        channel.setTvgName(extract(line, TVG_NAME));
+        channel.setLogo(extract(line, TVG_LOGO));
+    }
+
+    static String extractValue(String line, String token) {
         if (line == null || token == null) return "";
-        int index = line.toLowerCase().indexOf(token.toLowerCase());
+        int index = line.toLowerCase(Locale.ROOT).indexOf(token.toLowerCase(Locale.ROOT));
         if (index < 0) return "";
-        return line.substring(index + token.length()).trim().replace("\"", "");
+        String value = line.substring(index + token.length()).trim();
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            value = value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 
     public static void start(Live live) throws Exception {
@@ -105,7 +126,7 @@ public class LiveParser {
                     live.getGroups().add(group);
                     groupMap.put(groupName, group);
                 }
-                String channelName = extract(line, NAME);
+                String channelName = channelName(line);
                 Map<String, Channel> channels = channelMap.computeIfAbsent(group, k -> new HashMap<>());
                 channel = channels.get(channelName);
                 if (channel == null) {
@@ -113,8 +134,7 @@ public class LiveParser {
                     group.getChannel().add(channel);
                     channels.put(channelName, channel);
                 }
-                channel.setTvgName(extract(line, TVG_NAME));
-                channel.setLogo(extract(line, TVG_LOGO));
+                channelMetadata(channel, line);
                 Catchup unknown = Catchup.create();
                 unknown.setType(extract(line, CATCHUP));
                 unknown.setSource(extract(line, CATCHUP_SOURCE));

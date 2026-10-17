@@ -217,7 +217,7 @@ public class ControlDialog extends BaseDialog implements ParseAdapter.OnClickLis
     }
 
     public void updateParse() {
-        binding.parse.getAdapter().notifyItemRangeChanged(0, binding.parse.getAdapter().getItemCount());
+        ((ParseAdapter) binding.parse.getAdapter()).refresh();
     }
 
     public void updatePlayer() {

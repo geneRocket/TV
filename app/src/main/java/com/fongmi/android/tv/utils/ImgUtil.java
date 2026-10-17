@@ -15,6 +15,7 @@ import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.RequestOptions;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.target.Target;
 import com.bumptech.glide.signature.ObjectKey;
@@ -43,6 +44,14 @@ public class ImgUtil {
 
     public static void load(String url, CustomTarget<Bitmap> target) {
         if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).dontAnimate().signature(getSignature(url)).into(target);
+    }
+
+    public static void loadThumbnail(String url, CustomTarget<Bitmap> target) {
+        if (!TextUtils.isEmpty(url)) Glide.with(App.get()).asBitmap().load(getUrl(url)).dontAnimate().signature(getSignature(url)).apply(thumbnailOptions()).into(target);
+    }
+
+    static RequestOptions thumbnailOptions() {
+        return new RequestOptions().override(512, 512).fitCenter();
     }
 
     public static void load(String url, int error, CustomTarget<Drawable> target) {
@@ -147,14 +156,17 @@ public class ImgUtil {
         return UrlUtil.convert(link + suffix);
     }
 
-    private static String firstPic(String url) {
+    static String firstPic(String url) {
+        int tag = findFirstTag(url);
+        int end = tag < 0 ? url.length() : tag;
         for (String separator : new String[]{"$$$", "&&", "\n", "\r", "\t"}) {
             int index = url.indexOf(separator);
-            if (index > 0) return url.substring(0, index).trim();
+            if (index > 0 && (!"&&".equals(separator) || index < end)) return url.substring(0, index).trim();
         }
         int comma = url.indexOf(",");
         int nextHttp = url.indexOf("http", Math.max(comma, 0) + 1);
-        return comma > 0 && nextHttp > comma ? url.substring(0, comma).trim() : url;
+        return comma > 0 && comma < end && nextHttp > comma && nextHttp < end
+                ? url.substring(0, comma).trim() : url;
     }
 
     private static String getParam(String url, String tag) {

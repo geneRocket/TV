@@ -311,7 +311,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private int getPlayer() {
-        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : Setting.getPlayer();
+        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : getSite().getPlayerType() != -1 ? getSite().getPlayerType() : Setting.getPlayer();
     }
 
     private int getScale() {
@@ -1689,6 +1689,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
+        if (event.getType() == RefreshEvent.Type.CONFIG) {
+            if (mParseAdapter != null) mParseAdapter.refresh();
+            if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.updateParse();
+            return;
+        }
         if (!isCurrentPlayer() || isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
@@ -1803,7 +1808,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         boolean recovering = mRecoveryWindow.isActive();
         if (!mRecoveryWindow.begin()) return;
         if (!recovering) com.fongmi.android.tv.utils.Notify.show(getString(R.string.play_recovery_running));
-        switch (mRecovery.next(event, mPlayers, true)) {
+        switch (mRecovery.next(event, mPlayers, true, getSite().getPlayerType() == -1)) {
             case RETRY: retryPlayback(); break;
             case TOGGLE_DECODE: onDecode(false); break;
             case RELOAD_EXO:

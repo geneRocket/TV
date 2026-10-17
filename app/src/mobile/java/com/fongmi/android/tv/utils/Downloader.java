@@ -28,7 +28,7 @@ public class Downloader {
             Notify.show(com.fongmi.android.tv.R.string.vod_load_failed);
         } else if (!result.getRealUrl().startsWith("http")) {
             Notify.show(com.fongmi.android.tv.R.string.download_unsupported);
-        } else if (result.hasMsg()) {
+        } else if (result.hasErrorMsg()) {
             Notify.show(result.getMsg());
         }  else {
             download(activity);

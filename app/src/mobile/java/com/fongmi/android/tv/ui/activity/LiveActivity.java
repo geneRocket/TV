@@ -637,7 +637,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
             showEpg(item);
         } else {
             mGroup.setPosition(mChannelAdapter.setSelected(item.group(mGroup)));
-            mPlayers.setPlayer(Setting.getLivePlayer());
+            mPlayers.setPlayer(item.getPlayerType() == -1 ? Setting.getLivePlayer() : item.getPlayerType());
             setArtwork(item.getLogo());
             mChannel = item;
             setPlayerView();
@@ -881,7 +881,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
         if (!isCurrentPlayer()) return;
-        switch (mRecovery.next(event, mPlayers, mChannel != null)) {
+        switch (mRecovery.next(event, mPlayers, mChannel != null, mChannel != null && mChannel.getPlayerType() == -1)) {
             case RETRY: fetch(); break;
             case TOGGLE_DECODE: onDecode(false); break;
             case RELOAD_EXO: mPlayers.recoverExo(event); break;

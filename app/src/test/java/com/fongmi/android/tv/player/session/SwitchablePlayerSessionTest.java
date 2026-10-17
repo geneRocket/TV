@@ -14,6 +14,37 @@ import static org.junit.Assert.assertTrue;
 public class SwitchablePlayerSessionTest {
 
     @Test
+    public void reentrantStateChangeDoesNotDeliverOlderStateAfterNewerState() {
+        FakeSession delegate = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(delegate);
+        List<PlaybackPhase> phases = new ArrayList<>();
+        session.observe(state -> {
+            if (state.getPhase() == PlaybackPhase.ENDED) delegate.emit(PlaybackPhase.PREPARING);
+        });
+        session.observe(state -> phases.add(state.getPhase()));
+
+        delegate.emit(PlaybackPhase.ENDED);
+
+        assertEquals(java.util.Arrays.asList(PlaybackPhase.IDLE, PlaybackPhase.PREPARING), phases);
+        assertEquals(PlaybackPhase.PREPARING, session.state().getPhase());
+    }
+
+    @Test
+    public void releaseDuringNotificationDoesNotDeliverStateAfterReleased() {
+        FakeSession delegate = new FakeSession();
+        SwitchablePlayerSession session = new SwitchablePlayerSession(delegate);
+        List<PlaybackPhase> phases = new ArrayList<>();
+        session.observe(state -> {
+            if (state.getPhase() == PlaybackPhase.READY) session.release();
+        });
+        session.observe(state -> phases.add(state.getPhase()));
+
+        delegate.emit(PlaybackPhase.READY);
+
+        assertEquals(java.util.Arrays.asList(PlaybackPhase.IDLE, PlaybackPhase.RELEASED), phases);
+    }
+
+    @Test
     public void replacementKeepsObserversAndDetachesOldDelegate() {
         FakeSession first = new FakeSession();
         FakeSession second = new FakeSession();

@@ -81,13 +81,18 @@ public class FileUtil {
 
     public static void extractGzip(File target, File path) {
         if (target == null || path == null) return;
+        File staged = null;
         try {
             ensureParent(path);
-            try (GZIPInputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(target))); BufferedOutputStream os = new BufferedOutputStream(new FileOutputStream(path))) {
+            staged = File.createTempFile("gzip-", ".tmp", path.getAbsoluteFile().getParentFile());
+            try (GZIPInputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(target))); BufferedOutputStream os = new BufferedOutputStream(new FileOutputStream(staged))) {
                 copy(is, os, MAX_ZIP_BYTES);
             }
+            if (!staged.renameTo(path)) throw new IOException("Cannot replace decompressed file");
         } catch (Exception e) {
             ThreadPools.log(e, "Extract gzip failed.");
+        } finally {
+            if (staged != null && staged.exists()) staged.delete();
         }
     }
 
@@ -122,6 +127,7 @@ public class FileUtil {
     private static File getZipOutputFile(File path, ZipEntry entry) throws Exception {
         File root = path.getCanonicalFile();
         File out = new File(root, entry.getName()).getCanonicalFile();
+        if (entry.isDirectory() && out.equals(root)) return root;
         String rootPath = root.getPath() + File.separator;
         if (!out.getPath().startsWith(rootPath)) throw new SecurityException("Unsafe zip entry: " + entry.getName());
         File parent = out.getParentFile();

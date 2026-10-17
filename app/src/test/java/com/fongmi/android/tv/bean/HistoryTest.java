@@ -6,6 +6,49 @@ import static org.junit.Assert.assertEquals;
 
 public class HistoryTest {
 
+    @Test
+    public void importedKeysUseLocalConfigIdWithoutChangingSiteOrVodIdentity() {
+        assertEquals("site@@@video@@@9", History.keyForConfig("site@@@video@@@42", 9));
+        assertEquals("site@@@video@@@9", History.keyForConfig("42@site@@@video@@@42", 9));
+        assertEquals("site@@@video@@@9", History.keyForConfig("site@@@video", 9));
+        assertEquals("site@@@video@@@part@@@9", History.keyForConfig("site@@@video@@@part@@@42", 9));
+        assertEquals("site@@@video@@@9", History.keyForConfig("site@@@video@@@9", 9));
+    }
+
+    @Test
+    public void cachedProgressAndPendingInsertsKeepHistoryInNewestFirstOrder() throws Exception {
+        java.lang.reflect.Field field = History.class.getDeclaredField("CACHE");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, History> cache = (java.util.Map<String, History>) field.get(null);
+        java.lang.reflect.Method merge = History.class.getDeclaredMethod("withCached", java.util.List.class, java.util.List.class);
+        merge.setAccessible(true);
+        History oldFirst = entry("first", 200);
+        History oldSecond = entry("second", 100);
+        History updatedSecond = entry("second", 300);
+        History inserted = entry("inserted", 400);
+        try {
+            History.clearCache();
+            cache.put("999@second", updatedSecond);
+            cache.put("999@inserted", inserted);
+            @SuppressWarnings("unchecked")
+            java.util.List<History> merged = (java.util.List<History>) merge.invoke(null,
+                    java.util.Collections.singletonList(999), java.util.Arrays.asList(oldFirst, oldSecond));
+
+            assertEquals(java.util.Arrays.asList(inserted, updatedSecond, oldFirst), merged);
+        } finally {
+            History.clearCache();
+        }
+    }
+
+    private static History entry(String key, long time) {
+        History history = new History();
+        history.setKey(key);
+        history.setCid(999);
+        history.setCreateTime(time);
+        return history;
+    }
+
     @Test public void absentBestMatchDoesNotReplaceExistingHistory() {
         History existing = new History();
         existing.setPosition(120_000);

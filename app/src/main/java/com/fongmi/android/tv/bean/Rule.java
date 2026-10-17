@@ -28,8 +28,8 @@ public class Rule {
     @SerializedName("exclude")
     private List<String> exclude;
 
-    private List<Pattern> regexPatterns;
-    private List<Pattern> excludePatterns;
+    private transient List<Pattern> regexPatterns;
+    private transient List<Pattern> excludePatterns;
 
     public static Rule create(String name) {
         return new Rule(name);

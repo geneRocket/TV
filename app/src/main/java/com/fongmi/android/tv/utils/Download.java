@@ -2,13 +2,15 @@ package com.fongmi.android.tv.utils;
 
 import com.fongmi.android.tv.App;
 import com.github.catvod.net.OkHttp;
-import com.github.catvod.utils.Path;
+import com.github.catvod.net.HttpCallScope;
 import com.google.common.net.HttpHeaders;
 
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.util.Map;
 
 import okhttp3.Headers;
@@ -60,10 +62,9 @@ public class Download {
     }
 
     private void runDownload() throws Exception {
-        Path.create(file);
         Map<String, String> headers = UrlUtil.getTagHeaders(url);
         Request request = new Request.Builder().url(UrlUtil.stripTag(UrlUtil.normalize(url, ""))).headers(Headers.of(headers)).build();
-        try (Response response = OkHttp.client().newCall(request).execute()) {
+        try (Response response = HttpCallScope.track(OkHttp.client().newCall(request)).execute()) {
             if (!response.isSuccessful()) throw new IllegalStateException(response.code() + " " + response.message());
             if (response.body() == null) throw new IllegalStateException("Empty download body");
             download(response.body().byteStream(), getContentLength(response.header(HttpHeaders.CONTENT_LENGTH)));
@@ -79,20 +80,30 @@ public class Download {
         }
     }
 
-    private void download(InputStream is, double length) throws Exception {
-        try (BufferedInputStream input = new BufferedInputStream(is); FileOutputStream os = new FileOutputStream(file)) {
-            byte[] buffer = new byte[64 * 1024];
-            int readBytes;
-            long totalBytes = 0;
-            while ((readBytes = input.read(buffer)) != -1) {
-                totalBytes += readBytes;
-                os.write(buffer, 0, readBytes);
-                int progress = Math.min(100, (int) (totalBytes / length * 100.0));
-                if (callback != null && progress != lastProgress) {
-                    lastProgress = progress;
-                    App.post(() -> callback.progress(progress));
+    void download(InputStream is, double length) throws Exception {
+        File parent = file.getAbsoluteFile().getParentFile();
+        if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("Cannot create download directory");
+        File staged = File.createTempFile("download-", ".tmp", parent);
+        try {
+            try (BufferedInputStream input = new BufferedInputStream(is); FileOutputStream os = new FileOutputStream(staged)) {
+                byte[] buffer = new byte[64 * 1024];
+                int readBytes;
+                long totalBytes = 0;
+                while ((readBytes = input.read(buffer)) != -1) {
+                    if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
+                    totalBytes += readBytes;
+                    os.write(buffer, 0, readBytes);
+                    int progress = Math.min(100, (int) (totalBytes / length * 100.0));
+                    if (callback != null && progress != lastProgress) {
+                        lastProgress = progress;
+                        App.post(() -> callback.progress(progress));
+                    }
                 }
             }
+            if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
+            if (!staged.renameTo(file)) throw new IOException("Cannot replace downloaded file");
+        } finally {
+            if (staged.exists()) staged.delete();
         }
     }
 

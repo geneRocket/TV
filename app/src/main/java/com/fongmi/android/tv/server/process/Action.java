@@ -229,7 +229,7 @@ public class Action implements Process {
             if (!temp.exists()) continue;
             if (fn.toLowerCase(Locale.ROOT).endsWith(".apk")) {
                 File apk = Path.cache(System.currentTimeMillis() + "-" + fn);
-                if (Path.copy(temp, apk)) FileUtil.openFile(apk);
+                if (Path.tryCopy(temp, apk)) FileUtil.openFile(apk);
             }
             temp.delete();
             break;
@@ -249,7 +249,7 @@ public class Action implements Process {
             File temp = new File(files.get(k));
             if (!temp.exists() || TextUtils.isEmpty(fn)) continue;
             File wall = new File(Path.download(), fn);
-            if (!Path.copy(temp, wall)) {
+            if (!Path.tryCopy(temp, wall)) {
                 temp.delete();
                 break;
             }
@@ -276,11 +276,14 @@ public class Action implements Process {
             File temp = new File(files.get(k));
             if (!temp.exists() || TextUtils.isEmpty(fn)) continue;
             File restore = Path.cache(System.currentTimeMillis() + "-" + fn);
-            if (!Path.copy(temp, restore)) {
+            if (!Path.tryCopy(temp, restore)) {
                 temp.delete();
                 break;
             }
             AppDatabase.restore(restore, new Callback() {
+                @Override
+                public void error(String msg) { Notify.show(msg); }
+
                 @Override
                 public void success() {
                     showProgress();
@@ -350,6 +353,7 @@ public class Action implements Process {
     }
 
     private void initConfig() {
+        WallConfig.reload();
         List<Config> vodConfigs = getStartupConfigs(0);
         if (vodConfigs.size() == 1) VodConfig.loadCached(vodConfigs.get(0), getCallback());
         else VodConfig.loadCachedWithLive(vodConfigs, getCallback());

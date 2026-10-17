@@ -27,4 +27,18 @@ public class PlaybackRecoveryTest {
 
         assertEquals(PlaybackRecovery.Action.TOGGLE_DECODE, recovery.next(error, true, PlayerType.EXO, true));
     }
+
+    @Test public void explicitPlayerStillRetriesButDoesNotSwitchEngines() {
+        PlaybackRecovery recovery = new PlaybackRecovery();
+        ErrorEvent error = new ErrorEvent(ErrorEvent.Type.URL, 1, 4001);
+        assertEquals(PlaybackRecovery.Action.TOGGLE_DECODE, recovery.next(error, true, PlayerType.EXO, true, false));
+        assertEquals(PlaybackRecovery.Action.ADVANCE, recovery.next(error, true, PlayerType.EXO, true, false));
+    }
+
+    @Test public void defaultPlayerCanStillSwitchEnginesAfterRetry() {
+        PlaybackRecovery recovery = new PlaybackRecovery();
+        ErrorEvent error = new ErrorEvent(ErrorEvent.Type.URL, 1, 4001);
+        assertEquals(PlaybackRecovery.Action.TOGGLE_DECODE, recovery.next(error, true, PlayerType.EXO, true, true));
+        assertEquals(PlaybackRecovery.Action.SWITCH_PLAYER, recovery.next(error, true, PlayerType.EXO, true, true));
+    }
 }

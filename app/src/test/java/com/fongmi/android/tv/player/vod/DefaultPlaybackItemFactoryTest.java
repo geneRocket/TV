@@ -14,8 +14,23 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 
 public class DefaultPlaybackItemFactoryTest {
+
+    @Test
+    public void selectedSubtitleReplacesMatchingRemoteEntryAndTakesPriority() throws Exception {
+        Sub first = sub("https://example.com/first.srt");
+        Sub remote = sub("https://example.com/selected.srt");
+        Sub selected = sub("https://example.com/selected.srt");
+        PlaybackItem item = factory(selected).create(
+                new VodEpisode("episode", "site", "flag", "name", "url"),
+                new TestResult(Arrays.asList(first, remote)), 0);
+
+        assertEquals(2, item.getSubtitles().size());
+        assertSame(selected, item.getSubtitles().get(0));
+        assertSame(first, item.getSubtitles().get(1));
+    }
 
     @Test
     public void subtitlesDropNullEntriesAndKeepSelectedFirst() throws Exception {

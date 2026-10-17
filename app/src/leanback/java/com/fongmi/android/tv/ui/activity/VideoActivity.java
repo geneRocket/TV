@@ -368,7 +368,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private final class RecoveryPort implements TvVodRecoveryController.Port {
-        @Override public PlaybackRecovery.Action decide(ErrorEvent error) { return mRecovery.next(error, mPlayers, true); }
+        @Override public PlaybackRecovery.Action decide(ErrorEvent error) { return mRecovery.next(error, mPlayers, true, getSite().getPlayerType() == -1); }
         @Override public void retry() { onRefresh(); }
         @Override public void toggleDecode() { onDecode(false); }
         @Override public void reloadExo(ErrorEvent error) { capturePlaybackPosition(); mPlaybackCoordinator.reload(mPlayers.getRecoveryFormat(error)); }
@@ -673,7 +673,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int getPlayer() {
-        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : Setting.getPlayer();
+        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : getSite().getPlayerType() != -1 ? getSite().getPlayerType() : Setting.getPlayer();
     }
 
     private int getScale() {
@@ -2172,6 +2172,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
+        if (event.getType() == RefreshEvent.Type.CONFIG) {
+            if (mParseAdapter != null) {
+                mParseAdapter.setItems(VodConfig.get().getParses(), null);
+                mSelection.selectParse(getParsePosition(), mParseAdapter.size());
+            }
+            return;
+        }
         if (!isCurrentPlayer() || isBackground()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) mDetail.request();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();

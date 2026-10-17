@@ -11,6 +11,8 @@ import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Sub {
 
@@ -71,6 +73,19 @@ public class Sub {
 
     public int getFlag() {
         return flag == 0 ? C.SELECTION_FLAG_DEFAULT : flag;
+    }
+
+    public static List<Sub> withSelected(List<Sub> values, Sub selected) {
+        List<Sub> result = new ArrayList<>();
+        boolean hasSelection = selected != null && !selected.getUrl().isEmpty();
+        if (hasSelection) result.add(selected);
+        if (values != null) {
+            for (Sub value : values) {
+                if (value == null || hasSelection && value.getUrl().equals(selected.getUrl())) continue;
+                result.add(value);
+            }
+        }
+        return result;
     }
 
     public void trans() {

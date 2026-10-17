@@ -262,7 +262,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
 
     private void search(Site site, String keyword, String token) {
         try {
-            mViewModel.searchContent(site, keyword, site.isQuickSearch(), token);
+            mViewModel.searchContent(site, keyword, false, token);
         } catch (Throwable ignored) {
         } finally {
             App.post(() -> onSearchFinished(token));

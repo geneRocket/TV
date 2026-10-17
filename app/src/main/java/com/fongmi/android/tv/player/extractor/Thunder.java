@@ -142,7 +142,7 @@ public class Thunder implements Source.Extractor {
         }
 
         @Override
-        public List<Episode> call() {
+        public List<Episode> call() throws Exception {
             GetTaskId taskId = null;
             try {
                 boolean torrent = isTorrent(url);
@@ -151,7 +151,7 @@ public class Thunder implements Source.Extractor {
                 String realUrl = taskId.getRealUrl();
                 if (realUrl == null) return Collections.emptyList();
                 if (!torrent && !realUrl.startsWith(MAGNET_QUERY)) return Arrays.asList(Episode.create(taskId.getFileName(), realUrl));
-                if (torrent) Download.create(url, taskId.getSaveFile()).start();
+                if (torrent) Download.create(url, taskId.getSaveFile()).sync();
                 else while (XLTaskHelper.get().getTaskInfo(taskId).getTaskStatus() != 2 && time < PARSE_TIMEOUT) sleep();
                 List<TorrentFileInfo> medias = XLTaskHelper.get().getTorrentInfo(taskId.getSaveFile()).getMedias();
                 for (TorrentFileInfo media : medias) episodes.add(Episode.create(media.getFileName(), media.getSize(), media.getPlayUrl()));

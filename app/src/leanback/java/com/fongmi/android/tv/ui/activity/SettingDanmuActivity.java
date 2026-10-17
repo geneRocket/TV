@@ -50,7 +50,7 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     @Override
     protected void initView() {
         mBinding.danmuLoad.requestFocus();
-        mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmu()));
+        mBinding.danmuLoadText.setText(getSwitch(Setting.isDanmuLoad()));
         mBinding.danmuSizeText.setText(String.valueOf(Setting.getDanmuSize()));
         mBinding.danmuLineText.setText(String.valueOf(Setting.getDanmuLine(3)));
         mBinding.danmuAlphaText.setText(String.valueOf(Setting.getDanmuAlpha()));
@@ -116,11 +116,11 @@ public class SettingDanmuActivity extends BaseActivity implements DanmuLineCallb
     }
 
     private void setDanmuLoad(View view) {
-        setDanmuLoad(!Setting.isDanmu());
+        setDanmuLoad(!Setting.isDanmuLoad());
     }
 
     private void setDanmuLoad(boolean enabled) {
-        Setting.putDanmu(enabled);
+        Setting.putDanmuLoad(enabled);
         mBinding.danmuLoadText.setText(getSwitch(enabled));
     }
 

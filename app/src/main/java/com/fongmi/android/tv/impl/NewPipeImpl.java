@@ -3,6 +3,7 @@ package com.fongmi.android.tv.impl;
 import androidx.annotation.NonNull;
 
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.net.HttpCallScope;
 
 import org.schabi.newpipe.extractor.downloader.Downloader;
 import org.schabi.newpipe.extractor.downloader.Request;
@@ -49,15 +50,12 @@ public final class NewPipeImpl extends Downloader {
             }
         }
 
-        okhttp3.Response response = OkHttp.client().newCall(builder.build()).execute();
-        if (response.code() == 429) {
-            response.close();
-            throw new ReCaptchaException("reCaptcha Challenge requested", url);
+        try (okhttp3.Response response = HttpCallScope.track(OkHttp.client().newCall(builder.build())).execute()) {
+            if (response.code() == 429) throw new ReCaptchaException("reCaptcha Challenge requested", url);
+            ResponseBody body = response.body();
+            String responseBody = body == null ? "" : body.string();
+            String latestUrl = response.request().url().toString();
+            return new Response(response.code(), response.message(), response.headers().toMultimap(), responseBody, latestUrl);
         }
-
-        ResponseBody body = response.body();
-        String responseBody = body == null ? "" : body.string();
-        String latestUrl = response.request().url().toString();
-        return new Response(response.code(), response.message(), response.headers().toMultimap(), responseBody, latestUrl);
     }
 }

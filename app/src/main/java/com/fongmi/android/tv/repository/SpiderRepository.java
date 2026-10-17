@@ -94,7 +94,7 @@ public class SpiderRepository {
             SpiderDebug.log(detailContent);
             return prepareDetailResult(Result.fromJson(detailContent));
         } else if (site.isEmpty() && "push_agent".equals(key)) {
-            return Result.vod(createPushVod(id));
+            return prepareDetailResult(Result.vod(createPushVod(id)));
         } else if (site.isEmpty()) {
             return Result.empty();
         } else {
@@ -216,8 +216,20 @@ public class SpiderRepository {
         return vod;
     }
 
-    private Result prepareDetailResult(Result result) {
-        if (!result.getList().isEmpty()) result.getList().get(0).setVodFlags();
+    interface EpisodeParser {
+        void parse(java.util.List<Flag> flags) throws Exception;
+    }
+
+    private Result prepareDetailResult(Result result) throws Exception {
+        return prepareDetailResult(result, flags -> Source.get().parse(flags));
+    }
+
+    static Result prepareDetailResult(Result result, EpisodeParser parser) throws Exception {
+        if (!result.getList().isEmpty()) {
+            Vod vod = result.getList().get(0);
+            vod.setVodFlags();
+            parser.parse(vod.getVodFlags());
+        }
         return result;
     }
 
