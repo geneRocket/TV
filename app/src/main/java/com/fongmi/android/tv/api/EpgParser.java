@@ -3,6 +3,7 @@ package com.fongmi.android.tv.api;
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.Epg;
 import com.fongmi.android.tv.bean.EpgData;
+import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Tv;
 import com.fongmi.android.tv.utils.Download;
@@ -61,6 +62,7 @@ public class EpgParser {
     }
 
     public static boolean start(Live live) throws Exception {
+        HttpCallScope.throwIfCancelled();
         List<String> xmls = live.getEpgXml();
         if (xmls.isEmpty()) return false;
         boolean success = false;
@@ -68,6 +70,7 @@ public class EpgParser {
             try {
                 success |= start(live, url);
             } catch (Exception e) {
+                HttpCallScope.throwIfCancelled();
                 e.printStackTrace();
             }
         }
@@ -75,6 +78,7 @@ public class EpgParser {
     }
 
     public static boolean start(Live live, String url) throws Exception {
+        HttpCallScope.throwIfCancelled();
         File file = Path.epg(cacheName(url));
         boolean refresh = shouldRefresh(file);
         if (refresh) Download.create(url, file).sync();
@@ -88,13 +92,16 @@ public class EpgParser {
     }
 
     public static Epg getEpg(String xml, String key) throws Exception {
+        HttpCallScope.throwIfCancelled();
         refreshFormats();
         Tv tv = new Persister().read(Tv.class, xml, false);
         Epg epg = Epg.create(key, FORMAT_DATE.get().format(getDate(tv)));
         for (Tv.Programme programme : tv.getProgramme()) {
+            HttpCallScope.throwIfCancelled();
             EpgData item = getEpgData(programme);
             if (item != null) epg.getList().add(item);
         }
+        HttpCallScope.throwIfCancelled();
         return epg;
     }
 
@@ -128,6 +135,7 @@ public class EpgParser {
     }
 
     static void prepareGzip(File file, File xml, boolean refresh) throws IOException {
+        HttpCallScope.throwIfCancelled();
         if (xml.exists() && !refresh && xml.lastModified() >= file.lastModified()) return;
         if (FileUtil.tryExtractGzip(file, xml)) return;
         HttpCallScope.throwIfCancelled();
@@ -137,15 +145,18 @@ public class EpgParser {
     }
 
     private static void readXml(Live live, File file) throws Exception {
+        HttpCallScope.throwIfCancelled();
         refreshFormats();
         FormatContext context = FORMAT_CONTEXT.get();
         Map<String, Channel> liveChannelMap = prepareLiveChannels(live);
         Tv tv = new Persister().read(Tv.class, file, false);
+        HttpCallScope.throwIfCancelled();
         Map<String, List<Tv.Channel>> xmlChannelMap = tv.getChannel().stream().collect(Collectors.groupingBy(Tv.Channel::getId));
         String today = FORMAT_DATE.get().format(new Date());
         Map<String, Epg> epgMap = new HashMap<>();
         Map<String, String> srcMap = new HashMap<>();
         for (Tv.Programme programme : tv.getProgramme()) {
+            HttpCallScope.throwIfCancelled();
             Channel channel = findTargetChannel(programme.getChannel(), liveChannelMap, xmlChannelMap);
             if (channel == null) continue;
             Date startDate = parse(programme.getStart());
@@ -166,7 +177,12 @@ public class EpgParser {
                 }
             }
         }
-        live.getGroups().stream().flatMap(group -> group.getChannel().stream()).forEach(channel -> merge(channel, epgMap.get(channel.getTvgId()), srcMap.get(channel.getTvgId())));
+        for (Group group : live.getGroups()) {
+            for (Channel channel : group.getChannel()) {
+                HttpCallScope.throwIfCancelled();
+                merge(channel, epgMap.get(channel.getTvgId()), srcMap.get(channel.getTvgId()));
+            }
+        }
     }
 
     private static Map<String, Channel> prepareLiveChannels(Live live) {

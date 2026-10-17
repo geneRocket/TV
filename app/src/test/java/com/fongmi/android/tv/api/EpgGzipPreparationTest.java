@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.zip.GZIPOutputStream;
+import com.github.catvod.net.HttpCallScope;
 import static org.junit.Assert.*;
 
 public class EpgGzipPreparationTest {
@@ -64,6 +65,33 @@ public class EpgGzipPreparationTest {
             assertTrue(source.exists());
             assertEquals("previous XML", text(xml));
         } finally { Thread.interrupted(); }
+    }
+
+    @Test public void cancelledValidRefreshKeepsBothExistingFiles() throws Exception {
+        File source = gzip(false), xml = xml("previous XML");
+        HttpCallScope scope = new HttpCallScope();
+        scope.call(() -> {
+            scope.close();
+            expectFailure(source, xml, true);
+            return null;
+        });
+        assertTrue(source.exists());
+        assertEquals("previous XML", text(xml));
+        assertEquals(2, temporary.getRoot().list().length);
+    }
+
+    @Test public void cancelledRequestCannotTreatExistingXmlAsSuccessfulPreparation() throws Exception {
+        File source = gzip(false), xml = xml("previous XML");
+        assertTrue(source.setLastModified(1000));
+        assertTrue(xml.setLastModified(2000));
+        HttpCallScope scope = new HttpCallScope();
+        scope.call(() -> {
+            scope.close();
+            expectFailure(source, xml, false);
+            return null;
+        });
+        assertTrue(source.exists());
+        assertEquals("previous XML", text(xml));
     }
 
     private void expectFailure(File source, File xml, boolean refresh) throws Exception {

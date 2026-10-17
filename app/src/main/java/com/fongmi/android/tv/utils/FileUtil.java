@@ -10,6 +10,7 @@ import androidx.core.content.FileProvider;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.impl.Callback;
 import com.github.catvod.utils.Path;
+import com.github.catvod.net.HttpCallScope;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -87,11 +88,13 @@ public class FileUtil {
         if (target == null || path == null) return false;
         File staged = null;
         try {
+            HttpCallScope.throwIfCancelled();
             ensureParent(path);
             staged = File.createTempFile("gzip-", ".tmp", path.getAbsoluteFile().getParentFile());
             try (GZIPInputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(target))); BufferedOutputStream os = new BufferedOutputStream(new FileOutputStream(staged))) {
                 copy(is, os, MAX_ZIP_BYTES);
             }
+            HttpCallScope.throwIfCancelled();
             if (!staged.renameTo(path)) throw new IOException("Cannot replace decompressed file");
             return true;
         } catch (Exception e) {
@@ -142,14 +145,17 @@ public class FileUtil {
     }
 
     private static long copy(InputStream in, OutputStream out, long limit) throws IOException {
+        HttpCallScope.throwIfCancelled();
         byte[] buffer = new byte[BUFFER_SIZE];
         long total = 0;
         int read;
         while ((read = in.read(buffer)) != -1) {
+            HttpCallScope.throwIfCancelled();
             total += read;
             if (total > limit) throw new IOException("Output exceeds limit");
             out.write(buffer, 0, read);
         }
+        HttpCallScope.throwIfCancelled();
         return total;
     }
 
