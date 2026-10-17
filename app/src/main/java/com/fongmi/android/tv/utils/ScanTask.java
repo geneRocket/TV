@@ -34,9 +34,13 @@ public class ScanTask {
     }
 
     public ScanTask(Listener listener) {
+        this(listener, OkHttp.client(1000), AppTaskScheduler.get());
+    }
+
+    ScanTask(Listener listener, OkHttpClient client, TaskScheduler scheduler) {
         this.listener = listener;
-        this.client = OkHttp.client(1000);
-        this.scheduler = AppTaskScheduler.get();
+        this.client = client;
+        this.scheduler = scheduler;
     }
 
     public synchronized void start(List<String> ips) {
@@ -93,6 +97,7 @@ public class ScanTask {
 
     private synchronized void scheduleComplete(long currentGeneration, List<Device> devices) {
         if (generation != currentGeneration) return;
+        if (completion != null) scheduler.remove(completion);
         Runnable delivery = () -> complete(currentGeneration, devices);
         completion = delivery;
         scheduler.post(delivery, 0);
@@ -119,6 +124,12 @@ public class ScanTask {
         return executor == currentExecutor && generation == currentGeneration;
     }
 
+    synchronized void recordDevice(ExecutorService currentExecutor, long currentGeneration, List<Device> devices, Device device) {
+        if (!isCurrent(currentExecutor, currentGeneration)) return;
+        devices.add(device);
+        scheduleComplete(currentGeneration, devices);
+    }
+
     private void findDevice(String url, ExecutorService currentExecutor, long currentGeneration, List<Device> devices) {
         Call call = null;
         try {
@@ -134,7 +145,7 @@ public class ScanTask {
             }
             Device device = DeviceRepository.get().fromJson(result);
             if (device == null || !isCurrent(currentExecutor, currentGeneration)) return;
-            devices.add(device.save());
+            recordDevice(currentExecutor, currentGeneration, devices, device.save());
         } catch (Exception ignored) {
         } finally {
             if (call != null) calls.remove(call);
@@ -143,6 +154,7 @@ public class ScanTask {
 
     public interface Listener {
 
+        /** Receives main-thread snapshots as devices arrive, and once when the scan finishes. */
         void onFind(List<Device> devices);
     }
 }

@@ -194,7 +194,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
 
     @Override
     public void onFind(List<Device> devices) {
-        if (devices.size() > 0) postIfActive(() -> adapter.addAll(devices));
+        if (isViewActive() && devices.size() > 0) adapter.addAll(devices);
     }
 
     @Override
