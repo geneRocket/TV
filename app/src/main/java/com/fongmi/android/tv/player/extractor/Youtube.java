@@ -129,16 +129,19 @@ public class Youtube implements Source.Extractor {
         }
 
         private void add(YoutubePlaylistExtractor extractor, List<Episode> episodes, ListExtractor.InfoItemsPage<StreamInfoItem> page) {
-            for (StreamInfoItem item : page.getItems()) {
-                if (item.getDuration() == -1) continue;
-                episodes.add(Episode.create(item.getName(), item.getUrl()));
-            }
+            addItems(episodes, page.getItems());
             if (page.hasNextPage()) {
                 try {
                     add(extractor, episodes, extractor.getPage(page.getNextPage()));
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+            }
+        }
+
+        static void addItems(List<Episode> episodes, List<StreamInfoItem> items) {
+            for (StreamInfoItem item : items) {
+                episodes.add(Episode.create(item.getName(), item.getUrl()));
             }
         }
     }
