@@ -38,7 +38,10 @@ final class ConfigPayloadValidator {
             root = object.getAsJsonObject("video");
             rejectMessage(root);
         }
-        if (!arrays(root, VOD_ARRAYS) && !(root != object && arrays(object, new String[]{"lives"}))) throw invalid();
+        boolean found = arrays(root, VOD_ARRAYS);
+        // Outer live sources are parsed too, even when the wrapped video already has sites.
+        if (root != object) found = arrays(object, new String[]{"lives"}) || found;
+        if (!found) throw invalid();
     }
 
     static void live(JsonObject object) {
@@ -56,8 +59,10 @@ final class ConfigPayloadValidator {
             JsonElement value = object.get(key);
             if (value == null || value.isJsonNull()) continue;
             if (!value.isJsonArray()) throw invalid();
-            if (key.equals("sites") || key.equals("lives") || key.equals("parses")) {
-                for (JsonElement entry : value.getAsJsonArray()) if (!entry.isJsonObject()) throw invalid();
+            boolean objects = key.equals("sites") || key.equals("lives") || key.equals("parses")
+                    || key.equals("rules") || key.equals("doh") || key.equals("headers") || key.equals("proxy");
+            for (JsonElement entry : value.getAsJsonArray()) {
+                if (objects ? !entry.isJsonObject() : !entry.isJsonPrimitive()) throw invalid();
             }
             found = true;
         }
