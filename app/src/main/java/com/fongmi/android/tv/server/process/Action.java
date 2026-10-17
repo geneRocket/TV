@@ -170,21 +170,19 @@ public class Action implements Process {
         Config config = ConfigRepository.get().find(Config.objectFrom(params.get("config")));
         List<History> targets = HistoryRepository.get().listFromJson(params.get("targets"));
         if (VodConfig.get().getConfig().equals(config)) {
-            if (force) HistoryRepository.get().delete(config.getId());
-            HistoryRepository.get().sync(targets);
+            HistoryRepository.get().sync(config.getId(), targets, force);
         } else {
-            VodConfig.load(config, getCallback(targets, force));
+            VodConfig.load(config, getCallback(config.getId(), targets, force));
         }
     }
 
-    private Callback getCallback(List<History> targets, boolean force) {
+    private Callback getCallback(int cid, List<History> targets, boolean force) {
         return new Callback() {
             @Override
             public void success() {
-                if (force) HistoryRepository.get().delete(VodConfig.getCid());
                 RefreshEvent.config();
                 RefreshEvent.video();
-                HistoryRepository.get().sync(targets);
+                HistoryRepository.get().sync(cid, targets, force);
             }
 
             @Override
@@ -200,8 +198,7 @@ public class Action implements Process {
         if (TextUtils.isEmpty(VodConfig.getUrl()) && configs.size() > 0) {
             VodConfig.load(ConfigRepository.get().find(configs.get(0)), getCallback(configs, targets, force));
         } else {
-            if (force) KeepRepository.get().deleteAll();
-            KeepRepository.get().sync(configs, targets);
+            KeepRepository.get().sync(configs, targets, force);
         }
     }
 
@@ -209,10 +206,9 @@ public class Action implements Process {
         return new Callback() {
             @Override
             public void success() {
-                if (force) KeepRepository.get().deleteAll();
                 RefreshEvent.config();
                 RefreshEvent.video();
-                KeepRepository.get().sync(configs, targets);
+                KeepRepository.get().sync(configs, targets, force);
             }
 
             @Override

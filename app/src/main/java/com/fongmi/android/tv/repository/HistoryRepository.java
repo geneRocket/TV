@@ -93,6 +93,10 @@ public final class HistoryRepository {
         History.sync(targets);
     }
 
+    public void sync(int cid, List<History> targets, boolean force) {
+        History.sync(cid, targets, force);
+    }
+
     public void clearMemoryCache() {
         History.clearCache();
     }

@@ -335,7 +335,12 @@ public class Keep {
     }
 
     public static void sync(List<Config> configs, List<Keep> targets) {
+        sync(configs, targets, false);
+    }
+
+    public static void sync(List<Config> configs, List<Keep> targets, boolean force) {
         App.execute(() -> {
+            if (force) deleteAll();
             startSync(configs, targets);
             RefreshEvent.keep();
         });

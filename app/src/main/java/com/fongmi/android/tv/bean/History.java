@@ -743,8 +743,11 @@ public class History {
     }
 
     public List<History> find() {
+        return find(getLoadedCids());
+    }
+
+    private List<History> find(List<Integer> cids) {
         String name = normalizedName(getVodName());
-        List<Integer> cids = getLoadedCids();
         List<History> items = TextUtils.isEmpty(name) ? AppDatabase.get().getHistoryDao().findByName(cids, getVodName()) : findByNormalizedName(name, cids);
         Map<String, History> unique = new LinkedHashMap<>();
         for (History item : cache(items)) {
@@ -752,6 +755,10 @@ public class History {
             if (isNewerOrBetterSameVersion(item, old)) unique.put(item.getKey(), item);
         }
         return copy(new ArrayList<>(unique.values()));
+    }
+
+    List<History> find(int cid) {
+        return find(Collections.singletonList(cid));
     }
 
     public History findBestMatch() {
@@ -844,16 +851,16 @@ public class History {
         }
     }
 
-    private static void startSync(List<History> targets) {
+    static void startSync(int cid, List<History> targets) {
         for (History target : targets) {
-            List<History> items = target.find();
+            List<History> items = target.find(cid);
             if (items.isEmpty()) {
-                target.update(VodConfig.getCid(), items);
+                target.update(cid, items);
                 continue;
             }
             for (History item : items) {
                 if (target.getCreateTime() > item.getCreateTime()) {
-                    target.update(VodConfig.getCid(), items);
+                    target.update(cid, items);
                     break;
                 }
             }
@@ -861,8 +868,15 @@ public class History {
     }
 
     public static void sync(List<History> targets) {
+        sync(VodConfig.getCid(), targets, false);
+    }
+
+    public static void sync(int cid, List<History> targets, boolean force) {
         App.execute(() -> {
-            startSync(targets);
+            synchronized (WRITE_LOCK) {
+                if (force) delete(cid);
+                startSync(cid, targets);
+            }
             RefreshEvent.history();
         });
     }

@@ -57,6 +57,10 @@ public final class KeepRepository {
         Keep.sync(configs, targets);
     }
 
+    public void sync(List<Config> configs, List<Keep> targets, boolean force) {
+        Keep.sync(configs, targets, force);
+    }
+
     public void clearMemoryCache() {
         Keep.clearCache();
     }
