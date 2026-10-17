@@ -28,6 +28,8 @@ import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.repository.KeepRepository;
+import com.fongmi.android.tv.repository.VodEntryResolver;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Style;
@@ -77,6 +79,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     private String button;
     private int mHistoryRequestId;
     private int mKeepRequestId;
+    private final VodEntryResolver mEntryResolver = new VodEntryResolver(this::isActivityReady);
     private String mRecommendStyleKey;
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -286,11 +289,21 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     private void openVodItem(int cid, String siteKey, String vodId, String vodName, String vodPic) {
-        if (VodConfig.get().hasSite(siteKey)) {
-            VideoActivity.start(getActivity(), siteKey, vodId, vodName, vodPic);
-            return;
-        }
-        CollectActivity.start(getActivity(), vodName);
+        mEntryResolver.open(cid, siteKey,
+                () -> VideoActivity.start(getActivity(), siteKey, vodId, vodName, vodPic),
+                () -> CollectActivity.start(getActivity(), vodName), Notify::show);
+    }
+
+    @Override
+    public void onPause() {
+        mEntryResolver.cancel();
+        super.onPause();
+    }
+
+    @Override
+    public void onDestroyView() {
+        mEntryResolver.cancel();
+        super.onDestroyView();
     }
 
     private void applyHistoryItems(boolean renew, boolean enabled, List<History> items) {
