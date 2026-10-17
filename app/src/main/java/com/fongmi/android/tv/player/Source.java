@@ -47,6 +47,8 @@ public class Source {
     private final Map<String, Long> cacheTimes = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<Future<?>> preloadTasks = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.concurrent.atomic.AtomicLong preloadGeneration = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong playbackGeneration = new java.util.concurrent.atomic.AtomicLong();
+    private final Object playbackLock = new Object();
     private volatile Extractor activeExtractor;
 
     private static class Loader {
@@ -58,23 +60,18 @@ public class Source {
     }
 
     public Source() {
-        extractors = new ArrayList<>();
+        this(java.util.Arrays.asList(new Force(), new Thunder(), new JianPian(), new Proxy(),
+                new Push(), new Strm(), new TVBus(), new Video(), new Youtube(), new ZLive()));
+    }
+
+    Source(List<Extractor> extractors) {
+        this.extractors = new ArrayList<>(extractors);
         parseCache = Collections.synchronizedMap(new LinkedHashMap<String, List<Episode>>(MAX_PARSE_CACHE_SIZE, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, List<Episode>> eldest) {
                 return size() > MAX_PARSE_CACHE_SIZE;
             }
         });
-        extractors.add(new Force());
-        extractors.add(new Thunder());
-        extractors.add(new JianPian());
-        extractors.add(new Proxy());
-        extractors.add(new Push());
-        extractors.add(new Strm());
-        extractors.add(new TVBus());
-        extractors.add(new Video());
-        extractors.add(new Youtube());
-        extractors.add(new ZLive());
     }
 
     private Extractor getExtractor(String url) {
@@ -215,10 +212,13 @@ public class Source {
         return extractor == null ? url : extractor.fetch(url);
     }
 
-    private void prepare(Extractor extractor) {
-        Extractor previous = activeExtractor;
-        if (previous != null) previous.stop();
-        activeExtractor = extractor;
+    void prepare(Extractor extractor) {
+        synchronized (playbackLock) {
+            playbackGeneration.incrementAndGet();
+            Extractor previous = activeExtractor;
+            if (previous != null) previous.stop();
+            activeExtractor = extractor;
+        }
     }
 
     public void cancelPreloads() {
@@ -229,9 +229,26 @@ public class Source {
 
     public void stop() {
         cancelPreloads();
-        if (extractors == null) return;
+        synchronized (playbackLock) {
+            stopExtractors();
+        }
+    }
+
+    private void stopExtractors() {
+        playbackGeneration.incrementAndGet();
         extractors.forEach(Extractor::stop);
         activeExtractor = null;
+    }
+
+    public Runnable deferStop() {
+        long generation = playbackGeneration.get();
+        // Cancel at release time, so queued cleanup cannot cancel a new page's preload.
+        cancelPreloads();
+        return () -> {
+            synchronized (playbackLock) {
+                if (generation == playbackGeneration.get()) stopExtractors();
+            }
+        };
     }
 
     public void exit() {

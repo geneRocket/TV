@@ -555,7 +555,7 @@ public class PlaybackController {
         if (current) {
             M3u8AdFilter.clearSubtitlePlaylistWhitelist();
             Server.get().setPlayer(null);
-            App.execute(() -> Source.get().stop());
+            App.execute(Source.get().deferStop());
         }
     }
 
