@@ -24,4 +24,5 @@ dependencies {
     implementation 'net.sourceforge.streamsupport:android-retrofuture:1.7.4'
     implementation 'wang.harlon.quickjs:wrapper-android:3.2.3'
     implementation 'wang.harlon.quickjs:wrapper-java:3.2.3'
+    testImplementation 'junit:junit:4.13.2'
 }

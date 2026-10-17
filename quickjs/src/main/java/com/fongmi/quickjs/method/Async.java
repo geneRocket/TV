@@ -41,11 +41,13 @@ public class Async {
 
     private void then(Object result) {
         JSObject promise = (JSObject) result;
-        JSFunction then = promise.getJSFunction("then");
-        JSFunction catchFunc = promise.getJSFunction("catch");
+        JSFunction then = null;
+        JSFunction catchFunc = null;
         try {
-            if (then != null) then.call(callback);
-            if (catchFunc != null) catchFunc.call(error);
+            then = promise.getJSFunction("then");
+            catchFunc = promise.getJSFunction("catch");
+            if (then != null) then.callVoid(callback);
+            if (catchFunc != null) catchFunc.callVoid(error);
             if (then == null && catchFunc == null) future.complete(promise);
         } catch (Throwable e) {
             future.completeExceptionally(e);

@@ -188,6 +188,7 @@ tasks.register('verifyRefactor') {
     dependsOn(
             ':core:test',
             ':chaquo:testPythonBridge',
+            ':quickjs:testDebugUnitTest',
             'testLeanbackJavaArm64_v8aDebugUnitTest',
             'testMobileJavaArm64_v8aDebugUnitTest',
             'lintLeanbackJavaArm64_v8aDebug',
