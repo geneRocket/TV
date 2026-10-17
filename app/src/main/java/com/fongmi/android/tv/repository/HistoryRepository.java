@@ -85,6 +85,10 @@ public final class HistoryRepository {
         History.deleteLoaded();
     }
 
+    public Runnable prepareDeleteLoaded() {
+        return History.prepareDeleteLoaded();
+    }
+
     public void sync(List<History> targets) {
         History.sync(targets);
     }

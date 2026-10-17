@@ -510,19 +510,27 @@ public class History {
     }
 
     private static List<Integer> getLoadedCids() {
-        Set<Integer> cids = new LinkedHashSet<>();
-        Map<String, Integer> idMap = new HashMap<>();
-        for (Config item : ConfigRepository.get().urls()) idMap.put(item.getUrl(), item.getId());
+        return getLoadedCids(getLoadedUrls(), VodConfig.getCid());
+    }
+
+    private static List<String> getLoadedUrls() {
         List<String> urls = VodConfig.get().getLoadUrls();
         if (urls.isEmpty()) {
             urls.addAll(ConfigUrlParser.parse(Setting.getVodConfigUrls()));
         }
+        return urls;
+    }
+
+    private static List<Integer> getLoadedCids(List<String> urls, int fallbackCid) {
+        Set<Integer> cids = new LinkedHashSet<>();
+        Map<String, Integer> idMap = new HashMap<>();
+        for (Config item : ConfigRepository.get().urls()) idMap.put(item.getUrl(), item.getId());
         for (String url : urls) {
             if (url == null || url.trim().isEmpty()) continue;
             Integer cid = idMap.get(url.trim());
             if (cid != null && cid > 0) cids.add(cid);
         }
-        if (cids.isEmpty()) cids.add(VodConfig.getCid());
+        if (cids.isEmpty()) cids.add(fallbackCid);
         return new ArrayList<>(cids);
     }
 
@@ -544,7 +552,23 @@ public class History {
     }
 
     public static void deleteLoaded() {
-        List<Integer> cids = getLoadedCids();
+        deleteLoaded(getLoadedUrls(), VodConfig.getCid());
+    }
+
+    public static Runnable prepareDeleteLoaded() {
+        return prepareDeleteLoaded(History::getLoadedUrls, VodConfig::getCid, History::deleteLoaded);
+    }
+
+    static Runnable prepareDeleteLoaded(java.util.function.Supplier<List<String>> urls,
+                                        java.util.function.IntSupplier fallbackCid,
+                                        java.util.function.BiConsumer<List<String>, Integer> delete) {
+        List<String> selectedUrls = Collections.unmodifiableList(new ArrayList<>(urls.get()));
+        int selectedCid = fallbackCid.getAsInt();
+        return () -> delete.accept(selectedUrls, selectedCid);
+    }
+
+    private static void deleteLoaded(List<String> urls, int fallbackCid) {
+        List<Integer> cids = getLoadedCids(urls, fallbackCid);
         if (cids.isEmpty()) return;
         if (cids.size() == 1) {
             delete(cids.get(0));

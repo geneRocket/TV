@@ -94,7 +94,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
                 mHistoryRequestId++;
                 mAdapter.clear();
                 updateViews();
-                App.execute(() -> HistoryRepository.get().deleteLoaded());
+                App.execute(HistoryRepository.get().prepareDeleteLoaded());
             }).show();
         } else if (mAdapter.getItemCount() > 0) {
             mAdapter.setDelete(true);

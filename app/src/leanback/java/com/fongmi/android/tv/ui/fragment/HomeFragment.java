@@ -381,7 +381,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
         mHistoryRequestId++;
         int nextIndex = getHistoryHeaderIndex();
         removeHistorySection();
-        App.execute(() -> HistoryRepository.get().deleteLoaded());
+        App.execute(HistoryRepository.get().prepareDeleteLoaded());
         mPresenter.setDelete(false);
         mHistoryAdapter.clear();
         focusAfterSectionRemoved(nextIndex);
