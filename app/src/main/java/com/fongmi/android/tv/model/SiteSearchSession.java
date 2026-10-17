@@ -71,7 +71,10 @@ public final class SiteSearchSession implements AutoCloseable {
         String query = keyword == null ? "" : keyword.trim();
         Map<String, Site> unique = new LinkedHashMap<>();
         if (!query.isEmpty() && sites != null) {
-            for (Site site : sites) if (site != null && !site.getKey().isEmpty()) unique.putIfAbsent(site.getKey(), site);
+            for (Site site : sites) {
+                if (site == null || site.getKey().isEmpty() || (auto && !site.isChangeable())) continue;
+                unique.putIfAbsent(site.getKey(), site);
+            }
         }
         List<Site> requests = new ArrayList<>(unique.values());
         settled = false;

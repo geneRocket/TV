@@ -28,6 +28,44 @@ public class SiteSearchSessionTest {
     }, scheduler);
     private int completed;
 
+    @Test public void automaticSearchSkipsDisabledAndConfigLockedSourcesBeforeDeduplication() {
+        Site disabled = site("disabled");
+        disabled.setChangeable(Integer.valueOf(2));
+        Site locked = site("locked");
+        locked.setChangeable(Integer.valueOf(0));
+        Site duplicateDisabled = site("enabled");
+        duplicateDisabled.setChangeable(Integer.valueOf(2));
+        session.start(Arrays.asList(disabled, locked, duplicateDisabled, site("enabled")), "film", true, () -> completed++);
+        executors.get(0).runAll();
+        scheduler.runImmediate();
+        assertEquals(Collections.singletonList("enabled:film"), backend.searches);
+        assertEquals(1, completed);
+        assertFalse(session.hasPending());
+    }
+
+    @Test public void manualSearchStillIncludesSourcesExcludedFromAutomaticSwitching() {
+        Site disabled = site("disabled");
+        disabled.setChangeable(Integer.valueOf(2));
+        Site locked = site("locked");
+        locked.setChangeable(Integer.valueOf(0));
+        session.start(Arrays.asList(disabled, locked), "film", false, () -> completed++);
+        executors.get(0).runAll();
+        scheduler.runImmediate();
+        assertEquals(Arrays.asList("disabled:film", "locked:film"), backend.searches);
+        assertEquals(1, completed);
+    }
+
+    @Test public void automaticSearchWithNoEligibleSourcesSettlesWithoutWorkers() {
+        Site disabled = site("disabled");
+        disabled.setChangeable(Integer.valueOf(2));
+        session.start(Collections.singletonList(disabled), "film", true, () -> completed++);
+        assertTrue(executors.isEmpty());
+        scheduler.runImmediate();
+        assertEquals(1, completed);
+        assertFalse(session.hasPending());
+        assertTrue(scheduler.tasks.isEmpty());
+    }
+
     @Test public void deduplicatesScopedSitesAndTrimsQuery() {
         session.start(Arrays.asList(site("a/x"), null, site("a/x"), site("b/x")), "  film  ", false, () -> completed++);
         executors.get(0).runAll();
