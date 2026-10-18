@@ -16,6 +16,8 @@ import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LiveDialog implements LiveAdapter.OnClickListener {
@@ -90,24 +92,29 @@ public class LiveDialog implements LiveAdapter.OnClickListener {
     @Override
     public boolean onBootLongClick(Live item) {
         boolean result = !item.isBoot();
-        int version = batchVersion.incrementAndGet();
-        App.execute(() -> {
-            if (version != batchVersion.get()) return;
-            for (Live live : LiveConfig.get().getLives()) live.boot(result).save();
-            if (version == batchVersion.get()) App.post(() -> adapter.notifyItemRangeChanged(0, adapter.getItemCount()));
-        });
+        List<Live> lives = new ArrayList<>(LiveConfig.get().getLives());
+        for (Live live : lives) live.boot(result);
+        saveBatch(lives);
         return true;
     }
 
     @Override
     public boolean onPassLongClick(Live item) {
         boolean result = !item.isPass();
+        List<Live> lives = new ArrayList<>(LiveConfig.get().getLives());
+        for (Live live : lives) live.pass(result);
+        saveBatch(lives);
+        return true;
+    }
+
+    private void saveBatch(List<Live> lives) {
+        adapter.notifyItemRangeChanged(0, adapter.getItemCount());
         int version = batchVersion.incrementAndGet();
         App.execute(() -> {
-            if (version != batchVersion.get()) return;
-            for (Live live : LiveConfig.get().getLives()) live.pass(result).save();
-            if (version == batchVersion.get()) App.post(() -> adapter.notifyItemRangeChanged(0, adapter.getItemCount()));
+            synchronized (batchVersion) {
+                if (version != batchVersion.get()) return;
+                for (Live live : lives) live.save();
+            }
         });
-        return true;
     }
 }

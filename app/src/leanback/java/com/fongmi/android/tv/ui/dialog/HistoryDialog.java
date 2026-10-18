@@ -118,7 +118,7 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
     @Override
     public void onDeleteClick(Config item) {
         int index = adapter.remove(item);
-        if (multi) syncEnabledConfigs();
+        if (multi && index != -1) syncEnabledConfigs(item.getUrl());
         if (adapter.getItemCount() == 0) {
             dialog.dismiss();
             return;
@@ -161,8 +161,11 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
         return urls;
     }
 
-    private void syncEnabledConfigs() {
-        List<Config> selected = adapter.getSelected();
+    private void syncEnabledConfigs(String deletedUrl) {
+        List<Config> selected = new ArrayList<>();
+        for (String url : getEnabledUrls()) {
+            if (!url.equals(deletedUrl)) selected.add(ConfigRepository.get().find(url, type));
+        }
         if (type == 0) {
             Setting.putVodConfigDesc(getConfigsDesc(selected));
             Setting.putVodConfigUrls(getConfigsUrls(selected));

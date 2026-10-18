@@ -366,6 +366,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
                 setState(RenderState.PREPARING);
                 break;
             case READY:
+            case PAUSED:
                 setMetadata();
                 hideProgress();
                 mPlayers.reset();
