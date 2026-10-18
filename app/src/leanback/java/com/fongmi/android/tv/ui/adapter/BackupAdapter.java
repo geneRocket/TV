@@ -21,7 +21,6 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
 
     public BackupAdapter(OnClickListener listener) {
         this.mListener = listener;
-        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -58,11 +57,6 @@ public class BackupAdapter extends RecyclerView.Adapter<BackupAdapter.ViewHolder
     @Override
     public int getItemCount() {
         return mItems == null ? 0 : mItems.size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        return mItems.get(position).hashCode();
     }
 
     @NonNull

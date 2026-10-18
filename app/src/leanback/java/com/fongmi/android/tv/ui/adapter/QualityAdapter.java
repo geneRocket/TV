@@ -19,7 +19,6 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
     public QualityAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mResult = Result.empty();
-        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -45,11 +44,6 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
     @Override
     public int getItemCount() {
         return mResult.getUrl().getValues().size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        return (mResult.getUrl().n(position) + "@" + mResult.getUrl().v(position)).hashCode();
     }
 
     @NonNull

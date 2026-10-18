@@ -22,7 +22,6 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
     public WordAdapter(OnClickListener listener) {
         this.mItems = new ArrayList<>();
         this.mListener = listener;
-        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -54,11 +53,11 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
     private List<String> normalize(List<String> items, LinkedHashSet<String> set) {
         if (items != null) {
             for (String item : items) {
+                if (set.size() >= MAX_SIZE) break;
                 if (item == null) continue;
                 String text = item.trim();
                 if (text.isEmpty()) continue;
                 set.add(text);
-                if (set.size() >= MAX_SIZE) break;
             }
         }
         return new ArrayList<>(set);
@@ -67,11 +66,6 @@ public class WordAdapter extends RecyclerView.Adapter<WordAdapter.ViewHolder> {
     @Override
     public int getItemCount() {
         return mItems.size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        return mItems.get(position).hashCode();
     }
 
     @NonNull

@@ -27,7 +27,6 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     public KeepAdapter(OnClickListener listener) {
         this.mItems = new ArrayList<>();
         this.mListener = listener;
-        setHasStableIds(true);
         setLayoutSize();
     }
 
@@ -48,10 +47,17 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     }
 
     public void addAll(List<Keep> items) {
-        DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+        DiffUtil.DiffResult result = DiffUtil.calculateDiff(diffCallback(mItems, items));
+        mItems.clear();
+        mItems.addAll(items);
+        result.dispatchUpdatesTo(this);
+    }
+
+    static DiffUtil.Callback diffCallback(List<Keep> before, List<Keep> items) {
+        return new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
-                return mItems.size();
+                return before.size();
             }
 
             @Override
@@ -61,17 +67,16 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
 
             @Override
             public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                return mItems.get(oldItemPosition).getKey().equals(items.get(newItemPosition).getKey());
+                Keep oldItem = before.get(oldItemPosition);
+                Keep newItem = items.get(newItemPosition);
+                return oldItem.getCid() == newItem.getCid() && oldItem.getKey().equals(newItem.getKey());
             }
 
             @Override
             public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                return mItems.get(oldItemPosition).equals(items.get(newItemPosition));
+                return before.get(oldItemPosition).equals(items.get(newItemPosition));
             }
-        });
-        mItems.clear();
-        mItems.addAll(items);
-        result.dispatchUpdatesTo(this);
+        };
     }
 
     public int delete(Keep item) {
@@ -101,12 +106,6 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     @Override
     public int getItemCount() {
         return mItems.size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        Keep item = mItems.get(position);
-        return (item.getCid() + "@" + item.getKey()).hashCode();
     }
 
     @NonNull

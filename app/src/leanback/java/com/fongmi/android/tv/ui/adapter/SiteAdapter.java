@@ -28,7 +28,6 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         this.mListener = listener;
         this.mItems = VodConfig.get().getSites();
         this.batchVersion = new AtomicInteger();
-        setHasStableIds(true);
     }
 
     public interface OnClickListener {
@@ -53,11 +52,6 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     @Override
     public int getItemCount() {
         return mItems.size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        return mItems.get(position).getKey().hashCode();
     }
 
     @NonNull

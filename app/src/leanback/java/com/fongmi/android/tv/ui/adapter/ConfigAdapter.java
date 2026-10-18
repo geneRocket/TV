@@ -48,7 +48,6 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
 
     public void setItems(List<Config> items) {
         List<Config> newItems = items == null ? new ArrayList<>() : new ArrayList<>(items);
-        if (newItems.equals(mItems) && mSelected.isEmpty()) return;
         mItems = newItems;
         mSelected.clear();
         notifyDataSetChanged();

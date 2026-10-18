@@ -30,7 +30,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     public HistoryAdapter(OnClickListener listener) {
         this.mItems = new ArrayList<>();
         this.mListener = listener;
-        setHasStableIds(true);
         setLayoutSize();
     }
 
@@ -60,10 +59,17 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     }
 
     public void addAll(List<History> items) {
-        DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+        DiffUtil.DiffResult result = DiffUtil.calculateDiff(diffCallback(mItems, items));
+        mItems.clear();
+        mItems.addAll(items);
+        result.dispatchUpdatesTo(this);
+    }
+
+    static DiffUtil.Callback diffCallback(List<History> before, List<History> items) {
+        return new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
-                return mItems.size();
+                return before.size();
             }
 
             @Override
@@ -73,17 +79,16 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
 
             @Override
             public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                return mItems.get(oldItemPosition).getKey().equals(items.get(newItemPosition).getKey());
+                History oldItem = before.get(oldItemPosition);
+                History newItem = items.get(newItemPosition);
+                return oldItem.getCid() == newItem.getCid() && oldItem.getKey().equals(newItem.getKey());
             }
 
             @Override
             public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                return mItems.get(oldItemPosition).equals(items.get(newItemPosition));
+                return before.get(oldItemPosition).equals(items.get(newItemPosition));
             }
-        });
-        mItems.clear();
-        mItems.addAll(items);
-        result.dispatchUpdatesTo(this);
+        };
     }
 
     public void clear() {
@@ -103,12 +108,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHold
     @Override
     public int getItemCount() {
         return mItems.size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        History item = mItems.get(position);
-        return (item.getCid() + "@" + item.getKey()).hashCode();
     }
 
     @NonNull

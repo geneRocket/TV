@@ -37,7 +37,7 @@ public class DisplayAdapter extends RecyclerView.Adapter<DisplayAdapter.ViewHold
 
     @Override
     public long getItemId(int position) {
-        return mItems.get(position).hashCode();
+        return position;
     }
 
     @NonNull

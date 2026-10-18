@@ -22,7 +22,6 @@ public class LiveAdapter extends RecyclerView.Adapter<LiveAdapter.ViewHolder> {
     public LiveAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mItems = LiveConfig.get().getLives();
-        setHasStableIds(true);
     }
 
     public void setAction(boolean action) {
@@ -47,11 +46,6 @@ public class LiveAdapter extends RecyclerView.Adapter<LiveAdapter.ViewHolder> {
     @Override
     public int getItemCount() {
         return mItems.size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        return mItems.get(position).getName().hashCode();
     }
 
     @NonNull
