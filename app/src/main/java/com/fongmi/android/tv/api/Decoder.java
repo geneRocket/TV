@@ -8,9 +8,13 @@ import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Util;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,8 +33,8 @@ public class Decoder {
         String data = getData(url);
         if (data.isEmpty()) throw new Exception();
         if (Json.valid(data)) return fix(url, data);
-        String json = getJsonFromHtml(data);
-        if (Json.valid(json)) return fix(url, json);
+        LinkedJson json = getJsonFromHtml(url, data, Decoder::getData);
+        if (json != null) return fix(json.url, json.data);
         if (data.contains("**")) data = base64(data);
         if (data.startsWith("2423")) data = cbc(data);
         if (key.length() > 0) data = ecb(data, key);
@@ -92,13 +96,33 @@ public class Decoder {
         return "";
     }
 
-    private static String getJsonFromHtml(String data) {
+    static final class LinkedJson {
+        final String url;
+        final String data;
+
+        LinkedJson(String url, String data) {
+            this.url = url;
+            this.data = data;
+        }
+    }
+
+    static LinkedJson getJsonFromHtml(String url, String data, Function<String, String> loader) {
         Matcher matcher = JSON_URI.matcher(data);
         while (matcher.find()) {
-            String text = getData(matcher.group(1));
-            if (Json.valid(text)) return text;
+            String linkedUrl;
+            try {
+                linkedUrl = URI.create(url).resolve(matcher.group(1)).toString();
+            } catch (IllegalArgumentException ignored) {
+                continue;
+            }
+            String text = loader.apply(linkedUrl);
+            if (text == null) continue;
+            try {
+                if (JsonParser.parseString(text).isJsonObject()) return new LinkedJson(linkedUrl, text);
+            } catch (JsonParseException ignored) {
+            }
         }
-        return "";
+        return null;
     }
 
     private static String ecb(String data, String key) throws Exception {
