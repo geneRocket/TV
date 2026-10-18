@@ -369,7 +369,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private final class RecoveryPort implements TvVodRecoveryController.Port {
-        @Override public PlaybackRecovery.Action decide(ErrorEvent error) { return mRecovery.next(error, mPlayers, true, getSite().getPlayerType() == -1); }
+        @Override public PlaybackRecovery.Action decide(ErrorEvent error) { return mRecovery.next(error, mPlayers, true); }
         @Override public void retry() { onRefresh(); }
         @Override public void toggleDecode() { onDecode(false); }
         @Override public void reloadExo(ErrorEvent error) { capturePlaybackPosition(); mPlaybackCoordinator.reload(mPlayers.getRecoveryFormat(error)); }
@@ -674,7 +674,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private int getPlayer() {
-        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : getSite().getPlayerType() != -1 ? getSite().getPlayerType() : Setting.getPlayer();
+        return mHistory != null && mHistory.getPlayer() != -1 ? mHistory.getPlayer() : Setting.getPlayer();
     }
 
     private int getScale() {

@@ -3,34 +3,28 @@ package com.fongmi.android.tv.bean;
 import com.google.gson.Gson;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class ChannelPlayerTypeTest {
     private final Gson gson = new Gson();
 
-    @Test public void readsLegacyPlayerTypeAndKeepsDefaultUnset() {
-        assertEquals(-1, new Live().getPlayerType());
-        assertEquals(-1, new Channel().getPlayerType().intValue());
-        for (int type = 0; type <= 2; type++) {
-            String json = "{\"playerType\":" + type + "}";
-            assertEquals(type, gson.fromJson(json, Live.class).getPlayerType());
-            Channel channel = gson.fromJson(json, Channel.class);
-            assertEquals(type, channel.getPlayerType().intValue());
-            assertEquals(type, gson.fromJson(gson.toJson(channel), Channel.class).getPlayerType().intValue());
+    @Test public void apiPlayerTypeIsIgnoredOnLiveSourcesAndChannels() {
+        for (String value : new String[]{"0", "1", "2", "10", "null", "\"invalid\"", "{}", "[]"}) {
+            String json = "{\"playerType\":" + value + "}";
+            assertFalse(gson.toJsonTree(gson.fromJson(json, Live.class)).getAsJsonObject().has("playerType"));
+            assertFalse(gson.toJsonTree(gson.fromJson(json, Channel.class)).getAsJsonObject().has("playerType"));
         }
-        assertEquals(2, gson.fromJson("{\"playerType\":10}", Live.class).getPlayerType());
-        assertEquals(2, gson.fromJson("{\"playerType\":10}", Channel.class).getPlayerType().intValue());
     }
 
-    @Test public void sourcePlayerIsInheritedUnlessChannelOverridesIt() {
+    @Test public void sourceBindingCannotReintroduceApiPlayerType() {
         Live live = gson.fromJson("{\"playerType\":1}", EmptyMetadataLive.class);
         Channel inherited = new Channel();
         inherited.live(live);
-        assertEquals(1, inherited.getPlayerType().intValue());
+        assertFalse(gson.toJsonTree(inherited).getAsJsonObject().has("playerType"));
 
         Channel overridden = gson.fromJson("{\"playerType\":2}", Channel.class);
         overridden.live(live);
-        assertEquals(2, overridden.getPlayerType().intValue());
+        assertFalse(gson.toJsonTree(overridden).getAsJsonObject().has("playerType"));
     }
 
     private static class EmptyMetadataLive extends Live {

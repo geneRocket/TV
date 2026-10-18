@@ -8,6 +8,7 @@ import com.fongmi.android.tv.bean.Rule;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Util;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -47,18 +48,29 @@ public class Sniffer {
         if (uri.getHost() == null) return Rule.empty();
         String host = UrlUtil.host(uri);
         String query = UrlUtil.host(uri.getQueryParameter("url"));
-        Rule rule = findRule(VodConfig.get().getRules(), host, query);
-        if (rule == null) rule = findRule(LiveConfig.get().getRules(), host, query);
+        List<Rule> rules = new ArrayList<>(VodConfig.get().getRules());
+        rules.addAll(LiveConfig.get().getRules());
+        Rule rule = findRule(rules, host, query);
         return rule == null ? Rule.empty() : rule;
     }
 
     static Rule findRule(List<Rule> rules, String host, String query) {
+        Rule exact = findExactRule(rules, host);
+        if (exact == null) exact = findExactRule(rules, query);
+        if (exact != null) return exact;
         for (Rule rule : rules) {
             for (String pattern : rule.getHosts()) {
                 if (Util.containOrMatch(host, pattern) || Util.containOrMatch(query, pattern)) return rule;
             }
         }
         return null;
+    }
+
+    private static Rule findExactRule(List<Rule> rules, String host) {
+        if (host == null || host.isEmpty()) return null;
+        Rule result = null;
+        for (Rule rule : rules) if (rule.getHosts().contains(host)) result = rule;
+        return result;
     }
 
     public static List<String> getRegex(Uri uri) {

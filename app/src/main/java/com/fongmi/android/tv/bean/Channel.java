@@ -59,8 +59,6 @@ public class Channel {
     @SerializedName("header")
     @JsonAdapter(HeaderAdapter.class)
     private Map<String, String> header;
-    @SerializedName("playerType")
-    private Integer playerType;
     @SerializedName("parse")
     private Integer parse;
     @SerializedName("drm")
@@ -223,14 +221,6 @@ public class Channel {
         this.header = header;
     }
 
-    public Integer getPlayerType() {
-        return playerType == null ? -1 : Math.min(playerType, 2);
-    }
-
-    public void setPlayerType(Integer playerType) {
-        this.playerType = playerType;
-    }
-
     public Integer getParse() {
         return parse == null ? 0 : parse;
     }
@@ -367,7 +357,6 @@ public class Channel {
     }
 
     public void live(Live live) {
-        if (getPlayerType() == -1) setPlayerType(live.getPlayerType());
         if (!live.getUa().isEmpty() && getUa().isEmpty()) setUa(live.getUa());
         if (live.getHeader() != null && getHeader().isEmpty()) setHeader(Json.toMap(live.getHeader()));
         if (!live.getClick().isEmpty() && getClick().isEmpty()) setClick(live.getClick());
@@ -422,7 +411,6 @@ public class Channel {
     }
 
     public Channel copy(Channel item) {
-        setPlayerType(item.getPlayerType());
         setCatchup(item.getCatchup());
         setReferer(item.getReferer());
         setTvgId(item.hasTvgId() ? item.getTvgId() : null);

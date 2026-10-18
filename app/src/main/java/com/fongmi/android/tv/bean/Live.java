@@ -100,10 +100,6 @@ public class Live {
     private JsonElement header;
 
     @Ignore
-    @SerializedName("playerType")
-    private Integer playerType;
-
-    @Ignore
     @SerializedName("catchup")
     private Catchup catchup;
 
@@ -259,10 +255,6 @@ public class Live {
         return header;
     }
 
-    public int getPlayerType() {
-        return playerType == null ? -1 : Math.min(playerType, 2);
-    }
-
     public Catchup getCatchup() {
         return catchup == null ? new Catchup() : catchup;
     }
@@ -371,7 +363,7 @@ public class Live {
                 || !Objects.equals(origin, source.origin) || !Objects.equals(referer, source.referer)
                 || !Objects.equals(type, source.type) || !Objects.equals(timeZone, source.timeZone)
                 || !Objects.equals(timeout, source.timeout) || !Objects.equals(header, source.header)
-                || !Objects.equals(playerType, source.playerType) || !Objects.equals(catchup, source.catchup)
+                || !Objects.equals(catchup, source.catchup)
                 || !Objects.equals(core, source.core);
         if (changed) getGroups().clear();
         click = source.click;
@@ -384,7 +376,6 @@ public class Live {
         timeZone = source.timeZone;
         timeout = source.timeout;
         header = source.header;
-        playerType = source.playerType;
         catchup = source.catchup;
         core = source.core;
         headers = null;

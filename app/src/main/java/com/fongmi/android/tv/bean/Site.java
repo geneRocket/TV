@@ -81,10 +81,6 @@ public class Site implements Parcelable {
     @SerializedName("timeout")
     private Integer timeout;
 
-    @Ignore
-    @SerializedName("playerType")
-    private Integer playerType;
-
     @SerializedName("searchable")
     private Integer searchable;
 
@@ -204,10 +200,6 @@ public class Site implements Parcelable {
 
     public Integer getTimeout() {
         return timeout == null ? Constant.TIMEOUT_PLAY : Math.max(timeout, 1) * 1000;
-    }
-
-    public int getPlayerType() {
-        return playerType == null ? -1 : Math.min(playerType, 2);
     }
 
     public Integer getSearchable() {
@@ -390,7 +382,7 @@ public class Site implements Parcelable {
         dest.writeString(this.playUrl);
         dest.writeValue(this.type);
         dest.writeValue(this.timeout);
-        dest.writeValue(this.playerType);
+        dest.writeValue(null); // Preserve the legacy parcel slot without a source player override.
         dest.writeValue(this.searchable);
         dest.writeValue(this.changeable);
         dest.writeValue(this.indexs);
@@ -409,7 +401,7 @@ public class Site implements Parcelable {
         this.playUrl = in.readString();
         this.type = (Integer) in.readValue(Integer.class.getClassLoader());
         this.timeout = (Integer) in.readValue(Integer.class.getClassLoader());
-        this.playerType = (Integer) in.readValue(Integer.class.getClassLoader());
+        in.readValue(Integer.class.getClassLoader());
         this.searchable = (Integer) in.readValue(Integer.class.getClassLoader());
         this.changeable = (Integer) in.readValue(Integer.class.getClassLoader());
         this.indexs = (Integer) in.readValue(Integer.class.getClassLoader());

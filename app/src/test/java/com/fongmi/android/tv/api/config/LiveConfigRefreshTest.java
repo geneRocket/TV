@@ -41,15 +41,13 @@ public class LiveConfigRefreshTest {
         assertTrue(old.getGroups().isEmpty());
     }
 
-    @Test public void refreshedPlaybackAndEpgSettingsReplaceOldSourceSettings() throws Exception {
+    @Test public void refreshedEpgSettingsReplaceOldSourceSettings() throws Exception {
         PureLive old = loaded("extension", "spider.jar");
         old.setBoot(true);
         old.setPass(true);
         PureLive incoming = source("extension", "spider.jar");
-        field(incoming, "playerType", 1);
         field(incoming, "epg", "https://example.com/new-epg.xml");
         LiveConfig.updateLive(old, incoming);
-        assertEquals(1, old.getPlayerType());
         assertEquals("https://example.com/new-epg.xml", new Gson().toJsonTree(old, Live.class).getAsJsonObject().get("epg").getAsString());
         assertTrue(old.isBoot());
         assertTrue(old.isPass());

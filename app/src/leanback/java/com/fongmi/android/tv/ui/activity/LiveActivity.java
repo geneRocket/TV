@@ -766,7 +766,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void setChannel(Channel item) {
-        mPlayers.setPlayer(item.getPlayerType() == -1 ? Setting.getLivePlayer() : item.getPlayerType());
+        mPlayers.setPlayer(Setting.getLivePlayer());
         setArtwork(item.getLogo());
         App.post(mR0, 100);
         mChannel = item;
@@ -968,7 +968,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onErrorEvent(ErrorEvent event) {
         if (!isCurrentPlayer()) return;
-        switch (mRecovery.next(event, mPlayers, mChannel != null, mChannel != null && mChannel.getPlayerType() == -1)) {
+        switch (mRecovery.next(event, mPlayers, mChannel != null)) {
             case RETRY: fetch(); break;
             case TOGGLE_DECODE: onDecode(false); break;
             case RELOAD_EXO: mPlayers.recoverExo(event); break;

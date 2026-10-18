@@ -7,18 +7,20 @@ import static org.junit.Assert.*;
 public class SitePlayerTypeTest {
     private final Gson gson = new Gson();
 
-    @Test public void legacySourcePlayerTypeSurvivesDeserializationAndSerialization() {
-        for (int player = 0; player <= 2; player++) {
+    @Test public void apiPlayerTypeIsIgnoredAndNotSerialized() {
+        for (int player : new int[]{0, 1, 2, 10}) {
             Site site = gson.fromJson("{\"playerType\":" + player + "}", Site.class);
             com.google.gson.JsonObject stored = gson.toJsonTree(site).getAsJsonObject();
-            assertTrue("Source playerType was discarded", stored.has("playerType"));
-            assertEquals(player, stored.get("playerType").getAsInt());
+            assertFalse(stored.has("playerType"));
         }
     }
 
-    @Test public void unsetSourceDoesNotForceAPlayerAndLegacyLimitIsPreserved() throws Exception {
-        java.lang.reflect.Method getter = Site.class.getMethod("getPlayerType");
-        assertEquals(-1, getter.invoke(new Site()));
-        assertEquals(2, getter.invoke(gson.fromJson("{\"playerType\":10}", Site.class)));
+    @Test public void malformedIgnoredPlayerTypeDoesNotBreakOtherSiteFields() {
+        for (String value : new String[]{"null", "\"invalid\"", "{}", "[]"}) {
+            Site site = gson.fromJson("{\"key\":\"site\",\"playerType\":" + value + "}", Site.class);
+            com.google.gson.JsonObject stored = gson.toJsonTree(site).getAsJsonObject();
+            assertEquals("site", stored.get("key").getAsString());
+            assertFalse(stored.has("playerType"));
+        }
     }
 }

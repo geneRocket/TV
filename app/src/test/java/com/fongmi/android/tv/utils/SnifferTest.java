@@ -41,10 +41,30 @@ public class SnifferTest {
         assertSame(regex, Sniffer.findRule(Collections.singletonList(regex), "video12.example.com", ""));
     }
 
-    @Test public void firstMatchingRuleKeepsConfigurationPriority() {
+    @Test public void exactHostOverridesEarlierGenericRuleAndKeepsItsExclusions() {
         Rule first = rule("{\"hosts\":[\"example.com\"]}");
+        Rule second = rule("{\"hosts\":[\"cdn.example.com\"],\"exclude\":[\"/advert/\"]}");
+        Rule selected = Sniffer.findRule(Arrays.asList(first, second), "cdn.example.com", "");
+        assertSame(second, selected);
+        assertFalse(Sniffer.isVideoFormat("https://cdn.example.com/advert/video.mp4", selected));
+        assertSame(second, Sniffer.findRule(Arrays.asList(first, second), "parser.local", "cdn.example.com"));
+    }
+
+    @Test public void exactRequestHostPrecedesExactEmbeddedHost() {
+        Rule embedded = rule("{\"hosts\":[\"cdn.example.com\"]}");
+        Rule request = rule("{\"hosts\":[\"parser.local\"]}");
+        assertSame(request, Sniffer.findRule(Arrays.asList(embedded, request), "parser.local", "cdn.example.com"));
+    }
+
+    @Test public void duplicateExactHostsKeepTheLastConfiguredOverride() {
+        Rule first = rule("{\"hosts\":[\"cdn.example.com\"]}");
         Rule second = rule("{\"hosts\":[\"cdn.example.com\"]}");
-        assertSame(first, Sniffer.findRule(Arrays.asList(first, second), "cdn.example.com", ""));
-        assertSame(first, Sniffer.findRule(Arrays.asList(first, second), "parser.local", "cdn.example.com"));
+        assertSame(second, Sniffer.findRule(Arrays.asList(first, second), "cdn.example.com", ""));
+    }
+
+    @Test public void nonExactMatchesKeepConfigurationOrder() {
+        Rule first = rule("{\"hosts\":[\"example.com\"]}");
+        Rule second = rule("{\"hosts\":[\".*example[.]com\"]}");
+        assertSame(first, Sniffer.findRule(Arrays.asList(first, second), "video.example.com", ""));
     }
 }
