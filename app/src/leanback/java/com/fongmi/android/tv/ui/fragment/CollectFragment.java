@@ -104,7 +104,7 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
                 return;
             }
             mScroller.endLoading(result);
-            getCollect().setPage(mScroller.getPage());
+            savePagination(getCollect(), mScroller, result.getPageCount());
             List<Vod> items = result.getList();
             if (items == null || items.isEmpty()) return;
             appendCollectItems(items);
@@ -192,6 +192,11 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
             rows.add(new ListRow(mLast));
         }
         mAdapter.addAll(mAdapter.size(), rows);
+    }
+
+    static void savePagination(Collect collect, CustomScroller scroller, int pageCount) {
+        collect.setPage(scroller.getPage());
+        collect.setPageCount(scroller.isDisable() ? scroller.getPage() : pageCount);
     }
 
     private void syncRows() {

@@ -557,6 +557,11 @@ public class VodFragment extends BaseFragment implements CustomScroller.Callback
     }
 
     private void dispatchTypeState() {
+        Bundle args = getArguments();
+        if (args != null) {
+            args.putSerializable("extend", new HashMap<>(mExtends));
+            args.putBoolean("open", mOpen);
+        }
         if (getActivity() instanceof VodActivity) {
             ((VodActivity) getActivity()).updateTypeState(getRootTypeId(), mExtends, mOpen);
         } else if (getActivity() instanceof HomeActivity) {
