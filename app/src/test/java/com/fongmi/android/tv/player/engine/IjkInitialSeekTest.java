@@ -17,6 +17,7 @@ public class IjkInitialSeekTest {
         fixture.view.onPrepared(fixture.nativePlayer);
         assertEquals(Collections.singletonList(12_500L), fixture.seeks);
         assertEquals(EnginePhase.READY, fixture.engine.snapshot().getPhase());
+        assertEquals(1, fixture.starts);
     }
 
     @Test public void seekDuringPreparationUsesTheLatestPositionOnlyOnce() throws Exception {
@@ -24,6 +25,7 @@ public class IjkInitialSeekTest {
         fixture.engine.seekTo(42_000L);
         fixture.view.onPrepared(fixture.nativePlayer);
         assertEquals(Collections.singletonList(42_000L), fixture.seeks);
+        assertEquals(1, fixture.starts);
     }
 
     @Test public void pausedPreparationAppliesPositionWithoutStartingPlayback() throws Exception {

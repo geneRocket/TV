@@ -136,8 +136,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         pendingReady = false;
         // IjkVideoView applies its pending seek before forwarding onPrepared to us.
         pendingStartSeek = false;
-        if (playWhenReady) player.start();
-        else player.pause();
+        // The view also starts playback after this callback when its target is playing.
         phase = playWhenReady ? EnginePhase.READY : EnginePhase.PAUSED;
         emit(null);
     }
