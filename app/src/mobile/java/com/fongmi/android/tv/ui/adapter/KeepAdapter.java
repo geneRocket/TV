@@ -51,10 +51,17 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
     }
 
     public void addAll(List<Keep> items) {
-        DiffUtil.DiffResult result = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+        DiffUtil.DiffResult result = DiffUtil.calculateDiff(diffCallback(mItems, items));
+        mItems.clear();
+        mItems.addAll(items);
+        result.dispatchUpdatesTo(this);
+    }
+
+    static DiffUtil.Callback diffCallback(List<Keep> before, List<Keep> items) {
+        return new DiffUtil.Callback() {
             @Override
             public int getOldListSize() {
-                return mItems.size();
+                return before.size();
             }
 
             @Override
@@ -64,17 +71,15 @@ public class KeepAdapter extends RecyclerView.Adapter<KeepAdapter.ViewHolder> {
 
             @Override
             public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-                return mItems.get(oldItemPosition).getKey().equals(items.get(newItemPosition).getKey());
+                return before.get(oldItemPosition).getCid() == items.get(newItemPosition).getCid()
+                        && before.get(oldItemPosition).getKey().equals(items.get(newItemPosition).getKey());
             }
 
             @Override
             public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-                return mItems.get(oldItemPosition).equals(items.get(newItemPosition));
+                return before.get(oldItemPosition).equals(items.get(newItemPosition));
             }
-        });
-        mItems.clear();
-        mItems.addAll(items);
-        result.dispatchUpdatesTo(this);
+        };
     }
 
     public void clear() {

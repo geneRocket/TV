@@ -10,6 +10,7 @@ import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.fongmi.android.tv.databinding.DialogHistoryBinding;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.ui.adapter.ConfigAdapter;
@@ -86,7 +87,7 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
     @Override
     public void onDeleteClick(Config item) {
         int count = adapter.remove(item);
-        if (multi) syncEnabledConfigs();
+        if (multi) syncEnabledConfigs(item.getUrl());
         if (count == 0) dialog.dismiss();
     }
 
@@ -111,8 +112,11 @@ public class HistoryDialog implements ConfigAdapter.OnClickListener {
         return urls;
     }
 
-    private void syncEnabledConfigs() {
-        List<Config> selected = adapter.getSelected();
+    private void syncEnabledConfigs(String deletedUrl) {
+        List<Config> selected = new ArrayList<>();
+        for (String url : getEnabledUrls()) {
+            if (!url.equals(deletedUrl)) selected.add(ConfigRepository.get().find(url, type));
+        }
         if (type == 0) {
             Setting.putVodConfigDesc(getConfigsDesc(selected));
             Setting.putVodConfigUrls(getConfigsUrls(selected));
