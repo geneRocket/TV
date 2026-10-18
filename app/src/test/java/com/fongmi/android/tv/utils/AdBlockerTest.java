@@ -58,6 +58,24 @@ public class AdBlockerTest {
         assertTrue(configured("regex:[", true).matcher("[").matches());
     }
 
+    @Test public void legacyHostRegexWorksWithoutAnExplicitPrefix() throws Exception {
+        Pattern pattern = configured("^cdn\\D+\\.example\\.com$", true);
+        assertTrue(pattern.matcher("cdnads.example.com").find());
+        assertFalse(pattern.matcher("cdn123.example.com").find());
+    }
+
+    @Test public void legacyDomainRuleStillMatchesDeepSubdomains() throws Exception {
+        Pattern pattern = configured("ads.example.com", true);
+        assertTrue(pattern.matcher("a.b.ads.example.com").find());
+        assertFalse(pattern.matcher("media.example.com").find());
+    }
+
+    @Test public void legacyUrlRegexRetainsItsEscapes() throws Exception {
+        Pattern pattern = configured("^https://cdn\\.example/ads/\\S+$", false);
+        assertTrue(pattern.matcher("https://cdn.example/ads/clip.js").find());
+        assertFalse(pattern.matcher("https://cdn.example/ads/ ").find());
+    }
+
     @SuppressWarnings("unchecked")
     private Pattern configured(String rule, boolean hostOnly) throws Exception {
         Method method = AdBlocker.class.getDeclaredMethod("compilePatterns", List.class, boolean.class);

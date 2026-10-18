@@ -143,13 +143,15 @@ public final class AdBlocker {
         if (ads.isEmpty()) return Collections.emptyList();
         List<Pattern> patterns = new ArrayList<>(ads.size());
         for (String ad : ads) {
-            if (ad == null || ad.isEmpty()) continue;
+            if (ad == null || ad.trim().isEmpty()) continue;
             if (hostOnly != isHostRule(ad)) continue;
-            if (!isRegexRule(ad)) continue;
+            // Legacy configurations use bare regexes as well as literal substrings.
+            // Preserve regex escapes such as \\D when accepting either syntax.
+            String expression = isRegexRule(ad) ? normalizeRule(ad) : ad.trim();
             try {
-                patterns.add(Pattern.compile(normalizeRule(ad), Pattern.CASE_INSENSITIVE));
+                patterns.add(Pattern.compile(expression, Pattern.CASE_INSENSITIVE));
             } catch (Exception e) {
-                patterns.add(Pattern.compile(Pattern.quote(normalizeRule(ad)), Pattern.CASE_INSENSITIVE));
+                patterns.add(Pattern.compile(Pattern.quote(expression), Pattern.CASE_INSENSITIVE));
             }
         }
         return patterns;

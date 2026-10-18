@@ -28,8 +28,8 @@ public class Rule {
     @SerializedName("exclude")
     private List<String> exclude;
 
-    private transient List<Pattern> regexPatterns;
-    private transient List<Pattern> excludePatterns;
+    private transient volatile List<Pattern> regexPatterns;
+    private transient volatile List<Pattern> excludePatterns;
 
     public static Rule create(String name) {
         return new Rule(name);
@@ -62,11 +62,9 @@ public class Rule {
     }
 
     public List<Pattern> getRegexPatterns() {
-        if (regexPatterns == null) {
-            regexPatterns = new ArrayList<>();
-            for (String item : getRegex()) regexPatterns.add(Pattern.compile(item));
-        }
-        return regexPatterns;
+        List<Pattern> patterns = regexPatterns;
+        if (patterns == null) regexPatterns = patterns = compilePatterns(getRegex());
+        return patterns;
     }
 
     public List<String> getScript() {
@@ -78,11 +76,15 @@ public class Rule {
     }
 
     public List<Pattern> getExcludePatterns() {
-        if (excludePatterns == null) {
-            excludePatterns = new ArrayList<>();
-            for (String item : getExclude()) excludePatterns.add(Pattern.compile(item));
-        }
-        return excludePatterns;
+        List<Pattern> patterns = excludePatterns;
+        if (patterns == null) excludePatterns = patterns = compilePatterns(getExclude());
+        return patterns;
+    }
+
+    private static List<Pattern> compilePatterns(List<String> expressions) {
+        List<Pattern> patterns = new ArrayList<>(expressions.size());
+        for (String expression : expressions) patterns.add(Pattern.compile(expression));
+        return Collections.unmodifiableList(patterns);
     }
 
     @Override
