@@ -328,20 +328,24 @@ public class CustomWebView extends WebView implements DialogInterface.OnDismissL
         callback = null;
     }
 
-    private void onParseError() {
-        if (stopped) return;
-        if (callback != null) callback.onParseError();
-        callback = null;
+    public void stop(boolean error) {
+        stop(error, () -> {
+            hideDialog();
+            stopLoading();
+            loadUrl(BLANK);
+            App.removeCallbacks(timer);
+        });
     }
 
-    public void stop(boolean error) {
+    void stop(boolean error, Runnable cleanup) {
         if (stopped) return;
         stopped = true;
-        hideDialog();
-        stopLoading();
-        loadUrl(BLANK);
-        App.removeCallbacks(timer);
-        if (error) onParseError();
-        else callback = null;
+        ParseCallback target = callback;
+        callback = null;
+        try {
+            cleanup.run();
+        } finally {
+            if (error && target != null) target.onParseError();
+        }
     }
 }
