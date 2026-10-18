@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.player.engine;
 
-import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.utils.AppTaskScheduler;
+import com.fongmi.android.tv.utils.TaskScheduler;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.player.IjkUtil;
 
@@ -13,6 +14,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
 
     private final IjkVideoView player;
     private final Runnable readyFallback;
+    private final TaskScheduler scheduler;
     private Listener listener;
     private long sessionId;
     private long requestedStartPosition;
@@ -23,7 +25,12 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     private boolean released;
 
     public IjkPlayerEngine(IjkVideoView view, int playerType, int render, int decode) {
+        this(view, playerType, render, decode, AppTaskScheduler.get());
+    }
+
+    IjkPlayerEngine(IjkVideoView view, int playerType, int render, int decode, TaskScheduler scheduler) {
         this.player = view.render(render).decode(decode);
+        this.scheduler = scheduler;
         this.readyFallback = this::dispatchReadyFallback;
         player.addListener(this);
         player.setPlayer(playerType);
@@ -43,7 +50,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         this.playWhenReady = request.isPlayWhenReady();
         this.pendingStartSeek = requestedStartPosition > 0;
         this.pendingReady = true;
-        App.post(readyFallback, READY_FALLBACK_MS);
+        scheduler.remove(readyFallback);
+        scheduler.post(readyFallback, READY_FALLBACK_MS);
         player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), request.getStartPosition(), playWhenReady);
         if (phase == EnginePhase.PREPARING) { if (playWhenReady) player.start(); else player.pause(); }
     }
@@ -126,7 +134,8 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         if (released || phase == EnginePhase.STOPPED) return;
         removeReadyFallback();
         pendingReady = false;
-        ensureStartPositionApplied();
+        // IjkVideoView applies its pending seek before forwarding onPrepared to us.
+        pendingStartSeek = false;
         if (playWhenReady) player.start();
         else player.pause();
         phase = playWhenReady ? EnginePhase.READY : EnginePhase.PAUSED;
@@ -190,7 +199,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
     }
 
     private void removeReadyFallback() {
-        App.removeCallbacks(readyFallback);
+        scheduler.remove(readyFallback);
     }
 
     private void emit(Throwable error) {
