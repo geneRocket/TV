@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 public class Channel {
 
@@ -410,12 +411,12 @@ public class Channel {
         if (!getUa().isEmpty()) headers.put(HttpHeaders.USER_AGENT, getUa());
         if (!getOrigin().isEmpty()) headers.put(HttpHeaders.ORIGIN, getOrigin());
         if (!getReferer().isEmpty()) headers.put(HttpHeaders.REFERER, getReferer());
-        headers.putAll(UrlUtil.getTagHeaders(TextUtils.isEmpty(getUrl()) ? getCurrent() : getUrl()));
+        headers.putAll(UrlUtil.getTagHeaders(getUrl().isEmpty() ? getCurrent() : getUrl()));
         return headers;
     }
 
     private Map<String, String> fixHeaders(Map<String, String> headers) {
-        Map<String, String> result = new HashMap<>();
+        Map<String, String> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<String, String> entry : headers.entrySet()) result.put(UrlUtil.fixHeader(entry.getKey()), entry.getValue());
         return result;
     }

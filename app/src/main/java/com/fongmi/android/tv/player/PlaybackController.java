@@ -669,7 +669,7 @@ public class PlaybackController {
 
     private void setMediaSource(String identity, Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
         stopParse();
-        this.headers = PlaybackHeaders.applyUserAgent(mergeInlineHeaders(headers, url));
+        this.headers = PlaybackHeaders.applyUserAgent(PlaybackHeaders.mergeInlineHeaders(headers, url));
         this.url = UrlUtil.stripTag(UrlUtil.normalize(url, ""));
         this.format = format;
         this.drm = drm;
@@ -695,13 +695,6 @@ public class PlaybackController {
         removeTimeoutCheck();
         App.post(runnable, timeout);
         Logger.t(TAG).d(url);
-    }
-
-    private Map<String, String> mergeInlineHeaders(Map<String, String> headers, String url) {
-        Map<String, String> result = new LinkedHashMap<>();
-        if (headers != null) result.putAll(headers);
-        result.putAll(UrlUtil.getTagHeaders(url));
-        return result;
     }
 
     private void removeTimeoutCheck() {
