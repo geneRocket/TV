@@ -21,7 +21,6 @@ public class DohAdapter extends RecyclerView.Adapter<DohAdapter.ViewHolder> {
     public DohAdapter(OnClickListener listener) {
         this.mItems = VodConfig.get().getDoh();
         this.mListener = listener;
-        setHasStableIds(true);
     }
 
     public void setSelect(int select) {
@@ -40,11 +39,6 @@ public class DohAdapter extends RecyclerView.Adapter<DohAdapter.ViewHolder> {
     @Override
     public int getItemCount() {
         return mItems.size();
-    }
-
-    @Override
-    public long getItemId(int position) {
-        return mItems.get(position).getName().hashCode();
     }
 
     @NonNull

@@ -41,9 +41,9 @@ public class CustomTypeView extends AppCompatTextView {
     }
 
     private boolean onKeyDown() {
+        coolDown = true;
         App.post(coolDownReset, 3000);
         listener.onRefresh();
-        coolDown = true;
         return true;
     }
 
@@ -57,6 +57,7 @@ public class CustomTypeView extends AppCompatTextView {
     @Override
     protected void onDetachedFromWindow() {
         App.removeCallbacks(coolDownReset);
+        coolDown = false;
         super.onDetachedFromWindow();
     }
 

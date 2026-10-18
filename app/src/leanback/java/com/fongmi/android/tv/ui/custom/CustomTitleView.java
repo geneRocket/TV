@@ -75,14 +75,15 @@ public class CustomTitleView extends AppCompatTextView {
     }
 
     private void onKeyUp() {
+        coolDown = true;
         App.post(coolDownReset, 3000);
         listener.onRefresh();
-        coolDown = true;
     }
 
     @Override
     protected void onDetachedFromWindow() {
         App.removeCallbacks(coolDownReset);
+        coolDown = false;
         clearAnimation();
         super.onDetachedFromWindow();
     }
