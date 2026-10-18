@@ -30,6 +30,7 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
     private SubtitleViewModel viewModel;
     private Listener listener;
     private String currentTitle;
+    private String currentQuery = "";
     private int currentPage;
 
     public static SearchSubtitleDialog create() {
@@ -110,12 +111,20 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
     private void onSearch(View view) {
         String title = binding.input.getText().toString().trim();
         if (title.isEmpty()) {
+            currentQuery = "";
+            currentPage = 1;
+            viewModel.searchResult("", currentPage);
+            adapter.clear();
+            binding.loading.setVisibility(View.GONE);
+            binding.previous.setEnabled(false);
+            binding.next.setEnabled(false);
             binding.empty.setVisibility(View.VISIBLE);
             binding.recycler.setVisibility(View.GONE);
             binding.empty.setText(R.string.search_subtitle_empty);
             Notify.show(R.string.search_subtitle_empty);
             return;
         }
+        currentQuery = title;
         currentPage = 1;
         adapter.clear();
         binding.empty.setVisibility(View.GONE);
@@ -134,8 +143,7 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
             binding.loading.setVisibility(View.VISIBLE);
             binding.previous.setEnabled(false);
             binding.next.setEnabled(false);
-            String title = binding.input.getText().toString().trim();
-            viewModel.searchResult(title, currentPage);
+            viewModel.searchResult(currentQuery, currentPage);
         }
     }
 
@@ -146,8 +154,7 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
         binding.loading.setVisibility(View.VISIBLE);
         binding.previous.setEnabled(false);
         binding.next.setEnabled(false);
-        String title = binding.input.getText().toString().trim();
-        viewModel.searchResult(title, currentPage);
+        viewModel.searchResult(currentQuery, currentPage);
     }
 
     private void onDownload(View view) {
