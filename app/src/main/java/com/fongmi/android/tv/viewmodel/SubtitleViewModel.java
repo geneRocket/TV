@@ -63,6 +63,8 @@ public class SubtitleViewModel extends ViewModel {
     private volatile Call currentSearchCall;
     private volatile Call currentFallbackSearchCall;
     private volatile Call currentResolveCall;
+    private String requestedTitle = "";
+    private String searchKeyword = "";
 
     public SubtitleViewModel() {
         this(OkHttp.client().newBuilder()
@@ -87,8 +89,14 @@ public class SubtitleViewModel extends ViewModel {
         return searchResult;
     }
 
-    public void searchResult(String title, int page) {
-        searchResultFromAssrt(title, page, false);
+    public synchronized void searchResult(String title, int page) {
+        String query = title == null ? "" : title.trim();
+        if (page <= 1 || !query.equals(requestedTitle)) {
+            requestedTitle = query;
+            searchKeyword = query;
+            pagesTotal = -1;
+        }
+        searchResultFromAssrt(searchKeyword, page, false);
     }
 
     public void getSearchResultSubtitleUrls(Subtitle subtitle) {
@@ -147,6 +155,7 @@ public class SubtitleViewModel extends ViewModel {
             if (expected < 0) cancelSubtitleResolve();
             int currentPage = Math.max(1, page);
             String keyword = title == null ? "" : title.trim();
+            if (expected >= 0) searchKeyword = keyword;
             cancelCall(currentSearchCall);
             cancelCall(currentFallbackSearchCall);
             if (TextUtils.isEmpty(keyword)) {
