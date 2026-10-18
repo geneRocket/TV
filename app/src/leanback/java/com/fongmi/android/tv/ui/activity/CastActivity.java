@@ -485,7 +485,6 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
-        mServiceBound = false;
         mService = null;
     }
 

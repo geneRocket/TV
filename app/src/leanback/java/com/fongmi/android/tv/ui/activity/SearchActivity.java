@@ -267,6 +267,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     @Override
     public void onSearch() {
+        if (isFinishing() || isDestroyed()) return;
         String keyword = getKeyword();
         mBinding.keyword.setSelection(mBinding.keyword.length());
         Util.hideKeyboard(mBinding.keyword);
