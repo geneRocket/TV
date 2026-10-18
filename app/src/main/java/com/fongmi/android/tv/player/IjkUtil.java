@@ -34,6 +34,6 @@ public class IjkUtil {
         ijk.getSubtitleView().setApplyEmbeddedFontSizes(false);
         ijk.getSubtitleView().setApplyEmbeddedStyles(!Setting.isCaption());
         if (Setting.getSubtitleTextSize() != 0) ijk.getSubtitleView().setFractionalTextSize(Setting.getSubtitleTextSize());
-        if (Setting.getSubtitleBottomPadding() != 0) ijk.getSubtitleView().setBottomPaddingFraction(Setting.getSubtitleBottomPadding());
+        if (Setting.hasSubtitleBottomPadding()) ijk.getSubtitleView().setBottomPaddingFraction(Setting.getSubtitleBottomPadding());
     }
 }

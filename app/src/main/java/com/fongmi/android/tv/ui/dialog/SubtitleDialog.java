@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.content.Context;
+import android.view.accessibility.CaptioningManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -82,28 +84,28 @@ public final class SubtitleDialog extends BaseDialog {
     }
 
     private void onUp(View view) {
-        float padding = Setting.getSubtitleBottomPadding();
+        float padding = currentPadding();
         padding = Math.min(padding + 0.01f, 0.5f);
         Setting.putSubtitleBottomPadding(padding);
         subtitleView.setBottomPaddingFraction(padding);
     }
 
     private void onDown(View view) {
-        float padding = Setting.getSubtitleBottomPadding();
+        float padding = currentPadding();
         padding = Math.max(padding - 0.01f, 0f);
         Setting.putSubtitleBottomPadding(padding);
         subtitleView.setBottomPaddingFraction(padding);
     }
 
     private void onLarge(View view) {
-        float size = Setting.getSubtitleTextSize();
+        float size = currentTextSize();
         size = Math.min(size + 0.01f, 0.2f);
         Setting.putSubtitleTextSize(size);
         subtitleView.setFractionalTextSize(size);
     }
 
     private void onSmall(View view) {
-        float size = Setting.getSubtitleTextSize();
+        float size = currentTextSize();
         size = Math.max(size - 0.01f, 0.02f);
         Setting.putSubtitleTextSize(size);
         subtitleView.setFractionalTextSize(size);
@@ -111,9 +113,21 @@ public final class SubtitleDialog extends BaseDialog {
 
     private void onReset(View view) {
         Setting.putSubtitleTextSize(0);
-        Setting.putSubtitleBottomPadding(0);
+        Setting.resetSubtitleBottomPadding();
         subtitleView.setUserDefaultTextSize();
         subtitleView.setBottomPaddingFraction(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION);
+    }
+
+    private float currentPadding() {
+        return Setting.hasSubtitleBottomPadding() ? Setting.getSubtitleBottomPadding() : SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION;
+    }
+
+    private float currentTextSize() {
+        float size = Setting.getSubtitleTextSize();
+        if (size != 0) return size;
+        CaptioningManager captions = (CaptioningManager) subtitleView.getContext().getSystemService(Context.CAPTIONING_SERVICE);
+        float scale = captions != null && captions.isEnabled() ? captions.getFontScale() : 1f;
+        return SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * scale;
     }
 
     private void onSearch(View view) {

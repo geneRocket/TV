@@ -474,7 +474,15 @@ public class Setting {
     }
 
     public static void putSubtitleBottomPadding(float padding) {
-        getEditor().putFloat("subtitle_bottom_padding", padding).apply();
+        getEditor().putFloat("subtitle_bottom_padding", padding).putBoolean("subtitle_bottom_padding_custom", true).apply();
+    }
+
+    public static boolean hasSubtitleBottomPadding() {
+        return getSubtitleBottomPadding() != 0 || Prefers.getBoolean("subtitle_bottom_padding_custom", false);
+    }
+
+    public static void resetSubtitleBottomPadding() {
+        getEditor().remove("subtitle_bottom_padding").remove("subtitle_bottom_padding_custom").apply();
     }
 
     public static int getLanguage() {

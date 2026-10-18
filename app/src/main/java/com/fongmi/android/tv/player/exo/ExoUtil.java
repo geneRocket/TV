@@ -98,7 +98,7 @@ public class ExoUtil {
         exo.getSubtitleView().setApplyEmbeddedFontSizes(false);
         exo.getSubtitleView().setApplyEmbeddedStyles(!Setting.isCaption());
         if (Setting.getSubtitleTextSize() != 0) exo.getSubtitleView().setFractionalTextSize(Setting.getSubtitleTextSize());
-        if (Setting.getSubtitleBottomPadding() != 0) exo.getSubtitleView().setBottomPaddingFraction(Setting.getSubtitleBottomPadding());
+        if (Setting.hasSubtitleBottomPadding()) exo.getSubtitleView().setBottomPaddingFraction(Setting.getSubtitleBottomPadding());
     }
 
     public static String getMimeType(String path) {
