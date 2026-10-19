@@ -41,6 +41,7 @@ import com.fongmi.android.tv.bean.CastVideo;
 import com.fongmi.android.tv.databinding.ActivityLiveBinding;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
+import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.LiveCallback;
@@ -169,7 +170,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         setPadding(mBinding.control.getRoot());
         setPadding(mBinding.widget.epg, true);
         setPadding(mBinding.recycler, true);
-        mPlayers = PlaybackController.create(this);
+        mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
         mPlaybackSubscription = mPlayers.observe(this::onPlaybackState);
         mObserveEpg = this::setEpg;
         mObserveUrl = this::start;
@@ -827,10 +828,11 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
             case LIVE:
                 setLive(getHome());
                 break;
-            case PLAYER:
-                fetch();
-                break;
         }
+    }
+
+    private void onPlaybackCommand(PlaybackCommand command) {
+        if (isCurrentPlayer() && command.getType() == PlaybackCommand.Type.RELOAD) fetch();
     }
 
     private void onPlaybackState(PlaybackState state) {
@@ -878,8 +880,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mPlayers.setMetadata(title, artist, mChannel.getLogo());
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onErrorEvent(ErrorEvent event) {
+    private void onPlaybackError(ErrorEvent event) {
         if (!isCurrentPlayer()) return;
         switch (mRecovery.next(event, mPlayers, mChannel != null)) {
             case RETRY: fetch(); break;

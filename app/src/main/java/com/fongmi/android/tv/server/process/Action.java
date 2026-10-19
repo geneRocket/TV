@@ -23,6 +23,9 @@ import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.player.PlaybackCommand;
+import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.SyncPulls;
 import com.fongmi.android.tv.utils.FileUtil;
@@ -91,9 +94,9 @@ public class Action implements Process {
     private void onFile(Map<String, String> params) {
         String path = params.get("path");
         if (TextUtils.isEmpty(path)) return;
-        if (path.endsWith(".xml")) RefreshEvent.danmaku(path);
+        if (path.endsWith(".xml")) onPlaybackCommand(PlaybackCommand.fromRefresh("danmaku", path));
         else if (path.endsWith(".apk")) FileUtil.openFile(Path.local(path));
-        else if (path.endsWith(".srt") || path.endsWith(".ssa") || path.endsWith(".ass")) RefreshEvent.subtitle(path);
+        else if (path.endsWith(".srt") || path.endsWith(".ssa") || path.endsWith(".ass")) onPlaybackCommand(PlaybackCommand.fromRefresh("subtitle", path));
         else ServerEvent.setting(path);
     }
 
@@ -102,10 +105,12 @@ public class Action implements Process {
         String path = params.get("path");
         if (TextUtils.isEmpty(type)) return;
         if ("live".equals(type)) RefreshEvent.live();
-        else if ("detail".equals(type)) RefreshEvent.detail();
-        else if ("player".equals(type)) RefreshEvent.player();
-        else if ("danmaku".equals(type)) RefreshEvent.danmaku(path);
-        else if ("subtitle".equals(type)) RefreshEvent.subtitle(path);
+        else onPlaybackCommand(PlaybackCommand.fromRefresh(type, path));
+    }
+
+    private void onPlaybackCommand(PlaybackCommand command) {
+        PlaybackController player = Server.get().getPlayer();
+        if (player != null) player.command(command);
     }
 
     private void onCast(Map<String, String> params) {

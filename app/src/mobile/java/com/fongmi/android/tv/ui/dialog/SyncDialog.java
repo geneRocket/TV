@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
@@ -25,7 +26,6 @@ import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.repository.KeepRepository;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
-import com.fongmi.android.tv.event.ScanEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.server.SyncPulls;
 import com.fongmi.android.tv.ui.activity.ScanActivity;
@@ -35,10 +35,6 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ScanTask;
 import com.github.catvod.net.OkHttp;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
-
-import org.greenrobot.eventbus.EventBus;
-import org.greenrobot.eventbus.Subscribe;
-import org.greenrobot.eventbus.ThreadMode;
 
 import java.io.IOException;
 import java.util.List;
@@ -58,6 +54,9 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     private DialogDeviceBinding binding;
     private DeviceAdapter adapter;
     private ScanTask scanTask;
+    private final ActivityResultLauncher<Void> scanLauncher = registerForActivityResult(new ScanActivity.Contract(), address -> {
+        if (address != null && scanTask != null) scanTask.start(address);
+    });
     private Call activeCall;
     private SyncPulls.Ticket activePull;
     private String syncConfigUrl = "";
@@ -107,7 +106,6 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     @Override
     protected void initView() {
         binding.mode.setVisibility(View.VISIBLE);
-        EventBus.getDefault().register(this);
         scanTask = ScanTask.create(this);
         setRecyclerView();
         getDevice();
@@ -145,7 +143,7 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void onScan() {
-        ScanActivity.start(getActivity());
+        scanLauncher.launch(null);
     }
 
     private void onRefresh() {
@@ -156,11 +154,6 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
 
     private void onSuccess() {
         dismiss();
-    }
-
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onScanEvent(ScanEvent event) {
-        if (scanTask != null) scanTask.start(event.getAddress());
     }
 
     @Override
@@ -230,6 +223,5 @@ public class SyncDialog extends BaseDialog implements DeviceAdapter.OnClickListe
         if (call != null) call.cancel();
         App.removeCallbacks(refreshDevices);
         binding = null;
-        EventBus.getDefault().unregister(this);
     }
 }

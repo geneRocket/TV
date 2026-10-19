@@ -3,8 +3,7 @@ package com.fongmi.android.tv.event;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.ResUtil;
 
-import org.greenrobot.eventbus.EventBus;
-
+/** Playback failure data. Delivery belongs to the owning playback controller. */
 public class ErrorEvent {
 
     private final Type type;
@@ -12,28 +11,28 @@ public class ErrorEvent {
     private String msg;
     private int code;
 
-    public static void url(int retry) {
-        EventBus.getDefault().post(new ErrorEvent(Type.URL, retry, -1));
+    public static ErrorEvent url(int retry) {
+        return new ErrorEvent(Type.URL, retry, -1);
     }
 
-    public static void url(int retry, int code) {
-        EventBus.getDefault().post(new ErrorEvent(Type.URL, retry, code));
+    public static ErrorEvent url(int retry, int code) {
+        return new ErrorEvent(Type.URL, retry, code);
     }
 
-    public static void flag() {
-        EventBus.getDefault().post(new ErrorEvent(Type.FLAG, 0, -1));
+    public static ErrorEvent flag() {
+        return new ErrorEvent(Type.FLAG, 0, -1);
     }
 
-    public static void parse() {
-        EventBus.getDefault().post(new ErrorEvent(Type.PARSE, 0, -1));
+    public static ErrorEvent parse() {
+        return new ErrorEvent(Type.PARSE, 0, -1);
     }
 
-    public static void timeout() {
-        EventBus.getDefault().post(new ErrorEvent(Type.TIMEOUT, 0, -1));
+    public static ErrorEvent timeout() {
+        return new ErrorEvent(Type.TIMEOUT, 0, -1);
     }
 
-    public static void extract(String msg) {
-        EventBus.getDefault().post(new ErrorEvent(Type.EXTRACT, 0, -1, msg));
+    public static ErrorEvent extract(String msg) {
+        return new ErrorEvent(Type.EXTRACT, 0, -1, msg);
     }
 
     public ErrorEvent(Type type, int retry, int code) {

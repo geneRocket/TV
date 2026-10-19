@@ -5,6 +5,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
@@ -14,7 +15,6 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.repository.DeviceRepository;
-import com.fongmi.android.tv.event.ScanEvent;
 import com.fongmi.android.tv.utils.ScanTask;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
 import com.fongmi.android.tv.impl.Callback;
@@ -24,10 +24,6 @@ import com.fongmi.android.tv.ui.adapter.DeviceAdapter;
 import com.fongmi.android.tv.utils.Notify;
 import com.github.catvod.net.OkHttp;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
-
-import org.greenrobot.eventbus.EventBus;
-import org.greenrobot.eventbus.Subscribe;
-import org.greenrobot.eventbus.ThreadMode;
 
 import java.io.File;
 import java.io.IOException;
@@ -49,6 +45,9 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
     private DialogDeviceBinding binding;
     private DeviceAdapter adapter;
     private ScanTask scanTask;
+    private final ActivityResultLauncher<Void> scanLauncher = registerForActivityResult(new ScanActivity.Contract(), address -> {
+        if (address != null && scanTask != null) scanTask.start(address);
+    });
     private Call activeCall;
     private String type;
 
@@ -128,7 +127,6 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
 
     @Override
     protected void initView() {
-        EventBus.getDefault().register(this);
         scanTask = ScanTask.create(this);
         setRecyclerView();
         getDevice();
@@ -157,7 +155,7 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
     }
 
     private void onScan() {
-        ScanActivity.start(getActivity());
+        scanLauncher.launch(null);
     }
 
     private void onSuccess() {
@@ -168,11 +166,6 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
     private void onError(Exception e) {
         Notify.show(e.getMessage());
         Notify.dismiss();
-    }
-
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onScanEvent(ScanEvent event) {
-        if (scanTask != null) scanTask.start(event.getAddress());
     }
 
     @Override
@@ -226,6 +219,5 @@ public class TransmitDialog extends BaseDialog implements DeviceAdapter.OnClickL
         if (call != null) call.cancel();
         App.removeCallbacks(refreshDevices);
         binding = null;
-        EventBus.getDefault().unregister(this);
     }
 }

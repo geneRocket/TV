@@ -5,7 +5,6 @@ import org.greenrobot.eventbus.EventBus;
 public class RefreshEvent {
 
     private final Type type;
-    private String path;
 
     public static void config() {
         EventBus.getDefault().post(new RefreshEvent(Type.CONFIG));
@@ -39,40 +38,15 @@ public class RefreshEvent {
         EventBus.getDefault().post(new RefreshEvent(Type.LIVE));
     }
 
-    public static void detail() {
-        EventBus.getDefault().post(new RefreshEvent(Type.DETAIL));
-    }
-
-    public static void player() {
-        EventBus.getDefault().post(new RefreshEvent(Type.PLAYER));
-    }
-
-    public static void subtitle(String path) {
-        EventBus.getDefault().post(new RefreshEvent(Type.SUBTITLE, path));
-    }
-
-    public static void danmaku(String path) {
-        EventBus.getDefault().post(new RefreshEvent(Type.DANMAKU, path));
-    }
-
     private RefreshEvent(Type type) {
         this.type = type;
-    }
-
-    public RefreshEvent(Type type, String path) {
-        this.type = type;
-        this.path = path;
     }
 
     public Type getType() {
         return type;
     }
 
-    public String getPath() {
-        return path;
-    }
-
     public enum Type {
-        CONFIG, IMAGE, VIDEO, HISTORY, KEEP, SIZE, WALL, LIVE, DETAIL, PLAYER, SUBTITLE, DANMAKU
+        CONFIG, IMAGE, VIDEO, HISTORY, KEEP, SIZE, WALL, LIVE
     }
 }

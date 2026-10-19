@@ -65,6 +65,7 @@ import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
+import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.model.SearchRequestToken;
 import com.fongmi.android.tv.model.SiteViewModel;
@@ -404,7 +405,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mDanmakuContext = DanmakuContext.create();
         mBinding.progressLayout.showProgress();
         mBinding.swipeLayout.setEnabled(false);
-        mPlayers = PlaybackController.create(this);
+        mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
         mPlayerSubscription = mPlayers.observe(this::onPlaybackState);
         TaskScheduler scheduler = new TaskScheduler() {
             @Override public void post(Runnable task, long delayMillis) { App.post(task, delayMillis); }
@@ -565,7 +566,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             if (state.getPhase() != VodPlaybackPhase.ERROR) return;
             Throwable error = state.getError();
             if (error != null && mPlayers.session().state().getError() == error) return;
-            ErrorEvent.extract(error == null ? getString(R.string.error_play_timeout) : error.getMessage());
+            mPlayers.reportError(ErrorEvent.extract(error == null ? getString(R.string.error_play_timeout) : error.getMessage()));
         });
     }
 
@@ -763,7 +764,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     private void getPlayer(Flag flag, Episode episode, boolean replay) {
         if (flag == null || episode == null || TextUtils.isEmpty(episode.getUrl())) {
-            ErrorEvent.url(0);
+            mPlayers.reportError(ErrorEvent.url(0));
             return;
         }
         int index = flag.getEpisodes().indexOf(episode);
@@ -943,7 +944,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         } catch (Exception e) {
             ThreadPools.log(e, "Quality switch failed.");
             showError(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.error_play_timeout) : e.getMessage());
-            ErrorEvent.extract(e.getMessage());
+            mPlayers.reportError(ErrorEvent.extract(e.getMessage()));
         }
     }
 
@@ -1472,7 +1473,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         boolean empty = mFlagAdapter.isEmpty();
         mBinding.flag.setVisibility(empty ? View.GONE : View.VISIBLE);
         if (empty) {
-            ErrorEvent.flag();
+            mPlayers.reportError(ErrorEvent.flag());
         } else {
             switchFlag(mHistory.getFlag());
             if (mHistory.isRevSort()) reverseEpisode(true);
@@ -1697,11 +1698,16 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.updateParse();
             return;
         }
+    }
+
+    private void onPlaybackCommand(PlaybackCommand command) {
         if (!isCurrentPlayer() || isRedirect()) return;
-        if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
-        else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.SUBTITLE) setSubtitle(Sub.from(event.getPath()));
+        switch (command.getType()) {
+            case DETAIL: getDetail(); break;
+            case RELOAD: onRefresh(); break;
+            case DANMAKU: setDanmaku(Danmaku.from(command.getPath())); break;
+            case SUBTITLE: setSubtitle(Sub.from(command.getPath())); break;
+        }
     }
 
     private void onPlaybackState(PlaybackState state) {
@@ -1805,8 +1811,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlayers.setMetadata(title, artist, artwork);
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onErrorEvent(ErrorEvent event) {
+    private void onPlaybackError(ErrorEvent event) {
         if (!isCurrentPlayer() || isRedirect() || (!isForeground() && Setting.isBackgroundOff())) return;
         boolean recovering = mRecoveryWindow.isActive();
         if (!mRecoveryWindow.begin()) return;

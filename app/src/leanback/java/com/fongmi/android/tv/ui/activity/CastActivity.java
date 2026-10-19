@@ -35,7 +35,7 @@ import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.ActivityCastBinding;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
-import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
@@ -112,7 +112,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mServiceBound = bindService(new Intent(this, StableDLNARendererService.class), this, Context.BIND_AUTO_CREATE);
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownCast.create(this);
-        mPlayers = PlaybackController.create(this);
+        mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
         mPlaybackSubscription = mPlayers.observe(this::onPlaybackState);
         mParser = new DIDLParser();
         mR1 = this::hideControl;
@@ -343,10 +343,8 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         }
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onRefreshEvent(RefreshEvent event) {
-        if (!isCurrentPlayer()) return;
-        if (event.getType() == RefreshEvent.Type.SUBTITLE) mPlayers.setSub(Sub.from(event.getPath()));
+    private void onPlaybackCommand(PlaybackCommand command) {
+        if (isCurrentPlayer() && command.getType() == PlaybackCommand.Type.SUBTITLE) mPlayers.setSub(Sub.from(command.getPath()));
     }
 
     private void onPlaybackState(PlaybackState state) {
@@ -395,8 +393,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mPlayers.setMetadata(textOf(mBinding.widget.title), "", "");
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onErrorEvent(ErrorEvent event) {
+    private void onPlaybackError(ErrorEvent event) {
         if (!isCurrentPlayer()) return;
         switch (mRecovery.next(event, mPlayers, true)) {
             case RETRY: onReset(); break;

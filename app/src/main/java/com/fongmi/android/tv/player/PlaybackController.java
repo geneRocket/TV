@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Looper;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -51,6 +52,8 @@ import com.fongmi.android.tv.utils.Util;
 import com.orhanobut.logger.Logger;
 
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
@@ -64,6 +67,8 @@ public class PlaybackController {
     private final StringBuilder builder;
     private final Formatter formatter;
     private final Runnable runnable;
+    private final PlaybackErrors errors;
+    private final PlaybackCommands commands;
     private final ExternalPlayer externalPlayer;
     private final DanmakuController danmaku;
     private final MediaSessionController mediaSession;
@@ -93,10 +98,10 @@ public class PlaybackController {
 
     private static final Pattern PATTERN_VOD = Pattern.compile(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
 
-    public static PlaybackController create(Activity activity) {
+    public static PlaybackController create(Activity activity, Consumer<ErrorEvent> onError, Consumer<PlaybackCommand> onCommand) {
         PlaybackController previous = Server.get().getPlayer();
         if (previous != null) previous.releasePlayer();
-        PlaybackController player = new PlaybackController(activity);
+        PlaybackController player = new PlaybackController(activity, onError, onCommand);
         Server.get().setPlayer(player);
         return player;
     }
@@ -113,11 +118,29 @@ public class PlaybackController {
         return player == PlayerType.SYSTEM || player == PlayerType.IJK;
     }
 
-    private PlaybackController(Activity activity) {
+    private PlaybackController(Activity activity, Consumer<ErrorEvent> onError, Consumer<PlaybackCommand> onCommand) {
         player = Setting.getPlayer();
         decode = Setting.getDecode(player);
         builder = new StringBuilder();
-        runnable = ErrorEvent::timeout;
+        Executor main = task -> {
+            if (Looper.myLooper() == Looper.getMainLooper()) task.run();
+            else App.post(task);
+        };
+        commands = new PlaybackCommands(main, this::isCurrent, command -> {
+            try {
+                onCommand.accept(command);
+            } catch (RuntimeException failure) {
+                ThreadPools.log(failure, "Playback command callback failed.");
+            }
+        });
+        errors = new PlaybackErrors(main, error -> {
+            try {
+                onError.accept(error);
+            } catch (RuntimeException failure) {
+                ThreadPools.log(failure, "Playback error callback failed.");
+            }
+        });
+        runnable = () -> reportError(ErrorEvent.timeout());
         externalPlayer = new ExternalPlayer(this);
         danmaku = new DanmakuController(Setting.isDanmu(), this::prepared);
         formatter = new Formatter(builder, Locale.getDefault());
@@ -523,6 +546,7 @@ public class PlaybackController {
     }
 
     public void stop() {
+        errors.invalidate();
         removeTimeoutCheck();
         stopParse();
         if (playbackSession != null) playbackSession.stop();
@@ -534,10 +558,12 @@ public class PlaybackController {
 
     private void failIllegalUrl() {
         stop();
-        ErrorEvent.url(0);
+        reportError(ErrorEvent.url(0));
     }
 
     public void release() {
+        commands.close();
+        errors.close();
         boolean current = isCurrent();
         stopParse();
         try {
@@ -562,6 +588,8 @@ public class PlaybackController {
     }
 
     public void releasePlayer() {
+        commands.invalidate();
+        errors.invalidate();
         stopParse();
         releaseEngine();
         removeTimeoutCheck();
@@ -569,6 +597,7 @@ public class PlaybackController {
     }
 
     public void start(Channel channel, int timeout) {
+        errors.invalidate();
         ensureSession();
         String url = getChannelUrl(channel);
         replay = channel.isReplay();
@@ -576,7 +605,7 @@ public class PlaybackController {
         this.timeout = timeout;
         this.forceLive = forceLive;
         if (channel.hasMsg()) {
-            ErrorEvent.extract(channel.getMsg());
+            reportError(ErrorEvent.extract(channel.getMsg()));
         } else if (channel.getParse() == 1) {
             startParse(channel.result(), false);
         } else if (isIllegal(url)) {
@@ -587,16 +616,17 @@ public class PlaybackController {
     }
 
     public void start(Result result, boolean useParse, int timeout) {
+        errors.invalidate();
         ensureSession();
         replay = false;
         this.timeout = timeout;
         this.forceLive = false;
         if (result.hasErrorMsg()) {
-            ErrorEvent.extract(result.getMsg());
+            reportError(ErrorEvent.extract(result.getMsg()));
         } else if (result.getParse(1) == 1 || result.getJx() == 1) {
             startParse(result, useParse);
         } else if (Setting.isRemoveAd() && AdBlocker.isAdUrl(result.getRealUrl())) {
-            ErrorEvent.url(0);
+            reportError(ErrorEvent.url(0));
         } else if (isIllegal(result.getRealUrl())) {
             failIllegalUrl();
         } else {
@@ -610,7 +640,7 @@ public class PlaybackController {
             @Override
             public void onResolved(ResolvedMedia media) {
                 if (Setting.isRemoveAd() && AdBlocker.isAdUrl(media.getUrl())) {
-                    ErrorEvent.parse();
+                    reportError(ErrorEvent.parse());
                     return;
                 }
                 if (!TextUtils.isEmpty(media.getSource())) Notify.show(ResUtil.getString(R.string.parse_from, media.getSource()));
@@ -619,7 +649,7 @@ public class PlaybackController {
 
             @Override
             public void onFailure() {
-                ErrorEvent.parse();
+                reportError(ErrorEvent.parse());
             }
         });
     }
@@ -668,6 +698,7 @@ public class PlaybackController {
     }
 
     private void setMediaSource(String identity, Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
+        errors.invalidate();
         stopParse();
         this.headers = PlaybackHeaders.applyUserAgent(PlaybackHeaders.mergeInlineHeaders(headers, url));
         this.url = UrlUtil.stripTag(UrlUtil.normalize(url, ""));
@@ -689,7 +720,7 @@ public class PlaybackController {
         } catch (RuntimeException e) {
             removeTimeoutCheck();
             ThreadPools.log(e, "Player media source setup failed.");
-            ErrorEvent.url(ExoUtil.getRetry(PlaybackException.ERROR_CODE_UNSPECIFIED), PlaybackException.ERROR_CODE_UNSPECIFIED);
+            reportError(ErrorEvent.url(ExoUtil.getRetry(PlaybackException.ERROR_CODE_UNSPECIFIED), PlaybackException.ERROR_CODE_UNSPECIFIED));
             return;
         }
         removeTimeoutCheck();
@@ -861,18 +892,26 @@ public class PlaybackController {
         forceLive = resolveLiveFlag(forceLive, replay, exo() != null && exo().isCurrentMediaItemLive());
     }
 
+    public void reportError(ErrorEvent error) {
+        errors.report(error);
+    }
+
+    public void command(PlaybackCommand command) {
+        commands.send(command);
+    }
+
     private void dispatchPlaybackError(Throwable throwable) {
         if (!(throwable instanceof PlaybackException)) {
-            ErrorEvent.url(1);
+            reportError(ErrorEvent.url(1));
             return;
         }
         PlaybackException error = (PlaybackException) throwable;
         Logger.t(TAG).e(error.errorCode + "," + url);
         if (isPlaylistStuck(error)) {
-            ErrorEvent.url(0, error.errorCode);
+            reportError(ErrorEvent.url(0, error.errorCode));
             return;
         }
-        ErrorEvent.url(ExoUtil.getRetry(error.errorCode), error.errorCode);
+        reportError(ErrorEvent.url(ExoUtil.getRetry(error.errorCode), error.errorCode));
     }
 
     private boolean isPlaylistStuck(PlaybackException error) {

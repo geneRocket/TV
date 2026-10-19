@@ -1,14 +1,15 @@
 package com.fongmi.android.tv.ui.activity;
 
-import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.activity.result.contract.ActivityResultContract;
 import androidx.viewbinding.ViewBinding;
 
-import com.fongmi.android.tv.event.ScanEvent;
 import com.fongmi.android.tv.databinding.ActivityScanBinding;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.utils.Util;
@@ -24,11 +25,22 @@ import java.util.List;
 
 public class ScanActivity extends BaseActivity implements BarcodeCallback {
 
+    private static final String EXTRA_ADDRESS = "scan_address";
     private ActivityScanBinding mBinding;
     private CaptureManager mCapture;
 
-    public static void start(Activity activity) {
-        activity.startActivity(new Intent(activity, ScanActivity.class));
+    public static class Contract extends ActivityResultContract<Void, String> {
+        @NonNull
+        @Override
+        public Intent createIntent(@NonNull Context context, Void input) {
+            return new Intent(context, ScanActivity.class);
+        }
+
+        @Nullable
+        @Override
+        public String parseResult(int resultCode, @Nullable Intent intent) {
+            return resultCode == RESULT_OK && intent != null ? intent.getStringExtra(EXTRA_ADDRESS) : null;
+        }
     }
 
     @Override
@@ -55,7 +67,7 @@ public class ScanActivity extends BaseActivity implements BarcodeCallback {
     @Override
     public void barcodeResult(BarcodeResult result) {
         if (!result.getText().startsWith("http")) return;
-        ScanEvent.post(result.getText());
+        setResult(RESULT_OK, new Intent().putExtra(EXTRA_ADDRESS, result.getText()));
         finish();
     }
 

@@ -62,6 +62,7 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
+import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.model.SearchRequestToken;
@@ -430,7 +431,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setVisibilityIfChanged(mBinding.flag, item.getVodFlags().size() > 1 ? View.VISIBLE : View.GONE);
         if (empty) {
             if (isSourceLoading()) { resumeSourceSearch(); continueSourceSwitch(); }
-            else ErrorEvent.flag();
+            else mPlayers.reportError(ErrorEvent.flag());
             return;
         }
         Flag target = findTargetFlag(item.getVodFlags());
@@ -733,7 +734,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mFrameParams = mBinding.video.getLayoutParams();
         mClock = Clock.create(mBinding.display.clock);
         mDanmakuContext = DanmakuContext.create();
-        mPlayers = PlaybackController.create(this);
+        mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
         setVideoView();
         mVodResolver = new VodPlaybackResolver(ThreadPools.newSingle("vod-resolver"), App::post, new SpiderPlaybackGateway(),
                 this::prepareResolvedResult, result -> isUseParse());
@@ -1340,7 +1341,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         } catch (Exception e) {
             ThreadPools.log(e, "Quality switch failed.");
             showError(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.error_play_timeout) : e.getMessage());
-            ErrorEvent.extract(e.getMessage());
+            mPlayers.reportError(ErrorEvent.extract(e.getMessage()));
         }
     }
 
@@ -2180,11 +2181,16 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             }
             return;
         }
+    }
+
+    private void onPlaybackCommand(PlaybackCommand command) {
         if (!isCurrentPlayer() || isBackground()) return;
-        if (event.getType() == RefreshEvent.Type.DETAIL) mDetail.request();
-        else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) setDanmaku(Danmaku.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.SUBTITLE) setSubtitle(Sub.from(event.getPath()));
+        switch (command.getType()) {
+            case DETAIL: mDetail.request(); break;
+            case RELOAD: onRefresh(); break;
+            case DANMAKU: setDanmaku(Danmaku.from(command.getPath())); break;
+            case SUBTITLE: setSubtitle(Sub.from(command.getPath())); break;
+        }
     }
 
     private void onPlaybackPhase(VodPlaybackPhase phase) {
@@ -2255,7 +2261,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             // Engine failures already travel through PlaybackController. Resolver
             // failures need the same recovery path even after an earlier engine error.
             if (error != null && mPlayers.session().state().getError() == error) return;
-            ErrorEvent.extract(error == null ? getString(R.string.error_play_timeout) : error.getMessage());
+            mPlayers.reportError(ErrorEvent.extract(error == null ? getString(R.string.error_play_timeout) : error.getMessage()));
         }
     }
 
@@ -2308,8 +2314,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlayers.setMetadata(title, artist, artwork);
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onErrorEvent(ErrorEvent event) {
+    private void onPlaybackError(ErrorEvent event) {
         if (!isCurrentPlayer() || isBackground()) return;
         boolean recovering = mRecoveryWindow.isActive();
         if (!mRecoveryWindow.begin()) return;

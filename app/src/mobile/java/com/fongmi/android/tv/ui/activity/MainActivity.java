@@ -12,6 +12,7 @@ import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -27,7 +28,7 @@ import com.fongmi.android.tv.databinding.ActivityMainBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
-import com.fongmi.android.tv.event.StateEvent;
+import com.fongmi.android.tv.model.HomeConfigViewModel;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
@@ -53,6 +54,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
     private ActivityMainBinding mBinding;
     private FragmentStateManager mManager;
+    private HomeConfigViewModel mConfigState;
     private boolean confirm;
     private boolean loading;
 
@@ -69,6 +71,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        mConfigState = new ViewModelProvider(this).get(HomeConfigViewModel.class);
         Updater.get().release().start(this);
         initFragment(savedInstanceState);
         initConfig();
@@ -109,7 +112,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     public void initConfig() {
         if (loading) return;
         loading = true;
-        StateEvent.progress();
+        mConfigState.loading();
         App.execute(() -> {
             try {
                 List<Config> vodConfigs = getStartupConfigs(0);
@@ -119,7 +122,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                 App.post(() -> {
                     loading = false;
                     if (isFinishing() || isDestroyed()) return;
-                    StateEvent.empty();
+                    mConfigState.failed();
                     Notify.show(Notify.getError(R.string.error_config_parse, e));
                     loadStartupLive();
                 });
@@ -150,6 +153,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
             public void success() {
                 loading = false;
                 if (isFinishing() || isDestroyed()) return;
+                mConfigState.ready();
                 checkAction(getIntent());
                 RefreshEvent.config();
                 RefreshEvent.video();
@@ -161,7 +165,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                 loading = false;
                 if (isFinishing() || isDestroyed()) return;
                 RefreshEvent.config();
-                StateEvent.empty();
+                mConfigState.failed();
                 Notify.show(msg);
                 loadStartupLive();
             }

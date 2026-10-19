@@ -36,12 +36,12 @@ import com.fongmi.android.tv.bean.Value;
 import com.fongmi.android.tv.databinding.FragmentVodBinding;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.event.StateEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.ConfigCallback;
 import com.fongmi.android.tv.impl.FilterCallback;
 import com.fongmi.android.tv.impl.SiteCallback;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.model.HomeConfigViewModel;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.HistoryActivity;
 import com.fongmi.android.tv.ui.activity.KeepActivity;
@@ -182,6 +182,8 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     }
 
     private void setViewModel() {
+        new ViewModelProvider(requireActivity()).get(HomeConfigViewModel.class)
+                .state().observe(getViewLifecycleOwner(), this::onConfigState);
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class);
         mViewModel.result().observe(getViewLifecycleOwner(), result -> {
             if (mHomeRequestToken == null || !mHomeRequestToken.equals(result.getRequestToken())
@@ -487,17 +489,19 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
         }
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onStateEvent(StateEvent event) {
-        switch (event.getType()) {
-            case EMPTY:
+    private void onConfigState(HomeConfigViewModel.State state) {
+        switch (state) {
+            case FAILED:
                 mConfigLoadFailed = true;
                 hideProgress();
                 mBinding.retry.setVisibility(View.VISIBLE);
                 break;
-            case PROGRESS:
+            case LOADING:
                 mConfigLoadFailed = false;
                 showProgress();
+                break;
+            case READY:
+                mConfigLoadFailed = false;
                 break;
         }
     }

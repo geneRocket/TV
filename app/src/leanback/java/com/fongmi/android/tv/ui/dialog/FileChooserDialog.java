@@ -3,7 +3,7 @@ package com.fongmi.android.tv.ui.dialog;
 import android.app.Activity;
 
 import com.fongmi.android.tv.bean.Sub;
-import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.github.catvod.utils.Path;
 import com.obsez.android.lib.filechooser.ChooserDialog;
@@ -50,7 +50,7 @@ public class FileChooserDialog {
 
 
     private void onChoosePath(String path, File pathFile) {
-        if (mode == MODE_DANMAKU) RefreshEvent.danmaku(pathFile.getAbsolutePath());
+        if (mode == MODE_DANMAKU) player.command(PlaybackCommand.fromRefresh("danmaku", pathFile.getAbsolutePath()));
         else player.setSub(Sub.from(pathFile.getAbsolutePath()));
         if (dialog != null) dialog.dismiss();
         if (trackDialog != null) trackDialog.dismiss();

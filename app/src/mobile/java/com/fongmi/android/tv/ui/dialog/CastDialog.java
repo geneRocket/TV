@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
@@ -26,7 +27,6 @@ import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.repository.DeviceRepository;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
-import com.fongmi.android.tv.event.ScanEvent;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.activity.ScanActivity;
 import com.fongmi.android.tv.ui.adapter.DeviceAdapter;
@@ -40,9 +40,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
 import org.fourthline.cling.support.lastchange.EventedValue;
 import org.fourthline.cling.support.model.TransportState;
-import org.greenrobot.eventbus.EventBus;
-import org.greenrobot.eventbus.Subscribe;
-import org.greenrobot.eventbus.ThreadMode;
 
 import java.io.IOException;
 import java.util.List;
@@ -65,6 +62,9 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     private Listener listener;
     private CastVideo video;
     private ScanTask scanTask;
+    private final ActivityResultLauncher<Void> scanLauncher = registerForActivityResult(new ScanActivity.Contract(), address -> {
+        if (address != null && scanTask != null) scanTask.start(address);
+    });
     private volatile Call castCall;
     private boolean fm;
 
@@ -113,7 +113,6 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     @Override
     protected void initView() {
         binding.scan.setVisibility(fm ? View.VISIBLE : View.GONE);
-        EventBus.getDefault().register(this);
         scanTask = ScanTask.create(this);
         setRecyclerView();
         getDevice();
@@ -161,7 +160,7 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
     }
 
     private void onScan() {
-        ScanActivity.start(getActivity());
+        scanLauncher.launch(null);
     }
 
     private void onRefresh() {
@@ -185,11 +184,6 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
         App.post(() -> {
             if (isViewActive()) task.run();
         });
-    }
-
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onScanEvent(ScanEvent event) {
-        if (scanTask != null) scanTask.start(event.getAddress());
     }
 
     @Override
@@ -267,7 +261,6 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
         control = null;
         releaseLock();
         DLNADevice.get().disconnect();
-        EventBus.getDefault().unregister(this);
         DLNACastManager.INSTANCE.unregisterListener(this);
         DLNACastManager.INSTANCE.unbindCastService(App.get());
         super.onDestroyView();
