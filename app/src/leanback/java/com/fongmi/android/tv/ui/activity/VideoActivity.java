@@ -901,7 +901,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mBinding.control.parse.setItemViewCacheSize(10);
         mBinding.control.parse.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.control.parse.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.control.parse.setAdapter(new ItemBridgeAdapter(mParseAdapter = new ArrayObjectAdapter(new ParsePresenter(item -> { takePlaybackControl(); mPlaybackNavigation.switchParse(item, false); }))));
+        mBinding.control.parse.setAdapter(new ItemBridgeAdapter(mParseAdapter = new ArrayObjectAdapter(new ParsePresenter(this::onParseClick))));
         mParseAdapter.setItems(VodConfig.get().getParses(), null);
         mSelection.selectParse(getParsePosition(), mParseAdapter.size());
     }
@@ -1321,11 +1321,11 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     public void setEpisodeActivated(Episode item) {
-        takePlaybackControl();
         if (item.isActivated()) {
             if (!isFullscreen()) enterFullscreen();
             return;
         }
+        takePlaybackControl();
         mPlaybackNavigation.switchEpisode(item);
     }
 
@@ -1475,7 +1475,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         Notify.show(mHistory.getRevPlayHint());
     }
 
-    private void enterFullscreen() {
+    void enterFullscreen() {
         mFocus1 = getCurrentFocus();
         mBinding.video.requestFocus();
         mBinding.video.setForeground(null);
@@ -2489,12 +2489,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onFlagClick(Flag item) {
-        takePlaybackControl();
         if (item.isActivated()) {
             if (!isFullscreen()) enterFullscreen();
             return;
         }
+        takePlaybackControl();
         mPlaybackNavigation.switchFlag(item, false);
+    }
+
+    private void onParseClick(Parse item) {
+        if (item.isActivated()) return;
+        takePlaybackControl();
+        mPlaybackNavigation.switchParse(item, false);
     }
 
 

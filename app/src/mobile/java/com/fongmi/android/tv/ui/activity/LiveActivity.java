@@ -503,7 +503,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mBinding.widget.epg.setVisibility(View.GONE);
     }
 
-    private void showProgress() {
+    void showProgress() {
         mBinding.widget.seek.setVisibility(View.GONE);
         mBinding.widget.progress.setVisibility(View.VISIBLE);
         App.post(mR2, 0);
@@ -1150,6 +1150,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     @Override
     public void onSeekEnd(int time) {
         mBinding.widget.seek.setVisibility(View.GONE);
+        if (mPlayers.isBuffering()) showProgress();
         if (!mPlayers.isVod()) {
             mSeekGesture.reset();
             return;
@@ -1165,6 +1166,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     public void onSeekCancel() {
         mBinding.widget.seek.setVisibility(View.GONE);
         mSeekGesture.reset();
+        if (mPlayers.isBuffering()) showProgress();
     }
 
     @Override

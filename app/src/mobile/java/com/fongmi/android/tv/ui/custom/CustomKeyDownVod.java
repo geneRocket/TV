@@ -70,6 +70,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     }
 
     public void release() {
+        Util.cancelGesture(detector);
         if (changeTime) cancelSeek();
         if (changeSpeed) listener.onSpeedEnd();
         if (changeBright) listener.onBrightEnd();

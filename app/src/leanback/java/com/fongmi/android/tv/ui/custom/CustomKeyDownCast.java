@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.utils.KeyUtil;
+import com.fongmi.android.tv.utils.Util;
 
 public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
 
@@ -106,7 +107,10 @@ public class CustomKeyDownCast extends GestureDetector.SimpleOnGestureListener {
     }
 
     public void release() {
+        Util.cancelGesture(detector);
         App.removeCallbacks(seekRunnable);
+        if (changeSpeed) listener.onSpeedEnd();
+        changeSpeed = false;
         resetTime();
     }
 

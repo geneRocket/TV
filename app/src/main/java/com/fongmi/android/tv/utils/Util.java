@@ -17,6 +17,8 @@ import android.text.Html;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.view.View;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
@@ -36,6 +38,16 @@ public class Util {
 
     private static final Pattern PATTERN_DIGIT = Pattern.compile("\\D+");
     private static final Pattern PATTERN_VERSION = Pattern.compile("(?i)(mp4|H264|H265|720p|1080p|2160p|4K)");
+
+    public static void cancelGesture(GestureDetector detector) {
+        if (detector == null) return;
+        MotionEvent cancel = MotionEvent.obtain(0, 0, MotionEvent.ACTION_CANCEL, 0, 0, 0);
+        try {
+            detector.onTouchEvent(cancel);
+        } finally {
+            cancel.recycle();
+        }
+    }
 
     public static void toggleFullscreen(Activity activity, boolean fullscreen) {
         if (fullscreen) hideSystemUI(activity);

@@ -2,6 +2,8 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.widget.LinearLayout;
 
+import androidx.media3.common.Player;
+
 import com.fongmi.android.tv.databinding.ActivityLiveBinding;
 import com.fongmi.android.tv.databinding.ViewWidgetLiveBinding;
 import com.fongmi.android.tv.player.PlaybackController;
@@ -20,6 +22,30 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 public class LiveSeekUiTest {
+
+    @Test
+    public void cancellingSeekRestoresExistingBufferingIndicator() throws Exception {
+        Fixture fixture = new Fixture();
+        set(get(fixture.activity, "mPlayers"), "playerState", Player.STATE_BUFFERING);
+        fixture.gesture.preview(10_000, 600_000, 5_000);
+
+        fixture.activity.onSeekCancel();
+
+        assertEquals(1, fixture.activity.progressShows);
+        assertFalse(fixture.gesture.isActive());
+    }
+
+    @Test
+    public void zeroOffsetSeekRestoresExistingBufferingIndicator() throws Exception {
+        Fixture fixture = new Fixture();
+        set(get(fixture.activity, "mPlayers"), "playerState", Player.STATE_BUFFERING);
+        fixture.gesture.preview(10_000, 600_000, 0);
+
+        fixture.activity.onSeekEnd(0);
+
+        assertEquals(1, fixture.activity.progressShows);
+        assertEquals(0, fixture.seeks);
+    }
 
     @Test
     public void pausedReplaySeekDoesNotInvokePlayOrChangePlaybackControls() throws Exception {
@@ -42,6 +68,7 @@ public class LiveSeekUiTest {
         fixture.activity.onSeekCancel();
 
         assertEquals(0, fixture.seeks);
+        assertEquals(0, fixture.activity.progressShows);
         assertFalse(fixture.gesture.isActive());
         assertEquals(LinearLayout.GONE, fixture.seekView.visibility);
     }
@@ -60,7 +87,7 @@ public class LiveSeekUiTest {
     }
 
     private static final class Fixture {
-        final LiveActivity activity = allocate(LiveActivity.class);
+        final TestLiveActivity activity = allocate(TestLiveActivity.class);
         final PlaybackSeekGesture gesture = new PlaybackSeekGesture();
         final SeekView seekView = allocate(SeekView.class);
         long duration = 600_000;
@@ -94,6 +121,11 @@ public class LiveSeekUiTest {
         @Override public void setVisibility(int visibility) { this.visibility = visibility; }
     }
 
+    public static class TestLiveActivity extends LiveActivity {
+        int progressShows;
+        @Override void showProgress() { progressShows++; }
+    }
+
     private static <T> T allocate(Class<T> type) throws Exception {
         Class<?> unsafe = Class.forName("sun.misc.Unsafe");
         Field instance = unsafe.getDeclaredField("theUnsafe");
@@ -102,8 +134,23 @@ public class LiveSeekUiTest {
     }
 
     private static void set(Object object, String name, Object value) throws Exception {
-        Field field = object.getClass().getDeclaredField(name);
+        Field field = field(object, name);
         field.setAccessible(true);
         field.set(object, value);
+    }
+
+    private static Object get(Object object, String name) throws Exception {
+        Field field = field(object, name);
+        field.setAccessible(true);
+        return field.get(object);
+    }
+
+    private static Field field(Object object, String name) throws Exception {
+        Class<?> type = object.getClass();
+        while (type != null) {
+            try { return type.getDeclaredField(name); }
+            catch (NoSuchFieldException ignored) { type = type.getSuperclass(); }
+        }
+        throw new NoSuchFieldException(name);
     }
 }

@@ -142,9 +142,15 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     }
 
     public void release() {
+        Util.cancelGesture(detector);
         App.removeCallbacks(seekRunnable);
         if (changeSpeed) listener.onSpeedEnd();
+        if (changeBright) listener.onBrightEnd();
+        if (changeVolume) listener.onVolumeEnd();
         changeSpeed = false;
+        changeBright = false;
+        changeVolume = false;
+        touch = false;
         resetTime();
     }
 

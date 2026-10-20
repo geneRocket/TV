@@ -2183,6 +2183,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onSeekEnd(int time) {
         mBinding.widget.seek.setVisibility(View.GONE);
+        if (mPlayers.isBuffering()) showProgress();
         if (time == 0) {
             mSeekGesture.reset();
             updateRecommendationReadiness();
@@ -2197,6 +2198,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onSeekCancel() {
         mBinding.widget.seek.setVisibility(View.GONE);
         mSeekGesture.reset();
+        if (mPlayers.isBuffering()) showProgress();
         updateRecommendationReadiness();
     }
 

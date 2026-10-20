@@ -1055,6 +1055,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mPlayers.seekTo(position);
         mKeyDown.resetTime();
         hideCenter();
+        if (mPlayers.isBuffering()) showProgress();
     }
 
     private void postSeekTo(int offset) {
@@ -1233,6 +1234,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     @Override
     protected void onPause() {
+        mKeyDown.release();
         if (mSeekRunnable != null) App.removeCallbacks(mSeekRunnable);
         mSeekRunnable = null;
         mSeekGesture.reset();

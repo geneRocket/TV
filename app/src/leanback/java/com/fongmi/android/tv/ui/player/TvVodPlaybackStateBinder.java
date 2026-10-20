@@ -84,6 +84,7 @@ public final class TvVodPlaybackStateBinder {
         lastSeekAt = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         cancelBufferingCommit();
         cancelReadyCommit();
+        if (port.isBuffering()) onBuffering();
     }
 
     public void clear() {

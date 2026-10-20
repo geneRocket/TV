@@ -74,6 +74,7 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
     }
 
     public void release() {
+        Util.cancelGesture(detector);
         if (changeTime) {
             listener.onSeekCancel();
             changeTime = false;

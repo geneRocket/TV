@@ -12,6 +12,7 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Util;
 
 public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
 
@@ -142,6 +143,7 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
     }
 
     public void release() {
+        Util.cancelGesture(detector);
         App.removeCallbacks(runnable);
         text.setLength(0);
         resetTime();

@@ -553,7 +553,10 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         if (paused) {
             mBinding.widget.action.setImageResource(R.drawable.ic_widget_play);
             showInfo();
-        } else hideCenter();
+        } else {
+            hideCenter();
+            if (mPlayers.isBuffering()) showProgress();
+        }
     }
 
     @Override

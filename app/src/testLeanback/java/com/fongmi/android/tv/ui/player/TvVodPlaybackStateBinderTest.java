@@ -13,6 +13,22 @@ import java.util.Map;
 public class TvVodPlaybackStateBinderTest {
 
     @Test
+    public void seekDuringExistingBufferingRestoresProgressWithoutAnotherStateEvent() {
+        FakePort port = new FakePort();
+        FakeScheduler scheduler = new FakeScheduler();
+        TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, scheduler);
+        port.buffering = true;
+        port.overlayVisible = true;
+
+        binder.onSeek();
+        scheduler.runAll();
+
+        assertEquals(1, port.progressShows);
+        assertFalse(port.overlayVisible);
+        assertFalse(port.overlappingOverlays);
+    }
+
+    @Test
     public void pausingWhileBufferingHidesProgress() {
         FakePort port = new FakePort();
         TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, new FakeScheduler());
