@@ -537,7 +537,9 @@ public class VodFragment extends BaseFragment implements SiteCallback, FilterCal
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != Activity.RESULT_OK || requestCode != FileChooser.REQUEST_PICK_FILE) return;
-        VideoActivity.file(getActivity(), FileChooser.getPathFromUri(getContext(), data.getData()));
+        if (data == null || data.getData() == null || !isAdded()) return;
+        String path = FileChooser.getPathFromUri(getContext(), data.getData());
+        if (!TextUtils.isEmpty(path)) VideoActivity.file(getActivity(), path);
     }
 
     @Override

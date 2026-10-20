@@ -562,6 +562,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void showProgress() {
+        hideCenter();
         mBinding.widget.progress.setVisibility(View.VISIBLE);
         startProgressPolling();
         hideError();

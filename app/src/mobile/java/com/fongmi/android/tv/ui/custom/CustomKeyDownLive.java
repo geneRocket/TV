@@ -48,15 +48,45 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
     }
 
     public boolean onTouchEvent(MotionEvent e) {
+        if (e.getAction() == MotionEvent.ACTION_CANCEL) {
+            release();
+            return detector.onTouchEvent(e);
+        }
         if (changeTime && e.getAction() == MotionEvent.ACTION_UP) onSeekEnd();
-        if (changeSpeed && e.getAction() == MotionEvent.ACTION_UP) listener.onSpeedEnd();
-        if (changeBright && e.getAction() == MotionEvent.ACTION_UP) listener.onBrightEnd();
-        if (changeVolume && e.getAction() == MotionEvent.ACTION_UP) listener.onVolumeEnd();
+        if (changeSpeed && e.getAction() == MotionEvent.ACTION_UP) {
+            listener.onSpeedEnd();
+            changeSpeed = false;
+        }
+        if (changeBright && e.getAction() == MotionEvent.ACTION_UP) {
+            listener.onBrightEnd();
+            changeBright = false;
+        }
+        if (changeVolume && e.getAction() == MotionEvent.ACTION_UP) {
+            listener.onVolumeEnd();
+            changeVolume = false;
+        }
         return detector.onTouchEvent(e);
     }
 
     public void setLock(boolean lock) {
+        if (lock) release();
         this.lock = lock;
+    }
+
+    public void release() {
+        if (changeTime) {
+            listener.onSeekCancel();
+            changeTime = false;
+            time = 0;
+        }
+        if (changeSpeed) listener.onSpeedEnd();
+        if (changeBright) listener.onBrightEnd();
+        if (changeVolume) listener.onVolumeEnd();
+        changeSpeed = false;
+        changeBright = false;
+        changeVolume = false;
+        touch = false;
+        center = false;
     }
 
     private boolean isEdge(MotionEvent e) {
@@ -199,6 +229,8 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
         void onSeek(int time);
 
         void onSeekEnd(int time);
+
+        void onSeekCancel();
 
         void onSingleTap();
 

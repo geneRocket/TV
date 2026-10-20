@@ -1348,6 +1348,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void showProgress() {
+        mBinding.widget.seek.setVisibility(View.GONE);
         mBinding.widget.progress.setVisibility(View.VISIBLE);
         App.post(mR2, 0);
         hideError();
@@ -1728,6 +1729,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 showProgress();
                 break;
             case PAUSED:
+                hideProgress();
                 getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 checkPlayImg(false);
                 showDisplayInfo();

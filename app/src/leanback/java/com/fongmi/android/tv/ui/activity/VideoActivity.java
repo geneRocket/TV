@@ -2215,7 +2215,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 mPlaybackState.onReady();
                 break;
             case PAUSED:
-                mPlaybackState.clear();
                 mResumeOnForeground = false;
                 showPausedState();
                 break;
@@ -2344,6 +2343,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void showPausedState() {
+        mPlaybackState.onPaused();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setCenterAction(R.drawable.ic_widget_play);
         updateCenterProgress(mPlayers.getPosition(), mPlayers.getDuration());

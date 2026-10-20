@@ -64,7 +64,7 @@ public final class TvVodPlaybackStateBinder {
             }
             return;
         }
-        port.showProgress();
+        showBuffering();
     }
 
     public void onReady() {
@@ -72,6 +72,11 @@ public final class TvVodPlaybackStateBinder {
         cancelBufferingCommit();
         if (!pendingSeek || java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()) - lastSeekAt >= SEEK_BOUNCE_WINDOW_MS) commitReady();
         else scheduler.post(readyCommit, READY_STABLE_MS);
+    }
+
+    public void onPaused() {
+        clear();
+        port.hideProgress();
     }
 
     public void onSeek() {
@@ -109,7 +114,12 @@ public final class TvVodPlaybackStateBinder {
 
     private void commitBuffering() {
         bufferingScheduled = false;
-        if (!port.isBackground() && port.isBuffering()) port.showProgress();
+        if (!port.isBackground() && port.isBuffering()) showBuffering();
+    }
+
+    private void showBuffering() {
+        port.clearPlaybackOverlay();
+        port.showProgress();
     }
 
     private void cancelBufferingCommit() {

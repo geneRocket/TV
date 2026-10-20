@@ -96,6 +96,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private EpgDataAdapter mEpgDataAdapter;
     private Observer<Channel> mObserveUrl;
     private CustomKeyDownLive mKeyDown;
+    private float mSpeedBeforeLongPress = Float.NaN;
     private GroupAdapter mGroupAdapter;
     private Observer<Epg> mObserveEpg;
     private LiveViewModel mViewModel;
@@ -503,6 +504,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private void showProgress() {
+        mBinding.widget.seek.setVisibility(View.GONE);
         mBinding.widget.progress.setVisibility(View.VISIBLE);
         App.post(mR2, 0);
         hideError();
@@ -848,6 +850,10 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
             case BUFFERING:
                 showProgress();
                 break;
+            case PAUSED:
+                hideProgress();
+                checkPlayImg(false);
+                break;
             case READY:
                 setMetadata();
                 mRecovery.reset();
@@ -1070,6 +1076,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     @Override
     public void onSpeedUp() {
         if (!mPlayers.isVod() || !mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
+        if (Float.isNaN(mSpeedBeforeLongPress)) mSpeedBeforeLongPress = mPlayers.getSpeed();
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         mBinding.widget.speed.setVisibility(View.VISIBLE);
@@ -1077,7 +1084,8 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     public void onSpeedEnd() {
-        mBinding.control.action.speed.setText(mPlayers.setSpeed(1.0f));
+        if (!Float.isNaN(mSpeedBeforeLongPress)) mBinding.control.action.speed.setText(mPlayers.setSpeed(mSpeedBeforeLongPress));
+        mSpeedBeforeLongPress = Float.NaN;
         mBinding.widget.speed.setVisibility(View.GONE);
         mBinding.widget.speed.clearAnimation();
     }
@@ -1141,14 +1149,22 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     public void onSeekEnd(int time) {
-        if (!mPlayers.isVod()) return;
         mBinding.widget.seek.setVisibility(View.GONE);
+        if (!mPlayers.isVod()) {
+            mSeekGesture.reset();
+            return;
+        }
         if (time == 0) {
             mSeekGesture.reset();
             return;
         }
         mPlayers.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
-        onPlay();
+    }
+
+    @Override
+    public void onSeekCancel() {
+        mBinding.widget.seek.setVisibility(View.GONE);
+        mSeekGesture.reset();
     }
 
     @Override
@@ -1242,6 +1258,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     protected void onPause() {
+        mKeyDown.release();
         mSeekGesture.reset();
         super.onPause();
         setForeground(false);

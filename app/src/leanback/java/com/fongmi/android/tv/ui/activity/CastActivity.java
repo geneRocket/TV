@@ -264,6 +264,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void showProgress() {
+        hideInfo();
         mBinding.widget.progress.setVisibility(View.VISIBLE);
         startProgressPolling();
         hideError();
@@ -286,6 +287,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     }
 
     private void showInfo() {
+        hideProgress();
         mBinding.widget.center.setVisibility(View.VISIBLE);
         mBinding.widget.info.setVisibility(View.VISIBLE);
     }
@@ -542,12 +544,16 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     @Override
     public void onSeekTo(int time) {
         mKeyDown.resetTime();
+        boolean paused = mState == RenderState.PAUSED;
         if (time == 0) {
             mSeekGesture.reset();
-            return;
+        } else {
+            mPlayers.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
         }
-        mPlayers.seekTo(mSeekGesture.commit(mPlayers.getPosition(), mPlayers.getDuration(), time));
-        onPlay();
+        if (paused) {
+            mBinding.widget.action.setImageResource(R.drawable.ic_widget_play);
+            showInfo();
+        } else hideCenter();
     }
 
     @Override

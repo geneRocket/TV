@@ -505,7 +505,9 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != Activity.RESULT_OK || requestCode != FileChooser.REQUEST_PICK_FILE) return;
+        if (data == null || data.getData() == null || !isAdded()) return;
         String path = FileChooser.getPathFromUri(getContext(), data.getData());
+        if (path == null || path.isEmpty()) return;
         if (FileChooser.type() == FileChooser.TYPE_APK) TransmitDialog.create().apk(path).show(getActivity());
         else if (FileChooser.type() == FileChooser.TYPE_PUSH_WALLPAPER) TransmitDialog.create().wallConfig(path).show(getActivity());
         else setConfig(ConfigRepository.get().find("file:/" + path.replace(Path.rootPath(), ""), type));
