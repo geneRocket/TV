@@ -30,7 +30,6 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
-import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
 import androidx.viewbinding.ViewBinding;
@@ -64,7 +63,6 @@ import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.player.PlaybackInput;
-import com.fongmi.android.tv.player.PlayerType;
 import com.fongmi.android.tv.player.vod.VodPlaybackFlow;
 import com.fongmi.android.tv.player.vod.VodSessionAdapter;
 import com.fongmi.android.tv.ui.custom.PlaybackArtwork;
@@ -80,10 +78,11 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SiteSearchSession;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
-import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.utils.Downloader;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.ui.custom.PlaybackVideoViews;
+import com.fongmi.android.tv.ui.custom.PlaybackSubtitleLauncher;
 import com.fongmi.android.tv.player.PlaybackMarkers;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.resolver.SpiderPlaybackGateway;
@@ -92,7 +91,7 @@ import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.player.session.SwitchablePlayerSession;
 import com.fongmi.android.tv.player.vod.StartPolicy;
 import com.fongmi.android.tv.player.vod.DefaultPlaybackItemFactory;
-import com.fongmi.android.tv.player.vod.VodEpisode;
+import com.fongmi.android.tv.player.vod.VodEpisodeCatalog;
 import com.fongmi.android.tv.player.vod.VodSourceMatcher;
 import com.fongmi.android.tv.player.vod.VodPlaybackCoordinator;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
@@ -123,7 +122,6 @@ import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.IDMUtil;
-import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.TaskScope;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PiP;
@@ -148,9 +146,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -570,13 +566,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void setPlayerView() {
-        getIjk().setPlayer(mPlayers.getPlayer());
-        mBinding.control.action.player.setText(mPlayers.getPlayerText());
-        mBinding.control.action.speed.setEnabled(mPlayers.canAdjustSpeed());
+        PlaybackVideoViews.render(mPlayers, getExo(), getIjk(), mBinding.control.action.player, mBinding.control.action.speed);
         float speed = mHistory == null ? Setting.getPlaySpeed() : mHistory.getSpeed();
         mBinding.control.action.speed.setText(mPlayers.setSpeed(speed));
-        getExo().setVisibility(mPlayers.isExo() ? View.VISIBLE : View.GONE);
-        getIjk().setVisibility(mPlayers.isIjk() ? View.VISIBLE : View.GONE);
         setDanmuViewSettings();
         if (mControlDialog != null && mControlDialog.isVisible()) mControlDialog.updatePlayer();
     }
@@ -1047,13 +1039,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.more.setVisibility(items.size() < 3 ? View.GONE : View.VISIBLE);
         mEpisodeAdapter.addAll(items);
         if (mPlaybackCoordinator != null && !mFlagAdapter.isEmpty()) {
-            List<VodEpisode> episodes = new ArrayList<>(items.size());
-            String flag = getFlag().getFlag();
-            for (Episode item : items) episodes.add(new VodEpisode(VodEpisode.resumeIdentity(getKey(), flag, item.getName()), getKey(), flag, item.getName(), item.getUrl()));
-            mPlaybackCoordinator.setEpisodes(episodes);
-            String episodeId = mHistory == null ? "" : VodEpisode.resumeIdentity(getKey(), mHistory.getVodFlag(), mHistory.getVodRemarks());
-            mPlaybackCoordinator.setResumePosition(episodeId, mHistory == null ? 0 : mHistory.getPosition());
-            mPlaybackCoordinator.setOpening(mHistory == null ? 0 : mHistory.getOpening());
+            VodEpisodeCatalog.bind(mPlaybackCoordinator, getKey(), getFlag().getFlag(), items, mHistory);
         }
     }
 
@@ -1641,22 +1627,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onSubtitleClick() {
         long request = mPlaybackFlow.requestGeneration();
         mUiCallbacks.post(this::hideControl, 200);
-        SubtitleView subtitleView = mPlayers.isIjk() ? getIjk().getSubtitleView() : getExo().getSubtitleView();
-        String videoName = getName(); // 获取视频名称
-        String finalVideoName;
-        if (videoName.isEmpty() && getEpisode() != null) {
-            finalVideoName = getEpisode().getName();
-        } else if (videoName.isEmpty() && getTitle() != null) {
-            finalVideoName = getTitle().toString();
-        } else {
-            finalVideoName = videoName;
-        }
-        mUiCallbacks.post(() -> {
-            if (isFinishing() || isDestroyed() || !mPlaybackFlow.acceptsRequest(request)) return;
-            SubtitleDialog.create().view(subtitleView).listener(subtitle -> {
-                if (mPlaybackFlow.acceptsRequest(request)) setSubtitle(Sub.from(subtitle.getUrl()));
-            }).name(finalVideoName).full(isFullscreen()).show(this);
-        }, 200);
+        SubtitleView view = mPlayers.isIjk() ? getIjk().getSubtitleView() : getExo().getSubtitleView();
+        Episode current = mEpisodeAdapter != null && !mEpisodeAdapter.isEmpty() ? getEpisode() : null;
+        String name = PlaybackSubtitleLauncher.name(getName(), current == null ? "" : current.getName(), getTitle());
+        PlaybackSubtitleLauncher.show(this, mUiCallbacks, view, name, isFullscreen(),
+                () -> mPlaybackFlow.acceptsRequest(request), this::setSubtitle);
     }
 
     @Override

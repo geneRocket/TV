@@ -9,11 +9,12 @@ import android.view.View;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.bean.Sub;
-import com.fongmi.android.tv.impl.SessionCallback;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.DirectPlaybackFlow;
 import com.fongmi.android.tv.player.vod.VodPlaybackFlow;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
@@ -27,6 +28,7 @@ import java.lang.reflect.Method;
 public final class RefactorReceiver extends BroadcastReceiver {
     private static VodPlaybackFlow lastFlow;
     private static PlaybackController lastPlayer;
+    private static DirectPlaybackFlow lastDirect;
 
     @Override public void onReceive(Context context, Intent intent) {
         try {
@@ -35,11 +37,27 @@ public final class RefactorReceiver extends BroadcastReceiver {
             if (player != null) {
                 lastPlayer = player;
                 Object handler = field(player, "inputHandler");
-                if (handler instanceof VodPlaybackFlow) lastFlow = (VodPlaybackFlow) handler;
+                if (handler instanceof VodPlaybackFlow) { lastFlow = (VodPlaybackFlow) handler; lastDirect = null; }
+                if (handler instanceof DirectPlaybackFlow) { lastDirect = (DirectPlaybackFlow) handler; lastFlow = null; }
             }
             String command = intent.getStringExtra("cmd");
             if (command == null) command = "state";
             switch (command) {
+                case "configLive":
+                    LiveConfig.load(Config.create(1, intent.getStringExtra("url")), new Callback() {});
+                    break;
+                case "openLive":
+                    context.startActivity(new Intent().setClassName(context.getPackageName(), "com.fongmi.android.tv.ui.activity.LiveActivity")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("empty", false));
+                    break;
+                case "openCast":
+                    Class<?> actionType = Class.forName("com.android.cast.dlna.dmr.CastAction");
+                    android.os.Parcelable action = (android.os.Parcelable) actionType.getConstructor(String.class, String.class, String.class, String.class, String.class)
+                            .newInstance(intent.getStringExtra("url"), intent.hasExtra("metadata") ? intent.getStringExtra("metadata") : "", "", "", "");
+                    String actionKey = (String) Class.forName("com.android.cast.dlna.dmr.service.RendererInterfaceKt").getField("keyExtraCastAction").get(null);
+                    context.startActivity(new Intent().setClassName(context.getPackageName(), "com.fongmi.android.tv.ui.activity.CastActivity")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(actionKey, action));
+                    break;
                 case "config":
                     VodConfig.load(Config.create(0, intent.getStringExtra("url")), new Callback() {});
                     break;
@@ -58,6 +76,8 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 case "mediaPause": player.getSession().getController().getTransportControls().pause(); break;
                 case "mediaPlay": player.getSession().getController().getTransportControls().play(); break;
                 case "mediaSeek": player.getSession().getController().getTransportControls().seekTo(intent.getLongExtra("position", 0)); break;
+                case "mediaNext": player.getSession().getController().getTransportControls().skipToNext(); break;
+                case "mediaPrevious": player.getSession().getController().getTransportControls().skipToPrevious(); break;
                 case "seekBar":
                     ((CustomSeekView) path(activity, "control.seek")).onScrubStop(null, intent.getLongExtra("position", 0), false);
                     break;
@@ -75,7 +95,7 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 case "pip": invoke(activity, "onUserLeaveHint"); break;
                 case "rotate": activity.setRequestedOrientation(intent.getIntExtra("value", 1)); break;
                 case "finish": activity.finish(); break;
-                case "forget": lastFlow = null; lastPlayer = null; break;
+                case "forget": lastFlow = null; lastPlayer = null; lastDirect = null; break;
             }
             JSONObject data = new JSONObject();
             data.put("command", command);
@@ -86,6 +106,11 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 data.put("targetPosition", lastFlow.state().getPosition());
                 data.put("recovery", lastFlow.recovery().phase().name());
                 data.put("episode", lastFlow.state().getEpisode() == null ? "" : lastFlow.state().getEpisode().getName());
+            }
+            if (lastDirect != null) {
+                data.put("phase", lastDirect.state().getPhase().name());
+                data.put("sourceGeneration", lastDirect.generation());
+                data.put("canAutoplay", lastDirect.playWhenReady(true));
             }
             if (lastPlayer != null) {
                 data.put("engine", lastPlayer.getPlayer());
@@ -103,6 +128,10 @@ public final class RefactorReceiver extends BroadcastReceiver {
                     try { data.put(name, ((View) path(activity, name)).getVisibility()); }
                     catch (ReflectiveOperationException ignored) { }
                 }
+            }
+            if (activity != null && activity.getClass().getSimpleName().equals("CastActivity")) {
+                data.put("rendererState", String.valueOf(invoke(activity, "getState")));
+                data.put("title", ((android.widget.TextView) path(activity, "widget.title")).getText());
             }
             setResultCode(Activity.RESULT_OK);
             setResultData(data.toString());

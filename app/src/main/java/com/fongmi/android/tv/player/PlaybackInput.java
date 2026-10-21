@@ -43,5 +43,6 @@ public final class PlaybackInput {
 
     public interface Handler {
         void dispatch(PlaybackInput input);
+        default boolean playWhenReady(boolean requested) { return requested; }
     }
 }

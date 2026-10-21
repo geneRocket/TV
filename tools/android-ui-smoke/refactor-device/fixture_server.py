@@ -16,6 +16,14 @@ class Fixtures(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split('?', 1)[0]
         base = 'http://127.0.0.1:18765'
+        if path == '/live.m3u':
+            data = f'#EXTM3U\n#EXTINF:-1 group-title="Fixture",One\n{base}/fixture.mp4?live=1\n#EXTINF:-1 group-title="Fixture",Two\n{base}/fixture.mp4?live=2\n'.encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'audio/x-mpegurl')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path in ('/config.json', '/api'):
             query = parse_qs(urlsplit(self.path).query)
             if path == '/config.json':

@@ -2,16 +2,20 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.widget.LinearLayout;
 
-import androidx.media3.common.Player;
 
 import com.fongmi.android.tv.databinding.ActivityLiveBinding;
 import com.fongmi.android.tv.databinding.ViewWidgetLiveBinding;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.DirectPlaybackFlow;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.engine.EnginePhase;
 import com.fongmi.android.tv.player.engine.EngineSnapshot;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.session.PlayerSession;
+import com.fongmi.android.tv.player.session.PlaybackObserver;
+import com.fongmi.android.tv.player.session.PlaybackState;
+import com.fongmi.android.tv.player.session.PlaybackPhase;
+import com.fongmi.android.tv.player.session.Subscription;
 
 import org.junit.Test;
 
@@ -26,7 +30,7 @@ public class LiveSeekUiTest {
     @Test
     public void cancellingSeekRestoresExistingBufferingIndicator() throws Exception {
         Fixture fixture = new Fixture();
-        set(get(fixture.activity, "mPlayers"), "playerState", Player.STATE_BUFFERING);
+        fixture.buffering();
         fixture.gesture.preview(10_000, 600_000, 5_000);
 
         fixture.activity.onSeekCancel();
@@ -38,7 +42,7 @@ public class LiveSeekUiTest {
     @Test
     public void zeroOffsetSeekRestoresExistingBufferingIndicator() throws Exception {
         Fixture fixture = new Fixture();
-        set(get(fixture.activity, "mPlayers"), "playerState", Player.STATE_BUFFERING);
+        fixture.buffering();
         fixture.gesture.preview(10_000, 600_000, 0);
 
         fixture.activity.onSeekEnd(0);
@@ -93,6 +97,9 @@ public class LiveSeekUiTest {
         long duration = 600_000;
         long seekPosition;
         int seeks;
+        PlaybackObserver observer;
+
+        void buffering() { observer.onPlaybackState(new PlaybackState(1, PlaybackPhase.BUFFERING, null, 10_000, duration, null)); }
 
         Fixture() throws Exception {
             ActivityLiveBinding binding = allocate(ActivityLiveBinding.class);
@@ -112,6 +119,15 @@ public class LiveSeekUiTest {
                         throw new AssertionError("Unexpected session command " + method);
                     }));
             set(activity, "mPlayers", controller);
+            DirectPlaybackFlow.Engine engine = (DirectPlaybackFlow.Engine) Proxy.newProxyInstance(
+                    DirectPlaybackFlow.Engine.class.getClassLoader(), new Class<?>[]{DirectPlaybackFlow.Engine.class}, (proxy, method, args) -> {
+                        if (method.getName().equals("isCurrent")) return true;
+                        if (method.getName().equals("observe")) { observer = (PlaybackObserver) args[0]; return (Subscription) () -> {}; }
+                        throw new AssertionError("Unexpected flow engine command " + method);
+                    });
+            DirectPlaybackFlow.Port port = (DirectPlaybackFlow.Port) Proxy.newProxyInstance(
+                    DirectPlaybackFlow.Port.class.getClassLoader(), new Class<?>[]{DirectPlaybackFlow.Port.class}, (proxy, method, args) -> null);
+            set(activity, "mPlaybackFlow", new DirectPlaybackFlow(engine, port, Runnable::run));
         }
     }
 

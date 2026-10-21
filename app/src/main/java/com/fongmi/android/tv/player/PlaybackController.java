@@ -61,7 +61,7 @@ import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.ui.widget.DanmakuView;
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
-public class PlaybackController {
+public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     private static final String TAG = PlaybackController.class.getSimpleName();
     private final StringBuilder builder;
@@ -254,6 +254,10 @@ public class PlaybackController {
 
     public void setSub(Sub sub) {
         if (dispatchInput(PlaybackInput.subtitle(sub))) return;
+        setSubtitleDirect(sub);
+    }
+
+    private void setSubtitleDirect(Sub sub) {
         if (isSameSub(sub)) return;
         boolean paused = playbackSession != null && playbackSession.state().getPhase() == PlaybackPhase.PAUSED;
         float speed = getSpeed();
@@ -553,6 +557,10 @@ public class PlaybackController {
 
     public void seekTo(long time) {
         if (dispatchInput(PlaybackInput.seek(time))) return;
+        seekDirect(time);
+    }
+
+    private void seekDirect(long time) {
         danmaku.seekTo(time);
         if (engine != null) {
             playbackSession.seekTo(time);
@@ -561,8 +569,12 @@ public class PlaybackController {
 
     public void play() {
         if (dispatchInput(PlaybackInput.action(PlaybackInput.Type.PLAY))) return;
+        playDirect();
+    }
+
+    private void playDirect() {
         if (isPlaying()) return;
-        if (isEnd()) seekTo(0);
+        if (isEnd()) seekDirect(0);
         Server.get().setPlayer(this);
         mediaSession.setActive(true);
         if (playbackSession != null) playbackSession.play();
@@ -572,6 +584,10 @@ public class PlaybackController {
 
     public void pause() {
         if (dispatchInput(PlaybackInput.action(PlaybackInput.Type.PAUSE))) return;
+        pauseDirect();
+    }
+
+    private void pauseDirect() {
         if (playbackSession != null) playbackSession.pause();
         mediaSession.setActive(false);
         pauseDanmu();
@@ -587,6 +603,18 @@ public class PlaybackController {
         danmaku.stop();
         setPlaybackState(PlaybackStateCompat.STATE_STOPPED);
         setPlayerState(Player.STATE_IDLE);
+    }
+
+    /** Low-level effects used by DirectPlaybackFlow; deliberately bypasses the public input router. */
+    @Override public void executeInput(PlaybackInput input) {
+        switch (input.getType()) {
+            case PLAY: playDirect(); break;
+            case PAUSE: pauseDirect(); break;
+            case SEEK: seekDirect(input.getPosition()); break;
+            case SUBTITLE: setSubtitleDirect(input.getSubtitle()); break;
+            case STOP: stop(); break;
+            default: throw new IllegalArgumentException("unsupported direct effect: " + input.getType());
+        }
     }
 
     private void failIllegalUrl() {
@@ -758,7 +786,8 @@ public class PlaybackController {
             long startPosition = position == C.TIME_UNSET ? 0 : Math.max(position, 0);
             position = C.TIME_UNSET;
             String itemIdentity = TextUtils.isEmpty(identity) ? this.url : identity;
-            activeSessionId = playbackSession.prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive, playWhenReady));
+            boolean effectivePlayWhenReady = inputHandler == null ? playWhenReady : inputHandler.playWhenReady(playWhenReady);
+            activeSessionId = playbackSession.prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive, effectivePlayWhenReady));
         } catch (RuntimeException e) {
             removeTimeoutCheck();
             ThreadPools.log(e, "Player media source setup failed.");

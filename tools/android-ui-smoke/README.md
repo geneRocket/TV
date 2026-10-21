@@ -97,3 +97,5 @@ Receiver 的 `state` 返回真实 Flow/引擎状态；`mediaPause/mediaPlay/medi
 受控双路线验证：先发 `cmd=config url=http://127.0.0.1:18765/config.json`，等待配置加载，再发 `cmd=open key=fixture url=fixture`。首路线始终 404，第二路线返回本地视频；视频至少两集，以便验证自动下一集。此配置仅写入独立测试包的数据。
 
 测试结束卸载两个 codextest 包、移除设备 reverse 并停止本地服务器。最后不用 `-I` 重新构建普通 APK，确认 applicationId 为 `com.fongmi.android.tv` 且 Manifest 不含 RefactorReceiver。正常 APK 与测试 APK 使用相同输出文件名，不可混淆。
+
+直播和投屏接收页面也可复用此隔离包：`configLive` 的 url 为 `/live.m3u`，配置完成后 `openLive`；TV 包可用 `openCast` 携带视频 url 与可选 DIDL `metadata`。`state` 返回 DirectPlaybackFlow 阶段、来源代次及自动播放权限，投屏额外返回 rendererState 和标题；`mediaNext/mediaPrevious` 通过真实 MediaSession 切台。先让测试应用在前台，再发启动页面的广播，避免 Android 后台启动限制。实际覆盖与未验证范围见 [本轮记录](/Users/wuwenjun/code/TV/docs/playback-components-live-cast-2026-10-22.md)。
