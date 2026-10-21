@@ -751,6 +751,160 @@ public class VodPlaybackCoordinatorTest {
         }
     }
 
+    @Test
+    public void seekWhileResolvingIsAppliedToPreparedItemWithoutSeekingStoppedEngine() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        coordinator.pause();
+
+        coordinator.seekTo(30_000);
+        coordinator.seekTo(40_000);
+
+        assertEquals(0, engine.seekPosition);
+        assertEquals(40_000, coordinator.state().getPosition());
+        resolver.resolve(resolver.lastRequestId);
+        assertEquals(40_000, engine.request.getStartPosition());
+        assertFalse(engine.request.isPlayWhenReady());
+    }
+
+    @Test
+    public void seekWithoutAnAcceptedSessionDoesNotCommandOldEngine() {
+        for (boolean stopped : new boolean[]{false, true}) {
+            ManualResolver resolver = new ManualResolver();
+            FakeEngine engine = new FakeEngine();
+            VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+            if (stopped) {
+                coordinator.play(0, StartPolicy.FRESH);
+                resolver.resolve(resolver.lastRequestId);
+                coordinator.stop();
+            }
+
+            coordinator.seekTo(30_000);
+
+            assertEquals(0, engine.seekPosition);
+        }
+    }
+
+    @Test
+    public void pendingSeekKeepsDeadlineAndCannotLeakIntoAnotherEpisode() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        ManualScheduler scheduler = new ManualScheduler();
+        coordinator.configureTimeout(scheduler, 10_000);
+        coordinator.play(0, StartPolicy.FRESH);
+        long oldRequest = resolver.lastRequestId;
+        Runnable deadline = scheduler.task;
+
+        coordinator.seekTo(40_000);
+        assertSame(deadline, scheduler.task);
+        coordinator.play(1, StartPolicy.FRESH);
+        resolver.resolve(oldRequest);
+        assertEquals(VodPlaybackPhase.RESOLVING, coordinator.state().getPhase());
+        resolver.resolve(resolver.lastRequestId);
+
+        assertEquals("episode-2", engine.request.getUrl());
+        assertEquals(0, engine.request.getStartPosition());
+    }
+
+    @Test
+    public void inactiveAndResolvingStatesRejectEveryOldEnginePhase() {
+        for (VodPlaybackPhase phase : Arrays.asList(VodPlaybackPhase.IDLE, VodPlaybackPhase.RESOLVING,
+                VodPlaybackPhase.STOPPED, VodPlaybackPhase.RELEASED)) {
+            for (EnginePhase event : EnginePhase.values()) {
+                ManualResolver resolver = new ManualResolver();
+                FakeEngine engine = new FakeEngine();
+                VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+                coordinator.play(0, StartPolicy.FRESH);
+                resolver.resolve(resolver.lastRequestId);
+                long oldSession = engine.request.getSessionId();
+                switch (phase) {
+                    case IDLE: coordinator.reset(); break;
+                    case RESOLVING: coordinator.reload(); break;
+                    case STOPPED: coordinator.stop(); break;
+                    case RELEASED: coordinator.close(); break;
+                    default: throw new AssertionError(phase);
+                }
+
+                engine.emit(EngineEvent.state(oldSession, event, 99_000, 100_000));
+
+                assertEquals(phase + " / stale " + event, phase, coordinator.state().getPhase());
+                coordinator.close();
+            }
+        }
+    }
+
+    private enum Command { SELECT, NEXT, PREVIOUS, RELOAD, REPLAY, PLAY, PAUSE, SEEK, BACKGROUND, FOREGROUND, STOP, RESET, CLOSE }
+
+    @Test
+    public void everyPhaseHandlesEveryUserAndLifecycleCommand() {
+        for (VodPlaybackPhase phase : VodPlaybackPhase.values()) {
+            for (Command command : Command.values()) {
+                ManualResolver resolver = new ManualResolver();
+                FakeEngine engine = new FakeEngine();
+                VodPlaybackCoordinator coordinator = inPhase(phase, resolver, engine, command == Command.PREVIOUS ? 1 : 0);
+                String context = phase + " / " + command;
+                int plays = engine.plays, pauses = engine.pauses, stops = engine.stops;
+                try {
+                    switch (command) {
+                        case SELECT: coordinator.play(1, StartPolicy.RESUME_SAVED); break;
+                        case NEXT: coordinator.next(); break;
+                        case PREVIOUS: coordinator.previous(); break;
+                        case RELOAD: coordinator.reload(); break;
+                        case REPLAY: coordinator.replay(); break;
+                        case PLAY: coordinator.play(); break;
+                        case PAUSE: coordinator.pause(); break;
+                        case SEEK: coordinator.seekTo(12_000); break;
+                        case BACKGROUND: coordinator.setPlaybackAllowed(false); break;
+                        case FOREGROUND: coordinator.setPlaybackAllowed(true); break;
+                        case STOP: coordinator.stop(); break;
+                        case RESET: coordinator.reset(); break;
+                        case CLOSE: coordinator.close(); break;
+                    }
+                } catch (IllegalStateException closed) {
+                    if (phase != VodPlaybackPhase.RELEASED) throw closed;
+                }
+                VodPlaybackPhase expected = phase;
+                if (phase != VodPlaybackPhase.RELEASED) {
+                    switch (command) {
+                        case SELECT: expected = VodPlaybackPhase.RESOLVING; break;
+                        case NEXT: case PREVIOUS: case RELOAD: case REPLAY:
+                            if (phase != VodPlaybackPhase.IDLE) expected = VodPlaybackPhase.RESOLVING;
+                            break;
+                        case PLAY:
+                            if (phase == VodPlaybackPhase.ENDED) expected = VodPlaybackPhase.RESOLVING;
+                            break;
+                        case STOP: expected = VodPlaybackPhase.STOPPED; break;
+                        case RESET: expected = VodPlaybackPhase.IDLE; break;
+                        case CLOSE: expected = VodPlaybackPhase.RELEASED; break;
+                        default: break;
+                    }
+                } else {
+                    assertEquals(context, plays, engine.plays);
+                    assertEquals(context, pauses, engine.pauses);
+                    assertEquals(context, stops, engine.stops);
+                }
+                assertEquals(context, expected, coordinator.state().getPhase());
+                coordinator.close();
+            }
+        }
+    }
+
+    private VodPlaybackCoordinator inPhase(VodPlaybackPhase phase, ManualResolver resolver, FakeEngine engine, int index) {
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        if (phase == VodPlaybackPhase.IDLE) return coordinator;
+        coordinator.play(index, StartPolicy.FRESH);
+        if (phase == VodPlaybackPhase.RESOLVING) return coordinator;
+        resolver.resolve(resolver.lastRequestId);
+        if (phase == VodPlaybackPhase.STOPPED) coordinator.stop();
+        else if (phase == VodPlaybackPhase.RELEASED) coordinator.close();
+        else engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.valueOf(phase.name()), 20_000, 100_000));
+        assertEquals(phase, coordinator.state().getPhase());
+        return coordinator;
+    }
+
     private static class ManualScheduler implements com.fongmi.android.tv.utils.TaskScheduler {
         Runnable task;
         public void post(Runnable task, long delay) { this.task = task; }

@@ -7,13 +7,62 @@ import java.util.Map;
 import static org.junit.Assert.*;
 
 public class RecoveryWindowTest {
+    @Test public void repeatedReadySnapshotsDoNotExtendStabilityWindow() {
+        Scheduler scheduler = new Scheduler();
+        RecoveryWindow window = new RecoveryWindow(scheduler, () -> {});
+        window.begin();
+        window.ready();
+        int scheduled = scheduler.posts;
+        window.ready();
+        window.ready();
+        assertEquals(scheduled, scheduler.posts);
+        scheduler.run(5_000);
+        assertFalse(window.isActive());
+    }
+
+    @Test public void readyPlaybackNoLongerInterceptsBackDuringStabilityWindow() {
+        Scheduler scheduler = new Scheduler();
+        RecoveryWindow window = new RecoveryWindow(scheduler, () -> {});
+        window.begin();
+        assertTrue(window.isRecovering());
+
+        window.ready();
+
+        assertTrue(window.isActive());
+        assertFalse(window.isRecovering());
+        window.unstable();
+        assertFalse(window.isRecovering());
+        window.begin();
+        assertTrue(window.isRecovering());
+        assertEquals(1, scheduler.tasks.size());
+        scheduler.run(45_000);
+        assertFalse(window.isRecovering());
+        assertFalse(window.begin());
+    }
+
+    @Test public void deadlineDoesNotStopPlaybackThatHasAlreadyRecovered() {
+        Scheduler scheduler = new Scheduler();
+        int[] expired = {0};
+        RecoveryWindow window = new RecoveryWindow(scheduler, () -> expired[0]++);
+        window.begin();
+        window.ready();
+
+        scheduler.run(45_000);
+
+        assertEquals(0, expired[0]);
+        assertFalse(window.isActive());
+        assertTrue(scheduler.tasks.isEmpty());
+        assertTrue(window.begin());
+    }
+
     private static class Scheduler implements TaskScheduler {
+        int posts;
         Map<Runnable, Long> tasks = new LinkedHashMap<>();
-        public void post(Runnable task, long delay) { tasks.put(task, delay); }
+        public void post(Runnable task, long delay) { posts++; tasks.put(task, delay); }
         public void remove(Runnable task) { tasks.remove(task); }
         void run(long delay) {
             for (Runnable task : tasks.keySet().toArray(new Runnable[0])) {
-                if (tasks.get(task) == delay) { tasks.remove(task); task.run(); }
+                if (Long.valueOf(delay).equals(tasks.get(task))) { tasks.remove(task); task.run(); }
             }
         }
     }

@@ -378,6 +378,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }
         saveHistoryNow();
         clearPlaybackTimeout();
+        mRecoveryWindow.reset();
+        mRecovery.reset();
+        mPlaybackIntent.clear();
         if (mPlaybackCoordinator != null) mPlaybackCoordinator.reset();
         mPlayers.reset();
         mPlayers.clear();
@@ -892,6 +895,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onItemClick(Flag item) {
+        if (item == null || item.isActivated()) return;
         takePlaybackControl();
         switchFlag(item);
     }
@@ -937,6 +941,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onItemClick(Result result) {
+        takePlaybackControl();
         try {
             showProgress();
             mPlaybackCoordinator.reload();
@@ -1097,6 +1102,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void checkNext() {
+        takePlaybackControl();
         setR1Callback();
         Episode item = mEpisodeAdapter.getNext();
         if (item == null) return;
@@ -1105,6 +1111,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void checkPrev() {
+        takePlaybackControl();
         setR1Callback();
         Episode item = mEpisodeAdapter.getPrev();
         if (item == null) return;
@@ -1206,6 +1213,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void onDecode(boolean save) {
+        if (save) takePlaybackControl();
         capturePlaybackPosition();
         mPlayers.toggleDecode(save);
         mPlayers.init(getExo(), getIjk());
@@ -1704,8 +1712,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private void onPlaybackCommand(PlaybackCommand command) {
         if (!isCurrentPlayer() || isRedirect()) return;
         switch (command.getType()) {
-            case DETAIL: getDetail(); break;
-            case RELOAD: onRefresh(); break;
+            case DETAIL: takePlaybackControl(); getDetail(); break;
+            case RELOAD: takePlaybackControl(); onRefresh(); break;
             case DANMAKU: setDanmaku(Danmaku.from(command.getPath())); break;
             case SUBTITLE: setSubtitle(Sub.from(command.getPath())); break;
         }
@@ -2229,6 +2237,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onPlayerClick(Integer item) {
+        takePlaybackControl();
         capturePlaybackPosition();
         mPlayers.setPlayer(item);
         replacePlayerSession();
@@ -2335,7 +2344,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void takePlaybackControl() {
-        if (mRecoveryWindow.isActive()) {
+        if (mRecoveryWindow.isRecovering()) {
             pendingDetailToken = "";
             stopSearch();
             if (mPlaybackCoordinator != null) mPlaybackCoordinator.stop();
@@ -2355,7 +2364,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     @Override
     public void onBackPressed() {
-        if (mRecoveryWindow.isActive()) { cancelAutomaticRecovery(false); return; }
+        if (mRecoveryWindow.isRecovering()) { cancelAutomaticRecovery(false); return; }
         if (isVisible(mBinding.control.getRoot())) {
             hideControl();
         } else if (isFullscreen() && !isLock()) {

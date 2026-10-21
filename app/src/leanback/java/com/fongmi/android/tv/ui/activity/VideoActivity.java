@@ -1335,6 +1335,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void setQualityActivated(Result result) {
+        takePlaybackControl();
         try {
             mPlaybackCoordinator.reload();
             mBinding.danmaku.hide();
@@ -1593,11 +1594,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void checkNext() {
+        takePlaybackControl();
         boolean moved = mHistory != null && mHistory.isRevPlay() ? mPlaybackCoordinator.previous() : mPlaybackCoordinator.next();
         if (!moved) onEpisodeBoundary(mHistory != null && mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
     }
 
     private void checkPrev() {
+        takePlaybackControl();
         boolean moved = mHistory != null && mHistory.isRevPlay() ? mPlaybackCoordinator.next() : mPlaybackCoordinator.previous();
         if (!moved) onEpisodeBoundary(mHistory != null && mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
     }
@@ -1776,6 +1779,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void onDecode(boolean save) {
+        if (save) takePlaybackControl();
         capturePlaybackPosition();
         mPlayers.toggleDecode(save);
         mPlayers.init(getExo(), getIjk());
@@ -2186,8 +2190,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private void onPlaybackCommand(PlaybackCommand command) {
         if (!isCurrentPlayer() || isBackground()) return;
         switch (command.getType()) {
-            case DETAIL: mDetail.request(); break;
-            case RELOAD: onRefresh(); break;
+            case DETAIL: takePlaybackControl(); mDetail.request(); break;
+            case RELOAD: takePlaybackControl(); onRefresh(); break;
             case DANMAKU: setDanmaku(Danmaku.from(command.getPath())); break;
             case SUBTITLE: setSubtitle(Sub.from(command.getPath())); break;
         }
@@ -2649,7 +2653,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public boolean dispatchKeyEvent(KeyEvent event) {
         hasKeyEvent = true;
         boolean up = event.getAction() == KeyEvent.ACTION_UP;
-        if (mRecoveryWindow.isActive() && KeyUtil.isBackKey(event)) {
+        if (mRecoveryWindow.isRecovering() && KeyUtil.isBackKey(event)) {
             if (up) cancelAutomaticRecovery(false);
             return true;
         }
@@ -2813,6 +2817,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onPlayerClick(Integer item) {
+        takePlaybackControl();
         capturePlaybackPosition();
         mPlayers.setPlayer(item);
         replacePlayerSession();
@@ -2884,7 +2889,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private void takePlaybackControl() {
-        if (mRecoveryWindow.isActive()) {
+        if (mRecoveryWindow.isRecovering()) {
             capturePlaybackPosition();
             pendingDetailToken = "";
             mSourceSearch.stop();
@@ -2906,7 +2911,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     @Override
     public void onBackPressed() {
-        if (mRecoveryWindow.isActive()) { cancelAutomaticRecovery(false); return; }
+        if (mRecoveryWindow.isRecovering()) { cancelAutomaticRecovery(false); return; }
         if (mSeekGesture.isActive()) {
             mKeyDown.release();
             mSeekGesture.reset();

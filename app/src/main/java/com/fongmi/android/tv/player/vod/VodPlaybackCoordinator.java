@@ -273,7 +273,14 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized void pause() { requireOpen(); playWhenReady = false; if (acceptingSession) session.pause(); }
 
-    public synchronized void seekTo(long position) { requireOpen(); session.seekTo(position); }
+    public synchronized void seekTo(long position) {
+        requireOpen();
+        if (acceptingSession) session.seekTo(position);
+        else if (state.getPhase() == VodPlaybackPhase.RESOLVING) {
+            publish(new VodPlaybackState(VodPlaybackPhase.RESOLVING, state.getEpisode(), state.getEpisodeIndex(),
+                    Math.max(position, 0), state.getDuration(), null));
+        }
+    }
 
     public synchronized void stop() {
         requireOpen();
@@ -324,6 +331,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         if (closed || expectedRequest != requestId || pendingRequestId != expectedRequest) return;
         pendingRequestId = 0;
         resolveHandle = null;
+        // A seek can arrive while resolution is pending, before an engine exists.
+        startPosition = state.getPosition();
         if (resolved == null || resolved.getRequestId() != requestId) {
             publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, new IllegalStateException("resolver returned an invalid result")));
             return;

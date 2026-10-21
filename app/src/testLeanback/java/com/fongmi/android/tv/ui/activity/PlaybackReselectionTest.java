@@ -18,6 +18,22 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
 public class PlaybackReselectionTest {
+    @Test
+    public void takingControlAfterReadyDoesNotStopSuccessfulPlayback() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.window.ready();
+        Field recovery = VideoActivity.class.getDeclaredField("mRecovery");
+        recovery.setAccessible(true);
+        recovery.set(fixture.activity, new com.fongmi.android.tv.player.PlaybackRecovery());
+        Method takeControl = VideoActivity.class.getDeclaredMethod("takePlaybackControl");
+        takeControl.setAccessible(true);
+
+        takeControl.invoke(fixture.activity);
+
+        assertFalse(fixture.window.isActive());
+        assertTrue(fixture.tasks.isEmpty());
+    }
+
 
     @Test
     public void clickingCurrentParserDoesNotInterruptRecovery() throws Exception {
