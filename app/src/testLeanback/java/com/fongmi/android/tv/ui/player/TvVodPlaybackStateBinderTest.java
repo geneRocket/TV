@@ -208,7 +208,6 @@ public class TvVodPlaybackStateBinderTest {
         @Override public void stopContentSearch() {}
         @Override public void clearPlaybackTimeout() {}
         @Override public void updateMetadata() { metadataUpdates++; }
-        @Override public void resetRecovery() {}
         @Override public void clearBrokenSources() {}
         @Override public void hideProgress() { progressVisible = false; }
         @Override public void resetTransientPlayerState() {}

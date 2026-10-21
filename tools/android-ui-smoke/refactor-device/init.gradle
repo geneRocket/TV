@@ -1,0 +1,14 @@
+// Opt-in device harness: distinct application ids, no receiver in normal builds.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.plugins.withId('com.android.application') {
+            def fixture = new File(project.rootProject.projectDir, 'tools/android-ui-smoke/refactor-device')
+            project.android.sourceSets.debug.java.srcDir(new File(fixture, 'java'))
+            project.android.sourceSets.debug.manifest.srcFile(new File(fixture, 'AndroidManifest.xml'))
+            project.androidComponents.finalizeDsl { android ->
+                android.productFlavors.getByName('leanback').applicationIdSuffix = '.codextest.tv'
+                android.productFlavors.getByName('mobile').applicationIdSuffix = '.codextest.mobile'
+            }
+        }
+    }
+}

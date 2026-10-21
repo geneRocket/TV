@@ -1,4 +1,4 @@
-package com.fongmi.android.tv.ui.player;
+package com.fongmi.android.tv.player.vod;
 
 import android.text.TextUtils;
 
@@ -8,8 +8,8 @@ import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 import com.fongmi.android.tv.player.vod.VodPlaybackState;
 
-/** Owns TV VOD history mutation and throttled persistence rules. */
-public final class TvVodHistoryController {
+/** Owns VOD history mutation and throttled persistence rules. */
+public final class VodHistoryController {
 
     private static final long SAVE_INTERVAL_MS = 3000;
 

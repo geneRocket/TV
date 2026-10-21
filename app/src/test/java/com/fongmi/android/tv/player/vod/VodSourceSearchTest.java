@@ -1,4 +1,4 @@
-package com.fongmi.android.tv.ui.player;
+package com.fongmi.android.tv.player.vod;
 
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
@@ -12,14 +12,14 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 
-public class TvVodSourceSearchTest {
+public class VodSourceSearchTest {
 
     @Test public void completedManualSearchRetainsCandidatesForRecovery() {
         Port port = new Port();
         Vod first = new Vod();
         Vod backup = new Vod();
         port.candidates.addAll(Arrays.asList(first, backup));
-        TvVodSourceSearch search = new TvVodSourceSearch(port);
+        VodSourceSearch search = new VodSourceSearch(port);
         search.finish();
         assertEquals(2, port.candidates.size());
         search.recover();
@@ -34,7 +34,7 @@ public class TvVodSourceSearchTest {
         Vod selected = new Vod();
         Vod backup = new Vod();
         port.candidates.addAll(Arrays.asList(selected, backup));
-        TvVodSourceSearch search = new TvVodSourceSearch(port);
+        VodSourceSearch search = new VodSourceSearch(port);
         search.select(selected);
         assertSame(selected, port.opened);
         search.finish();
@@ -48,14 +48,14 @@ public class TvVodSourceSearchTest {
     @Test public void explicitStopStillDiscardsCandidatesAfterSearchHasFinished() {
         Port port = new Port();
         port.candidates.add(new Vod());
-        TvVodSourceSearch search = new TvVodSourceSearch(port);
+        VodSourceSearch search = new VodSourceSearch(port);
         search.finish();
         search.stop();
         assertTrue(port.candidates.isEmpty());
         assertEquals(2, port.cancelled);
     }
 
-    private static final class Port implements TvVodSourceSearch.Port {
+    private static final class Port implements VodSourceSearch.Port {
         final List<Vod> candidates = new ArrayList<>();
         Vod opened;
         int cancelled;
@@ -80,6 +80,13 @@ public class TvVodSourceSearchTest {
         @Override public void clearCandidates() { candidates.clear(); }
         @Override public void setSearchKeyword(String keyword) {}
         @Override public void startSearch(List<Site> sites, String keyword, boolean auto, Runnable settled) { searches++; }
-        @Override public void onSearchSettled() {}
+        @Override public boolean loading() { return false; }
+        @Override public boolean hasPending() { return false; }
+        @Override public boolean shouldSelectFirst() { return false; }
+        @Override public boolean switching() { return false; }
+        @Override public boolean earlyThresholdReached() { return false; }
+        @Override public void flushCandidates() {}
+        @Override public void clearSourceSwitch() {}
+        @Override public void empty(boolean automatic) {}
     }
 }

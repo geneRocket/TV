@@ -1,4 +1,4 @@
-package com.fongmi.android.tv.ui.player;
+package com.fongmi.android.tv.player.vod;
 
 import static org.junit.Assert.assertSame;
 
@@ -6,11 +6,11 @@ import com.fongmi.android.tv.bean.History;
 
 import org.junit.Test;
 
-public class TvVodHistoryControllerTest {
+public class VodHistoryControllerTest {
 
     @Test
     public void progressUpdateDuringLoadDoesNotDiscardLoadedHistory() {
-        TvVodHistoryController controller = new TvVodHistoryController();
+        VodHistoryController controller = new VodHistoryController();
         History provisional = new History();
         History loaded = new History();
 

@@ -1,11 +1,11 @@
-package com.fongmi.android.tv.ui.player;
+package com.fongmi.android.tv.player.vod;
 
 import com.fongmi.android.tv.bean.Flag;
 
 import java.util.List;
 
 /** Small explicit state machine for automatic source replacement. */
-public final class TvVodSourceSwitchState {
+public final class VodSourceSwitchState {
 
     public enum Phase { IDLE, SEARCHING, LOADING }
 

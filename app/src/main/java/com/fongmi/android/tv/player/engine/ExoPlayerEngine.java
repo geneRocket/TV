@@ -79,8 +79,9 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
 
     @Override public void seekTo(long position) {
         requireActive();
+        requestedStartPosition = Math.max(position, 0);
         pendingStartSeek = false;
-        player.seekTo(Math.max(position, 0));
+        player.seekTo(requestedStartPosition);
     }
 
     @Override

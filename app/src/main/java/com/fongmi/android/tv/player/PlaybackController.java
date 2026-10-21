@@ -171,6 +171,12 @@ public class PlaybackController {
         return playbackSession;
     }
 
+    public boolean ownsSession(PlayerSession expected, long sessionId) {
+        return isCurrent() && expected != null && playbackSession == expected
+                && expected.state().getSessionId() == sessionId
+                && expected.state().getPhase() != PlaybackPhase.RELEASED;
+    }
+
     private void setupEngine() {
         releaseEngine();
         if (exoView == null || ijkView == null) return;
@@ -247,15 +253,39 @@ public class PlaybackController {
     }
 
     public void setSub(Sub sub) {
+        if (dispatchInput(PlaybackInput.subtitle(sub))) return;
         if (isSameSub(sub)) return;
+        boolean paused = playbackSession != null && playbackSession.state().getPhase() == PlaybackPhase.PAUSED;
+        float speed = getSpeed();
         String identity = currentIdentity();
         this.sub = sub;
         if (TextUtils.isEmpty(url)) return;
         long current = getPosition();
         if (isIjk()) setPlayer(PlayerType.EXO);
         setPosition(current);
-        reloadMediaSource(identity);
+        reloadMediaSource(identity, !paused);
+        if (playbackSession != null) playbackSession.setSpeed(speed);
     }
+
+    /** Changes metadata only; VOD prepares through its flow after attaching a compatible session. */
+    public boolean selectSubtitle(Sub selected) {
+        if (isSameSub(selected)) return false;
+        sub = selected;
+        return true;
+    }
+
+    private PlaybackInput.Handler inputHandler;
+
+    public void setInputHandler(PlaybackInput.Handler handler) { inputHandler = handler; }
+
+    public boolean dispatchInput(PlaybackInput input) {
+        if (inputHandler == null) return false;
+        // Consume stale media-session input instead of rerouting it to another playback owner.
+        if (isCurrent()) inputHandler.dispatch(input);
+        return true;
+    }
+
+    public void syncDanmakuPosition(long position) { danmaku.seekTo(position); }
 
     public Sub getSub() {
         return sub;
@@ -522,6 +552,7 @@ public class PlaybackController {
     }
 
     public void seekTo(long time) {
+        if (dispatchInput(PlaybackInput.seek(time))) return;
         danmaku.seekTo(time);
         if (engine != null) {
             playbackSession.seekTo(time);
@@ -529,6 +560,7 @@ public class PlaybackController {
     }
 
     public void play() {
+        if (dispatchInput(PlaybackInput.action(PlaybackInput.Type.PLAY))) return;
         if (isPlaying()) return;
         if (isEnd()) seekTo(0);
         Server.get().setPlayer(this);
@@ -539,6 +571,7 @@ public class PlaybackController {
     }
 
     public void pause() {
+        if (dispatchInput(PlaybackInput.action(PlaybackInput.Type.PAUSE))) return;
         if (playbackSession != null) playbackSession.pause();
         mediaSession.setActive(false);
         pauseDanmu();
@@ -562,6 +595,7 @@ public class PlaybackController {
     }
 
     public void release() {
+        inputHandler = null;
         commands.close();
         errors.close();
         boolean current = isCurrent();
@@ -663,8 +697,12 @@ public class PlaybackController {
     }
 
     private void reloadMediaSource(String identity) {
+        reloadMediaSource(identity, true);
+    }
+
+    private void reloadMediaSource(String identity, boolean playWhenReady) {
         if (TextUtils.isEmpty(url)) return;
-        setMediaSource(identity, headers, url, format, drm, subs, timeout, this.forceLive);
+        setMediaSource(identity, headers, url, format, drm, subs, timeout, this.forceLive, playWhenReady);
     }
 
     public void setMediaSource(String url) {
@@ -698,6 +736,10 @@ public class PlaybackController {
     }
 
     private void setMediaSource(String identity, Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive) {
+        setMediaSource(identity, headers, url, format, drm, subs, timeout, forceLive, true);
+    }
+
+    private void setMediaSource(String identity, Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive, boolean playWhenReady) {
         errors.invalidate();
         stopParse();
         this.headers = PlaybackHeaders.applyUserAgent(PlaybackHeaders.mergeInlineHeaders(headers, url));
@@ -716,7 +758,7 @@ public class PlaybackController {
             long startPosition = position == C.TIME_UNSET ? 0 : Math.max(position, 0);
             position = C.TIME_UNSET;
             String itemIdentity = TextUtils.isEmpty(identity) ? this.url : identity;
-            activeSessionId = playbackSession.prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive));
+            activeSessionId = playbackSession.prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive, playWhenReady));
         } catch (RuntimeException e) {
             removeTimeoutCheck();
             ThreadPools.log(e, "Player media source setup failed.");

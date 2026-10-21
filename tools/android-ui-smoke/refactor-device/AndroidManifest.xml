@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <provider
+            android:name="com.fongmi.quickjs.Provider"
+            android:authorities="${applicationId}.quickjs"
+            tools:replace="android:authorities" />
+        <receiver
+            android:name="com.fongmi.android.tv.test.RefactorReceiver"
+            android:exported="true" />
+    </application>
+</manifest>

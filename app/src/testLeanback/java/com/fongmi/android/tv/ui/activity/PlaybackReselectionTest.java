@@ -3,8 +3,8 @@ package com.fongmi.android.tv.ui.activity;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.Parse;
-import com.fongmi.android.tv.player.RecoveryWindow;
-import com.fongmi.android.tv.utils.TaskScheduler;
+import com.fongmi.android.tv.player.vod.TestVodFlow;
+import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 
 import org.junit.Test;
 
@@ -18,19 +18,35 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
 public class PlaybackReselectionTest {
+    @Test public void bufferingUiUsesFlowSnapshotInsteadOfControllerCache() throws Exception {
+        Fixture fixture = new Fixture();
+        Class<?> unsafe = Class.forName("sun.misc.Unsafe");
+        Field singleton = unsafe.getDeclaredField("theUnsafe");
+        singleton.setAccessible(true);
+        Object player = unsafe.getMethod("allocateInstance", Class.class).invoke(singleton.get(null),
+                com.fongmi.android.tv.player.PlaybackController.class);
+        Field cache = player.getClass().getDeclaredField("playerState");
+        cache.setAccessible(true);
+        cache.setInt(player, androidx.media3.common.Player.STATE_BUFFERING);
+        Field players = VideoActivity.class.getDeclaredField("mPlayers");
+        players.setAccessible(true);
+        players.set(fixture.activity, player);
+        Method buffering = VideoActivity.class.getDeclaredMethod("isBuffering");
+        buffering.setAccessible(true);
+        assertEquals(VodPlaybackPhase.IDLE, fixture.playback.flow.state().getPhase());
+        assertFalse((Boolean) buffering.invoke(fixture.activity));
+    }
+
     @Test
     public void takingControlAfterReadyDoesNotStopSuccessfulPlayback() throws Exception {
         Fixture fixture = new Fixture();
-        fixture.window.ready();
-        Field recovery = VideoActivity.class.getDeclaredField("mRecovery");
-        recovery.setAccessible(true);
-        recovery.set(fixture.activity, new com.fongmi.android.tv.player.PlaybackRecovery());
+        fixture.playback.recovery.onPhase(VodPlaybackPhase.READY);
         Method takeControl = VideoActivity.class.getDeclaredMethod("takePlaybackControl");
         takeControl.setAccessible(true);
 
         takeControl.invoke(fixture.activity);
 
-        assertFalse(fixture.window.isActive());
+        assertFalse(fixture.playback.recovery.isActive());
         assertTrue(fixture.tasks.isEmpty());
     }
 
@@ -45,7 +61,7 @@ public class PlaybackReselectionTest {
 
         click.invoke(fixture.activity, current);
 
-        assertTrue(fixture.window.isActive());
+        assertTrue(fixture.playback.recovery.isActive());
         assertEquals(1, fixture.tasks.size());
         assertFalse(fixture.activity.isFullscreen());
     }
@@ -61,7 +77,7 @@ public class PlaybackReselectionTest {
         click.invoke(fixture.activity, current);
         click.invoke(fixture.activity, current);
 
-        assertTrue(fixture.window.isActive());
+        assertTrue(fixture.playback.recovery.isActive());
         assertEquals(1, fixture.tasks.size());
         assertTrue(fixture.activity.isFullscreen());
         assertEquals(1, fixture.activity.fullscreenEntries);
@@ -76,18 +92,15 @@ public class PlaybackReselectionTest {
         fixture.activity.setEpisodeActivated(current);
         fixture.activity.setEpisodeActivated(current);
 
-        assertTrue(fixture.window.isActive());
+        assertTrue(fixture.playback.recovery.isActive());
         assertEquals(1, fixture.tasks.size());
         assertTrue(fixture.activity.isFullscreen());
         assertEquals(1, fixture.activity.fullscreenEntries);
     }
 
     private static final class Fixture {
-        final Map<Runnable, Long> tasks = new LinkedHashMap<>();
-        final RecoveryWindow window = new RecoveryWindow(new TaskScheduler() {
-            @Override public void post(Runnable task, long delay) { tasks.put(task, delay); }
-            @Override public void remove(Runnable task) { tasks.remove(task); }
-        }, () -> {});
+        final TestVodFlow playback = new TestVodFlow();
+        final Map<Runnable, Long> tasks = playback.tasks;
         final FullscreenVideoActivity activity;
 
         Fixture() throws Exception {
@@ -96,10 +109,9 @@ public class PlaybackReselectionTest {
             instance.setAccessible(true);
             activity = (FullscreenVideoActivity) unsafe.getMethod("allocateInstance", Class.class)
                     .invoke(instance.get(null), FullscreenVideoActivity.class);
-            Field recovery = VideoActivity.class.getDeclaredField("mRecoveryWindow");
+            Field recovery = VideoActivity.class.getDeclaredField("mPlaybackFlow");
             recovery.setAccessible(true);
-            recovery.set(activity, window);
-            window.begin();
+            recovery.set(activity, playback.flow);
         }
     }
 

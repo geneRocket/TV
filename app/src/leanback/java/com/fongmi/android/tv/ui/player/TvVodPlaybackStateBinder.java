@@ -19,7 +19,6 @@ public final class TvVodPlaybackStateBinder {
         void stopContentSearch();
         void clearPlaybackTimeout();
         void updateMetadata();
-        void resetRecovery();
         void clearBrokenSources();
         void hideProgress();
         void resetTransientPlayerState();
@@ -103,7 +102,6 @@ public final class TvVodPlaybackStateBinder {
         port.stopContentSearch();
         port.clearPlaybackTimeout();
         port.updateMetadata();
-        port.resetRecovery();
         port.clearBrokenSources();
         port.hideProgress();
         port.resetTransientPlayerState();

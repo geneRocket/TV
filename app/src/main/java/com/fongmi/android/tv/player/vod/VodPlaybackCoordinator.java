@@ -306,6 +306,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         return state;
     }
 
+    public synchronized long generation() { return requestId; }
+
     public synchronized long currentPosition() {
         if (closed) return state.getPosition();
         long snapshot = sessionSnapshotPosition();

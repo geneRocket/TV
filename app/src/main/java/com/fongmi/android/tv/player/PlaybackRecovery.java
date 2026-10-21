@@ -33,7 +33,7 @@ public final class PlaybackRecovery {
         return next(error, exo, player, hasPlayableItem, true);
     }
 
-    Action next(ErrorEvent error, boolean exo, int player, boolean hasPlayableItem, boolean allowPlayerSwitch) {
+    public Action next(ErrorEvent error, boolean exo, int player, boolean hasPlayableItem, boolean allowPlayerSwitch) {
         if (++errors > MAX_ERRORS) {
             reset();
             return Action.STOP;

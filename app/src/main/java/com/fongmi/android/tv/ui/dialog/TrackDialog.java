@@ -21,6 +21,7 @@ import com.fongmi.android.tv.bean.Subtitle;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.DialogTrackBinding;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.session.PlayerSession;
 import com.fongmi.android.tv.player.custom.TrackNameProvider;
 import com.fongmi.android.tv.ui.adapter.TrackAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -41,6 +42,8 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
     private Listener listener;
     private ChooserListener cListener;
     private PlaybackController player;
+    private PlayerSession boundSession;
+    private long boundSessionId;
     private String name;
     private boolean vod;
     private int type;
@@ -61,8 +64,12 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
 
     public TrackDialog player(PlaybackController player) {
         this.player = player;
+        boundSession = player.session();
+        boundSessionId = boundSession.state().getSessionId();
         return this;
     }
+
+    private boolean ownsPlayback() { return player != null && player.ownsSession(boundSession, boundSessionId); }
 
     public TrackDialog name(String name) {
         this.name = name;
@@ -111,6 +118,7 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
     }
 
     private void onSearch(View view) {
+        if (!ownsPlayback()) { dismiss(); return; }
         if (name != null && !name.isEmpty()) {
             SearchSubtitleDialog.create().title(name).listener(this).show(getActivity());
         } else {
@@ -130,11 +138,13 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
     }
 
     private void onSubtitle(View view) {
+        if (!ownsPlayback()) { dismiss(); return; }
         listener.onSubtitleClick();
         dismiss();
     }
 
     private void showChooser(View view) {
+        if (!ownsPlayback()) { dismiss(); return; }
         if (cListener != null) cListener.showChooser(this);
         else FileChooser.from(this).show(new String[]{MimeTypes.APPLICATION_SUBRIP, MimeTypes.TEXT_SSA, MimeTypes.TEXT_VTT, MimeTypes.APPLICATION_TTML, "text/*", "application/octet-stream"});
         player.pause();
@@ -142,6 +152,7 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
 
     @Override
     public void onSubtitleSelected(Subtitle subtitle) {
+        if (!ownsPlayback()) return;
         // 将选择的字幕转换为Sub对象并设置到播放器
         if (player != null) {
             player.setSub(Sub.from(subtitle.getUrl()));
@@ -188,6 +199,7 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
 
     @Override
     public void onItemClick(Track item) {
+        if (!ownsPlayback()) { dismiss(); return; }
         if (listener != null) listener.onTrackClick(item);
         player.setTrack(Arrays.asList(item));
         if (item.isAdaptive()) return;
@@ -197,7 +209,8 @@ public final class TrackDialog extends BaseDialog implements TrackAdapter.OnClic
     @Override
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != Activity.RESULT_OK || requestCode != FileChooser.REQUEST_PICK_FILE) return;
+        if (resultCode != Activity.RESULT_OK || requestCode != FileChooser.REQUEST_PICK_FILE
+                || data == null || data.getData() == null || !ownsPlayback()) return;
         player.setSub(Sub.from(FileChooser.getPathFromUri(getContext(), data.getData())));
         dismiss();
     }
