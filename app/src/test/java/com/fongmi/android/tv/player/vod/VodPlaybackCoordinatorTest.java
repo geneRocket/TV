@@ -323,6 +323,58 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    public void crossSiteSwitchKeepsProgressAfterStopAndTargetHistoryBinding() {
+        for (long position : new long[]{0, 321_000}) {
+            ManualResolver resolver = new ManualResolver();
+            FakeEngine engine = new FakeEngine();
+            VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+            coordinator.play(0, StartPolicy.FRESH);
+            resolver.resolve(resolver.lastRequestId);
+            engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, position, 900_000));
+
+            // Both pages stop the old delegate and empty the catalog before loading new details.
+            coordinator.preservePosition("episode-1", position);
+            coordinator.stop();
+            coordinator.setEpisodes(Collections.emptyList());
+            coordinator.setEpisodes(Collections.singletonList(
+                    new VodEpisode("other-site-episode", "other-site", "other-route", "第1集", "other-url")));
+            coordinator.setResumePosition("other-site-episode", 600_000);
+            coordinator.play(0, StartPolicy.KEEP_CURRENT_POSITION);
+            resolver.resolve(resolver.lastRequestId);
+
+            assertEquals(position, engine.request.getStartPosition());
+        }
+    }
+
+    @Test
+    public void failedSourceResolutionDoesNotLoseProgressForFollowingSource() {
+        ManualResolver resolver = new ManualResolver();
+        FakeEngine engine = new FakeEngine();
+        VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
+        coordinator.play(0, StartPolicy.FRESH);
+        resolver.resolve(resolver.lastRequestId);
+        engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 321_000, 900_000));
+
+        coordinator.stop();
+        coordinator.setEpisodes(Collections.singletonList(
+                new VodEpisode("failed-source", "site-b", "route-b", "第1集", "failed-url")));
+        coordinator.play(0, StartPolicy.KEEP_CURRENT_POSITION);
+        long failedRequest = resolver.lastRequestId;
+        resolver.callbacks.get(failedRequest).onFailure(new ResolveFailure(failedRequest, new IllegalStateException("unavailable")));
+        assertEquals(321_000, coordinator.currentPosition());
+
+        coordinator.stop();
+        coordinator.setEpisodes(Collections.emptyList());
+        coordinator.setEpisodes(Collections.singletonList(
+                new VodEpisode("working-source", "site-c", "route-c", "第1集", "working-url")));
+        coordinator.setResumePosition("working-source", 600_000);
+        coordinator.play(0, StartPolicy.KEEP_CURRENT_POSITION);
+        resolver.resolve(resolver.lastRequestId);
+
+        assertEquals(321_000, engine.request.getStartPosition());
+    }
+
+    @Test
     public void resumePositionIsDeliveredToEngineRequest() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
