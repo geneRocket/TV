@@ -898,6 +898,19 @@ public class M3u8AdFilterTest {
     }
 
     @Test
+    public void minorityCdnDoesNotTurnAdNumberFilenameCollisionIntoAnAd() {
+        String playlist = "#EXTM3U\n"
+                + segment(5, "https://cdn.example/main001.ts")
+                + segment(5, "https://backup.example/AD1veWOf.ts")
+                + segment(5, "https://cdn.example/main002.ts")
+                + segment(5, "https://backup.example/aD5b9wgLiG.ts")
+                + segment(5, "https://cdn.example/main003.ts")
+                + segment(5, "https://backup.example/ads/break.ts") + "#EXT-X-ENDLIST\n";
+        assertOnlyAdsRemoved("minority CDN filename collision", playlist, filter(playlist),
+                "https://backup.example/ads/break.ts");
+    }
+
+    @Test
     public void preservesAdNumberCollisionImmediatelyBeforeDiscontinuity() {
         String playlist = "#EXTM3U\n"
                 + segment(4.0, "2f3dda1fb14e0264ff377a3b514892dc.ts")
@@ -990,6 +1003,15 @@ public class M3u8AdFilterTest {
                 + segment(5.0, "main-1.ts")
                 + segment(5.0, "ads/ad-2.ts")
                 + segment(5.0, "main-3.ts");
+        assertEquals(playlist, filter(playlist));
+    }
+
+    @Test
+    public void completedEventRetainsSegmentNumberingWhenEndlistAppears() {
+        String playlist = "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-MEDIA-SEQUENCE:100\n"
+                + segment(5, "main-100.ts")
+                + "#EXT-X-CUE-OUT:DURATION=5\n" + segment(5, "ads/ad-101.ts")
+                + "#EXT-X-CUE-IN\n" + segment(5, "main-102.ts") + "#EXT-X-ENDLIST\n";
         assertEquals(playlist, filter(playlist));
     }
 
@@ -1853,6 +1875,17 @@ public class M3u8AdFilterTest {
                 + segment(5, "main0.m4s") + segment(5, "main1.m4s")
                 + segment(5, "main2.m4s") + "#EXT-X-ENDLIST\n";
         assertEquals(mediaEntries(playlist), mediaEntries(filter(playlist)));
+    }
+
+    @Test
+    public void inlineInitializationMapDoesNotMakeFollowingContentAnAd() {
+        String playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:5\n"
+                + segment(5, "main0.m4s")
+                + "#EXTINF:5,\n#EXT-X-MAP:URI=\"ads/init.mp4\"\nmain1.m4s\n"
+                + segment(5, "main2.m4s") + segment(5, "ads/break.m4s") + "#EXT-X-ENDLIST\n";
+        String filtered = filter(playlist);
+        assertOnlyAdsRemoved("inline initialization map", playlist, filtered, "ads/break.m4s");
+        assertTrue(filtered.indexOf("ads/init.mp4") < filtered.indexOf("main1.m4s"));
     }
 
     @Test

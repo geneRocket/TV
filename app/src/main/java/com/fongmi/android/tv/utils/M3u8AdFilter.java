@@ -642,7 +642,9 @@ public final class M3u8AdFilter {
             String h = record.host == null ? "" : record.host;
             boolean sameAsMajor = isEmpty(h) || majorHost.equals(h);
             boolean explicitAd = isExplicitAdRecord(record);
-            boolean minorAdHost = !sameAsMajor && record.adLikeUri;
+            // CDN balancing does not corroborate a random AD1... filename.
+            // Explicit ad tags/paths still win; structural number rules run earlier.
+            boolean minorAdHost = !sameAsMajor && record.adLikeUri && !record.weakAdNumberUri;
 
             if (explicitAd || minorAdHost) {
                 removed++;
@@ -985,11 +987,15 @@ public final class M3u8AdFilter {
     }
 
     private static boolean isVodPlaylist(String content) {
+        boolean vod = false;
         for (String line : content.split("\n")) {
             String tag = line.trim();
-            if (tag.equals("#EXT-X-ENDLIST") || tag.equals("#EXT-X-PLAYLIST-TYPE:VOD")) return true;
+            // A completed EVENT is still the same sequence clients were refreshing.
+            // ENDLIST must not suddenly renumber it by enabling segment removal.
+            if (tag.equals("#EXT-X-PLAYLIST-TYPE:EVENT")) return false;
+            if (tag.equals("#EXT-X-ENDLIST") || tag.equals("#EXT-X-PLAYLIST-TYPE:VOD")) vod = true;
         }
-        return false;
+        return vod;
     }
 
     public static String identifyProvider(String url) {
@@ -2017,8 +2023,9 @@ public final class M3u8AdFilter {
         for (String tag : tags) {
             if (isEmpty(tag)) continue;
             String lower = tag.toLowerCase(Locale.US);
-            if (!lower.startsWith("#ext-x-map:")
-                    && !lower.startsWith("#ext-x-part:")
+            // MAP is required initialization state, wherever it appears relative
+            // to EXTINF. Its filename alone does not classify the media as an ad.
+            if (!lower.startsWith("#ext-x-part:")
                     && !lower.startsWith("#ext-x-preload-hint:")) continue;
             String uri = parseAttributeString(tag, "URI");
             if (!isEmpty(uri) && isLikelyAdResourceUri(uri)) return true;
