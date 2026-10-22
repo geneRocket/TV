@@ -334,5 +334,5 @@
 
     <string name="play_recovery_expired">自动恢复超时，请手动换源或重试</string>
     <string name="play_recovery_cancelled">已取消自动恢复，可手动换源或重试</string>
-    <string name="play_recovery_running">正在尝试恢复播放，按返回可取消（最多45秒）</string>
+    <string name="play_recovery_running">正在尝试恢复播放（最多45秒）</string>
 </resources>

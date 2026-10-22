@@ -2298,13 +2298,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mPlaybackFlow.recovery().takeControl();
     }
 
-    private void cancelAutomaticRecovery(boolean expired) {
-        mPlaybackFlow.recovery().cancel(expired);
-    }
-
     @Override
     public void onBackPressed() {
-        if (mPlaybackFlow.recovery().isRecovering()) { cancelAutomaticRecovery(false); return; }
         if (isVisible(mBinding.control.getRoot())) {
             hideControl();
         } else if (isFullscreen() && !isLock()) {

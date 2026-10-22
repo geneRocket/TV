@@ -2589,10 +2589,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public boolean dispatchKeyEvent(KeyEvent event) {
         hasKeyEvent = true;
         boolean up = event.getAction() == KeyEvent.ACTION_UP;
-        if (mPlaybackFlow.recovery().isRecovering() && KeyUtil.isBackKey(event)) {
-            if (up) cancelAutomaticRecovery(false);
-            return true;
-        }
         if (!isFullscreen() && getEpisodeView().hasFocus() && KeyUtil.isDigitKey(event)) {
             if (up) appendEpisodeNumber(event.getKeyCode());
             return true;
@@ -2820,13 +2816,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mPlaybackFlow.recovery().takeControl();
     }
 
-    private void cancelAutomaticRecovery(boolean expired) {
-        mPlaybackFlow.recovery().cancel(expired);
-    }
-
     @Override
     public void onBackPressed() {
-        if (mPlaybackFlow.recovery().isRecovering()) { cancelAutomaticRecovery(false); return; }
         if (mSeekGesture.isActive()) {
             mKeyDown.release();
             mSeekGesture.reset();
