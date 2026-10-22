@@ -47,6 +47,7 @@ import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.player.live.LiveChannelNavigator;
 import com.fongmi.android.tv.player.live.LiveDataConnection;
 import com.fongmi.android.tv.ui.custom.LiveListLayout;
+import com.fongmi.android.tv.ui.custom.LiveListSelection;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
@@ -86,7 +87,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Objects;
 
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
@@ -119,9 +119,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private Runnable mR4;
     private Runnable mSeekRunnable;
     private Clock mClock;
-    private Group mDisplayedGroup;
-    private Channel mActivatedChannel;
-    private EpgData mActivatedEpgData;
+    private LiveListSelection mListSelection;
     private String mInfoLogoUrl;
     private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private int count;
@@ -250,6 +248,9 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mBinding.group.setAdapter(new ItemBridgeAdapter(mGroupAdapter = new ArrayObjectAdapter(new GroupPresenter(this))));
         mBinding.channel.setAdapter(new ItemBridgeAdapter(mChannelAdapter = new ArrayObjectAdapter(new ChannelPresenter(this))));
         mBinding.widget.epgData.setAdapter(new ItemBridgeAdapter(mEpgDataAdapter = new ArrayObjectAdapter(new EpgDataPresenter(this))));
+        mListSelection = new LiveListSelection(
+                LiveListSelection.rows(mChannelAdapter, mBinding.channel),
+                LiveListSelection.rows(mEpgDataAdapter, mBinding.widget.epgData));
     }
 
     private void setPlayerView() {
@@ -389,26 +390,12 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void setActivated() {
-        if (mActivatedChannel != null && !Objects.equals(mActivatedChannel, mChannel)) {
-            mActivatedChannel.setSelected(false);
-            notifyChannelChanged(mActivatedChannel);
-        }
-        if (mChannel != null) {
-            mChannel.setSelected(true);
-            notifyChannelChanged(mChannel);
-        }
-        mActivatedChannel = mChannel;
+        mListSelection.activate(mChannel);
         fetch();
     }
 
     private void setActivated(EpgData item) {
-        if (mActivatedEpgData != null && !Objects.equals(mActivatedEpgData, item)) {
-            mActivatedEpgData.setSelected(false);
-            notifyEpgChanged(mActivatedEpgData);
-        }
-        item.setSelected(true);
-        notifyEpgChanged(item);
-        mActivatedEpgData = item;
+        mListSelection.activate(item);
     }
 
     private void checkPlay() {
@@ -758,8 +745,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         String epg = mChannel.getData().getEpg();
         if (epg.length() > 0) mBinding.widget.name.setMaxEms(12);
         Epg data = mChannel.getData();
-        mEpgDataAdapter.setItems(data.getList(), null);
-        mActivatedEpgData = null;
+        mListSelection.showPrograms(data.getList());
         setTextIfChanged(mBinding.widget.play, epg);
         setWidth(data);
         setMetadata();
@@ -780,15 +766,11 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     private void resetAdapter() {
         mListLayout.reset();
-        mEpgDataAdapter.clear();
-        mChannelAdapter.clear();
+        mListSelection.reset();
         mGroupAdapter.clear();
         mHides.clear();
         mChannel = null;
         mGroup = null;
-        mDisplayedGroup = null;
-        mActivatedChannel = null;
-        mActivatedEpgData = null;
         mArtwork.reset();
         mInfoLogoUrl = null;
     }
@@ -1179,6 +1161,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     protected void onDestroy() {
         if (mLiveData != null) mLiveData.close();
+        if (mListSelection != null) mListSelection.close();
         mUiCallbacks.close();
         mArtwork.close();
         super.onDestroy();
@@ -1192,23 +1175,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void setChannels(Group group) {
-        group = setWidth(group);
-        if (mDisplayedGroup == group) return;
-        mChannelAdapter.setItems(group.getChannel(), null);
-        mDisplayedGroup = group;
-    }
-
-    private void notifyChannelChanged(Channel item) {
-        int position = mChannelAdapter.indexOf(item);
-        if (position == -1) return;
-        if (mBinding.channel.isComputingLayout()) mBinding.channel.post(() -> notifyChannelChanged(item));
-        else mChannelAdapter.notifyArrayItemRangeChanged(position, 1);
-    }
-
-    private void notifyEpgChanged(EpgData item) {
-        int position = mEpgDataAdapter.indexOf(item);
-        if (position == -1) return;
-        if (mBinding.widget.epgData.isComputingLayout()) mBinding.widget.epgData.post(() -> notifyEpgChanged(item));
-        else mEpgDataAdapter.notifyArrayItemRangeChanged(position, 1);
+        mListSelection.showGroup(setWidth(group));
     }
 }
