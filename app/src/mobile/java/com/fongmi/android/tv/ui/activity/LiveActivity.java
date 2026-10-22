@@ -12,7 +12,6 @@ import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
 import androidx.media3.ui.PlayerView;
@@ -42,6 +41,9 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.LiveCallback;
 import com.fongmi.android.tv.impl.PassCallback;
 import com.fongmi.android.tv.model.LiveViewModel;
+import com.fongmi.android.tv.player.live.LiveChannelNavigator;
+import com.fongmi.android.tv.player.live.LiveDataConnection;
+import com.fongmi.android.tv.ui.custom.LiveListLayout;
 import com.fongmi.android.tv.player.IjkUtil;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.PlaybackController;
@@ -93,12 +95,13 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private ActivityLiveBinding mBinding;
     private ChannelAdapter mChannelAdapter;
     private EpgDataAdapter mEpgDataAdapter;
-    private Observer<Channel> mObserveUrl;
     private CustomKeyDownLive mKeyDown;
     private float mSpeedBeforeLongPress = Float.NaN;
     private GroupAdapter mGroupAdapter;
-    private Observer<Epg> mObserveEpg;
     private LiveViewModel mViewModel;
+    private LiveDataConnection mLiveData;
+    private LiveChannelNavigator mNavigation;
+    private LiveListLayout mListLayout;
     private DirectPlaybackFlow mPlaybackFlow;
     private final CallbackScope mUiCallbacks = new CallbackScope(AppTaskScheduler.get());
     private List<Group> mHides;
@@ -172,8 +175,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         setPadding(mBinding.recycler, true);
         mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
         setPlaybackFlow();
-        mObserveEpg = this::setEpg;
-        mObserveUrl = this::start;
         mHides = new ArrayList<>();
         mR0 = this::stopService;
         mR1 = this::hideControl;
@@ -219,6 +220,20 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private void setRecyclerView() {
+        mListLayout = new LiveListLayout(mBinding.group, mBinding.channel, mBinding.widget.epgData, mBinding.divide, false);
+        mNavigation = new LiveChannelNavigator(new LiveChannelNavigator.Port() {
+            @Override public Group currentGroup() { return mGroup; }
+            @Override public int groupCount() { return mGroupAdapter.getItemCount(); }
+            @Override public int selectedGroup() { return mGroupAdapter.getPosition(); }
+            @Override public Group groupAt(int index) { return mGroupAdapter.get(index); }
+            @Override public void selectGroup(int index, Group group) {
+                mGroup = group;
+                mGroupAdapter.setSelected(index);
+                mChannelAdapter.addAll(group.getChannel());
+            }
+            @Override public void play(Channel channel) { onItemClick(channel); }
+        });
+
         mBinding.group.setItemAnimator(null);
         mBinding.channel.setItemAnimator(null);
         mBinding.widget.epgData.setItemAnimator(null);
@@ -262,15 +277,13 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(LiveViewModel.class);
-        mViewModel.url().observeForever(mObserveUrl);
-        mViewModel.xml().observe(this, this::setEpg);
-        mViewModel.epg().observeForever(mObserveEpg);
-        mViewModel.live().observe(this, live -> {
-            mViewModel.getXml(live);
-            hideProgress();
-            setGroup(live);
-            setWidth(live);
+        mLiveData = new LiveDataConnection(this, LiveDataConnection.source(mViewModel), true, new LiveDataConnection.Port() {
+            @Override public Channel channel() { return mChannel; }
+            @Override public void play(Channel channel) { mPlayers.start(channel, getTimeout()); }
+            @Override public void renderEpg() { setEpg(); }
+            @Override public void renderLive(Live live) { hideProgress(); setGroup(live); mListLayout.render(live); }
         });
+        mLiveData.connect();
     }
 
     private void checkLive() {
@@ -290,12 +303,13 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
             @Override
             public void error(String msg) {
-                Notify.show(msg);
+                if (mLiveData != null && !mLiveData.isClosed()) Notify.show(msg);
             }
         };
     }
 
     private void getLive() {
+        if (mLiveData == null || mLiveData.isClosed()) return;
         mBinding.control.action.home.setText(getHome().getName());
         mPlayers.setPlayer(Setting.getLivePlayer());
         mViewModel.getLive(getHome());
@@ -312,29 +326,12 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         setPosition(LiveConfig.get().find(items));
     }
 
-    private void setWidth(Live live) {
-        int padding = ResUtil.dp2px(48);
-        if (live.getWidth() == 0) for (Group item : live.getGroups()) live.setWidth(Math.max(live.getWidth(), ResUtil.getTextWidth(item.getName(), 14)));
-        mBinding.group.getLayoutParams().width = live.getWidth() == 0 ? 0 : Math.min(live.getWidth() + padding, ResUtil.getScreenWidth() / 4);
-        mBinding.divide.setVisibility(live.getWidth() == 0 ? View.GONE : View.VISIBLE);
-    }
+
 
     @Override
-    public void setWidth(Group group) {
-        int logo = ResUtil.dp2px(56);
-        int padding = ResUtil.dp2px(60);
-        if (group.isKeep()) group.setWidth(0);
-        if (group.getWidth() == 0) for (Channel item : group.getChannel()) group.setWidth(Math.max(group.getWidth(), (item.getLogo().isEmpty() ? 0 : logo) + ResUtil.getTextWidth(item.getNumber() + item.getName(), 14)));
-        mBinding.channel.getLayoutParams().width = group.getWidth() == 0 ? 0 : Math.min(group.getWidth() + padding, ResUtil.getScreenWidth() / 2);
-    }
+    public void setWidth(Group group) { mListLayout.render(group); }
 
-    private void setWidth(Epg epg) {
-        int padding = ResUtil.dp2px(40);
-        if (epg.getList().isEmpty()) return;
-        int minWidth = ResUtil.getTextWidth(epg.getList().get(0).getTime(), 14);
-        if (epg.getWidth() == 0) for (EpgData item : epg.getList()) epg.setWidth(Math.max(epg.getWidth(), ResUtil.getTextWidth(item.getTitle(), 14)));
-        mBinding.widget.epgData.getLayoutParams().width = epg.getWidth() == 0 ? 0 : Math.min(Math.max(epg.getWidth(), minWidth) + padding, ResUtil.getScreenWidth() / 2);
-    }
+    private void setWidth(Epg epg) { mListLayout.render(epg); }
 
     private void setPosition(int[] position) {
         if (position[0] == -1) return;
@@ -654,15 +651,15 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     public void onItemClick(EpgData item) {
-        mPlaybackFlow.beginSource();
-        if (item.isFuture() || !mChannel.hasCatchup()) return;
-        Notify.show(getString(R.string.play_ready, item.getTitle()));
-        mEpgDataAdapter.setSelected(item);
-        mViewModel.getUrl(mChannel, item);
-        mPlayers.clear();
-        mPlayers.stop();
-        showProgress();
-        hideEpg();
+        mLiveData.replay(item, () -> {
+            mPlaybackFlow.beginSource();
+            Notify.show(getString(R.string.play_ready, item.getTitle()));
+            mEpgDataAdapter.setSelected(item);
+            mPlayers.clear();
+            mPlayers.stop();
+            showProgress();
+            hideEpg();
+        });
     }
 
     private void addKeep(Channel item) {
@@ -680,7 +677,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private void setInfo() {
-        mViewModel.getEpg(mChannel);
+        mLiveData.refreshEpg();
         mBinding.widget.play.setText("");
         mChannel.loadLogo(mBinding.widget.logo);
         mBinding.widget.name.setText(mChannel.getName());
@@ -707,26 +704,20 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         setMetadata();
     }
 
-    private void setEpg(boolean success) {
-        if (mChannel != null && success) mViewModel.getEpg(mChannel);
-    }
 
-    private void setEpg(Epg epg) {
-        if (mChannel != null && mChannel.getTvgName().equals(epg.getKey())) setEpg();
-    }
+
+
 
     private void fetch() {
         if (mChannel == null) return;
         LiveConfig.get().setKeep(mChannel);
-        mViewModel.getUrl(mChannel);
+        mLiveData.loadChannel();
         mPlayers.clear();
         mPlayers.stop();
         showProgress();
     }
 
-    private void start(Channel result) {
-        mPlayers.start(result, getTimeout());
-    }
+
 
     private void checkPlayImg(boolean playing) {
         mPiP.update(this, playing);
@@ -738,10 +729,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private void resetAdapter() {
-        mBinding.widget.epgData.getLayoutParams().width = 0;
-        mBinding.channel.getLayoutParams().width = 0;
-        mBinding.group.getLayoutParams().width = 0;
-        mBinding.divide.setVisibility(View.GONE);
+        mListLayout.reset();
         mEpgDataAdapter.clear();
         mChannelAdapter.clear();
         mGroupAdapter.clear();
@@ -929,59 +917,13 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         }
     }
 
-    private boolean prevGroup() {
-        int size = mGroupAdapter.getItemCount();
-        if (mGroup == null || size == 0) return false;
-        int selected = mGroupAdapter.getPosition();
-        for (int offset = 1; offset <= size; offset++) {
-            int position = (selected - offset + size) % size;
-            Group group = mGroupAdapter.get(position);
-            if (mGroup.equals(group)) return false;
-            if (group.skip()) continue;
-            mGroup = group;
-            mGroupAdapter.setSelected(position);
-            mChannelAdapter.addAll(mGroup.getChannel());
-            mGroup.setPosition(mGroup.getChannel().size() - 1);
-            return true;
-        }
-        return false;
-    }
 
-    private boolean nextGroup() {
-        int size = mGroupAdapter.getItemCount();
-        if (mGroup == null || size == 0) return false;
-        int selected = mGroupAdapter.getPosition();
-        for (int offset = 1; offset <= size; offset++) {
-            int position = (selected + offset) % size;
-            Group group = mGroupAdapter.get(position);
-            if (mGroup.equals(group)) return false;
-            if (group.skip()) continue;
-            mGroup = group;
-            mGroupAdapter.setSelected(position);
-            mChannelAdapter.addAll(mGroup.getChannel());
-            mGroup.setPosition(0);
-            return true;
-        }
-        return false;
-    }
 
-    private void prevChannel() {
-        if (mGroup == null) return;
-        int position = mGroup.getPosition() - 1;
-        boolean limit = position < 0;
-        if (Setting.isAcross() & limit) prevGroup();
-        else mGroup.setPosition(limit ? mChannelAdapter.getItemCount() - 1 : position);
-        if (!mGroup.isEmpty()) onItemClick(mGroup.current());
-    }
 
-    private void nextChannel() {
-        if (mGroup == null) return;
-        int position = mGroup.getPosition() + 1;
-        boolean limit = position > mChannelAdapter.getItemCount() - 1;
-        if (Setting.isAcross() && limit) nextGroup();
-        else mGroup.setPosition(limit ? 0 : position);
-        if (!mGroup.isEmpty()) onItemClick(mGroup.current());
-    }
+
+    private void prevChannel() { mNavigation.channel(false, Setting.isAcross()); }
+
+    private void nextChannel() { mNavigation.channel(true, Setting.isAcross()); }
 
     private void checkNext() {
         int current = mChannel.getData().getInRange();
@@ -1302,6 +1244,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     protected void onDestroy() {
+        if (mLiveData != null) mLiveData.close();
         mUiCallbacks.close();
         mArtwork.close();
         super.onDestroy();
@@ -1311,8 +1254,6 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         PlaybackController previous = mPlayers;
         App.post(() -> PlaybackService.stop(previous), 1000);
         mUiCallbacks.remove(mR1, mR2, mR3);
-        mViewModel.url().removeObserver(mObserveUrl);
-        mViewModel.epg().removeObserver(mObserveEpg);
     }
 
 }

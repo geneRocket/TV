@@ -1,11 +1,7 @@
 package com.fongmi.android.tv.ui.activity;
 
 import android.annotation.SuppressLint;
-import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
-import android.os.IBinder;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
@@ -20,12 +16,11 @@ import androidx.media3.ui.SubtitleView;
 import androidx.viewbinding.ViewBinding;
 
 import com.android.cast.dlna.dmr.CastAction;
-import com.android.cast.dlna.dmr.DLNARendererService;
 import com.android.cast.dlna.dmr.RenderControl;
 import com.android.cast.dlna.dmr.RenderState;
-import com.android.cast.dlna.dmr.RendererServiceBinder;
 import com.android.cast.dlna.dmr.service.RendererInterfaceKt;
 import com.fongmi.android.tv.Constant;
+import com.fongmi.android.tv.ui.player.CastRendererConnection;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.bean.Sub;
@@ -47,7 +42,6 @@ import com.fongmi.android.tv.utils.MainThreadExecutor;
 import com.fongmi.android.tv.utils.CallbackScope;
 import com.fongmi.android.tv.utils.AppTaskScheduler;
 import com.fongmi.android.tv.player.session.PlaybackState;
-import com.fongmi.android.tv.service.StableDLNARendererService;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownCast;
 import com.fongmi.android.tv.ui.dialog.PlayerDialog;
@@ -64,14 +58,14 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
-public class CastActivity extends BaseActivity implements CustomKeyDownCast.Listener, TrackDialog.Listener, PlayerDialog.Listener, RenderControl, ServiceConnection, Clock.Callback {
+public class CastActivity extends BaseActivity implements CustomKeyDownCast.Listener, TrackDialog.Listener, PlayerDialog.Listener, RenderControl, Clock.Callback {
 
     private static String textOf(TextView view) {
         return view == null || view.getText() == null ? "" : view.getText().toString();
     }
 
     private ActivityCastBinding mBinding;
-    private DLNARendererService mService;
+    private CastRendererConnection mRenderer;
     private CustomKeyDownCast mKeyDown;
     private RenderState mState = RenderState.IDLE;
     private CastAction mAction;
@@ -85,7 +79,6 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private long position;
     private long duration;
     private int scale;
-    private boolean mServiceBound;
 
     private PlayerView getExo() {
         return mBinding.exo;
@@ -115,7 +108,8 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     protected void initView() {
-        mServiceBound = bindService(new Intent(this, StableDLNARendererService.class), this, Context.BIND_AUTO_CREATE);
+        mRenderer = new CastRendererConnection(this, this);
+        mRenderer.bind();
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownCast.create(this);
         mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
@@ -459,7 +453,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     private void setState(RenderState state) {
         mState = state;
-        if (mService != null) mService.notifyAvTransportLastChange(state);
+        if (mRenderer != null) mRenderer.state(state);
     }
 
     @NonNull
@@ -485,17 +479,6 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     public void onTimeChanged() {
         position = mPlayers.getPosition();
         duration = mPlayers.getDuration();
-    }
-
-    @Override
-    public void onServiceConnected(ComponentName name, IBinder service) {
-        mServiceBound = true;
-        (mService = ((RendererServiceBinder) service).getService()).bindRealPlayer(this);
-    }
-
-    @Override
-    public void onServiceDisconnected(ComponentName name) {
-        mService = null;
     }
 
     @Override
@@ -659,17 +642,12 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     @Override
     protected void onDestroy() {
         mUiCallbacks.close();
-        if (mService != null) mService.bindRealPlayer(null);
-        if (mServiceBound) {
-            unbindService(this);
-            mServiceBound = false;
-        }
+        if (mRenderer != null) mRenderer.close();
         super.onDestroy();
         mClock.release();
         if (mPlaybackFlow != null) mPlaybackFlow.close();
         mPlayers.release();
         mKeyDown.release();
-        mService = null;
         mUiCallbacks.remove(mR1, mR2);
     }
 }

@@ -99,3 +99,5 @@ Receiver 的 `state` 返回真实 Flow/引擎状态；`mediaPause/mediaPlay/medi
 测试结束卸载两个 codextest 包、移除设备 reverse 并停止本地服务器。最后不用 `-I` 重新构建普通 APK，确认 applicationId 为 `com.fongmi.android.tv` 且 Manifest 不含 RefactorReceiver。正常 APK 与测试 APK 使用相同输出文件名，不可混淆。
 
 直播和投屏接收页面也可复用此隔离包：`configLive` 的 url 为 `/live.m3u`，配置完成后 `openLive`；TV 包可用 `openCast` 携带视频 url 与可选 DIDL `metadata`。`state` 返回 DirectPlaybackFlow 阶段、来源代次及自动播放权限，投屏额外返回 rendererState 和标题；`mediaNext/mediaPrevious` 通过真实 MediaSession 切台。先让测试应用在前台，再发启动页面的广播，避免 Android 后台启动限制。实际覆盖与未验证范围见 [本轮记录](/Users/wuwenjun/code/TV/docs/playback-components-live-cast-2026-10-22.md)。
+
+频道/EPG 验收可将设备 `date +%s` 的结果作为 `/live.m3u?epoch=...` 参数，让 XMLTV 的节目时间与设备一致。此接口包含跨组频道、tvg-id/name 不同的频道及当前/未来节目。`state` 增加频道、组、EPG 文本与条数；`replayFuture` 检查无效节目点击，`replayCurrent` 选择首条节目，`across` 开启跨组切台；投屏 state 增加 rendererConnected。验收边界见 [数据与连接拆分记录](/Users/wuwenjun/code/TV/docs/live-navigation-data-renderer-2026-10-22.md)。

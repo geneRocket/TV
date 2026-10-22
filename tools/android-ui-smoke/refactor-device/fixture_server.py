@@ -5,6 +5,8 @@ import pathlib
 import re
 import threading
 import json
+import datetime
+import time
 from urllib.parse import urlsplit, parse_qs
 
 
@@ -17,9 +19,26 @@ class Fixtures(http.server.BaseHTTPRequestHandler):
         path = self.path.split('?', 1)[0]
         base = 'http://127.0.0.1:18765'
         if path == '/live.m3u':
-            data = f'#EXTM3U\n#EXTINF:-1 group-title="Fixture",One\n{base}/fixture.mp4?live=1\n#EXTINF:-1 group-title="Fixture",Two\n{base}/fixture.mp4?live=2\n'.encode()
+            epoch = int(parse_qs(urlsplit(self.path).query).get('epoch', [time.time()])[0])
+            data = (f'#EXTM3U x-tvg-url="{base}/epg.xml?epoch={epoch}" catchup="append" catchup-source="?replay=1"\n'
+                    f'#EXTINF:-1 tvg-id="fixture-id" tvg-name="Fixture Name" group-title="Fixture",One\n{base}/fixture.mp4?live=1\n'
+                    f'#EXTINF:-1 group-title="Fixture",Two\n{base}/fixture.mp4?live=2\n'
+                    f'#EXTINF:-1 group-title="Other",Three\n{base}/fixture.mp4?live=3\n').encode()
             self.send_response(200)
             self.send_header('Content-Type', 'audio/x-mpegurl')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if path == '/epg.xml':
+            epoch = int(parse_qs(urlsplit(self.path).query).get('epoch', [time.time()])[0])
+            def stamp(offset):
+                return datetime.datetime.fromtimestamp(epoch + offset, datetime.timezone.utc).strftime('%Y%m%d%H%M%S +0000')
+            data = (f'<tv><channel id="fixture-id"><display-name>Fixture Name</display-name></channel>'
+                    f'<programme channel="fixture-id" start="{stamp(-3600)}" stop="{stamp(3600)}"><title>Current fixture</title></programme>'
+                    f'<programme channel="fixture-id" start="{stamp(3600)}" stop="{stamp(7200)}"><title>Future fixture</title></programme></tv>').encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/xml')
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()
             self.wfile.write(data)

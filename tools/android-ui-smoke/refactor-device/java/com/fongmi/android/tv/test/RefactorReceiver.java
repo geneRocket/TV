@@ -13,6 +13,8 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.bean.Sub;
+import com.fongmi.android.tv.bean.Channel;
+import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.DirectPlaybackFlow;
 import com.fongmi.android.tv.player.vod.VodPlaybackFlow;
@@ -43,6 +45,16 @@ public final class RefactorReceiver extends BroadcastReceiver {
             String command = intent.getStringExtra("cmd");
             if (command == null) command = "state";
             switch (command) {
+                case "across": Setting.putAcross(intent.getBooleanExtra("value", true)); break;
+                case "replayFuture":
+                    EpgData future = new EpgData();
+                    future.setStartTime(Long.MAX_VALUE);
+                    invoke(activity, "onItemClick", future);
+                    break;
+                case "replayCurrent":
+                    Channel channel = (Channel) field(activity, "mChannel");
+                    invoke(activity, "onItemClick", channel.getData().getList().get(0));
+                    break;
                 case "configLive":
                     LiveConfig.load(Config.create(1, intent.getStringExtra("url")), new Callback() {});
                     break;
@@ -132,6 +144,18 @@ public final class RefactorReceiver extends BroadcastReceiver {
             if (activity != null && activity.getClass().getSimpleName().equals("CastActivity")) {
                 data.put("rendererState", String.valueOf(invoke(activity, "getState")));
                 data.put("title", ((android.widget.TextView) path(activity, "widget.title")).getText());
+                data.put("rendererConnected", field(field(activity, "mRenderer"), "peer") != null);
+            }
+            if (activity != null && activity.getClass().getSimpleName().equals("LiveActivity")) {
+                Channel channel = (Channel) field(activity, "mChannel");
+                if (channel != null) {
+                    data.put("channel", channel.getName());
+                    data.put("group", channel.getGroup().getName());
+                    data.put("tvgId", channel.getTvgId());
+                    data.put("tvgName", channel.getTvgName());
+                    data.put("epgCount", channel.getData().getList().size());
+                    data.put("epgText", ((android.widget.TextView) path(activity, "widget.play")).getText());
+                }
             }
             setResultCode(Activity.RESULT_OK);
             setResultData(data.toString());

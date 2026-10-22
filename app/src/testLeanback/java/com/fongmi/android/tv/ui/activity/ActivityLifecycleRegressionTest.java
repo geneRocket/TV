@@ -4,29 +4,7 @@ import org.junit.Test;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 public class ActivityLifecycleRegressionTest {
-
-    @Test
-    public void disconnectedServiceRemainsBoundUntilUnbind() throws Exception {
-        CastActivity activity = allocate(CastActivity.class);
-        Field bound = CastActivity.class.getDeclaredField("mServiceBound");
-        bound.setAccessible(true);
-        bound.setBoolean(activity, true);
-        activity.onServiceDisconnected(null);
-        assertTrue(bound.getBoolean(activity));
-    }
-
-    @Test
-    public void disconnectedServiceDoesNotCreateBinding() throws Exception {
-        CastActivity activity = allocate(CastActivity.class);
-        Field bound = CastActivity.class.getDeclaredField("mServiceBound");
-        bound.setAccessible(true);
-        activity.onServiceDisconnected(null);
-        assertFalse(bound.getBoolean(activity));
-    }
 
     @Test
     public void finishingSearchIgnoresDelayedSubmission() throws Exception {
