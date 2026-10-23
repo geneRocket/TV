@@ -31,6 +31,7 @@ public final class RefactorReceiver extends BroadcastReceiver {
     private static VodPlaybackFlow lastFlow;
     private static PlaybackController lastPlayer;
     private static DirectPlaybackFlow lastDirect;
+    private static String liveConfigStatus = "idle";
 
     @Override public void onReceive(Context context, Intent intent) {
         try {
@@ -56,8 +57,19 @@ public final class RefactorReceiver extends BroadcastReceiver {
                     invoke(activity, "onItemClick", channel.getData().getList().get(0));
                     break;
                 case "configLive":
-                    LiveConfig.load(Config.create(1, intent.getStringExtra("url")), new Callback() {});
+                    liveConfigStatus = "loading";
+                    LiveConfig.load(Config.create(1, intent.getStringExtra("url")), new Callback() {
+                        @Override public void success() { liveConfigStatus = "success"; }
+                        @Override public void error(String message) { liveConfigStatus = "error: " + message; }
+                    });
                     break;
+                case "liveHome":
+                    invoke(activity, "setLive", LiveConfig.get().getLives().get(intent.getIntExtra("value", 0)));
+                    break;
+                case "liveSelect":
+                    invoke(activity, "setPosition", new int[]{intent.getIntExtra("group", 0), intent.getIntExtra("channel", 0)});
+                    break;
+                case "removeAd": Setting.putRemoveAd(intent.getBooleanExtra("value", true)); break;
                 case "openLive":
                     context.startActivity(new Intent().setClassName(context.getPackageName(), "com.fongmi.android.tv.ui.activity.LiveActivity")
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("empty", false));
@@ -111,6 +123,9 @@ public final class RefactorReceiver extends BroadcastReceiver {
             }
             JSONObject data = new JSONObject();
             data.put("command", command);
+            data.put("liveConfigStatus", liveConfigStatus);
+            data.put("liveSources", LiveConfig.get().getLives().size());
+            data.put("removeAd", Setting.isRemoveAd());
             data.put("activity", activity == null ? JSONObject.NULL : activity.getClass().getSimpleName());
             if (lastFlow != null) {
                 data.put("phase", lastFlow.state().getPhase().name());
