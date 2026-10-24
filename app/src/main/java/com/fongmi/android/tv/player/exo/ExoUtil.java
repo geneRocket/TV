@@ -128,11 +128,37 @@ public class ExoUtil {
         builder.setRequestMetadata(getRequestMetadata(headers, uri, forceLive));
         builder.setSubtitleConfigurations(getSubtitleConfigs(subs));
         if (drm != null) builder.setDrmConfiguration(drm.get());
+        mimeType = resolveMimeType(mimeType, uri.toString());
         if (TextUtils.isEmpty(mimeType) && forceLive) mimeType = guessLiveMimeType(uri);
         if (mimeType != null) builder.setMimeType(mimeType);
         if (forceLive) builder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder().build());
         builder.setMediaId(uri.toString());
         return builder.build();
+    }
+
+    static String resolveMimeType(String configured, String url) {
+        if ((configured != null && !configured.isEmpty()) || url == null) return configured;
+        try {
+            java.net.URI uri = new java.net.URI(url);
+            String host = uri.getHost();
+            boolean local = "127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host)
+                    || "[::1]".equals(host) || "::1".equals(host);
+            if (!local || !"/proxy".equals(uri.getRawPath())
+                    || !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                    || uri.getRawQuery() == null) return configured;
+            // CatVod declares HLS through this local endpoint, which has no media
+            // suffix. Select HLS before Exo attempts progressive extraction/recovery.
+            for (String parameter : uri.getRawQuery().split("&")) {
+                int equals = parameter.indexOf('=');
+                if (equals < 0) continue;
+                String key = java.net.URLDecoder.decode(parameter.substring(0, equals), "UTF-8");
+                String value = java.net.URLDecoder.decode(parameter.substring(equals + 1), "UTF-8");
+                if ("do".equals(key) && "m3u8".equals(value)) return MimeTypes.APPLICATION_M3U8;
+            }
+        } catch (Exception ignored) {
+            // Unknown/malformed URLs keep the existing factory selection behavior.
+        }
+        return configured;
     }
 
     private static String guessLiveMimeType(Uri uri) {

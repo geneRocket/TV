@@ -32,6 +32,8 @@ public final class RefactorReceiver extends BroadcastReceiver {
     private static PlaybackController lastPlayer;
     private static DirectPlaybackFlow lastDirect;
     private static String liveConfigStatus = "idle";
+    private static String vodConfigStatus = "idle";
+    private static volatile JSONObject vodProbe;
 
     @Override public void onReceive(Context context, Intent intent) {
         try {
@@ -83,7 +85,32 @@ public final class RefactorReceiver extends BroadcastReceiver {
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(actionKey, action));
                     break;
                 case "config":
-                    VodConfig.load(Config.create(0, intent.getStringExtra("url")), new Callback() {});
+                    vodConfigStatus = "loading";
+                    VodConfig.load(Config.create(0, intent.getStringExtra("url")), new Callback() {
+                        @Override public void success() { vodConfigStatus = "success"; }
+                        @Override public void error(String message) { vodConfigStatus = "error: " + message; }
+                    });
+                    break;
+                case "vodProbe":
+                    vodProbe = new JSONObject().put("status", "loading");
+                    String siteKey = intent.getStringExtra("key");
+                    App.execute(() -> {
+                        JSONObject probe = new JSONObject();
+                        try {
+                            com.fongmi.android.tv.bean.Site site = VodConfig.get().getSite(siteKey);
+                            com.github.catvod.crawler.Spider spider = site.spider();
+                            JSONObject home = new JSONObject(spider.homeContent(false));
+                            org.json.JSONArray list = home.optJSONArray("list");
+                            if (list == null || list.length() == 0) list = new JSONObject(spider.homeVideoContent()).optJSONArray("list");
+                            probe.put("site", site.getKey());
+                            probe.put("status", "success");
+                            probe.put("count", list == null ? 0 : list.length());
+                            if (list != null && list.length() > 0) probe.put("first", list.getJSONObject(0));
+                        } catch (Throwable error) {
+                            try { probe.put("status", "error").put("error", error.toString()); } catch (org.json.JSONException ignored) {}
+                        }
+                        vodProbe = probe;
+                    });
                     break;
                 case "background": Setting.putBackground(intent.getIntExtra("value", 0)); break;
                 case "open":
@@ -124,6 +151,9 @@ public final class RefactorReceiver extends BroadcastReceiver {
             JSONObject data = new JSONObject();
             data.put("command", command);
             data.put("liveConfigStatus", liveConfigStatus);
+            data.put("vodConfigStatus", vodConfigStatus);
+            data.put("vodSites", VodConfig.get().getSites().size());
+            if (vodProbe != null) data.put("vodProbe", vodProbe);
             data.put("liveSources", LiveConfig.get().getLives().size());
             data.put("removeAd", Setting.isRemoveAd());
             data.put("activity", activity == null ? JSONObject.NULL : activity.getClass().getSimpleName());
@@ -147,6 +177,10 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 data.put("speed", lastPlayer.getSpeed());
                 data.put("videoWidth", lastPlayer.getVideoWidth());
                 data.put("videoHeight", lastPlayer.getVideoHeight());
+                if (lastPlayer.exo() != null && lastPlayer.exo().getCurrentMediaItem() != null
+                        && lastPlayer.exo().getCurrentMediaItem().localConfiguration != null) {
+                    data.put("mimeType", lastPlayer.exo().getCurrentMediaItem().localConfiguration.mimeType);
+                }
             }
             if (activity != null && activity.getClass().getSimpleName().equals("VideoActivity")) {
                 data.put("fullscreen", invoke(activity, "isFullscreen"));
