@@ -19,6 +19,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.receiver.ActionReceiver;
+import com.fongmi.android.tv.player.PlaybackController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,8 @@ import java.util.List;
 public class PiP {
 
     private PictureInPictureParams.Builder builder;
+    private PlaybackController owner;
+    public PiP owner(PlaybackController owner) { this.owner = owner; return this; }
 
     public static boolean noPiP() {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !App.get().getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
@@ -33,7 +36,7 @@ public class PiP {
 
     @TargetApi(Build.VERSION_CODES.O)
     private RemoteAction buildRemoteAction(Activity activity, @DrawableRes int icon, @StringRes int title, String action) {
-        return new RemoteAction(Icon.createWithResource(activity, icon), activity.getString(title), "", ActionReceiver.getPendingIntent(activity, action));
+        return new RemoteAction(Icon.createWithResource(activity, icon), activity.getString(title), "", ActionReceiver.getPendingIntent(activity, action, owner));
     }
 
     private RemoteAction getPlayPauseAction(Activity activity, boolean play) {

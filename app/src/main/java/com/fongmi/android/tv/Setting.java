@@ -22,6 +22,11 @@ public class Setting {
         return getPref().edit();
     }
 
+    private static int getOption(String key, int fallback, int count) {
+        int value = Prefers.getInt(key, fallback);
+        return value >= 0 && value < count ? value : fallback;
+    }
+
     // region Core Settings
 
     public static String getDoh() {
@@ -49,7 +54,7 @@ public class Setting {
     }
 
     public static int getQuality() {
-        return Prefers.getInt("quality", 2);
+        return getOption("quality", 2, 3);
     }
 
     public static void putQuality(int index) {
@@ -61,7 +66,7 @@ public class Setting {
     }
 
     public static int getConfigCache() {
-        return Math.min(Prefers.getInt("config_cache", 0), 2);
+        return getOption("config_cache", 0, 3);
     }
 
     public static void putConfigCache(int value) {
@@ -181,7 +186,7 @@ public class Setting {
     }
 
     public static int getBackground() {
-        return Prefers.getInt("background", 2);
+        return getOption("background", 2, 3);
     }
 
     public static void putBackground(int value) {
@@ -434,7 +439,7 @@ public class Setting {
     // region Misc Settings
 
     public static int getReset() {
-        return Prefers.getInt("reset", 0);
+        return getOption("reset", 0, 2);
     }
 
     public static void putReset(int reset) {
@@ -486,7 +491,7 @@ public class Setting {
     }
 
     public static int getLanguage() {
-        return Prefers.getInt("language", LanguageUtil.locale());
+        return getOption("language", LanguageUtil.locale(), 3);
     }
 
     public static void putLanguage(int lang) {
@@ -494,7 +499,7 @@ public class Setting {
     }
 
     public static int getBackupMode() {
-        return Prefers.getInt("backup_mode", 1);
+        return getOption("backup_mode", 1, 2);
     }
 
     public static void putBackupMode(int mode) {
@@ -598,7 +603,7 @@ public class Setting {
     }
 
     public static int getSize() {
-        return Prefers.getInt("size", 2);
+        return getOption("size", 2, 4);
     }
 
     public static void putSize(int index) {

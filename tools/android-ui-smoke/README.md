@@ -1,5 +1,26 @@
 # Android 手势释放回归检查
 
+## 播放所有权与恢复验收
+
+按下文“隔离的实际播放验收包”构建/安装测试包、启动对应首页与本地 fixture_server.py，并完成 `adb reverse tcp:18765 tcp:18765` 后运行：
+
+```sh
+export ANDROID_SERIAL=emulator-5554
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py paused
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py playing
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py live
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py ijk
+
+# 切换到已安装的手机隔离包，并先启动其 MainActivity。
+export TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py mobile-paused
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py mobile-playing
+```
+
+脚本仅使用隔离包和本地视频。验证目标包括用户暂停、2倍速、30秒附近进度、引擎/页面切换和返回后的播放状态，并输出JSON。启动阶段若另一配置加载覆盖了测试配置加载，先等待首页初始化结束再重跑；不要将测试 Receiver 的广播返回等同于异步配置完成。手机测试在Android TV模拟器上只验证手机页面逻辑，不代表手机硬件/PiP验收。结束后卸载隔离包、移除reverse并重新构建普通APK。
+
+本轮结构与证据见 [架构重构记录](../../docs/playback-architecture-refactor-2026-10-24.md)。
+
 `GestureDetectorSmoke.java` 使用 Android 真实消息循环验证：调用手势处理器的 release 后，排队的长按与单击确认回调不再执行。TV 额外检查投屏临时倍速、点播亮度/音量的结束回调只执行一次。
 
 处理器由反射创建，注入真实 GestureDetector 和回调计数器；不创建应用 Activity、不安装 APK、不接触应用数据。测试覆盖 release 与 Android 消息队列的配合，不能代替实际播放、遥控器焦点和触摸操作验收。

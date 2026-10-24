@@ -16,6 +16,41 @@ import java.util.Set;
 import static org.junit.Assert.*;
 
 public class VodEntryResolverTest {
+    @Test public void leavingPageBeforeClickDoesNotLoadOrPlayAnything() {
+        Harness h = new Harness();
+        h.ready = false;
+        h.open(2);
+        h.drain();
+        assertNull(h.loaded);
+        assertEquals(0, h.played + h.fallbacks + h.errors);
+    }
+
+    @Test public void invalidOwnerTypesCannotReplaceTheUsersVodConfiguration() {
+        for (int type : new int[]{1, 2}) {
+            Harness h = new Harness();
+            h.owner.setType(type);
+            h.open(2);
+            h.drain();
+            assertNull(h.loaded);
+            assertEquals(1, h.fallbacks);
+            assertEquals(0, h.played);
+        }
+    }
+
+    @Test public void failedEntryLoadCanBeRetriedWithoutAnOldErrorStealingTheNewClick() {
+        Harness h = new Harness();
+        h.open(2); h.drain();
+        Callback old = h.callback;
+        old.error("offline"); h.drain();
+        assertEquals(1, h.errors);
+        h.open(2); h.drain();
+        old.error("late offline");
+        h.sites.add("2@site");
+        h.callback.success(); h.drain();
+        assertEquals(1, h.errors);
+        assertEquals(1, h.played);
+        assertEquals(Arrays.asList(1, 2), h.loadedIds());
+    }
     @Test public void loadedSiteOpensWithoutReloadingConfigurations() {
         Harness h = new Harness();
         h.sites.add("2@site");

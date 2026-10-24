@@ -156,6 +156,9 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         if (released || phase == EnginePhase.STOPPED) return;
         switch (what) {
             case IMediaPlayer.MEDIA_INFO_BUFFERING_START:
+                // A paused initial seek may never produce BUFFERING_END until
+                // playback resumes. Native buffering must not override user pause.
+                if (!playWhenReady) break;
                 phase = EnginePhase.BUFFERING;
                 emit(null);
                 break;

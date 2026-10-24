@@ -15,7 +15,7 @@ public final class PaginationState {
         int page = Math.max(1, requestedPage);
         if (failed) return new PaginationState(Math.max(1, page - 1), true);
         if (itemCount == 0) return new PaginationState(Math.max(1, page - 1), false);
-        return new PaginationState(page, pageCount == 0 || page < pageCount);
+        return new PaginationState(page, pageCount <= 0 || page < pageCount);
     }
 
     public int getPage() {

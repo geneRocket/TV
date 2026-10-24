@@ -13,7 +13,7 @@ import static org.junit.Assert.*;
 
 public class DatabaseResetConcurrencyTest {
     @Test public void waitingForHistoryWritesDoesNotHoldTheDatabaseMonitor() throws Exception {
-        Field field = History.class.getDeclaredField("WRITE_LOCK");
+        Field field = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("WRITE_LOCK");
         field.setAccessible(true);
         Object writes = field.get(null);
         CountDownLatch databaseAvailable = new CountDownLatch(1);

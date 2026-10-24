@@ -13,6 +13,31 @@ import java.util.function.Function;
 import static org.junit.Assert.*;
 
 public class ConfigLoadTaskTest {
+    @Test public void cancellingOneNestedConfigLoadDoesNotCancelTheOuterIndependentLoad() {
+        ConfigLoadTask.Session outer = new ConfigLoadTask.Session();
+        ConfigLoadTask.Session inner = new ConfigLoadTask.Session();
+        AtomicInteger committed = new AtomicInteger();
+        AtomicReference<Runnable> old = new AtomicReference<>(), current = new AtomicReference<>();
+        outer.run(() -> {
+            inner.run(() -> old.set(ConfigLoadTask.guard(() -> committed.addAndGet(100))));
+            inner.cancel();
+            ConfigLoadTask.check();
+            current.set(ConfigLoadTask.guard(committed::incrementAndGet));
+        });
+        old.get().run(); current.get().run();
+        assertEquals(1, committed.get());
+    }
+
+    @Test public void cancelledLoadCannotStartItsDeferredHttpWorker() {
+        ConfigLoadTask.Session session = new ConfigLoadTask.Session();
+        AtomicReference<Function<Integer, Integer>> worker = new AtomicReference<>();
+        AtomicInteger fetched = new AtomicInteger();
+        session.run(() -> worker.set(ConfigLoadTask.bind(value -> fetched.incrementAndGet())));
+        session.cancel();
+        try { worker.get().apply(1); fail("Cancelled load fetched a remote resource"); }
+        catch (CancellationException expected) { }
+        assertEquals(0, fetched.get());
+    }
     @Test public void queuedCallbackIsDiscardedAfterSupersedingLoad() {
         ConfigLoadTask.Session session = new ConfigLoadTask.Session();
         AtomicInteger delivered = new AtomicInteger();

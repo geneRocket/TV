@@ -10,7 +10,20 @@ public final class RemoteContentValidator {
         if (content == null) return false;
         String text = content.trim();
         if (text.startsWith("\uFEFF")) text = text.substring(1).trim();
-        String prefix = text.substring(0, Math.min(text.length(), 256)).toLowerCase(Locale.ROOT);
+        int start = 0;
+        while (start < text.length()) {
+            while (start < text.length() && Character.isWhitespace(text.charAt(start))) start++;
+            if (text.startsWith("<!--", start)) {
+                int end = text.indexOf("-->", start + 4);
+                if (end < 0) break;
+                start = end + 3;
+            } else if (text.regionMatches(true, start, "<?xml", 0, 5)) {
+                int end = text.indexOf("?>", start + 5);
+                if (end < 0) break;
+                start = end + 2;
+            } else break;
+        }
+        String prefix = text.substring(start, Math.min(text.length(), start + 256)).toLowerCase(Locale.ROOT);
         return prefix.startsWith("<!doctype html") || prefix.startsWith("<html")
                 || prefix.startsWith("<head") || prefix.startsWith("<body");
     }

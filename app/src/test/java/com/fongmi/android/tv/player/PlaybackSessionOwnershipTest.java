@@ -20,9 +20,9 @@ public class PlaybackSessionOwnershipTest {
         PlaybackState[] state = {new PlaybackState(7, PlaybackPhase.PAUSED, null, 0, 1, null)};
         PlayerSession session = (PlayerSession) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{PlayerSession.class},
                 (proxy, method, args) -> method.getName().equals("state") ? state[0] : null);
-        Field delegate = PlaybackController.class.getDeclaredField("playbackSession");
+        Field delegate = PlaybackController.class.getDeclaredField("engines");
         delegate.setAccessible(true);
-        delegate.set(controller, session);
+        delegate.set(controller, new PlaybackEngineHost(session));
         PlaybackController previous = Server.get().getPlayer();
         try {
             Server.get().setPlayer(controller);
@@ -32,9 +32,9 @@ public class PlaybackSessionOwnershipTest {
             state[0] = new PlaybackState(7, PlaybackPhase.RELEASED, null, 0, 1, null);
             assertFalse(controller.ownsSession(session, 7));
             state[0] = new PlaybackState(7, PlaybackPhase.PAUSED, null, 0, 1, null);
-            delegate.set(controller, null);
+            delegate.set(controller, new PlaybackEngineHost());
             assertFalse(controller.ownsSession(session, 7));
-            delegate.set(controller, session);
+            delegate.set(controller, new PlaybackEngineHost(session));
             Server.get().setPlayer(null);
             assertFalse(controller.ownsSession(session, 7));
         } finally { Server.get().setPlayer(previous); }

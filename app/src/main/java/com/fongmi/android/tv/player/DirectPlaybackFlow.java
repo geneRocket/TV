@@ -5,6 +5,8 @@ import com.fongmi.android.tv.player.session.PlaybackPhase;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.PlaybackObserver;
 import com.fongmi.android.tv.player.session.Subscription;
+import com.fongmi.android.tv.player.engine.EngineSnapshot;
+import com.fongmi.android.tv.player.engine.EnginePhase;
 
 import java.util.ArrayDeque;
 import java.util.concurrent.Executor;
@@ -16,6 +18,7 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
         int getPlayer();
         void executeInput(PlaybackInput input);
         Subscription observe(PlaybackObserver observer);
+        default EngineSnapshot snapshot() { return EngineSnapshot.EMPTY; }
     }
 
     public interface Port {
@@ -48,6 +51,7 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
     private long generation;
     private long endedSession = -1;
     private PlaybackState state = PlaybackState.IDLE;
+    private EngineSnapshot checkpoint = EngineSnapshot.EMPTY;
 
     public DirectPlaybackFlow(Engine engine, Port port, Executor delivery) {
         this.engine = engine;
@@ -73,6 +77,7 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
     }
 
     public PlaybackState state() { return state; }
+    public boolean isClosed() { return closed; }
     public long generation() { return generation; }
     public boolean accepts(long token) { return !closed && engine.isCurrent() && token == generation; }
     public boolean isBuffering() { return state.getPhase() == PlaybackPhase.PREPARING || state.getPhase() == PlaybackPhase.BUFFERING; }
@@ -90,6 +95,29 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
         enqueue(() -> {
             allowed = value;
             engine.executeInput(PlaybackInput.action(value && wantsPlayback ? PlaybackInput.Type.PLAY : PlaybackInput.Type.PAUSE));
+        });
+    }
+
+    @Override public void onOwnershipLost() {
+        // Ownership has already moved. Do not use the current-owner input queue.
+        if (closed) return;
+        allowed = false;
+        generation++;
+        queue.clear();
+        recovery.reset();
+        try { checkpoint = engine.snapshot(); }
+        catch (RuntimeException ignored) {
+            checkpoint = new EngineSnapshot(state.getSessionId(), EnginePhase.PAUSED, state.getPosition(),
+                    state.getDuration(), state.getPosition(), false, 1, 0, 0);
+        }
+    }
+
+    public EngineSnapshot checkpoint() { return checkpoint; }
+
+    public void restoreAfterHandoff(Runnable prepare) {
+        enqueue(() -> {
+            allowed = true;
+            prepare.run();
         });
     }
 

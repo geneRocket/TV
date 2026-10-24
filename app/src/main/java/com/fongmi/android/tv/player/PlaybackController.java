@@ -8,7 +8,6 @@ import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.text.TextUtils;
-import android.view.View;
 
 import androidx.media3.common.C;
 import androidx.media3.common.PlaybackException;
@@ -30,18 +29,12 @@ import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.engine.EngineSnapshot;
-import com.fongmi.android.tv.player.engine.ExoPlayerEngine;
-import com.fongmi.android.tv.player.engine.IjkPlayerEngine;
-import com.fongmi.android.tv.player.engine.PlayerEngine;
-import com.fongmi.android.tv.player.session.DefaultPlayerSession;
 import com.fongmi.android.tv.player.session.PlaybackItem;
 import com.fongmi.android.tv.player.session.PlaybackPhase;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.session.PlayerSession;
 import com.fongmi.android.tv.player.session.Subscription;
-import com.fongmi.android.tv.player.resolver.PlaybackSourceResolver;
 import com.fongmi.android.tv.player.resolver.ResolvedMedia;
-import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.AdBlocker;
 import com.fongmi.android.tv.utils.M3u8AdFilter;
 import com.fongmi.android.tv.utils.Notify;
@@ -74,13 +67,9 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     private final MediaSessionController mediaSession;
     private final Set<com.fongmi.android.tv.player.session.PlaybackObserver> observers;
 
-    private PlayerEngine engine;
-    private PlayerSession playbackSession;
-    private Subscription playbackSubscription;
-    private PlayerView exoView;
-    private IjkVideoView ijkView;
+    private final PlaybackEngineHost engines;
     private Map<String, String> headers;
-    private final PlaybackSourceResolver sourceResolver;
+    private final PlaybackSourcePipeline sourcePipeline;
     private List<Sub> subs;
     private String format;
     private String url;
@@ -99,11 +88,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     private static final Pattern PATTERN_VOD = Pattern.compile(".*\\.(mp4|mkv|avi|mov|wmv|m4v)(\\?.*)?$");
 
     public static PlaybackController create(Activity activity, Consumer<ErrorEvent> onError, Consumer<PlaybackCommand> onCommand) {
-        PlaybackController previous = Server.get().getPlayer();
-        if (previous != null) previous.releasePlayer();
-        PlaybackController player = new PlaybackController(activity, onError, onCommand);
-        Server.get().setPlayer(player);
-        return player;
+        return new PlaybackController(activity, onError, onCommand);
     }
 
     public boolean isHard() {
@@ -149,76 +134,58 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         timeout = Constant.TIMEOUT_PLAY;
         mediaSession = new MediaSessionController(activity, this);
         observers = new LinkedHashSet<>();
-        sourceResolver = new PlaybackSourceResolver();
+        engines = new PlaybackEngineHost();
+        sourcePipeline = new PlaybackSourcePipeline(new PlaybackSourcePipeline.Port() {
+            @Override public boolean isCurrent() { return PlaybackController.this.isCurrent(); }
+            @Override public void resolved(ResolvedMedia media) { applyResolvedMedia(media); }
+            @Override public void failed() { reportError(ErrorEvent.parse()); }
+        });
     }
 
     public void init(PlayerView exo, IjkVideoView ijk) {
-        this.exoView = exo;
-        this.ijkView = ijk;
+        activateAsCurrentPlayer();
+        engines.views(exo, ijk);
         setupEngine();
     }
 
     public void activateAsCurrentPlayer() {
-        Server.get().setPlayer(this);
+        if (engines != null && engines.isClosed()) return;
+        PlaybackOwners.acquire(this);
     }
 
     public boolean isCurrent() {
-        return Server.get().getPlayer() == this;
+        return PlaybackOwners.owns(this);
+    }
+
+    void revokeOwnership() {
+        try {
+            if (inputHandler != null) inputHandler.onOwnershipLost();
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Playback handoff failed.");
+        } finally {
+            mediaSession.setActive(false);
+            releasePlayer();
+        }
     }
 
     public PlayerSession session() {
         ensureSession();
-        return playbackSession;
+        return engines.session();
     }
 
     public boolean ownsSession(PlayerSession expected, long sessionId) {
-        return isCurrent() && expected != null && playbackSession == expected
+        return isCurrent() && expected != null && engines.session() == expected
                 && expected.state().getSessionId() == sessionId
                 && expected.state().getPhase() != PlaybackPhase.RELEASED;
     }
 
     private void setupEngine() {
-        releaseEngine();
-        if (exoView == null || ijkView == null) return;
-        if (isExo()) {
-            exoView.setVisibility(View.VISIBLE);
-            ijkView.setVisibility(View.GONE);
-            try {
-                engine = new ExoPlayerEngine(exoView, decode, Setting.isPlayWithOthers(), Setting.isTunnel());
-            } catch (RuntimeException e) {
-                ThreadPools.log(e, "Exo initialization failed; falling back to IJK.");
-                player = PlayerType.IJK;
-                decode = getDecode(player);
-                setupEngine();
-                return;
-            }
-        } else {
-            exoView.setVisibility(View.GONE);
-            ijkView.setVisibility(View.VISIBLE);
-            engine = new IjkPlayerEngine(ijkView, player, Setting.getRender(), decode);
-        }
-        playbackSession = new DefaultPlayerSession(engine);
-        playbackSubscription = playbackSession.observe(this::onPlaybackState);
+        engines.initialize(player, decode, this::onPlaybackState);
+        player = engines.type();
+        decode = engines.decode();
     }
 
-    private void releaseEngine() {
-        if (playbackSession == null && engine == null) return;
-        try {
-            if (playbackSubscription != null) playbackSubscription.cancel();
-        } catch (RuntimeException e) {
-            ThreadPools.log(e, "Player subscription release failed.");
-        }
-        try {
-            if (playbackSession != null) playbackSession.release();
-            else engine.release();
-        } catch (RuntimeException e) {
-            ThreadPools.log(e, "Player release failed.");
-        } finally {
-            engine = null;
-            playbackSession = null;
-            playbackSubscription = null;
-        }
-    }
+    private void releaseEngine() { engines.releaseEngine(); }
 
     public void setDanmuView(DanmakuView view) {
         danmaku.setView(view);
@@ -233,11 +200,11 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     public ExoPlayer exo() {
-        return engine instanceof ExoPlayerEngine ? ((ExoPlayerEngine) engine).player() : null;
+        return engines.exo();
     }
 
     public IjkVideoView ijk() {
-        return ijkView;
+        return engines.ijk();
     }
 
     public MediaSessionCompat getSession() {
@@ -259,7 +226,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     private void setSubtitleDirect(Sub sub) {
         if (isSameSub(sub)) return;
-        boolean paused = playbackSession != null && playbackSession.state().getPhase() == PlaybackPhase.PAUSED;
+        boolean paused = engines.session() != null && engines.session().state().getPhase() == PlaybackPhase.PAUSED;
         float speed = getSpeed();
         String identity = currentIdentity();
         this.sub = sub;
@@ -268,7 +235,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         if (isIjk()) setPlayer(PlayerType.EXO);
         setPosition(current);
         reloadMediaSource(identity, !paused);
-        if (playbackSession != null) playbackSession.setSpeed(speed);
+        if (engines.session() != null) engines.session().setSpeed(speed);
     }
 
     /** Changes metadata only; VOD prepares through its flow after attaching a compatible session. */
@@ -279,6 +246,10 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     private PlaybackInput.Handler inputHandler;
+    private java.util.function.BooleanSupplier foregroundSurface;
+
+    public void setForegroundSource(java.util.function.BooleanSupplier source) { foregroundSurface = source; }
+    public boolean hasForegroundSurface() { return foregroundSurface != null && foregroundSurface.getAsBoolean(); }
 
     public void setInputHandler(PlaybackInput.Handler handler) { inputHandler = handler; }
 
@@ -349,7 +320,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         if (changed) stop();
         this.player = player;
         this.decode = getDecode(player);
-        if (changed || engine == null) setupEngine();
+        if (changed || engines.engine() == null) setupEngine();
     }
 
     public boolean ensureCompatiblePlayer(Drm drm) {
@@ -420,13 +391,13 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         return snapshot().getBufferedPosition();
     }
 
-    private EngineSnapshot snapshot() {
-        return playbackSession == null ? EngineSnapshot.EMPTY : playbackSession.snapshot();
+    @Override public EngineSnapshot snapshot() {
+        return engines.session() == null ? EngineSnapshot.EMPTY : engines.session().snapshot();
     }
 
     public boolean haveTrack(int type) {
         if (isExo() && exo() != null) return ExoUtil.haveTrack(exo().getCurrentTracks(), type);
-        if (isIjk() && ijkView != null) return ijkView.haveTrack(type);
+        if (isIjk() && engines.ijk() != null) return engines.ijk().haveTrack(type);
         return false;
     }
 
@@ -452,12 +423,12 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     public boolean isEnd() {
         if (isExo() && exo() != null) return exo().getPlaybackState() == Player.STATE_ENDED;
-        if (isIjk() && ijkView != null) return ijkView.getPlaybackState() == IjkVideoView.STATE_ENDED;
+        if (isIjk() && engines.ijk() != null) return engines.ijk().getPlaybackState() == IjkVideoView.STATE_ENDED;
         return false;
     }
 
     public boolean isRelease() {
-        return engine == null;
+        return engines.engine() == null;
     }
 
     public boolean isEmpty() {
@@ -495,7 +466,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     public String setSpeed(float speed) {
-        if (playbackSession != null) playbackSession.setSpeed(speed);
+        if (engines.session() != null) engines.session().setSpeed(speed);
         danmaku.applySpeed(getSpeed());
         return getSpeedText();
     }
@@ -562,8 +533,8 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     private void seekDirect(long time) {
         danmaku.seekTo(time);
-        if (engine != null) {
-            playbackSession.seekTo(time);
+        if (engines.engine() != null) {
+            engines.session().seekTo(time);
         }
     }
 
@@ -575,9 +546,9 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     private void playDirect() {
         if (isPlaying()) return;
         if (isEnd()) seekDirect(0);
-        Server.get().setPlayer(this);
+        activateAsCurrentPlayer();
         mediaSession.setActive(true);
-        if (playbackSession != null) playbackSession.play();
+        if (engines.session() != null) engines.session().play();
         updateDanmuPlayingState();
         setPlaybackState(PlaybackStateCompat.STATE_PLAYING);
     }
@@ -588,7 +559,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     private void pauseDirect() {
-        if (playbackSession != null) playbackSession.pause();
+        if (engines.session() != null) engines.session().pause();
         mediaSession.setActive(false);
         pauseDanmu();
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
@@ -598,7 +569,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         errors.invalidate();
         removeTimeoutCheck();
         stopParse();
-        if (playbackSession != null) playbackSession.stop();
+        if (engines.session() != null) engines.session().stop();
         mediaSession.setActive(false);
         danmaku.stop();
         setPlaybackState(PlaybackStateCompat.STATE_STOPPED);
@@ -624,16 +595,17 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     public void release() {
         inputHandler = null;
+        foregroundSurface = null;
         commands.close();
         errors.close();
-        boolean current = isCurrent();
+        sourcePipeline.close();
         stopParse();
         try {
             mediaSession.release();
         } catch (RuntimeException e) {
             ThreadPools.log(e, "Media session release failed.");
         }
-        releaseEngine();
+        engines.close();
         try {
             danmaku.release();
         } catch (RuntimeException e) {
@@ -642,9 +614,8 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         observers.clear();
         clear();
         removeTimeoutCheck();
-        if (current) {
+        if (PlaybackOwners.release(this)) {
             M3u8AdFilter.clearSubtitlePlaylistWhitelist();
-            Server.get().setPlayer(null);
             App.execute(Source.get().deferStop());
         }
     }
@@ -697,31 +668,28 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     private void startParse(Result result, boolean useParse) {
-        stopParse();
-        sourceResolver.resolve(result, useParse, forceLive, new PlaybackSourceResolver.Callback() {
-            @Override
-            public void onResolved(ResolvedMedia media) {
-                if (Setting.isRemoveAd() && AdBlocker.isAdUrl(media.getUrl())) {
-                    reportError(ErrorEvent.parse());
-                    return;
-                }
-                if (!TextUtils.isEmpty(media.getSource())) Notify.show(ResUtil.getString(R.string.parse_from, media.getSource()));
-                setMediaSource(media.getHeaders(), media.getUrl(), media.getFormat(), media.getDrm(), media.getSubtitles(), timeout, media.isForceLive());
-            }
-
-            @Override
-            public void onFailure() {
-                reportError(ErrorEvent.parse());
-            }
-        });
+        sourcePipeline.resolve(result, useParse, forceLive);
     }
 
-    private void stopParse() {
-        sourceResolver.cancel();
+    private void applyResolvedMedia(ResolvedMedia media) {
+        if (Setting.isRemoveAd() && AdBlocker.isAdUrl(media.getUrl())) {
+            reportError(ErrorEvent.parse());
+            return;
+        }
+        if (!TextUtils.isEmpty(media.getSource())) Notify.show(ResUtil.getString(R.string.parse_from, media.getSource()));
+        setMediaSource(media.getHeaders(), media.getUrl(), media.getFormat(), media.getDrm(), media.getSubtitles(), timeout, media.isForceLive());
     }
+
+    private void stopParse() { sourcePipeline.cancel(); }
 
     public void setMediaSource() {
         reloadMediaSource(currentIdentity());
+    }
+
+    public void restoreCheckpoint(EngineSnapshot checkpoint) {
+        if (checkpoint != null) setPosition(forceLive ? 0 : checkpoint.getPosition());
+        setMediaSource();
+        if (checkpoint != null) setSpeed(checkpoint.getSpeed());
     }
 
     private void reloadMediaSource(String identity) {
@@ -768,6 +736,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     private void setMediaSource(String identity, Map<String, String> headers, String url, String format, Drm drm, List<Sub> subs, int timeout, boolean forceLive, boolean playWhenReady) {
+        if (!isCurrent()) return;
         errors.invalidate();
         stopParse();
         this.headers = PlaybackHeaders.applyUserAgent(PlaybackHeaders.mergeInlineHeaders(headers, url));
@@ -782,12 +751,12 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         }
         ensureCompatiblePlayer(this.drm);
         try {
-            if (playbackSession == null) throw new IllegalStateException("player session is not initialized");
+            if (engines.session() == null) throw new IllegalStateException("player session is not initialized");
             long startPosition = position == C.TIME_UNSET ? 0 : Math.max(position, 0);
             position = C.TIME_UNSET;
             String itemIdentity = TextUtils.isEmpty(identity) ? this.url : identity;
             boolean effectivePlayWhenReady = inputHandler == null ? playWhenReady : inputHandler.playWhenReady(playWhenReady);
-            activeSessionId = playbackSession.prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive, effectivePlayWhenReady));
+            activeSessionId = engines.session().prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive, effectivePlayWhenReady));
         } catch (RuntimeException e) {
             removeTimeoutCheck();
             ThreadPools.log(e, "Player media source setup failed.");
@@ -810,8 +779,8 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     public void setTrack(List<Track> tracks) {
         for (Track track : tracks) {
-            if (engine == null) return;
-            if (track.isExo(player) || track.isIjk(player)) playbackSession.setTrack(track);
+            if (engines.engine() == null) return;
+            if (track.isExo(player) || track.isIjk(player)) engines.session().setTrack(track);
         }
     }
 
@@ -875,14 +844,14 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         }
         if (state.getSessionId() != 0) activeSessionId = state.getSessionId();
         for (com.fongmi.android.tv.player.session.PlaybackObserver observer : new LinkedHashSet<>(observers)) {
-            if (playbackSession == null || playbackSession.state() != state) return;
+            if (engines.session() == null || engines.session().state() != state) return;
             try {
                 observer.onPlaybackState(state);
             } catch (RuntimeException error) {
                 ThreadPools.log(error, "Playback observer failed.");
             }
         }
-        if (playbackSession == null || playbackSession.state() != state) return;
+        if (engines.session() == null || engines.session().state() != state) return;
         PlaybackPhase phase = state.getPhase();
         mediaSession.setActive(isCurrent() && phase != PlaybackPhase.IDLE && phase != PlaybackPhase.STOPPED
                 && phase != PlaybackPhase.ERROR && phase != PlaybackPhase.RELEASED);
@@ -927,7 +896,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
         if (observer == null) throw new IllegalArgumentException("observer must not be null");
         observers.add(observer);
         try {
-            observer.onPlaybackState(playbackSession == null ? PlaybackState.IDLE : playbackSession.state());
+            observer.onPlaybackState(engines.session() == null ? PlaybackState.IDLE : engines.session().state());
         } catch (RuntimeException error) {
             ThreadPools.log(error, "Playback observer failed.");
         }
@@ -935,8 +904,8 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     private String currentIdentity() {
-        if (playbackSession == null) return "";
-        PlaybackItem item = playbackSession.state().getItem();
+        if (engines.session() == null) return "";
+        PlaybackItem item = engines.session().state().getItem();
         return item == null ? "" : item.getIdentity();
     }
 

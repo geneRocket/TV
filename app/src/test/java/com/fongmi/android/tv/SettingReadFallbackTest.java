@@ -77,6 +77,33 @@ public class SettingReadFallbackTest {
         assertEquals("https://dns.example/query", Setting.getDoh()); assertEquals(1, Setting.getRender());
     }
 
+    @Test public void restoredOutOfRangeOptionsUseDefaultsWithoutRewritingTheBackup() throws Exception {
+        String[] keys = {"background", "reset", "language", "backup_mode", "size", "quality", "config_cache"};
+        String[] getters = {"getBackground", "getReset", "getLanguage", "getBackupMode", "getSize", "getQuality", "getConfigCache"};
+        int[] defaults = {2, 0, com.fongmi.android.tv.utils.LanguageUtil.locale(), 1, 2, 2, 0};
+        for (int i = 0; i < keys.length; i++) {
+            for (int invalid : new int[]{Integer.MIN_VALUE, -1, 999, Integer.MAX_VALUE}) {
+                values.put(keys[i], invalid);
+                assertEquals(keys[i], defaults[i], Setting.class.getMethod(getters[i]).invoke(null));
+                assertEquals(invalid, values.get(keys[i]));
+            }
+            values.clear();
+        }
+    }
+
+    @Test public void everySupportedOptionStillSelectsExactlyTheUsersChoice() throws Exception {
+        String[] keys = {"background", "reset", "language", "backup_mode", "size", "quality", "config_cache"};
+        String[] getters = {"getBackground", "getReset", "getLanguage", "getBackupMode", "getSize", "getQuality", "getConfigCache"};
+        int[] sizes = {3, 2, 3, 2, 4, 3, 3};
+        for (int i = 0; i < keys.length; i++) {
+            for (int selected = 0; selected < sizes[i]; selected++) {
+                values.put(keys[i], selected);
+                assertEquals(keys[i], selected, Setting.class.getMethod(getters[i]).invoke(null));
+            }
+            values.clear();
+        }
+    }
+
     private static class TestContext extends ContextWrapper {
         SharedPreferences preferences;
         private TestContext() { super(null); }

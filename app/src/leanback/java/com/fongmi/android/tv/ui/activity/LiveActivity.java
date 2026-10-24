@@ -57,6 +57,7 @@ import com.fongmi.android.tv.ui.custom.PlaybackArtwork;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.DirectPlaybackFlow;
+import com.fongmi.android.tv.player.DirectPlaybackLifecycle;
 import com.fongmi.android.tv.player.PlaybackInput;
 import com.fongmi.android.tv.utils.MainThreadExecutor;
 import com.fongmi.android.tv.utils.CallbackScope;
@@ -106,6 +107,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private LiveChannelNavigator mNavigation;
     private LiveListLayout mListLayout;
     private DirectPlaybackFlow mPlaybackFlow;
+    private DirectPlaybackLifecycle mPlaybackLifecycle;
     private final CallbackScope mUiCallbacks = new CallbackScope(AppTaskScheduler.get());
     private List<Group> mHides;
     private PlaybackController mPlayers;
@@ -917,6 +919,19 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
             @Override public void error(ErrorEvent error) { onErrorPlayer(error); }
             @Override public void ended() { if (mChannel != null) nextEpg(); }
         }, MainThreadExecutor.get());
+        mPlaybackLifecycle = new DirectPlaybackLifecycle(mPlaybackFlow, new DirectPlaybackLifecycle.Port() {
+            @Override public void acquireOwnership() { mPlayers.activateAsCurrentPlayer(); }
+            @Override public boolean needsEngine() { return mPlayers.isRelease(); }
+            @Override public void rebuildEngine() {
+                mPlayers.init(getExo(), getIjk());
+                setPlayerView();
+                setDecodeView();
+            }
+            @Override public void restoreSource() {
+                if (mPlayers.isEmpty()) { fetch(); }
+                else mPlayers.restoreCheckpoint(mPlaybackFlow.checkpoint());
+            }
+        });
         mPlayers.setInputHandler(mPlaybackFlow);
     }
 
@@ -1117,18 +1132,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     @Override
     protected void onResume() {
         super.onResume();
-        mPlayers.activateAsCurrentPlayer();
-        boolean needInit = mPlayers.isRelease()
-                || (mPlayers.isExo() && mPlayers.exo() == null)
-                || (mPlayers.isIjk() && mPlayers.ijk() == null);
-        if (needInit) {
-            mPlayers.init(getExo(), getIjk());
-            setPlayerView();
-            setDecodeView();
-                if (mChannel != null) setArtwork(mChannel.getLogo());
-            fetch();
-        }
-        mPlaybackFlow.setPlaybackAllowed(true);
+        mPlaybackLifecycle.resume();
         mClock.start();
     }
 
@@ -1139,7 +1143,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
         mSeekRunnable = null;
         mSeekGesture.reset();
         super.onPause();
-        mPlaybackFlow.setPlaybackAllowed(false);
+        mPlaybackLifecycle.pause();
         mClock.stop();
     }
 

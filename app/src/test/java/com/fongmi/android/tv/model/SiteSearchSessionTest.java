@@ -28,6 +28,72 @@ public class SiteSearchSessionTest {
     }, scheduler);
     private int completed;
 
+    @Test public void oneBrokenSourceDoesNotDiscardOtherSourcesOrLeaveSearchSpinning() {
+        backend.failingSite = "broken";
+        session.start(Arrays.asList(site("broken"), site("working")), "film", false, () -> completed++);
+        executors.get(0).runAll();
+        scheduler.runImmediate();
+        assertEquals(Arrays.asList("broken:film", "working:film"), backend.searches);
+        assertEquals(1, completed);
+        assertFalse(session.hasPending());
+        assertTrue(session.accepts(result(session.getToken())));
+    }
+
+    @Test public void restartingSearchRejectsPreviousResultsEvenWhenTheKeywordIsTheSame() {
+        session.start(Collections.singletonList(site("1@site")), "film", false, null);
+        Result old = result(session.getToken());
+        session.start(Collections.singletonList(site("2@site")), "film", false, () -> completed++);
+        assertFalse(session.accepts(old));
+        assertTrue(session.accepts(result(session.getToken())));
+        executors.get(0).runAll();
+        executors.get(1).runAll();
+        scheduler.runImmediate();
+        assertEquals(Collections.singletonList("2@site:film"), backend.searches);
+        assertEquals(1, completed);
+    }
+
+    @Test public void switchingAutomaticSearchToManualStopsAutomaticSelectionButKeepsResults() {
+        session.start(Collections.singletonList(site("site")), "film", true, null);
+        Result current = result(session.getToken());
+        assertTrue(session.shouldSelectFirst());
+        session.markSelected();
+        assertTrue(session.isAutomatic());
+        assertFalse(session.shouldSelectFirst());
+        session.setManual();
+        assertFalse(session.isAutomatic());
+        assertFalse(session.shouldSelectFirst());
+        assertTrue(session.accepts(current));
+        session.close();
+    }
+
+    @Test public void completionMayStartAnotherSearchWithoutOldCleanupCancellingIt() {
+        session.start(Collections.singletonList(site("first")), "first", false, () ->
+                session.start(Collections.singletonList(site("second")), "second", false, () -> completed++));
+        executors.get(0).runAll();
+        scheduler.runImmediate();
+        assertTrue(session.hasPending());
+        executors.get(1).runAll();
+        scheduler.runImmediate();
+        assertEquals(Arrays.asList("first:first", "second:second"), backend.searches);
+        assertEquals(1, completed);
+        assertFalse(session.hasPending());
+    }
+
+    @Test public void leavingPageBeforeWorkersRunCannotShowResultsOrCompletionLater() {
+        session.start(Collections.singletonList(site("site")), "film", false, () -> completed++);
+        Result old = result(session.getToken());
+        Runnable worker = executors.get(0).tasks.get(0);
+        Runnable timeout = scheduler.delayed();
+        session.close();
+        session.close();
+        worker.run();
+        timeout.run();
+        assertFalse(session.accepts(old));
+        assertEquals(0, completed);
+        assertTrue(backend.searches.isEmpty());
+        assertTrue(scheduler.tasks.isEmpty());
+    }
+
     @Test public void automaticSearchSkipsDisabledAndConfigLockedSourcesBeforeDeduplication() {
         Site disabled = site("disabled");
         disabled.setChangeable(Integer.valueOf(2));
@@ -152,13 +218,20 @@ public class SiteSearchSessionTest {
     }
 
     private static Site site(String key) {
-        return new Site() { @Override public String getKey() { return key; } };
+        return new Site() {
+            @Override public String getKey() { return key; }
+            @Override public String getName() { return key; }
+        };
     }
 
     private static final class Backend implements SiteSearchSession.Backend {
         final List<String> searches = new ArrayList<>();
         final List<String> cancelled = new ArrayList<>();
-        public void search(Site site, String keyword, String token) { searches.add(site.getKey() + ":" + keyword); }
+        String failingSite;
+        public void search(Site site, String keyword, String token) {
+            searches.add(site.getKey() + ":" + keyword);
+            if (site.getKey().equals(failingSite)) throw new IllegalStateException("Source unavailable");
+        }
         public void cancel(String token) { cancelled.add(token); }
         public void finish(String token) {}
     }

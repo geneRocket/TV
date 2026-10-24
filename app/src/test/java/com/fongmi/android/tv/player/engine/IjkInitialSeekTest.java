@@ -36,6 +36,21 @@ public class IjkInitialSeekTest {
         assertEquals(0, fixture.starts);
     }
 
+    @Test public void bufferingAfterAPausedPrepareCannotLeaveTheUiLoadingForever() throws Exception {
+        Fixture fixture = new Fixture(false);
+        fixture.view.onPrepared(fixture.nativePlayer);
+        fixture.engine.onInfo(fixture.nativePlayer, IMediaPlayer.MEDIA_INFO_BUFFERING_START, 0);
+        assertEquals(EnginePhase.PAUSED, fixture.engine.snapshot().getPhase());
+        assertEquals(0, fixture.starts);
+    }
+
+    @Test public void bufferingWhilePlaybackIsRequestedStillReportsBuffering() throws Exception {
+        Fixture fixture = new Fixture(true);
+        fixture.view.onPrepared(fixture.nativePlayer);
+        fixture.engine.onInfo(fixture.nativePlayer, IMediaPlayer.MEDIA_INFO_BUFFERING_START, 0);
+        assertEquals(EnginePhase.BUFFERING, fixture.engine.snapshot().getPhase());
+    }
+
     private static final class Fixture {
         final TestView view;
         final IMediaPlayer nativePlayer;

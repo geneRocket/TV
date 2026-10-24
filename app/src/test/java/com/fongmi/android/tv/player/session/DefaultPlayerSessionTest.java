@@ -75,6 +75,91 @@ public class DefaultPlayerSessionTest {
         assertEquals(1, engine.releaseCount);
     }
 
+    @Test public void releaseCapturesProgressBeforeEngineClearsIt() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long id = session.prepare(item("episode-1", 0));
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 0, -1));
+        engine.snapshot = new EngineSnapshot(id, EnginePhase.READY, 480_000,
+                900_000, 480_000, true, 1, 0, 0);
+
+        session.release();
+        session.release();
+
+        assertEquals(480_000, session.state().getPosition());
+        assertEquals(900_000, session.state().getDuration());
+        assertEquals(1, engine.releaseCount);
+    }
+
+    @Test public void releaseDoesNotUseAnotherRequestOrStoppedEngineProgress() {
+        for (boolean stopped : new boolean[]{false, true}) {
+            FakeEngine engine = new FakeEngine();
+            DefaultPlayerSession session = new DefaultPlayerSession(engine);
+            long id = session.prepare(item("episode-1", 120_000));
+            engine.emit(EngineEvent.state(id, EnginePhase.READY, 120_000, 900_000));
+            if (stopped) session.stop();
+            engine.snapshot = new EngineSnapshot(stopped ? id : id + 1,
+                    EnginePhase.READY, 0, 0, 0, false, 1, 0, 0);
+
+            session.release();
+
+            assertEquals(120_000, session.state().getPosition());
+            assertEquals(900_000, session.state().getDuration());
+        }
+    }
+
+    @Test public void releaseWithUnavailableSnapshotRetainsLastKnownProgress() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long id = session.prepare(item("episode-1", 120_000));
+        engine.snapshotError = new IllegalStateException("engine unavailable");
+
+        session.release();
+
+        assertEquals(PlaybackPhase.RELEASED, session.state().getPhase());
+        assertEquals(id, session.state().getSessionId());
+        assertEquals(120_000, session.state().getPosition());
+        assertEquals(1, engine.releaseCount);
+    }
+
+    @Test public void releasedSnapshotsRemainReadableWithoutCallingTheDestroyedEngine() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long id = session.prepare(item("episode-1", 0));
+        engine.snapshot = new EngineSnapshot(id, EnginePhase.READY, 480_000, 900_000, 500_000, true, 2, 1920, 1080);
+        session.release();
+        engine.snapshotError = new IllegalStateException("native player destroyed");
+
+        EngineSnapshot snapshot = session.snapshot();
+        assertEquals(480_000, snapshot.getPosition());
+        assertEquals(900_000, snapshot.getDuration());
+        assertEquals(2, snapshot.getSpeed(), 0);
+        assertEquals(EnginePhase.RELEASED, snapshot.getPhase());
+        org.junit.Assert.assertFalse(snapshot.isPlaying());
+    }
+
+    @Test public void explicitSeekBackToZeroIsNotReplacedWithOlderPositiveProgress() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long id = session.prepare(item("episode-1", 480_000));
+        engine.snapshot = new EngineSnapshot(id, EnginePhase.PAUSED, 0, 900_000, 0, false, 1, 0, 0);
+        session.release();
+        assertEquals(0, session.state().getPosition());
+        assertEquals(0, session.snapshot().getPosition());
+    }
+
+    @Test public void releaseFailureStillKeepsTheCapturedProgressAndRejectsLateEvents() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long id = session.prepare(item("episode-1", 0));
+        engine.snapshot = new EngineSnapshot(id, EnginePhase.READY, 480_000, 900_000, 480_000, true, 2, 0, 0);
+        engine.releaseError = new IllegalStateException("release failed");
+        session.release();
+        engine.emit(EngineEvent.state(id, EnginePhase.READY, 0, 900_000));
+        assertEquals(PlaybackPhase.RELEASED, session.state().getPhase());
+        assertEquals(480_000, session.state().getPosition());
+    }
+
     @Test
     public void prepareFailurePublishesErrorInsteadOfLeavingPreparing() {
         FakeEngine engine = new FakeEngine();
@@ -190,6 +275,8 @@ public class DefaultPlayerSessionTest {
         private RuntimeException releaseError;
         private RuntimeException stopError;
         private boolean emitStop;
+        private EngineSnapshot snapshot = EngineSnapshot.EMPTY;
+        private RuntimeException snapshotError;
 
         @Override
         public void prepare(EngineRequest request, Listener listener) {
@@ -211,8 +298,8 @@ public class DefaultPlayerSessionTest {
         }
         @Override public void setSpeed(float speed) {}
         @Override public void setTrack(Track track) {}
-        @Override public EngineSnapshot snapshot() { return EngineSnapshot.EMPTY; }
-        @Override public void release() { releaseCount++; if (releaseError != null) throw releaseError; }
+        @Override public EngineSnapshot snapshot() { if (snapshotError != null) throw snapshotError; return snapshot; }
+        @Override public void release() { releaseCount++; snapshot = EngineSnapshot.EMPTY; if (releaseError != null) throw releaseError; }
     }
 
     @Test public void pausedPrepareDoesNotRequestAutoplayFromTheEngine() {

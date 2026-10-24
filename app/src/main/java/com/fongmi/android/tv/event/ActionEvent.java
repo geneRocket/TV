@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.event;
 
 import com.fongmi.android.tv.BuildConfig;
+import com.fongmi.android.tv.player.PlaybackInput;
+import com.fongmi.android.tv.player.PlaybackOwners;
 
 import org.greenrobot.eventbus.EventBus;
 
@@ -16,7 +18,17 @@ public class ActionEvent {
     private final String action;
 
     public static void send(String action) {
-        EventBus.getDefault().post(new ActionEvent(action));
+        if (UPDATE.equals(action)) EventBus.getDefault().post(new ActionEvent(action));
+        else PlaybackOwners.dispatch(PlaybackOwners.lease(PlaybackOwners.current()), input(action));
+    }
+
+    public static PlaybackInput input(String action) {
+        if (PLAY.equals(action)) return PlaybackInput.action(PlaybackInput.Type.PLAY);
+        if (PAUSE.equals(action)) return PlaybackInput.action(PlaybackInput.Type.PAUSE);
+        if (STOP.equals(action)) return PlaybackInput.action(PlaybackInput.Type.STOP);
+        if (NEXT.equals(action)) return PlaybackInput.action(PlaybackInput.Type.NEXT);
+        if (PREV.equals(action)) return PlaybackInput.action(PlaybackInput.Type.PREVIOUS);
+        return null;
     }
 
     public static void update() {

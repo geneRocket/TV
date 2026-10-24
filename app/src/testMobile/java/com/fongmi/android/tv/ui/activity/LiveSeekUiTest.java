@@ -6,6 +6,7 @@ import android.widget.LinearLayout;
 import com.fongmi.android.tv.databinding.ActivityLiveBinding;
 import com.fongmi.android.tv.databinding.ViewWidgetLiveBinding;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackEngineHost;
 import com.fongmi.android.tv.player.DirectPlaybackFlow;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.engine.EnginePhase;
@@ -109,10 +110,12 @@ public class LiveSeekUiTest {
             set(activity, "mBinding", binding);
             set(activity, "mSeekGesture", gesture);
             PlaybackController controller = allocate(PlaybackController.class);
+            PlaybackEngineHost host = new PlaybackEngineHost();
+            set(controller, "engines", host);
             set(controller, "danmaku", allocate(Class.forName("com.fongmi.android.tv.player.DanmakuController")));
-            set(controller, "engine", Proxy.newProxyInstance(PlayerEngine.class.getClassLoader(), new Class<?>[]{PlayerEngine.class},
+            set(host, "engine", Proxy.newProxyInstance(PlayerEngine.class.getClassLoader(), new Class<?>[]{PlayerEngine.class},
                     (proxy, method, args) -> { throw new AssertionError("Unexpected engine command " + method); }));
-            set(controller, "playbackSession", Proxy.newProxyInstance(PlayerSession.class.getClassLoader(), new Class<?>[]{PlayerSession.class},
+            set(host, "session", Proxy.newProxyInstance(PlayerSession.class.getClassLoader(), new Class<?>[]{PlayerSession.class},
                     (proxy, method, args) -> {
                         if (method.getName().equals("snapshot")) return new EngineSnapshot(1, EnginePhase.PAUSED, 10_000, duration, 0, false, 1, 0, 0);
                         if (method.getName().equals("seekTo")) { seeks++; seekPosition = (Long) args[0]; return null; }

@@ -30,7 +30,53 @@ public class LiveChannelNavigatorTest {
         Fixture f = new Fixture(); f.groups.remove(2);
         f.current.setPosition(1); f.nav.channel(true, true);
         assertEquals(0, f.selected); assertEquals(1, f.plays);
+        assertEquals(0, f.current.getPosition());
+    }
+    @Test public void onlyPlayableGroupWrapsBackwardsToItsLastChannel() {
+        Fixture f = new Fixture(); f.groups.remove(2);
+        f.nav.channel(false, true);
+        assertEquals(0, f.selected);
         assertEquals(1, f.current.getPosition());
+        assertEquals(1, f.plays);
+    }
+    @Test public void automaticChannelChangeSkipsEmptyOrdinaryGroupsInBothDirections() {
+        for (boolean next : new boolean[]{false, true}) {
+            Fixture f = new Fixture();
+            f.groups.add(1, new NamedGroup("empty", false, 0));
+            f.current.setPosition(next ? 1 : 0);
+            f.nav.channel(next, true);
+            assertEquals(3, f.selected);
+            assertEquals(next ? 0 : 2, f.current.getPosition());
+            assertEquals(1, f.plays);
+        }
+    }
+    @Test public void allEmptyGroupsCannotStartAnEmptyChannel() {
+        Fixture f = new Fixture();
+        f.groups.clear();
+        f.groups.add(new NamedGroup("a", false, 0));
+        f.groups.add(new NamedGroup("b", false, 0));
+        f.current = f.groups.get(0);
+        for (boolean next : new boolean[]{false, true}) f.nav.channel(next, true);
+        assertEquals(0, f.plays);
+        assertEquals(0, f.selected);
+    }
+    @Test public void channelNavigationExhaustsDirectionsAcrossGroupModesAndListSizes() {
+        for (int size = 1; size <= 5; size++) {
+            for (int position = 0; position < size; position++) {
+                for (boolean next : new boolean[]{false, true}) {
+                    for (boolean across : new boolean[]{false, true}) {
+                        Fixture f = new Fixture();
+                        f.groups.clear();
+                        f.current = new NamedGroup("only", false, size);
+                        f.groups.add(f.current);
+                        f.current.setPosition(position);
+                        f.nav.channel(next, across);
+                        assertEquals(Math.floorMod(position + (next ? 1 : -1), size), f.current.getPosition());
+                        assertEquals(1, f.plays);
+                    }
+                }
+            }
+        }
     }
     @Test public void emptyFavoritesCanAdvanceToRealChannels() {
         Fixture f = new Fixture(); f.current = f.groups.get(1); f.selected = 1;

@@ -44,6 +44,7 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
     private boolean dispatching;
     private boolean closed;
     private boolean loop;
+    private Runnable handoff = () -> {};
     private long endedGeneration = -1;
     private long markerGeneration = -1;
     private final VodPlaybackIntent intent = new VodPlaybackIntent();
@@ -61,10 +62,10 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
         state = coordinator.state();
         subscription = coordinator.observe(value -> {
             long generation = coordinator.generation();
+            historyGate.onState(value);
             enqueue(() -> {
                 if (generation != coordinator.generation()) return;
                 state = value;
-                historyGate.onState(value);
                 if (recovery != null) recovery.onPhase(value.getPhase());
                 if (value.getPhase() == VodPlaybackPhase.READY) {
                     sourceSwitch.clear();
@@ -109,9 +110,21 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
     public long requestGeneration() { return coordinator.generation(); }
     public boolean acceptsRequest(long generation) { return !closed && port.isCurrent() && generation == coordinator.generation(); }
     public VodPlaybackIntent intent() { return intent; }
-    public boolean canCommitHistory() { return historyGate.canCommit(state); }
+    public boolean canCommitHistory() { return historyGate.canCommit(coordinator.state()); }
     public void resetHistoryGate() { historyGate.reset(); }
     public void setLoop(boolean loop) { this.loop = loop; }
+    public void setHandoff(Runnable handoff) { this.handoff = handoff == null ? () -> {} : handoff; }
+
+    @Override public void onOwnershipLost() {
+        enqueue(() -> {
+            if (coordinator.state().getPhase() == VodPlaybackPhase.SUSPENDED) return;
+            coordinator.suspend();
+            if (recovery != null) recovery.reset();
+            if (sources != null) sources.stop();
+            sourceSwitch.clear();
+            handoff.run();
+        });
+    }
 
     /** Capture before releasing a delegate; zero is an explicit, valid position. */
     public void preservePosition(long position) {
@@ -137,20 +150,20 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
     }
 
     public void playEpisode(int index, StartPolicy policy) {
-        enqueue(() -> {
+        enqueueOwned(() -> {
             StartPolicy normalized = coordinator.normalizeStartPolicy(index, policy);
             if (normalized != StartPolicy.KEEP_CURRENT_POSITION) port.clearForNewEpisode();
             coordinator.play(index, normalized);
         });
     }
 
-    public void reload() { enqueue(coordinator::reload); }
+    public void reload() { enqueueOwned(coordinator::reload); }
     /** Stops the current attempt without closing the page (detail changes or terminal errors). */
     public void stop() { enqueue(coordinator::stop); }
-    public void reload(String format) { enqueue(() -> coordinator.reload(format)); }
+    public void reload(String format) { enqueueOwned(() -> coordinator.reload(format)); }
 
     public void nextPlayer() {
-        enqueue(() -> {
+        enqueueOwned(() -> {
             preservePosition(coordinator.currentPosition());
             port.nextPlayer();
             coordinator.reload();
@@ -169,7 +182,7 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
     }
 
     public void acceptSourceResult(com.fongmi.android.tv.bean.Result result) {
-        enqueue(() -> { if (sources != null) sources.accept(result); });
+        enqueueOwned(() -> { if (sources != null) sources.accept(result); });
     }
 
     public void installSources(VodSourceSearch.Port port) {
@@ -193,7 +206,7 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
 
     public void onError(ErrorEvent error) {
         long generation = coordinator.generation();
-        enqueue(() -> {
+        enqueueOwned(() -> {
             if (generation == coordinator.generation() && recovery != null) {
                 sourceSwitch.resumeSearch();
                 recovery.recover(error);
@@ -210,6 +223,10 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
 
     private void enqueue(Runnable input) {
         delivery.execute(() -> accept(input));
+    }
+
+    private void enqueueOwned(Runnable input) {
+        enqueue(() -> { if (port.isCurrent()) input.run(); });
     }
 
     private void accept(Runnable input) {

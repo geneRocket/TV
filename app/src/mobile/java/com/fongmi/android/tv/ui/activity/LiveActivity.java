@@ -53,6 +53,7 @@ import com.fongmi.android.tv.ui.custom.PlaybackArtwork;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.session.PlaybackState;
 import com.fongmi.android.tv.player.DirectPlaybackFlow;
+import com.fongmi.android.tv.player.DirectPlaybackLifecycle;
 import com.fongmi.android.tv.player.PlaybackInput;
 import com.fongmi.android.tv.utils.MainThreadExecutor;
 import com.fongmi.android.tv.utils.CallbackScope;
@@ -103,6 +104,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private LiveChannelNavigator mNavigation;
     private LiveListLayout mListLayout;
     private DirectPlaybackFlow mPlaybackFlow;
+    private DirectPlaybackLifecycle mPlaybackLifecycle;
     private final CallbackScope mUiCallbacks = new CallbackScope(AppTaskScheduler.get());
     private List<Group> mHides;
     private PlaybackController mPlayers;
@@ -174,13 +176,14 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         setPadding(mBinding.widget.epg, true);
         setPadding(mBinding.recycler, true);
         mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
+        mPlayers.setForegroundSource(this::isForeground);
         setPlaybackFlow();
         mHides = new ArrayList<>();
         mR0 = this::stopService;
         mR1 = this::hideControl;
         mR2 = this::setTraffic;
         mR3 = this::hideInfo;
-        mPiP = new PiP();
+        mPiP = new PiP().owner(mPlayers);
         Server.get().start();
         setForeground(true);
         setRecyclerView();
@@ -883,6 +886,19 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
             @Override public void error(ErrorEvent error) { onErrorPlayer(error); }
             @Override public void ended() { if (mChannel != null) checkNext(); }
         }, MainThreadExecutor.get());
+        mPlaybackLifecycle = new DirectPlaybackLifecycle(mPlaybackFlow, new DirectPlaybackLifecycle.Port() {
+            @Override public void acquireOwnership() { mPlayers.activateAsCurrentPlayer(); }
+            @Override public boolean needsEngine() { return mPlayers.isRelease(); }
+            @Override public void rebuildEngine() {
+                mPlayers.init(getExo(), getIjk());
+                setPlayerView();
+                setDecodeView();
+            }
+            @Override public void restoreSource() {
+                if (mPlayers.isEmpty()) { fetch(); }
+                else mPlayers.restoreCheckpoint(mPlaybackFlow.checkpoint());
+            }
+        });
         mPlayers.setInputHandler(mPlaybackFlow);
     }
 
@@ -1201,8 +1217,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     protected void onResume() {
         super.onResume();
         if (isForeground()) return;
-        mPlayers.activateAsCurrentPlayer();
-        if (isRedirect()) mPlaybackFlow.setPlaybackAllowed(true);
+        mPlaybackLifecycle.resume();
         mUiCallbacks.post(mR0, 1000);
         setForeground(true);
         setRedirect(false);
@@ -1215,14 +1230,14 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         super.onPause();
         setForeground(false);
         mUiCallbacks.remove(mR0);
-        if (isRedirect()) mPlaybackFlow.setPlaybackAllowed(false);
+        if (isRedirect()) mPlaybackLifecycle.pause();
         else if (Setting.isBackgroundOn() && !isFinishing()) PlaybackService.start(mPlayers);
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        if (Setting.isBackgroundOff()) mPlaybackFlow.setPlaybackAllowed(false);
+        if (Setting.isBackgroundOff()) mPlaybackLifecycle.pause();
         if (Setting.isBackgroundOff()) mClock.stop();
         setStop(true);
     }

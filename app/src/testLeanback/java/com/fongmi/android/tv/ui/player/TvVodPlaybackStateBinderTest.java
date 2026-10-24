@@ -11,6 +11,61 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class TvVodPlaybackStateBinderTest {
+    @Test public void preparingAndBufferingNeverOverlapAnyExistingPlaybackOverlay() {
+        for (boolean seek : new boolean[]{false, true}) {
+            for (boolean preparing : new boolean[]{false, true}) {
+                FakePort port = new FakePort();
+                FakeScheduler scheduler = new FakeScheduler();
+                TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, scheduler);
+                if (seek) binder.onSeek();
+                port.overlayVisible = true;
+                port.buffering = true;
+                if (preparing) binder.onPreparing(); else binder.onBuffering();
+                scheduler.runAll();
+                assertFalse(port.overlappingOverlays);
+                assertFalse(port.overlayVisible);
+                org.junit.Assert.assertTrue(port.progressVisible);
+                binder.onPaused();
+                assertFalse(port.progressVisible);
+            }
+        }
+    }
+
+    @Test public void leavingPageDuringDelayedSeekCannotUpdateMetadataOrShowLoadingLater() {
+        for (boolean buffering : new boolean[]{false, true}) {
+            FakePort port = new FakePort();
+            FakeScheduler scheduler = new FakeScheduler();
+            TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, scheduler);
+            binder.onSeek();
+            port.buffering = buffering;
+            if (buffering) binder.onBuffering(); else binder.onReady();
+            port.background = true;
+            scheduler.runAll();
+            assertEquals(0, port.metadataUpdates);
+            assertEquals(0, port.progressShows);
+            binder.release();
+            assertEquals(0, scheduler.size());
+        }
+    }
+
+    @Test public void rapidSeekBufferPauseThenPlaySettlesWithoutAnOldLoadingTask() {
+        FakePort port = new FakePort();
+        FakeScheduler scheduler = new FakeScheduler();
+        TvVodPlaybackStateBinder binder = new TvVodPlaybackStateBinder(port, scheduler);
+        for (int i = 0; i < 5; i++) {
+            binder.onSeek();
+            port.buffering = true;
+            binder.onBuffering();
+            binder.onPaused();
+            port.buffering = false;
+            binder.onReady();
+        }
+        scheduler.runAll();
+        assertEquals(0, port.progressShows);
+        assertFalse(port.overlappingOverlays);
+        assertFalse(port.progressVisible);
+        assertEquals(5, port.metadataUpdates);
+    }
 
     @Test
     public void seekDuringExistingBufferingRestoresProgressWithoutAnotherStateEvent() {
@@ -186,6 +241,7 @@ public class TvVodPlaybackStateBinderTest {
 
     private static final class FakePort implements TvVodPlaybackStateBinder.Port {
         private boolean buffering;
+        private boolean background;
         private int progressShows;
         private int overlayClears;
         private int metadataUpdates;
@@ -193,7 +249,7 @@ public class TvVodPlaybackStateBinderTest {
         private boolean progressVisible;
         private boolean overlappingOverlays;
 
-        @Override public boolean isBackground() { return false; }
+        @Override public boolean isBackground() { return background; }
         @Override public boolean isBuffering() { return buffering; }
         @Override public void showProgress() {
             overlappingOverlays |= overlayVisible;

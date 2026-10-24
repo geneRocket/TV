@@ -61,6 +61,9 @@ import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.player.PlaybackInput;
 import com.fongmi.android.tv.player.vod.VodPlaybackFlow;
 import com.fongmi.android.tv.player.vod.VodSessionAdapter;
+import com.fongmi.android.tv.player.vod.VodPlayerPort;
+import com.fongmi.android.tv.player.vod.VodHistorySession;
+import com.fongmi.android.tv.player.vod.VodPlaybackLifecycle;
 import com.fongmi.android.tv.ui.custom.PlaybackArtwork;
 import com.fongmi.android.tv.utils.CallbackScope;
 import com.fongmi.android.tv.utils.AppTaskScheduler;
@@ -521,6 +524,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private VodPlaybackCoordinator mPlaybackCoordinator;
     private VodPlaybackFlow mPlaybackFlow;
     private VodSessionAdapter mSessionAdapter;
+    private VodHistorySession mHistorySession;
+    private VodPlaybackLifecycle mPlaybackLifecycle;
     private final CallbackScope mUiCallbacks = new CallbackScope(AppTaskScheduler.get());
     private final PlaybackArtwork mArtwork = new PlaybackArtwork(new PlaybackArtwork.Listener() {
         @Override public void loaded(Drawable drawable) {
@@ -540,23 +545,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             setPlayerView();
             setDecodeView();
         });
-        mPlaybackFlow = new VodPlaybackFlow(mPlaybackCoordinator, new VodPlaybackFlow.Port() {
-            @Override public boolean isCurrent() { return isCurrentPlayer(); }
-            @Override public float speed() { return mPlayers.getSpeed(); }
-            @Override public boolean errorAlreadyReported(Throwable error) {
-                return error != null && mPlayers.session().state().getError() == error;
-            }
-            @Override public boolean selectSubtitle(Sub subtitle) { return mPlayers.selectSubtitle(subtitle); }
-            @Override public void attachSubtitleSession() { mSessionAdapter.ensureSubtitleSession(); }
-            @Override public void selectPlayer(int player) { mSessionAdapter.selectPlayer(player); }
-            @Override public void toggleDecode(boolean persist) { mSessionAdapter.decode(persist); }
-            @Override public void nextPlayer() { mSessionAdapter.nextPlayer(); }
+        mPlaybackFlow = new VodPlaybackFlow(mPlaybackCoordinator, new VodPlayerPort(mPlayers, mSessionAdapter) {
             @Override public void seekPresentation(long position) {
                 mPlaybackState.onSeek();
                 mPlayers.syncDanmakuPosition(position);
             }
             @Override public boolean reversePlayback() { return mHistory != null && mHistory.isRevPlay(); }
-            @Override public void clearForNewEpisode() { mPlayers.clear(); }
             @Override public void navigated(boolean next, boolean moved) {
                 if (!moved) onEpisodeBoundary(next != reversePlayback() ? R.string.error_play_next : R.string.error_play_prev);
             }
@@ -565,6 +559,18 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }, MainThreadExecutor.get());
         mPlaybackFlow.installRecovery(new RecoveryPort(), com.fongmi.android.tv.utils.AppTaskScheduler.get());
         mPlaybackFlow.installSources(new SourceSearchPort());
+        mHistorySession = new VodHistorySession(mPlaybackCoordinator, mPlaybackFlow, mHistoryController, () -> mHistory);
+        mPlaybackLifecycle = new VodPlaybackLifecycle(mPlaybackFlow, new VodPlaybackLifecycle.Port() {
+            @Override public void acquireOwnership() { mPlayers.activateAsCurrentPlayer(); }
+            @Override public void restoreInitialSelection() { if (mHistory != null) playSelected(false); }
+            @Override public boolean needsEngine() { return mPlayers.isRelease(); }
+            @Override public void rebuildAndAttachEngine() {
+                mPlayers.init(getExo(), getIjk());
+                replacePlayerSession();
+                setPlayerView();
+                setDecodeView();
+            }
+        });
         mPlayers.setInputHandler(mPlaybackFlow);
     }
     private Subscription mPlaybackSubscription;
@@ -1700,21 +1706,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         long position = getCurrentSwitchPosition();
         mPlaybackFlow.preservePosition(position);
         mPlayers.setPosition(position);
-        mHistoryController.saveNow(mHistory, canCommitCurrentHistory(), position, mPlayers.getDuration());
+        mHistorySession.save();
     }
 
     private void saveHistoryNow() {
-        long position = getCurrentSwitchPosition();
-        long duration = mPlayers.getDuration();
-        mHistoryController.saveNow(mHistory, canCommitCurrentHistory(), position, duration);
+        if (mHistorySession != null) mHistorySession.save();
     }
 
-    private void releaseForCastIfNeeded() {
-        if (!isBackground() || isFinishing() || mPlayers.isRelease()) return;
-        if (!(App.activity() instanceof CastActivity)) return;
-        saveHistoryNow();
-        mPlayers.releasePlayer();
-    }
 
     private boolean onSubtitleUpDown() {
         onSubtitleClick();
@@ -2145,10 +2143,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onTimeChanged() {
         onTimeChangeDisplaySpeed();
-        long position = getCurrentSwitchPosition();
-        long duration = mPlayers.getDuration();
-        mHistoryController.saveTick(mHistory, canCommitCurrentHistory(), position, duration, System.currentTimeMillis());
-        if (mHistory != null) mPlaybackFlow.onPosition(position, duration, mHistory.getOpening(), mHistory.getEnding());
+        mHistorySession.tick(System.currentTimeMillis());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -2249,9 +2244,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     }
 
     private boolean canCommitCurrentHistory() {
-        return mHistory != null && mPlaybackCoordinator != null
-                && mPlaybackFlow.canCommitHistory()
-                && mHistoryController.shouldCommit(mPlaybackFlow.state().getPhase());
+        return mHistorySession != null && mHistorySession.canCommit();
     }
 
     private void checkEnded() {
@@ -2774,23 +2767,9 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     protected void onResume() {
         super.onResume();
         setBackground(false);
-        mPlayers.activateAsCurrentPlayer();
         mClock.start();
-        boolean needInit = mPlayers.isRelease()
-                || (mPlayers.isExo() && mPlayers.exo() == null)
-                || (mPlayers.isIjk() && mPlayers.ijk() == null);
-        if (needInit) {
-            mPlayers.init(getExo(), getIjk());
-            replacePlayerSession();
-            setPlayerView();
-            setDecodeView();
-            hideInfoAndCenter();
-            mPlaybackFlow.setPlaybackAllowed(true);
-            mPlaybackFlow.reload();
-        } else {
-            mPlaybackFlow.setPlaybackAllowed(true);
-            reconcilePlaybackUiState();
-        }
+        if (mPlaybackLifecycle.resume()) hideInfoAndCenter();
+        else reconcilePlaybackUiState();
     }
 
     @Override
@@ -2801,7 +2780,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setBackground(true);
         mPlaybackState.clear();
         saveHistoryNow();
-        mPlaybackFlow.setPlaybackAllowed(false);
+        mPlaybackLifecycle.pause();
         mClock.stop();
         stopDisplayTrafficPolling();
     }
@@ -2809,7 +2788,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     protected void onStop() {
         super.onStop();
-        releaseForCastIfNeeded();
     }
 
     private void takePlaybackControl() {

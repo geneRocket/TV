@@ -25,6 +25,51 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class VodPlaybackFlowTest {
+    @Test public void revokedPagesCannotRestartPlaybackThroughNonTransportEntryPoints() {
+        Fixture f = new Fixture(); f.start();
+        long request = f.coordinator.generation();
+        f.current = false;
+        f.flow.reload();
+        f.flow.reload("hls");
+        f.flow.nextPlayer();
+        f.flow.playEpisode(0, StartPolicy.FRESH);
+        assertEquals(request, f.coordinator.generation());
+        assertFalse(f.replace);
+    }
+    @Test public void historyQualificationUsesBusinessStateWithoutWaitingForUiDelivery() {
+        List<Runnable> delivery = new ArrayList<>();
+        Fixture f = new Fixture(delivery::add);
+        f.start();
+        assertTrue(f.flow.canCommitHistory());
+        f.coordinator.play(0, StartPolicy.FRESH);
+        assertFalse(f.flow.canCommitHistory());
+        while (!delivery.isEmpty()) delivery.remove(0).run();
+        assertFalse(f.flow.canCommitHistory());
+    }
+    @Test public void castReleaseAndReturnKeepsProgressWithoutARecentStateCallback() {
+        for (boolean paused : new boolean[]{false, true}) {
+            Fixture f = new Fixture();
+            f.start();
+            f.engine.emit(EnginePhase.READY, 0);
+            if (paused) f.flow.dispatch(PlaybackInput.action(PlaybackInput.Type.PAUSE));
+            // Playback advances between callbacks; cast can release the old owner
+            // before its Activity gets another pause/stop callback.
+            f.engine.snapshot = new EngineSnapshot(f.engine.request.getSessionId(),
+                    paused ? EnginePhase.PAUSED : EnginePhase.READY, 480_000, 900_000,
+                    480_000, !paused, 1.75f, 0, 0);
+            f.delegate.release();
+            f.flow.setPlaybackAllowed(false);
+            f.replace = true;
+            f.attachSubtitleSession();
+            f.flow.setPlaybackAllowed(true);
+            f.flow.reload();
+            f.resolve();
+
+            assertEquals(480_000, f.engine.request.getStartPosition());
+            assertEquals(!paused, f.engine.request.isPlayWhenReady());
+        }
+    }
+
     @Test public void pausedSubtitleSwitchAttachesBeforePrepareAndRestoresControls() {
         Fixture f = new Fixture();
         f.start();

@@ -50,6 +50,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private String preservedEpisodeId = "";
     private long preservedPosition;
     private boolean hasPreservedPosition;
+    private VodPlaybackCheckpoint checkpoint;
 
     public VodPlaybackCoordinator(PlaybackResolver resolver, PlaybackItemFactory itemFactory, PlayerSession session) {
         if (resolver == null) throw new IllegalArgumentException("resolver must not be null");
@@ -155,6 +156,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         requireOpen();
         if (policy == null) throw new IllegalArgumentException("policy must not be null");
         if (index < 0 || index >= episodes.size()) throw new IndexOutOfBoundsException("episode index=" + index);
+        checkpoint = null;
         clearTimeout();
         VodEpisode target = episodes.get(index);
         if (policy == StartPolicy.FRESH || state.getEpisode() == null
@@ -248,6 +250,43 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
 
     public synchronized boolean wantsPlayback() { return playWhenReady; }
 
+    public synchronized VodPlaybackCheckpoint checkpoint() {
+        if (checkpoint != null) return checkpoint;
+        if (closed) return new VodPlaybackCheckpoint(state.getEpisode(), state.getPosition(), state.getDuration(), resumeSpeed, playWhenReady);
+        EngineSnapshot snapshot = EngineSnapshot.EMPTY;
+        long position = state.getPosition();
+        try {
+            position = currentPosition();
+            EngineSnapshot candidate = session.snapshot();
+            PlaybackState playback = session.state();
+            if (candidate != null && playback.getItem() != null && state.getEpisode() != null
+                    && candidate.getSessionId() == playback.getSessionId()
+                    && playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) snapshot = candidate;
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Playback checkpoint used last known progress.");
+        }
+        long duration = snapshot.getDuration() > 0 ? snapshot.getDuration() : state.getDuration();
+        return new VodPlaybackCheckpoint(state.getEpisode(), position, duration,
+                preserveControls ? resumeSpeed : snapshot.getSpeed(), playWhenReady);
+    }
+
+    /** Business suspension precedes native teardown, so lifecycle ordering cannot discard the handoff. */
+    public synchronized void suspend() {
+        requireOpen();
+        if (state.getPhase() == VodPlaybackPhase.SUSPENDED) return;
+        checkpoint = checkpoint();
+        if (checkpoint.getEpisode() != null) {
+            preservePosition(checkpoint.getEpisode().getIdentity(), checkpoint.getPosition());
+            preserveControls(!checkpoint.wantsPlayback(), checkpoint.getSpeed());
+        }
+        playbackAllowed = false;
+        acceptingSession = false;
+        pendingRequestId = 0;
+        cancelResolve();
+        publish(new VodPlaybackState(VodPlaybackPhase.SUSPENDED, state.getEpisode(), state.getEpisodeIndex(),
+                checkpoint.getPosition(), checkpoint.getDuration(), null));
+    }
+
     public synchronized void setPlaybackAllowed(boolean allowed) {
         requireOpen();
         if (playbackAllowed == allowed) return;
@@ -267,6 +306,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         resumeEpisodeId = "";
         resumePosition = opening = 0;
         preserveControls = false;
+        checkpoint = null;
         playWhenReady = true;
         publish(VodPlaybackState.IDLE);
     }
@@ -375,10 +415,28 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private synchronized void onSessionState(PlaybackState playback) {
+        if (!closed && playback != null && playback.getPhase() == PlaybackPhase.RELEASED && state.getEpisode() != null) {
+            if (state.getPhase() == VodPlaybackPhase.SUSPENDED) return;
+            // Cast can take the engine while a resolver is still running, including
+            // before the first prepare. Its late result must not revive that owner.
+            long position = state.getPosition();
+            long duration = state.getDuration();
+            if (acceptingSession && playback.getItem() != null
+                    && playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) {
+                position = playback.getPosition();
+                duration = playback.getDuration();
+                preserveControls(!playWhenReady, session.snapshot().getSpeed());
+            }
+            acceptingSession = false;
+            pendingRequestId = 0;
+            cancelResolve();
+            checkpoint = new VodPlaybackCheckpoint(state.getEpisode(), position, duration, resumeSpeed, playWhenReady);
+            publish(new VodPlaybackState(VodPlaybackPhase.SUSPENDED, state.getEpisode(), state.getEpisodeIndex(), position, duration, null));
+            return;
+        }
         if (closed || !acceptingSession || playback == null || playback.getItem() == null || state.getEpisode() == null) return;
         if (!playback.getItem().getIdentity().equals(state.getEpisode().getIdentity())) return;
         if (state.getPhase() == VodPlaybackPhase.RESOLVING && playback.getPhase() != PlaybackPhase.PREPARING) return;
-        if (playback.getPhase() == PlaybackPhase.RELEASED) acceptingSession = false;
         publish(new VodPlaybackState(map(playback.getPhase()), state.getEpisode(), state.getEpisodeIndex(), playback.getPosition(), playback.getDuration(), playback.getError()));
     }
 

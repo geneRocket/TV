@@ -23,27 +23,35 @@ public class HistorySyncScopeTest {
 
     @Test public void importDestinationDoesNotFollowTheActiveConfiguration() {
         Incoming target = new Incoming(Collections.emptyList());
-        History.startSync(10, Collections.singletonList(target));
+        sync(10, Collections.singletonList(target));
         assertEquals(10, target.savedCid);
         assertEquals(10, target.queriedCid);
     }
 
     @Test public void newerRecordInAnotherConfigurationDoesNotSuppressImport() {
         Incoming target = new Incoming(Collections.singletonList(local(20, 300)));
-        History.startSync(10, Collections.singletonList(target));
+        sync(10, Collections.singletonList(target));
         assertEquals(10, target.savedCid);
         assertTrue(target.merged.isEmpty());
     }
 
     @Test public void newerLocalRecordIsPreservedAndOlderLocalRecordCanBeUpdated() {
         Incoming target = new Incoming(Arrays.asList(local(10, 300), local(20, 100)));
-        History.startSync(10, Collections.singletonList(target));
+        sync(10, Collections.singletonList(target));
         assertEquals(0, target.savedCid);
         Incoming older = new Incoming(Collections.singletonList(local(10, 100)));
-        History.startSync(10, Collections.singletonList(older));
+        sync(10, Collections.singletonList(older));
         assertEquals(10, older.savedCid);
         assertEquals(1, older.merged.size());
         assertEquals(10, older.merged.get(0).getCid());
+    }
+
+    private static void sync(int cid, List<History> targets) {
+        com.fongmi.android.tv.repository.HistoryStore.startSync(cid, targets,
+                new com.fongmi.android.tv.repository.HistoryStore.SyncAccess() {
+                    @Override public List<History> find(History target, int config) { return ((Incoming) target).find(config); }
+                    @Override public void update(History target, int config, List<History> items) { ((Incoming) target).update(config, items); }
+                });
     }
 
     private static History local(int cid, long time) {

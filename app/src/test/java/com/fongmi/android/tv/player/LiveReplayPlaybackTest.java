@@ -56,8 +56,8 @@ public class LiveReplayPlaybackTest {
                     if (method.getName().equals("snapshot")) return new EngineSnapshot(1, EnginePhase.READY, 1000, 3_600_000, 1000, true, 1, 1920, 1080);
                     throw new UnsupportedOperationException(method.getName());
                 });
-        Field playback = PlaybackController.class.getDeclaredField("playbackSession"); playback.setAccessible(true);
-        playback.set(controller, session);
+        Field playback = PlaybackController.class.getDeclaredField("engines"); playback.setAccessible(true);
+        playback.set(controller, new PlaybackEngineHost(session));
         return controller;
     }
 }

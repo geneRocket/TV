@@ -65,6 +65,9 @@ import com.fongmi.android.tv.player.PlaybackCommand;
 import com.fongmi.android.tv.player.PlaybackInput;
 import com.fongmi.android.tv.player.vod.VodPlaybackFlow;
 import com.fongmi.android.tv.player.vod.VodSessionAdapter;
+import com.fongmi.android.tv.player.vod.VodPlayerPort;
+import com.fongmi.android.tv.player.vod.VodHistorySession;
+import com.fongmi.android.tv.player.vod.VodPlaybackLifecycle;
 import com.fongmi.android.tv.ui.custom.PlaybackArtwork;
 import com.fongmi.android.tv.utils.CallbackScope;
 import com.fongmi.android.tv.utils.AppTaskScheduler;
@@ -187,6 +190,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private VodPlaybackCoordinator mPlaybackCoordinator;
     private VodPlaybackFlow mPlaybackFlow;
     private VodSessionAdapter mSessionAdapter;
+    private VodHistorySession mHistorySession;
+    private VodPlaybackLifecycle mPlaybackLifecycle;
     private final CallbackScope mUiCallbacks = new CallbackScope(AppTaskScheduler.get());
     private final PlaybackArtwork mArtwork = new PlaybackArtwork(new PlaybackArtwork.Listener() {
         @Override public void loaded(Drawable drawable) {
@@ -209,19 +214,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             setDecodeView();
             setR1Callback();
         });
-        mPlaybackFlow = new VodPlaybackFlow(mPlaybackCoordinator, new VodPlaybackFlow.Port() {
-            @Override public boolean isCurrent() { return isCurrentPlayer(); }
-            @Override public float speed() { return mPlayers.getSpeed(); }
-            @Override public boolean errorAlreadyReported(Throwable error) {
-                return error != null && mPlayers.session().state().getError() == error;
-            }
-            @Override public boolean selectSubtitle(Sub subtitle) { return mPlayers.selectSubtitle(subtitle); }
-            @Override public void attachSubtitleSession() { mSessionAdapter.ensureSubtitleSession(); }
-            @Override public void selectPlayer(int player) { mSessionAdapter.selectPlayer(player); }
-            @Override public void toggleDecode(boolean persist) { mSessionAdapter.decode(persist); }
-            @Override public void nextPlayer() { mSessionAdapter.nextPlayer(); }
+        mPlaybackFlow = new VodPlaybackFlow(mPlaybackCoordinator, new VodPlayerPort(mPlayers, mSessionAdapter) {
             @Override public void seekPresentation(long position) { mPlayers.syncDanmakuPosition(position); }
-            @Override public void clearForNewEpisode() { mPlayers.clear(); }
             @Override public void navigated(boolean next, boolean moved) {
                 setR1Callback();
                 if (!moved) Notify.show(next ? R.string.error_play_next : R.string.error_play_prev);
@@ -231,6 +225,18 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }, MainThreadExecutor.get());
         mPlaybackFlow.installRecovery(new RecoveryPort(), com.fongmi.android.tv.utils.AppTaskScheduler.get());
         mPlaybackFlow.installSources(new SourceSearchPort());
+        mHistorySession = new VodHistorySession(mPlaybackCoordinator, mPlaybackFlow, mHistoryController, () -> mHistory);
+        mPlaybackLifecycle = new VodPlaybackLifecycle(mPlaybackFlow, new VodPlaybackLifecycle.Port() {
+            @Override public void acquireOwnership() { mPlayers.activateAsCurrentPlayer(); }
+            @Override public void restoreInitialSelection() { if (mHistory != null) onReset(false); }
+            @Override public boolean needsEngine() { return mPlayers.isRelease(); }
+            @Override public void rebuildAndAttachEngine() {
+                mPlayers.init(getExo(), getIjk());
+                replacePlayerSession();
+                setPlayerView();
+                setDecodeView();
+            }
+        });
         mPlayers.setInputHandler(mPlaybackFlow);
     }
     private Subscription mPlaybackSubscription;
@@ -455,6 +461,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.progressLayout.showProgress();
         mBinding.swipeLayout.setEnabled(false);
         mPlayers = PlaybackController.create(this, this::onPlaybackError, this::onPlaybackCommand);
+        mPlayers.setForegroundSource(this::isForeground);
         TaskScheduler scheduler = new TaskScheduler() {
             @Override public void post(Runnable task, long delayMillis) { mUiCallbacks.post(task, delayMillis); }
             @Override public void remove(Runnable task) { mUiCallbacks.remove(task); }
@@ -468,7 +475,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mR2 = this::setTraffic;
         mR3 = this::setOrient;
         mR4 = this::showEmpty;
-        mPiP = new PiP();
+        mPiP = new PiP().owner(mPlayers);
         setForeground(true);
         setRecyclerView();
         setVideoView();
@@ -1565,7 +1572,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         long position = getCurrentSwitchPosition();
         mPlaybackFlow.preservePosition(position);
         mPlayers.setPosition(position);
-        mHistoryController.saveNow(mHistory, canCommitCurrentHistory(), position, mPlayers.getDuration());
+        mHistorySession.save();
     }
 
     private long getCurrentSwitchPosition() {
@@ -1637,10 +1644,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onTimeChanged() {
         onTimeChangeDisplaySpeed();
-        long position = getCurrentSwitchPosition();
-        long duration = mPlayers.getDuration();
-        mHistoryController.saveTick(mHistory, canCommitCurrentHistory(), position, duration, System.currentTimeMillis());
-        if (mHistory != null) mPlaybackFlow.onPosition(position, duration, mHistory.getOpening(), mHistory.getEnding());
+        mHistorySession.tick(System.currentTimeMillis());
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -2265,8 +2269,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     protected void onResume() {
         super.onResume();
         if (isForeground()) return;
-        mPlayers.activateAsCurrentPlayer();
-        mPlaybackFlow.setPlaybackAllowed(true);
+        mPlaybackLifecycle.resume();
         mUiCallbacks.post(mR0, 1000);
         setForeground(true);
         setRedirect(false);
@@ -2282,7 +2285,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         setForeground(false);
         mUiCallbacks.remove(mR0);
         saveHistoryNow();
-        if (isRedirect() || Setting.isBackgroundOff()) mPlaybackFlow.setPlaybackAllowed(false);
+        if (isRedirect() || Setting.isBackgroundOff()) mPlaybackLifecycle.pause();
         if (!isRedirect() && Setting.isBackgroundOn() && !isFinishing()) PlaybackService.start(mPlayers);
     }
 
@@ -2354,12 +2357,11 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private boolean canCommitCurrentHistory() {
-        if (mHistory == null || mPlaybackCoordinator == null) return false;
-        return mPlaybackFlow.canCommitHistory();
+        return mHistorySession != null && mHistorySession.canCommit();
     }
 
     private void saveHistoryNow() {
-        mHistoryController.saveNow(mHistory, canCommitCurrentHistory(), getCurrentSwitchPosition(), mPlayers.getDuration());
+        if (mHistorySession != null) mHistorySession.save();
     }
 
 }

@@ -1,14 +1,12 @@
 package com.fongmi.android.tv.server;
 
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackOwners;
 import com.github.catvod.Proxy;
 import com.github.catvod.utils.Util;
 
 public class Server {
 
-    // The local HTTP server reads this from its worker threads while playback
-    // activities replace it on the main thread.
-    private volatile PlaybackController player;
     private Nano nano;
     private int port;
 
@@ -29,11 +27,12 @@ public class Server {
     }
 
     public PlaybackController getPlayer() {
-        return player;
+        return PlaybackOwners.current();
     }
 
     public void setPlayer(PlaybackController player) {
-        this.player = player;
+        if (player != null) player.activateAsCurrentPlayer();
+        else PlaybackOwners.release(PlaybackOwners.current());
     }
 
     public String getAddress() {

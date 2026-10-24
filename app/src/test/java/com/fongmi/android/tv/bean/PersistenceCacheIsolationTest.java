@@ -91,7 +91,9 @@ public class PersistenceCacheIsolationTest {
     }
 
     private static <T> T cache(java.lang.Class<T> owner, T value) throws Exception {
-        Method cache = owner.getDeclaredMethod("cache", owner);
+        java.lang.Class<?> storage = owner == History.class ? com.fongmi.android.tv.repository.HistoryStore.class
+                : owner == Keep.class ? com.fongmi.android.tv.repository.KeepStore.class : owner;
+        Method cache = storage.getDeclaredMethod("cache", owner);
         cache.setAccessible(true);
         return owner.cast(cache.invoke(null, value));
     }

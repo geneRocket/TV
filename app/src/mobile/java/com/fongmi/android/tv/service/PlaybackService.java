@@ -26,6 +26,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.player.PlaybackController;
+import com.fongmi.android.tv.player.PlaybackOwners;
 import com.fongmi.android.tv.receiver.ActionReceiver;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -40,6 +41,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.lang.ref.WeakReference;
 
 public class PlaybackService extends Service {
 
@@ -51,12 +53,16 @@ public class PlaybackService extends Service {
     };
     private final Set<String> loadingArtwork = Collections.synchronizedSet(new HashSet<>());
     private final Set<CustomTarget<Bitmap>> artworkTargets = Collections.synchronizedSet(new HashSet<>());
-    private static volatile PlaybackController player;
+    private static volatile WeakReference<PlaybackService> instance = new WeakReference<>(null);
+    private PlaybackController player;
+    private long ownerLease;
+    private int activeStartId;
     private volatile boolean destroyed;
 
     public static void start(PlaybackController player) {
-        PlaybackService.player = player;
-        ContextCompat.startForegroundService(App.get(), new Intent(App.get(), PlaybackService.class));
+        if (player == null || !player.isCurrent()) return;
+        Intent intent = new Intent(App.get(), PlaybackService.class).putExtra("playback_owner", PlaybackOwners.lease(player));
+        ContextCompat.startForegroundService(App.get(), intent);
     }
 
     public static void stop() {
@@ -64,15 +70,17 @@ public class PlaybackService extends Service {
     }
 
     public static void stop(PlaybackController owner) {
-        if (player == owner) stop();
+        PlaybackService service = instance.get();
+        if (service != null && service.player == owner) service.stopSelf(service.activeStartId);
     }
 
     private boolean isNull() {
-        return Objects.isNull(player) || Objects.isNull(player.getSession());
+        return !nonNull();
     }
 
     private boolean nonNull() {
-        return Objects.nonNull(player) && Objects.nonNull(player.getSession());
+        return Objects.nonNull(player) && ownerLease > 0 && PlaybackOwners.lease(player) == ownerLease
+                && Objects.nonNull(player.getSession());
     }
 
     private NotificationManagerCompat getManager() {
@@ -80,7 +88,7 @@ public class PlaybackService extends Service {
     }
 
     private NotificationCompat.Action buildNotificationAction(@DrawableRes int icon, @StringRes int title, String action) {
-        return new NotificationCompat.Action(icon, getString(title), ActionReceiver.getPendingIntent(this, action));
+        return new NotificationCompat.Action(icon, getString(title), ActionReceiver.getPendingIntent(this, action, player));
     }
 
     private NotificationCompat.Action getPlayPauseAction() {
@@ -147,7 +155,7 @@ public class PlaybackService extends Service {
         builder.setContentTitle(getTitle());
         builder.setSmallIcon(R.drawable.ic_logo);
         builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
-        builder.setDeleteIntent(ActionReceiver.getPendingIntent(this, ActionEvent.STOP));
+        builder.setDeleteIntent(ActionReceiver.getNotificationDismissIntent(this, player));
         if (nonNull()) builder.setContentIntent(player.getSession().getController().getSessionActivity());
         if (nonNull()) builder.setStyle(new MediaStyle().setMediaSession(player.getSession().getSessionToken()));
         addAction(builder);
@@ -189,18 +197,26 @@ public class PlaybackService extends Service {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onActionEvent(ActionEvent event) {
-        if (event.isUpdate()) Notify.show(buildNotification());
+        if (!event.isUpdate()) return;
+        if (nonNull()) Notify.show(buildNotification());
+        else stopSelf(activeStartId);
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = new WeakReference<>(this);
         destroyed = false;
         EventBus.getDefault().register(this);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        activeStartId = startId;
+        player = PlaybackOwners.current();
+        ownerLease = intent != null && Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction())
+                ? PlaybackOwners.lease(player) : intent == null ? 0 : intent.getLongExtra("playback_owner", 0);
+        if (!nonNull()) { stopSelf(startId); return START_NOT_STICKY; }
         if (nonNull()) MediaButtonReceiver.handleIntent(player.getSession(), intent);
         startForeground(Notify.ID, buildNotification());
         return START_NOT_STICKY;
@@ -225,6 +241,7 @@ public class PlaybackService extends Service {
         cache.evictAll();
         loadingArtwork.clear();
         player = null;
+        if (instance.get() == this) instance.clear();
     }
 
     @Nullable

@@ -10,5 +10,6 @@ public enum VodPlaybackPhase {
     ENDED,
     ERROR,
     STOPPED,
+    SUSPENDED,
     RELEASED
 }

@@ -9,68 +9,31 @@ import androidx.room.PrimaryKey;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.config.VodConfig;
-import com.fongmi.android.tv.repository.ConfigRepository;
-import com.fongmi.android.tv.db.AppDatabase;
-import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.utils.ThreadPools;
-import com.fongmi.android.tv.utils.ConfigUrlParser;
-import com.github.catvod.utils.Trans;
+import com.fongmi.android.tv.repository.HistoryStore;
+import com.fongmi.android.tv.utils.PersistedEntryKey;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 
-import java.util.regex.Pattern;
 
 @Entity
 public class History {
-
-    private static final Map<String, History> CACHE = new ConcurrentHashMap<>();
-    private static final int MAX_CACHE_SIZE = 512;
-    private static final Map<String, PendingWrite> PENDING_WRITES = new ConcurrentHashMap<>();
-    private static final Set<String> ACTIVE_WRITES = ConcurrentHashMap.newKeySet();
-    private static final Map<String, Long> WRITE_VERSIONS = new ConcurrentHashMap<>();
-    private static final ExecutorService WRITE_EXECUTOR = ThreadPools.newSingle("history-write");
-    private static final Object WRITE_LOCK = new Object();
-    private static final Object QUEUE_LOCK = new Object();
-    private static final long REFRESH_THROTTLE_MS = 1000;
-    private static long lastRefreshAt;
-    private static final Pattern PATTERN_END = Pattern.compile("(?i)[\\s\\p{P}\\p{S}]+$");
-    private static final Pattern PATTERN_VERSION = Pattern.compile("(?i)(?:粤语版|国语版|普通话版|粤语中字|国语中字|国粤双语|双语版|中英双字|中文字幕|中字|粤语|国语|普通话|高清版|hd中字|hd|bd|正片|全集|4k|2160p|1080p|720p|x264|x265|h264|h265|mp4|mkv|m3u8|mp3|avi|flv|wmv|ts|mov)$");
-    private static final Pattern PATTERN_ALL = Pattern.compile("[\\s\\p{P}\\p{S}]+");
-
     public static void clearCache() {
-        CACHE.clear();
+        HistoryStore.clearCache();
     }
 
     public static void cancelPendingWrites() {
-        synchronized (WRITE_LOCK) {
-            synchronized (QUEUE_LOCK) {
-                for (String key : WRITE_VERSIONS.keySet()) WRITE_VERSIONS.merge(key, 1L, Long::sum);
-                PENDING_WRITES.clear();
-            }
-        }
+        HistoryStore.cancelPendingWrites();
     }
 
     public static void withWritesPaused(Runnable action) {
-        synchronized (WRITE_LOCK) {
-            cancelPendingWrites();
-            action.run();
-        }
+        HistoryStore.withWritesPaused(action);
     }
 
     @NonNull
@@ -127,51 +90,19 @@ public class History {
     }
 
     public static History create(String key, int cid, Vod vod, float speed) {
-        History history = new History();
-        history.setKey(key);
-        history.setCid(cid);
-        history.setVodName(vod.getVodName());
-        history.findEpisode(vod.getVodFlags());
-        history.setSpeed(speed);
-        return history;
+        return HistoryStore.create(key, cid, vod, speed);
     }
 
     public static History prepare(History history, String key, int cid, Vod vod, float speed, String mark) {
-        History prepared = history == null ? create(key, cid, vod, speed) : history.copy();
-        prepared.setKey(key);
-        prepared.setCid(cid);
-        prepared.setVodName(vod.getVodName());
-        if (!TextUtils.isEmpty(mark)) prepared.setVodRemarks(mark);
-        prepared.findEpisode(vod.getVodFlags());
-        prepared.setVodPic(vod.getVodPic());
-        return prepared;
+        return HistoryStore.prepare(history, key, cid, vod, speed, mark);
     }
 
     public static String historyKey(String siteKey, String vodId, String vodName, int cid) {
-        String rawSiteKey = rawSiteKey(siteKey);
-        String stableId = isEmpty(vodId) ? normalizeKeyName(vodName) : vodId;
-        return rawSiteKey.concat(AppDatabase.SYMBOL).concat(stableId).concat(AppDatabase.SYMBOL) + cid;
+        return PersistedEntryKey.create(siteKey, vodId, vodName, cid);
     }
 
     static String keyForConfig(String key, int cid) {
-        if (key == null) return null;
-        int first = key.indexOf(AppDatabase.SYMBOL);
-        if (first < 0) return key;
-        int last = key.lastIndexOf(AppDatabase.SYMBOL);
-        String id = key.substring(first + AppDatabase.SYMBOL.length(), last > first ? last : key.length());
-        return rawSiteKey(key.substring(0, first)) + AppDatabase.SYMBOL + id + AppDatabase.SYMBOL + cid;
-    }
-
-    private static String rawSiteKey(String key) {
-        return VodConfig.rawSiteKey(key);
-    }
-
-    private static String normalizeKeyName(String name) {
-        return isEmpty(name) ? "" : name.toLowerCase(Locale.ROOT).replaceAll("[\\p{Punct}\\s]+", " ").trim();
-    }
-
-    private static boolean isEmpty(String value) {
-        return value == null || value.length() == 0;
+        return PersistedEntryKey.rebase(key, cid);
     }
 
     @NonNull
@@ -314,48 +245,22 @@ public class History {
     public String getSiteName() {
         Site site = VodConfig.get().getSite(getSiteKey());
         if (!site.getName().isEmpty()) return site.getName();
-        String rawKey = VodConfig.rawSiteKey(getKeyPart(0));
+        String rawKey = VodConfig.rawSiteKey(PersistedEntryKey.site(getKey()));
         site = VodConfig.get().getSite(rawKey);
         if (!site.getName().isEmpty()) return site.getName();
         return rawKey;
     }
 
     public String getSiteKey() {
-        return VodConfig.siteKey(getCid(), getKeyPart(0));
+        return VodConfig.siteKey(getCid(), PersistedEntryKey.site(getKey()));
     }
 
     public String getVodId() {
-        return getKeyPart(1);
+        return PersistedEntryKey.video(getKey());
     }
 
-    private String getKeyPart(int index) {
-        String[] values = splitKey(getKey());
-        return index >= 0 && index < values.length ? values[index] : "";
-    }
-
-    private static String cacheKey(int cid, String key) {
-        return cid + "@" + key;
-    }
-
-    private static String[] splitKey(String key) {
-        return key == null ? new String[0] : key.split(AppDatabase.SYMBOL);
-    }
-
-    private static History cache(History item) {
-        if (item == null) return null;
-        String key = cacheKey(item.getCid(), item.getKey());
-        History old = CACHE.get(key);
-        if (old != null && old.getCreateTime() > item.getCreateTime()) return copy(old);
-        if (old != null && old.getCreateTime() == item.getCreateTime() && old.getPosition() > 0 && item.getPosition() <= 0) return copy(old);
-        CACHE.put(key, copy(item));
-        trimCache();
-        return item;
-    }
-
-    private static List<History> cache(List<History> items) {
-        List<History> cached = new ArrayList<>(items.size());
-        for (History item : items) cached.add(cache(item));
-        return cached;
+    static String vodIdFromKey(String key) {
+        return PersistedEntryKey.video(key);
     }
 
     private static History copy(History item) {
@@ -365,8 +270,8 @@ public class History {
         copy.setVodPic(item.getVodPic());
         copy.setVodName(item.getVodName());
         copy.setVodFlag(item.getVodFlag());
-        copy.setVodRemarks(item.getVodRemarks());
-        copy.setEpisodeUrl(item.getEpisodeUrl());
+        copy.setVodRemarks(item.vodRemarks);
+        copy.setEpisodeUrl(item.episodeUrl);
         copy.setRevSort(item.isRevSort());
         copy.setRevPlay(item.isRevPlay());
         copy.setCreateTime(item.getCreateTime());
@@ -385,33 +290,6 @@ public class History {
         List<History> copied = new ArrayList<>(items.size());
         for (History item : items) copied.add(copy(item));
         return copied;
-    }
-
-    private static void removeCache(int cid, String key) {
-        CACHE.remove(cacheKey(cid, key));
-    }
-
-    private static void trimCache() {
-        while (CACHE.size() > MAX_CACHE_SIZE) {
-            String eldest = CACHE.keySet().stream().findFirst().orElse(null);
-            if (eldest == null) return;
-            CACHE.remove(eldest);
-        }
-    }
-
-    private static int keyCid(String key) {
-        String[] values = splitKey(key);
-        if (values.length >= 3) {
-            try {
-                return Integer.parseInt(values[2]);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        return VodConfig.siteCid(values.length > 0 ? values[0] : "", VodConfig.getCid());
-    }
-
-    private static void removeCache(int cid) {
-        for (String key : new ArrayList<>(CACHE.keySet())) if (key.startsWith(cid + "@")) CACHE.remove(key);
     }
 
     public Flag getFlag() {
@@ -443,442 +321,83 @@ public class History {
     }
 
     public static List<History> get() {
-        return get(VodConfig.getCid());
+        return HistoryStore.get();
     }
 
     public static List<History> getLoaded() {
-        List<Integer> cids = getLoadedCids();
-        if (cids.size() == 1) return get(cids.get(0));
-        List<History> items = withCached(cids, cache(AppDatabase.get().getHistoryDao().find(cids)));
-        return copy(unique(items, true));
+        return HistoryStore.getLoaded();
     }
 
     public static List<History> get(int cid) {
-        List<History> items = withCached(Collections.singletonList(cid), cache(AppDatabase.get().getHistoryDao().find(cid)));
-        return copy(unique(items, false));
-    }
-
-    private static List<History> withCached(List<Integer> cids, List<History> items) {
-        Map<String, History> merged = new LinkedHashMap<>();
-        for (History item : items) merged.put(cacheKey(item.getCid(), item.getKey()), item);
-        for (History item : CACHE.values()) {
-            if (!cids.contains(item.getCid())) continue;
-            String key = cacheKey(item.getCid(), item.getKey());
-            History old = merged.get(key);
-            if (isNewerOrBetterSameVersion(item, old)) merged.put(key, item);
-        }
-        List<History> result = new ArrayList<>(merged.values());
-        result.sort((left, right) -> Long.compare(right.getCreateTime(), left.getCreateTime()));
-        return result;
-    }
-
-    private static List<History> unique(List<History> items, boolean crossCid) {
-        Map<String, History> unique = new LinkedHashMap<>();
-        for (History item : items) {
-            String key = uniqueKey(item, crossCid);
-            History old = unique.get(key);
-            if (isNewerOrBetterSameVersion(item, old)) unique.put(key, item);
-        }
-        return new ArrayList<>(unique.values());
+        return HistoryStore.get(cid);
     }
 
     public static boolean isNewerOrBetterSameVersion(History item, History old) {
-        if (item == null) return false;
-        if (old == null) return true;
-        if (item.getCreateTime() != old.getCreateTime()) return item.getCreateTime() > old.getCreateTime();
-        if (old.getPosition() <= 0 && item.getPosition() > 0) return true;
-        return old.getDuration() <= 0 && item.getDuration() > 0;
-    }
-
-    private static String uniqueKey(History item, boolean crossCid) {
-        String name = normalizedName(item.getVodName());
-        String scope = crossCid ? "" : item.getCid() + "@";
-        if (TextUtils.isEmpty(name)) return scope + item.getCid() + "@" + item.getKey();
-        return scope + name;
-    }
-
-    private static String normalizedName(String name) {
-        if (TextUtils.isEmpty(name)) return "";
-        String value = Trans.s2t(name).trim().toLowerCase(Locale.US);
-        String old;
-        do {
-            old = value;
-            value = PATTERN_END.matcher(value).replaceAll("");
-            value = PATTERN_VERSION.matcher(value).replaceAll("");
-        } while (!old.equals(value));
-        return PATTERN_ALL.matcher(value).replaceAll("");
-    }
-
-    private static List<Integer> getLoadedCids() {
-        return getLoadedCids(getLoadedUrls(), VodConfig.getCid());
-    }
-
-    private static List<String> getLoadedUrls() {
-        List<String> urls = VodConfig.get().getLoadUrls();
-        if (urls.isEmpty()) {
-            urls.addAll(ConfigUrlParser.parse(Setting.getVodConfigUrls()));
-        }
-        return urls;
-    }
-
-    private static List<Integer> getLoadedCids(List<String> urls, int fallbackCid) {
-        Set<Integer> cids = new LinkedHashSet<>();
-        Map<String, Integer> idMap = new HashMap<>();
-        for (Config item : ConfigRepository.get().urls()) idMap.put(item.getUrl(), item.getId());
-        for (String url : urls) {
-            if (url == null || url.trim().isEmpty()) continue;
-            Integer cid = idMap.get(url.trim());
-            if (cid != null && cid > 0) cids.add(cid);
-        }
-        if (cids.isEmpty()) cids.add(fallbackCid);
-        return new ArrayList<>(cids);
+        return HistoryStore.isNewerOrBetterSameVersion(item, old);
     }
 
     public static History find(String key) {
-        int cid = keyCid(key);
-        History item = CACHE.get(cacheKey(cid, key));
-        if (item != null) return copy(item);
-        History db = cache(AppDatabase.get().getHistoryDao().find(cid, key));
-        return copy(db);
+        return HistoryStore.find(key);
     }
 
     public static void delete(int cid) {
-        synchronized (WRITE_LOCK) {
-            cancelWrites(cid);
-            AppDatabase.get().getHistoryDao().delete(cid);
-            removeCache(cid);
-        }
-        RefreshEvent.history();
+        HistoryStore.delete(cid);
     }
 
     public static void deleteLoaded() {
-        deleteLoaded(getLoadedUrls(), VodConfig.getCid());
+        HistoryStore.deleteLoaded();
     }
 
     public static Runnable prepareDeleteLoaded() {
-        return prepareDeleteLoaded(History::getLoadedUrls, VodConfig::getCid, History::deleteLoaded);
-    }
-
-    static Runnable prepareDeleteLoaded(java.util.function.Supplier<List<String>> urls,
-                                        java.util.function.IntSupplier fallbackCid,
-                                        java.util.function.BiConsumer<List<String>, Integer> delete) {
-        List<String> selectedUrls = Collections.unmodifiableList(new ArrayList<>(urls.get()));
-        int selectedCid = fallbackCid.getAsInt();
-        return () -> delete.accept(selectedUrls, selectedCid);
-    }
-
-    private static void deleteLoaded(List<String> urls, int fallbackCid) {
-        List<Integer> cids = getLoadedCids(urls, fallbackCid);
-        if (cids.isEmpty()) return;
-        if (cids.size() == 1) {
-            delete(cids.get(0));
-            return;
-        }
-        synchronized (WRITE_LOCK) {
-            for (Integer cid : cids) cancelWrites(cid);
-            AppDatabase.get().getHistoryDao().delete(cids);
-            for (Integer cid : cids) removeCache(cid);
-        }
-        RefreshEvent.history();
-    }
-
-    private void checkParam(History item) {
-        if (getOpening() == 0) setOpening(item.getOpening());
-        if (getEnding() == 0) setEnding(item.getEnding());
-        if (getSpeed() == 1) setSpeed(item.getSpeed());
-    }
-
-    private void checkProgress(History item) {
-        if (item == null) return;
-        if (item.getCreateTime() < getCreateTime()) return;
-        if (item.getCreateTime() == getCreateTime() && getPosition() > 0 && item.getPosition() <= 0) return;
-        setPosition(item.getPosition());
-        if (item.getDuration() > 0) setDuration(item.getDuration());
-        if (item.getCreateTime() > getCreateTime()) setCreateTime(item.getCreateTime());
-    }
-
-    private void merge(List<History> items, boolean force) {
-        for (History item : items) {
-            if (getDuration() > 0 && item.getDuration() > 0) {
-                long diff = Math.abs(getDuration() - item.getDuration());
-                long threshold = Math.min(getDuration() / 10, 10 * 60 * 1000);
-                if (diff > threshold) continue;
-            }
-            if (!force && getKey().equals(item.getKey())) continue;
-            checkParam(item);
-            checkProgress(item);
-            item.deleteSelf();
-        }
+        return HistoryStore.prepareDeleteLoaded();
     }
 
     public void update() {
-        synchronized (WRITE_LOCK) {
-            merge(find(), false);
-            save();
-        }
+        HistoryStore.update(this);
     }
 
     public History update(int cid) {
-        return update(cid, find());
+        return HistoryStore.update(this, cid);
     }
 
     public History update(int cid, List<History> items) {
-        synchronized (WRITE_LOCK) {
-            setKey(keyForConfig(getKey(), cid));
-            setCid(cid);
-            merge(items, true);
-            return save();
-        }
+        return HistoryStore.update(this, cid, items);
     }
 
     public History save() {
-        return save(true);
-    }
-
-    private History save(boolean cancelPending) {
-        if (TextUtils.isEmpty(getKey())) return this;
-        synchronized (WRITE_LOCK) {
-            if (cancelPending) cancelWrite(getCid(), getKey());
-            preserveCurrentProgressIfNeeded();
-            AppDatabase.get().getHistoryDao().insertOrUpdate(this);
-            return cache(this);
-        }
-    }
-
-    private void preserveCurrentProgressIfNeeded() {
-        if (getPosition() > 0) return;
-        History current = CACHE.get(cacheKey(getCid(), getKey()));
-        if (current == null) current = AppDatabase.get().getHistoryDao().find(getCid(), getKey());
-        if (current == null || current.getCreateTime() != getCreateTime() || current.getPosition() <= 0) return;
-        setPosition(current.getPosition());
-        if (getDuration() <= 0 && current.getDuration() > 0) setDuration(current.getDuration());
+        return HistoryStore.save(this);
     }
 
     public void saveAsync() {
-        if (isEmpty(getKey())) return;
-        History snapshot = copy(this);
-        String key = cacheKey(snapshot.getCid(), snapshot.getKey());
-        synchronized (QUEUE_LOCK) {
-            cache(snapshot);
-            long version = WRITE_VERSIONS.merge(key, 1L, Long::sum);
-            PENDING_WRITES.put(key, new PendingWrite(snapshot, version));
-            scheduleWrite(key);
-        }
-    }
-
-    private static void scheduleWrite(String key) {
-        if (!ACTIVE_WRITES.add(key)) return;
-        WRITE_EXECUTOR.execute(() -> drainWrite(key));
-    }
-
-    private static void drainWrite(String key) {
-        try {
-            PendingWrite pending;
-            while ((pending = PENDING_WRITES.remove(key)) != null) {
-                synchronized (WRITE_LOCK) {
-                    synchronized (QUEUE_LOCK) {
-                        if (pending.version != WRITE_VERSIONS.getOrDefault(key, 0L)) continue;
-                    }
-                    // Never hold the enqueue lock during disk I/O: lifecycle saves
-                    // must not wait for a slow database transaction on the UI thread.
-                    pending.item.preserveCurrentProgressIfNeeded();
-                    AppDatabase.get().getHistoryDao().insertOrUpdate(pending.item);
-                    synchronized (QUEUE_LOCK) {
-                        if (pending.version == WRITE_VERSIONS.getOrDefault(key, 0L)) cache(pending.item);
-                    }
-                    notifyHistoryChangedLocked();
-                }
-            }
-        } finally {
-            synchronized (QUEUE_LOCK) {
-                ACTIVE_WRITES.remove(key);
-                if (PENDING_WRITES.containsKey(key)) scheduleWrite(key);
-                else WRITE_VERSIONS.remove(key);
-            }
-        }
-    }
-
-    private static void notifyHistoryChangedLocked() {
-        long now = System.currentTimeMillis();
-        if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return;
-        lastRefreshAt = now;
-        RefreshEvent.history();
+        HistoryStore.saveAsync(this);
     }
 
     public History delete() {
-        for (History item : find()) item.deleteSelf(false);
-        return deleteSelf(true);
-    }
-
-    private History deleteSelf() {
-        return deleteSelf(true);
-    }
-
-    private History deleteSelf(boolean notify) {
-        synchronized (WRITE_LOCK) {
-            cancelWrite(getCid(), getKey());
-            AppDatabase.get().getHistoryDao().delete(getCid(), getKey());
-            AppDatabase.get().getTrackDao().delete(getKey());
-            removeCache(getCid(), getKey());
-        }
-        if (notify) RefreshEvent.history();
-        return this;
-    }
-
-    private static void cancelWrites(int cid) {
-        String prefix = cid + "@";
-        for (String key : WRITE_VERSIONS.keySet()) if (key.startsWith(prefix)) cancelWrite(key);
-    }
-
-    private static void cancelWrite(int cid, String key) {
-        cancelWrite(cacheKey(cid, key));
-    }
-
-    private static void cancelWrite(String key) {
-        synchronized (QUEUE_LOCK) {
-            WRITE_VERSIONS.merge(key, 1L, Long::sum);
-            PENDING_WRITES.remove(key);
-            if (!ACTIVE_WRITES.contains(key)) WRITE_VERSIONS.remove(key);
-        }
+        return HistoryStore.delete(this);
     }
 
     public List<History> find() {
-        return find(getLoadedCids());
-    }
-
-    private List<History> find(List<Integer> cids) {
-        String name = normalizedName(getVodName());
-        List<History> items = TextUtils.isEmpty(name) ? AppDatabase.get().getHistoryDao().findByName(cids, getVodName()) : findByNormalizedName(name, cids);
-        Map<String, History> unique = new LinkedHashMap<>();
-        for (History item : cache(items)) {
-            History old = unique.get(item.getKey());
-            if (isNewerOrBetterSameVersion(item, old)) unique.put(item.getKey(), item);
-        }
-        return copy(new ArrayList<>(unique.values()));
+        return HistoryStore.find(this);
     }
 
     List<History> find(int cid) {
-        return find(Collections.singletonList(cid));
+        return HistoryStore.find(this, cid);
     }
 
     public History findBestMatch() {
-        History best = null;
-        for (History item : find()) {
-            if (item.getCid() != getCid()) continue;
-            if (!Objects.equals(rawSiteKey(item.getSiteKey()), rawSiteKey(getSiteKey()))) continue;
-            if (best == null || isNewerOrBetterSameVersion(item, best)) best = item;
-        }
-        return copy(best);
-    }
-
-    private List<History> findByNormalizedName(String name, List<Integer> cids) {
-        List<History> result = new ArrayList<>();
-        for (History item : withCached(cids, cache(AppDatabase.get().getHistoryDao().find(cids)))) {
-            if (name.equals(normalizedName(item.getVodName()))) result.add(item);
-        }
-        return result;
+        return HistoryStore.findBestMatch(this);
     }
 
     public void findEpisode(List<Flag> flags) {
-        if (flags.size() > 0 && TextUtils.isEmpty(getVodFlag())) {
-            setVodFlag(flags.get(0).getFlag());
-        }
-        if (flags.size() > 0 && TextUtils.isEmpty(getVodRemarks()) && flags.get(0).getEpisodes().size() > 0) {
-            setVodRemarks(flags.get(0).getEpisodes().get(0).getName());
-        }
-        EpisodeMatch best = null;
-        for (History item : find()) {
-            EpisodeMatch match = findEpisode(flags, item.getVodFlag(), item.getVodRemarks());
-            if (match == null) continue;
-            if (isBetterMatch(best, match, item)) best = match.history(item);
-        }
-        if (best == null) return;
-        setVodFlag(best.flag.getFlag());
-        setVodRemarks(best.episode.getName());
-        setEpisodeUrl(best.episode.getUrl());
-        checkParam(best.history);
-        checkProgress(best.history);
-    }
-
-    private boolean isBetterMatch(EpisodeMatch best, EpisodeMatch match, History item) {
-        if (best == null) return true;
-        if (match.sameFlag != best.sameFlag) return match.sameFlag;
-        if (best.history.getPosition() <= 0 && item.getPosition() > 0) return true;
-        return item.getCreateTime() > best.history.getCreateTime();
-    }
-
-    private EpisodeMatch findEpisode(List<Flag> flags, String targetFlag, String remarks) {
-        if (TextUtils.isEmpty(remarks)) return null;
-        for (Flag flag : flags) {
-            if (!flag.getFlag().equals(targetFlag)) continue;
-            Episode episode = flag.find(remarks, true);
-            if (episode != null) return new EpisodeMatch(flag, episode, true);
-        }
-        for (Flag flag : flags) {
-            Episode episode = flag.find(remarks, true);
-            if (episode != null) return new EpisodeMatch(flag, episode, false);
-        }
-        return null;
-    }
-
-    private static class EpisodeMatch {
-
-        private final Flag flag;
-        private final Episode episode;
-        private final boolean sameFlag;
-        private History history;
-
-        private EpisodeMatch(Flag flag, Episode episode, boolean sameFlag) {
-            this.flag = flag;
-            this.episode = episode;
-            this.sameFlag = sameFlag;
-        }
-
-        private EpisodeMatch history(History history) {
-            this.history = history;
-            return this;
-        }
-    }
-
-    private static class PendingWrite {
-
-        private final History item;
-        private final long version;
-
-        private PendingWrite(History item, long version) {
-            this.item = item;
-            this.version = version;
-        }
-    }
-
-    static void startSync(int cid, List<History> targets) {
-        for (History target : targets) {
-            List<History> items = target.find(cid);
-            if (items.isEmpty()) {
-                target.update(cid, items);
-                continue;
-            }
-            for (History item : items) {
-                if (target.getCreateTime() > item.getCreateTime()) {
-                    target.update(cid, items);
-                    break;
-                }
-            }
-        }
+        HistoryStore.findEpisode(this, flags);
     }
 
     public static void sync(List<History> targets) {
-        sync(VodConfig.getCid(), targets, false);
+        HistoryStore.sync(targets);
     }
 
     public static void sync(int cid, List<History> targets, boolean force) {
-        App.execute(() -> {
-            synchronized (WRITE_LOCK) {
-                if (force) delete(cid);
-                startSync(cid, targets);
-            }
-            RefreshEvent.history();
-        });
+        HistoryStore.sync(cid, targets, force);
     }
 
     @Override

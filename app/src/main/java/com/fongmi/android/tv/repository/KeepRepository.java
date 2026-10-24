@@ -18,15 +18,15 @@ public final class KeepRepository {
     }
 
     public Keep find(String key) {
-        return Keep.find(key);
+        return KeepStore.find(key);
     }
 
     public List<Keep> vod() {
-        return Keep.getVod();
+        return KeepStore.getVod();
     }
 
     public List<Keep> live() {
-        return Keep.getLive();
+        return KeepStore.getLive();
     }
 
     public List<Keep> listFromJson(String value) {
@@ -34,34 +34,34 @@ public final class KeepRepository {
     }
 
     public void save(Keep keep) {
-        keep.save();
+        KeepStore.save(keep);
     }
 
     public Keep delete(Keep keep) {
-        return keep.delete();
+        return KeepStore.delete(keep);
     }
 
     public void deleteAll() {
-        Keep.deleteAll();
+        KeepStore.deleteAll();
     }
 
     public void delete(int cid) {
-        Keep.delete(cid);
+        KeepStore.delete(cid);
     }
 
     public void delete(String key) {
-        Keep.delete(key);
+        KeepStore.delete(key);
     }
 
     public void sync(List<Config> configs, List<Keep> targets) {
-        Keep.sync(configs, targets);
+        KeepStore.sync(configs, targets);
     }
 
     public void sync(List<Config> configs, List<Keep> targets, boolean force) {
-        Keep.sync(configs, targets, force);
+        KeepStore.sync(configs, targets, force);
     }
 
     public void clearMemoryCache() {
-        Keep.clearCache();
+        KeepStore.clearCache();
     }
 }

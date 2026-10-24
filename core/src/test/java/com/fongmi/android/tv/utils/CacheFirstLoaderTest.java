@@ -7,6 +7,40 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 public class CacheFirstLoaderTest {
+    @Test public void startupKeepsConfiguredOrderAcrossEveryFreshExpiredAndMissingCacheCombination() {
+        // Three selected configurations, each fresh / expired / missing: 27 user states.
+        for (int first = 0; first < 3; first++) {
+            for (int second = 0; second < 3; second++) {
+                for (int third = 0; third < 3; third++) {
+                    int[] states = {first, second, third};
+                    List<Integer> refreshes = new ArrayList<>(), missing = new ArrayList<>();
+                    List<String> expected = new ArrayList<>();
+                    List<Integer> expectedRefreshes = new ArrayList<>(), expectedMissing = new ArrayList<>();
+                    for (int i = 0; i < 3; i++) {
+                        if (states[i] != 2) expected.add("cached-" + i);
+                        if (states[i] == 1) expectedRefreshes.add(i);
+                        if (states[i] == 2) expectedMissing.add(i);
+                    }
+                    AtomicInteger fetches = new AtomicInteger();
+                    List<String> result = CacheFirstLoader.load(Arrays.asList(0, 1, 2),
+                            i -> states[i] == 2 ? null : "cached-" + i, i -> states[i] == 1,
+                            refreshes::add, missing::add, () -> {
+                                fetches.incrementAndGet(); return Collections.singletonList("network");
+                            });
+                    if (expected.isEmpty()) {
+                        assertEquals(Collections.singletonList("network"), result);
+                        assertEquals(1, fetches.get());
+                        assertTrue(refreshes.isEmpty()); assertTrue(missing.isEmpty());
+                    } else {
+                        assertEquals(expected, result);
+                        assertEquals(0, fetches.get());
+                        assertEquals(expectedRefreshes, refreshes);
+                        assertEquals(expectedMissing, missing);
+                    }
+                }
+            }
+        }
+    }
     @Test public void expiredAndMissingInputsDoNotDelayCachedStartup() throws Exception {
         ExecutorService caller = Executors.newSingleThreadExecutor();
         ExecutorService refresh = Executors.newFixedThreadPool(2);

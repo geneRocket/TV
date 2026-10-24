@@ -20,15 +20,18 @@ public class LiveServiceOwnershipTest {
         Field controller = LiveActivity.class.getDeclaredField("mPlayers"); controller.setAccessible(true);
         controller.set(oldPage, oldPlayer);
         Field servicePlayer = PlaybackService.class.getDeclaredField("player"); servicePlayer.setAccessible(true);
-        Object previous = servicePlayer.get(null);
+        Field serviceInstance = PlaybackService.class.getDeclaredField("instance"); serviceInstance.setAccessible(true);
+        Object previous = serviceInstance.get(null);
+        PlaybackService currentService = (PlaybackService) allocate.invoke(unsafe, PlaybackService.class);
         Method cleanup = LiveActivity.class.getDeclaredMethod("stopService"); cleanup.setAccessible(true);
         try {
-            servicePlayer.set(null, currentPlayer);
+            servicePlayer.set(currentService, currentPlayer);
+            serviceInstance.set(null, new java.lang.ref.WeakReference<>(currentService));
             try { cleanup.invoke(oldPage); }
             catch (InvocationTargetException error) {
                 throw new AssertionError("Stale live cleanup reached the global Android service-stop path", error.getCause());
             }
-            org.junit.Assert.assertSame(currentPlayer, servicePlayer.get(null));
-        } finally { servicePlayer.set(null, previous); }
+            org.junit.Assert.assertSame(currentPlayer, servicePlayer.get(currentService));
+        } finally { serviceInstance.set(null, previous); }
     }
 }

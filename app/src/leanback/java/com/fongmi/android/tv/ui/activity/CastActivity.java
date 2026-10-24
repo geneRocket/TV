@@ -36,6 +36,7 @@ import com.fongmi.android.tv.ui.custom.PlaybackVideoViews;
 import com.fongmi.android.tv.ui.custom.PlaybackSubtitleLauncher;
 import com.fongmi.android.tv.player.PlaybackSeekGesture;
 import com.fongmi.android.tv.player.DirectPlaybackFlow;
+import com.fongmi.android.tv.player.DirectPlaybackLifecycle;
 import com.fongmi.android.tv.player.PlaybackInput;
 import com.fongmi.android.tv.player.CastMediaTitle;
 import com.fongmi.android.tv.utils.MainThreadExecutor;
@@ -71,6 +72,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     private CastAction mAction;
     private PlaybackController mPlayers;
     private DirectPlaybackFlow mPlaybackFlow;
+    private DirectPlaybackLifecycle mPlaybackLifecycle;
     private final CallbackScope mUiCallbacks = new CallbackScope(AppTaskScheduler.get());
     private final PlaybackSeekGesture mSeekGesture = new PlaybackSeekGesture();
     private Runnable mR1;
@@ -406,6 +408,19 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
             @Override public void ended() { }
             @Override public void userPlayback(boolean playing) { if (playing) hideCenter(); else presentPaused(); }
         }, MainThreadExecutor.get());
+        mPlaybackLifecycle = new DirectPlaybackLifecycle(mPlaybackFlow, new DirectPlaybackLifecycle.Port() {
+            @Override public void acquireOwnership() { mPlayers.activateAsCurrentPlayer(); }
+            @Override public boolean needsEngine() { return mPlayers.isRelease(); }
+            @Override public void rebuildEngine() {
+                mPlayers.init(getExo(), getIjk());
+                setPlayerView();
+                setDecodeView();
+            }
+            @Override public void restoreSource() {
+                if (mPlayers.isEmpty()) { onReset(); }
+                else mPlayers.restoreCheckpoint(mPlaybackFlow.checkpoint());
+            }
+        });
         mPlayers.setInputHandler(mPlaybackFlow);
     }
 
@@ -615,8 +630,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
     protected void onResume() {
         super.onResume();
         mClock.start();
-        mPlayers.activateAsCurrentPlayer();
-        mPlaybackFlow.setPlaybackAllowed(true);
+        mPlaybackLifecycle.resume();
     }
 
     @Override
@@ -624,7 +638,7 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
         mKeyDown.release();
         mSeekGesture.reset();
         super.onPause();
-        mPlaybackFlow.setPlaybackAllowed(false);
+        mPlaybackLifecycle.pause();
         mClock.stop();
     }
 

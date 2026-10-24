@@ -26,7 +26,7 @@ public final class LiveChannelNavigator {
             int index = Math.floorMod(selected + (next ? offset : -offset), size);
             Group group = port.groupAt(index);
             if (current.equals(group)) return false;
-            if (skipFavorites && group.skip()) continue;
+            if (skipFavorites && (group.skip() || group.isEmpty())) continue;
             port.selectGroup(index, group);
             group.setPosition(next ? 0 : group.getChannel().size() - 1);
             return true;
@@ -40,8 +40,9 @@ public final class LiveChannelNavigator {
         int size = group.getChannel().size();
         int position = group.getPosition() + (next ? 1 : -1);
         boolean outside = position < 0 || position >= size;
-        if (outside && acrossGroups) group(next, true);
-        else group.setPosition(outside ? (next ? 0 : size - 1) : position);
+        if (!(outside && acrossGroups && group(next, true))) {
+            group.setPosition(outside ? (next ? 0 : size - 1) : position);
+        }
         group = port.currentGroup();
         if (group != null && !group.isEmpty()) port.play(group.current());
     }

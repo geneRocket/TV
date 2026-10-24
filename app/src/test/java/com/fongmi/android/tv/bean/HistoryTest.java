@@ -17,11 +17,11 @@ public class HistoryTest {
 
     @Test
     public void cachedProgressAndPendingInsertsKeepHistoryInNewestFirstOrder() throws Exception {
-        java.lang.reflect.Field field = History.class.getDeclaredField("CACHE");
+        java.lang.reflect.Field field = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("CACHE");
         field.setAccessible(true);
         @SuppressWarnings("unchecked")
         java.util.Map<String, History> cache = (java.util.Map<String, History>) field.get(null);
-        java.lang.reflect.Method merge = History.class.getDeclaredMethod("withCached", java.util.List.class, java.util.List.class);
+        java.lang.reflect.Method merge = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredMethod("withCached", java.util.List.class, java.util.List.class);
         merge.setAccessible(true);
         History oldFirst = entry("first", 200);
         History oldSecond = entry("second", 100);
@@ -59,10 +59,10 @@ public class HistoryTest {
 
     @Test
     public void asyncSnapshotDoesNotWaitForDatabaseWriteLock() throws Exception {
-        java.lang.reflect.Field field = History.class.getDeclaredField("WRITE_LOCK");
+        java.lang.reflect.Field field = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("WRITE_LOCK");
         field.setAccessible(true);
         Object databaseLock = field.get(null);
-        java.lang.reflect.Field activeField = History.class.getDeclaredField("ACTIVE_WRITES");
+        java.lang.reflect.Field activeField = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("ACTIVE_WRITES");
         activeField.setAccessible(true);
         @SuppressWarnings("unchecked")
         java.util.Set<String> active = (java.util.Set<String>) activeField.get(null);

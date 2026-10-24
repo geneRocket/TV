@@ -11,16 +11,6 @@ public final class VodHistoryCommitGate {
     }
 
     public boolean canCommit(VodPlaybackState state) {
-        VodEpisode episode = state.getEpisode();
-        if (committed == null || episode == null
-                || !committed.getIdentity().equals(episode.getIdentity())
-                || !committed.getResolverUrl().equals(episode.getResolverUrl())) return false;
-        switch (state.getPhase()) {
-            case READY:
-            case PAUSED:
-            case ENDED:
-            case BUFFERING: return true;
-            default: return false;
-        }
+        return VodHistoryPolicy.canCommit(committed, state);
     }
 }

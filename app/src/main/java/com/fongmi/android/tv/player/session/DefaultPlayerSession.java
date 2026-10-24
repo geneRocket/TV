@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player.session;
 import com.fongmi.android.tv.player.engine.EngineEvent;
 import com.fongmi.android.tv.player.engine.EnginePhase;
 import com.fongmi.android.tv.player.engine.EngineRequest;
+import com.fongmi.android.tv.player.engine.EngineSnapshot;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.utils.ThreadPools;
 
@@ -17,6 +18,7 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     private long nextSessionId;
     private boolean released;
     private boolean acceptingEvents;
+    private EngineSnapshot releasedSnapshot;
 
     public DefaultPlayerSession(PlayerEngine engine) {
         if (engine == null) throw new IllegalArgumentException("engine must not be null");
@@ -78,8 +80,8 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     }
 
     @Override
-    public synchronized com.fongmi.android.tv.player.engine.EngineSnapshot snapshot() {
-        return engine.snapshot();
+    public synchronized EngineSnapshot snapshot() {
+        return releasedSnapshot == null ? engine.snapshot() : releasedSnapshot;
     }
 
     @Override
@@ -122,12 +124,30 @@ public final class DefaultPlayerSession implements PlayerSession, PlayerEngine.L
     public synchronized void release() {
         if (released) return;
         released = true;
+        long position = state.getPosition();
+        long duration = state.getDuration();
+        float speed = 1;
+        // A new playback owner (e.g. cast) can release us between state callbacks.
+        // Capture live progress before engine.release() stops and clears it.
+        try {
+            EngineSnapshot snapshot = engine.snapshot();
+            if (acceptingEvents && state.getItem() != null && snapshot != null
+                    && snapshot.getSessionId() == state.getSessionId()) {
+                if (snapshot.getPosition() >= 0) position = snapshot.getPosition();
+                if (snapshot.getDuration() >= 0) duration = snapshot.getDuration();
+                speed = snapshot.getSpeed();
+            }
+        } catch (RuntimeException error) {
+            ThreadPools.log(error, "Player progress capture before release failed.");
+        }
+        releasedSnapshot = new EngineSnapshot(state.getSessionId(), EnginePhase.RELEASED,
+                position, duration, position, false, speed, 0, 0);
         try {
             engine.release();
         } catch (RuntimeException error) {
             ThreadPools.log(error, "Player engine release failed.");
         }
-        state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), state.getPosition(), state.getDuration(), null);
+        state = new PlaybackState(state.getSessionId(), PlaybackPhase.RELEASED, state.getItem(), position, duration, null);
         for (PlaybackObserver observer : snapshotObservers()) {
             try {
                 observer.onPlaybackState(state);

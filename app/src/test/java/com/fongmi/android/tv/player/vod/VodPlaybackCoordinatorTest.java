@@ -888,7 +888,7 @@ public class VodPlaybackCoordinatorTest {
         }
     }
 
-    private enum Command { SELECT, NEXT, PREVIOUS, RELOAD, REPLAY, PLAY, PAUSE, SEEK, BACKGROUND, FOREGROUND, STOP, RESET, CLOSE }
+    private enum Command { SELECT, NEXT, PREVIOUS, RELOAD, REPLAY, PLAY, PAUSE, SEEK, BACKGROUND, FOREGROUND, SUSPEND, STOP, RESET, CLOSE }
 
     @Test
     public void everyPhaseHandlesEveryUserAndLifecycleCommand() {
@@ -911,6 +911,7 @@ public class VodPlaybackCoordinatorTest {
                         case SEEK: coordinator.seekTo(12_000); break;
                         case BACKGROUND: coordinator.setPlaybackAllowed(false); break;
                         case FOREGROUND: coordinator.setPlaybackAllowed(true); break;
+                        case SUSPEND: coordinator.suspend(); break;
                         case STOP: coordinator.stop(); break;
                         case RESET: coordinator.reset(); break;
                         case CLOSE: coordinator.close(); break;
@@ -929,6 +930,7 @@ public class VodPlaybackCoordinatorTest {
                             if (phase == VodPlaybackPhase.ENDED) expected = VodPlaybackPhase.RESOLVING;
                             break;
                         case STOP: expected = VodPlaybackPhase.STOPPED; break;
+                        case SUSPEND: expected = VodPlaybackPhase.SUSPENDED; break;
                         case RESET: expected = VodPlaybackPhase.IDLE; break;
                         case CLOSE: expected = VodPlaybackPhase.RELEASED; break;
                         default: break;
@@ -951,6 +953,7 @@ public class VodPlaybackCoordinatorTest {
         if (phase == VodPlaybackPhase.RESOLVING) return coordinator;
         resolver.resolve(resolver.lastRequestId);
         if (phase == VodPlaybackPhase.STOPPED) coordinator.stop();
+        else if (phase == VodPlaybackPhase.SUSPENDED) coordinator.suspend();
         else if (phase == VodPlaybackPhase.RELEASED) coordinator.close();
         else engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.valueOf(phase.name()), 20_000, 100_000));
         assertEquals(phase, coordinator.state().getPhase());

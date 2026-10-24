@@ -18,23 +18,23 @@ public final class HistoryRepository {
     }
 
     public History find(String key) {
-        return History.find(key);
+        return HistoryStore.find(key);
     }
 
     public List<History> all() {
-        return History.get();
+        return HistoryStore.get();
     }
 
     public List<History> all(int configId) {
-        return History.get(configId);
+        return HistoryStore.get(configId);
     }
 
     public List<History> loaded() {
-        return History.getLoaded();
+        return HistoryStore.getLoaded();
     }
 
     public History prepare(History history, String key, int cid, Vod vod, float speed, String mark) {
-        return History.prepare(history, key, cid, vod, speed, mark);
+        return HistoryStore.prepare(history, key, cid, vod, speed, mark);
     }
 
     public History prepareDefault(String key, int cid, Vod vod, float speed, String mark) {
@@ -54,19 +54,21 @@ public final class HistoryRepository {
     }
 
     public History prepareBestMatch(String key, int cid, Vod vod, float speed, String mark) {
-        History prepared = History.prepare(find(key), key, cid, vod, speed, mark);
-        History matched = prepared.findBestMatch();
+        History prepared = HistoryStore.prepare(find(key), key, cid, vod, speed, mark);
+        History matched = HistoryStore.findBestMatch(prepared);
         return History.isNewerOrBetterSameVersion(matched, prepared)
-                ? History.prepare(matched, key, cid, vod, speed, mark)
+                ? HistoryStore.prepare(matched, key, cid, vod, speed, mark)
                 : prepared;
     }
 
     public History save(History history) {
-        return history.save();
+        return HistoryStore.save(history);
     }
 
+    public void saveAsync(History history) { HistoryStore.saveAsync(history); }
+
     public History delete(History history) {
-        return history.delete();
+        return HistoryStore.delete(history);
     }
 
     public History fromJson(String value) {
@@ -78,34 +80,34 @@ public final class HistoryRepository {
     }
 
     public void delete(int cid) {
-        History.delete(cid);
+        HistoryStore.delete(cid);
     }
 
     public void deleteLoaded() {
-        History.deleteLoaded();
+        HistoryStore.deleteLoaded();
     }
 
     public Runnable prepareDeleteLoaded() {
-        return History.prepareDeleteLoaded();
+        return HistoryStore.prepareDeleteLoaded();
     }
 
     public void sync(List<History> targets) {
-        History.sync(targets);
+        HistoryStore.sync(targets);
     }
 
     public void sync(int cid, List<History> targets, boolean force) {
-        History.sync(cid, targets, force);
+        HistoryStore.sync(cid, targets, force);
     }
 
     public void clearMemoryCache() {
-        History.clearCache();
+        HistoryStore.clearCache();
     }
 
     public void cancelPendingWrites() {
-        History.cancelPendingWrites();
+        HistoryStore.cancelPendingWrites();
     }
 
     public void withWritesPaused(Runnable action) {
-        History.withWritesPaused(action);
+        HistoryStore.withWritesPaused(action);
     }
 }
