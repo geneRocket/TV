@@ -31,3 +31,13 @@
 - 卸载隔离测试包，移除本轮19978 adb forward；普通TV修复包以install -r更新至当前模拟器并启动，未清除原应用数据。临时数据库副本删除。
 - 测试入口增加点播配置状态、站点home/homeVideo探测及当前Exo MIME，仅显式启用隔离包时生效。
 - 未承诺全部49个站点可用，未覆盖所有电视硬件。复测包含真实站点详情及用户同一故障URL的直接播放，不是完整分类/搜索验收。
+
+## removeAd 开启后的追加复测
+
+- 用户要求后，将原应用 remove_ad 设为true；重启原应用后再次读取确认仍为true，decode_2=1和exo_buffer=15保留。
+- 隔离测试包同样先开启removeAd，再加载饭太硬49站配置。厂长《峡谷》首次请求READY、Exo、1920×1038；通过真实进度条回调拖至600000ms后，后续观测READY、playing=true、位置694825ms，画面已截图确认。
+- 原故障HLS代理地址首次请求READY、application/x-mpegURL、1920×800；持续至82194ms仍playing=true、recovery=IDLE、removeAd=true。
+- 本次测试进程有界日志未出现格式识别错误、证书日期错误、FATAL或ANR记录。进度观测有一次3秒超时，随后状态正常；模拟器也记录到掉帧，未做性能归因，不宣称完成流畅度验收。
+- 未记录到本次清单的广告删片摘要，因此仅确认开启过滤不阻断这些样本的播放，不据此宣称实际删除了多少广告。
+- 证据目录：`/tmp/tv-removead-retest-20261024/`，含fty-seek.png、hls-removead.png、构建日志。
+- 本轮未改产品代码；普通TV Debug重新构建成功，无测试Receiver；隔离包已卸载，原应用已重新启动并保持广告过滤开启。
