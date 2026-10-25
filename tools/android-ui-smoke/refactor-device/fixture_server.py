@@ -18,6 +18,16 @@ class Fixtures(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split('?', 1)[0]
         base = 'http://127.0.0.1:18765'
+        if path == '/danmaku-load-counts':
+            with self.lock:
+                counts = {'/danmaku-load.xml': self.counts.get('/danmaku-load.xml', 0)}
+            data = json.dumps(counts).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path in ('/wallpaper.png', '/invalid-wallpaper.png'):
             image = pathlib.Path(__file__).resolve().parents[3] / 'app/src/main/res/mipmap-hdpi/ic_launcher.png'
             data = image.read_bytes() if path == '/wallpaper.png' else b'not an image'
@@ -73,6 +83,15 @@ class Fixtures(http.server.BaseHTTPRequestHandler):
             return
         with self.lock:
             count = self.counts[path] = self.counts.get(path, 0) + 1
+        if path == '/danmaku-load.xml':
+            time.sleep(.5)
+            data = ('<i>' + ''.join(f"<d p='{i * .2},1,25,16777215'>Load once {i}</d>" for i in range(450)) + '</i>').encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/xml')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path == '/fail-once.mp4' and count == 1:
             self.send_error(404, 'Intentional first-request failure')
             return

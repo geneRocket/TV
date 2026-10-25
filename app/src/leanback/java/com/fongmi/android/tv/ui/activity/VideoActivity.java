@@ -94,6 +94,7 @@ import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 import com.fongmi.android.tv.player.vod.VodPlaybackState;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.player.danmu.Parser;
+import com.fongmi.android.tv.player.danmu.DanmakuLoadGate;
 import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
@@ -614,7 +615,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     private int mEpisodeNumColumns;
     private int mEpisodeColumnWidth;
     private int mArraySize = -1;
-    private int mDanmakuRequestId;
+    private final DanmakuLoadGate mDanmakuLoad = new DanmakuLoadGate();
     private boolean mArrayRevSort;
     private boolean mDisplayTrafficPolling;
     private boolean mProgressTrafficPolling;
@@ -1148,6 +1149,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         }
         mPlayers.setDanmaku(item);
         mDanmakus = mPlayers.getDanmakus();
+        mDanmakuLoad.invalidate();
         prepareDanmaku(mPlayers.getDanmaku());
     }
 
@@ -1155,12 +1157,12 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         mDanmakus = mPlayers.getDanmakus();
         mPlayers.resetDanmu();
         mBinding.danmaku.setVisibility(View.GONE);
-        ++mDanmakuRequestId;
+        mDanmakuLoad.invalidate();
     }
 
     private void prepareDanmaku(Danmaku item) {
-        final int requestId = ++mDanmakuRequestId;
         if (!Setting.isDanmuLoad() || !mDanmuVisible) {
+            mDanmakuLoad.invalidate();
             mPlayers.resetDanmu();
             showDanmu();
             mBinding.danmaku.setVisibility(View.GONE);
@@ -1171,7 +1173,14 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         setVisibilityIfChanged(mBinding.control.danmu, View.VISIBLE);
         mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         if (!hasSource) {
+            mDanmakuLoad.invalidate();
             mPlayers.resetDanmu();
+            return;
+        }
+        final long requestId = mDanmakuLoad.begin(mPlaybackFlow.requestGeneration(), item.getUrl());
+        if (requestId == 0) {
+            showDanmu();
+            mPlayers.prepared();
             return;
         }
         mPlayers.resetDanmu();
@@ -1180,7 +1189,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             try {
                 Parser parser = new Parser(item.getUrl());
                 mUiCallbacks.post(() -> {
-                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    if (isFinishing() || isDestroyed() || !mDanmakuLoad.accepts(requestId)) return;
                     mPlayers.prepareDanmu(parser, mDanmakuContext);
                     showDanmu();
                     mPlayers.prepared();
@@ -1188,7 +1197,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
             } catch (Throwable e) {
                 ThreadPools.log(e, "Danmaku prepare failed.");
                 mUiCallbacks.post(() -> {
-                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    if (isFinishing() || isDestroyed() || !mDanmakuLoad.accepts(requestId)) return;
+                    mDanmakuLoad.failed(requestId);
                     mPlayers.resetDanmu();
                     mBinding.danmaku.setVisibility(View.GONE);
                 });

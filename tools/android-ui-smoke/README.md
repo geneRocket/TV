@@ -1,5 +1,7 @@
 # Android 手势释放回归检查
 
+弹幕重复请求验收：本地 fixture_server 提供 `/danmaku-load.xml` 和 `/danmaku-load-counts`，运行 `ANDROID_SERIAL=设备序列号 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py danmaku-load-once`（手机加 `TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile`）。测试同一视频三次界面恢复、第二个视频使用同一弹幕地址及手动刷新，检查请求增量依次为 1、2、3，并检查第一次恢复未改变视频播放请求代次。测试会直接调用页面恢复方法，不能据此推断用户实际经历了三次生命周期恢复。详情见 [排查记录](/Users/wuwenjun/code/TV/docs/danmaku-load-once-2026-10-25.md)。
+
 弹幕倍速验收：启动本地 fixture_server（视频至少 90 秒）、安装隔离包并进入前台，执行 `ANDROID_SERIAL=设备序列号 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py danmaku-speed`。手机加 `TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile`，IJK 加 `TV_SMOKE_ENGINE=1`。脚本注入密集弹幕，检查原生渲染时间、切速前后弹幕索引/左坐标、1.25→3→5→1.25、暂停和跳转。TV 使用 Activity 的实际 KeyEvent 分发；手机调用实际加速处理函数，不能替代实体长按触摸验收。记录见 [弹幕计时修复](/Users/wuwenjun/code/TV/docs/danmaku-playback-clock-2026-10-25.md)。
 
 字幕扩展验证（隔离包，应用需先进入前台，TV 启动 HomeActivity、手机启动 MainActivity）：

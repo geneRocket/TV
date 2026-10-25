@@ -102,6 +102,7 @@ import com.fongmi.android.tv.player.vod.VodPlaybackPhase;
 import com.fongmi.android.tv.player.vod.VodPlaybackState;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.player.danmu.Parser;
+import com.fongmi.android.tv.player.danmu.DanmakuLoadGate;
 import com.fongmi.android.tv.utils.Timer;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
@@ -253,7 +254,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     private boolean rotate;
     private boolean stop;
     private boolean lock;
-    private int mDanmakuRequestId;
+    private final DanmakuLoadGate mDanmakuLoad = new DanmakuLoadGate();
     private final com.fongmi.android.tv.utils.DeferredTask<List<Vod>> mRecommendations =
             new com.fongmi.android.tv.utils.DeferredTask<>(ThreadPools.recommendations(),
                     com.fongmi.android.tv.utils.AppTaskScheduler.get(), error -> ThreadPools.log(error, "Recommendation failed."));
@@ -910,6 +911,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         }
         mPlayers.setDanmaku(item);
         mDanmakus = mPlayers.getDanmakus();
+        mDanmakuLoad.invalidate();
         prepareDanmaku(mPlayers.getDanmaku());
     }
 
@@ -917,7 +919,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mDanmakus = mPlayers.getDanmakus();
         mPlayers.resetDanmu();
         mBinding.danmaku.setVisibility(View.GONE);
-        ++mDanmakuRequestId;
+        mDanmakuLoad.invalidate();
     }
 
     public void chooseDanmakuFile() {
@@ -930,9 +932,9 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     }
 
     private void prepareDanmaku(Danmaku item) {
-        final int requestId = ++mDanmakuRequestId;
         boolean blocked = !Setting.isDanmuLoad() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode());
         if (blocked) {
+            mDanmakuLoad.invalidate();
             mPlayers.resetDanmu();
             mBinding.danmaku.setVisibility(View.GONE);
             showDanmu();
@@ -942,7 +944,14 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         boolean hasSource = item != null && !item.isEmpty();
         mBinding.danmaku.setVisibility(hasSource ? View.VISIBLE : View.GONE);
         if (!hasSource) {
+            mDanmakuLoad.invalidate();
             mPlayers.resetDanmu();
+            return;
+        }
+        final long requestId = mDanmakuLoad.begin(mPlaybackFlow.requestGeneration(), item.getUrl());
+        if (requestId == 0) {
+            showDanmu();
+            mPlayers.prepared();
             return;
         }
         mPlayers.resetDanmu();
@@ -950,7 +959,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             try {
                 Parser parser = new Parser(item.getUrl());
                 mUiCallbacks.post(() -> {
-                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    if (isFinishing() || isDestroyed() || !mDanmakuLoad.accepts(requestId)) return;
                     mPlayers.prepareDanmu(parser, mDanmakuContext);
                     showDanmu();
                     mPlayers.prepared();
@@ -958,7 +967,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
             } catch (Throwable e) {
                 ThreadPools.log(e, "Danmaku prepare failed.");
                 mUiCallbacks.post(() -> {
-                    if (isFinishing() || isDestroyed() || requestId != mDanmakuRequestId) return;
+                    if (isFinishing() || isDestroyed() || !mDanmakuLoad.accepts(requestId)) return;
+                    mDanmakuLoad.failed(requestId);
                     mPlayers.resetDanmu();
                     mBinding.danmaku.setVisibility(View.GONE);
                 });

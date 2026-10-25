@@ -203,6 +203,12 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 case "decode": invoke(activity, "onDecode", true); break;
                 case "subtitle": player.setSub(Sub.from(intent.getStringExtra("url"))); break;
                 case "speed": player.setSpeed(intent.getFloatExtra("value", 1.5f)); break;
+                case "danmakuReconcile":
+                    if (context.getPackageName().endsWith(".tv")) invoke(activity, "reconcilePlaybackUiState");
+                    else invoke(activity, "prepareDanmaku", player.getDanmaku());
+                    break;
+                case "danmakuRefresh": invoke(activity, "setDanmaku", intent.hasExtra("url")
+                        ? com.fongmi.android.tv.bean.Danmaku.from(intent.getStringExtra("url")) : player.getDanmaku()); break;
                 case "speedHold": invoke(activity, "onSpeedUp"); break;
                 case "speedRelease": invoke(activity, "onSpeedEnd"); break;
                 case "speedKeyHold": {

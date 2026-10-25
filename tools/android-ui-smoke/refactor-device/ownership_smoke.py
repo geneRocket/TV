@@ -186,6 +186,41 @@ def load_live_config():
         except AssertionError:
             if attempt: raise
 
+def danmaku_load_once():
+    import urllib.request
+    def counts():
+        with urllib.request.urlopen(BASE + '/danmaku-load-counts', timeout=5) as response:
+            return json.load(response)
+    before = counts()
+    cmd('open', url=BASE + '/fixture.mp4?danmaku-load=' + str(time.time_ns()))
+    initial = wait('initial danmaku episode', video)
+    cmd('danmakuRefresh', url=BASE + '/danmaku-load.xml')
+    wait('initial danmaku ready', lambda s: s.get('danmakuReady'))
+    request = initial['request']
+    for _ in range(3): cmd('danmakuReconcile')
+    wait('danmaku retained after reconcile', lambda s: video(s) and s.get('danmakuReady'))
+    time.sleep(1)
+    reconciled = counts()
+    assert reconciled['/danmaku-load.xml'] - before['/danmaku-load.xml'] == 1, reconciled
+    assert cmd('state')['request'] == request
+    cmd('finish')
+    wait('first video closed', lambda s: s.get('activity') != 'VideoActivity')
+    cmd('open', url=BASE + '/fixture.mp4?danmaku-load=' + str(time.time_ns()))
+    wait('second video', video)
+    cmd('danmakuRefresh', url=BASE + '/danmaku-load.xml')
+    wait('second video uses same danmaku endpoint', lambda s: video(s) and s.get('danmakuReady'))
+    time.sleep(1)
+    second = counts()
+    assert second['/danmaku-load.xml'] - before['/danmaku-load.xml'] == 2, second
+    cmd('danmakuRefresh')
+    wait('manual danmaku retry', lambda s: video(s) and s.get('danmakuReady'))
+    time.sleep(1)
+    refreshed = counts()
+    assert refreshed['/danmaku-load.xml'] - before['/danmaku-load.xml'] == 3, refreshed
+    print(json.dumps({'initial': before, 'reconciled': reconciled, 'second_video': second, 'manual_refresh': refreshed}), flush=True)
+    cmd('finish')
+
+
 def danmaku_speed():
     """Exercise renderer with TV KeyEvents or mobile speed handlers, without a physical remote."""
     cmd('open', url=BASE + '/fixture.mp4?danmaku=' + str(time.time_ns()))
@@ -297,7 +332,7 @@ def live_cast():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'subtitle-screen', 'subtitle-options', 'subtitle-live', 'danmaku-speed', 'wallpaper', 'state'])
+    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'subtitle-screen', 'subtitle-options', 'subtitle-live', 'danmaku-speed', 'danmaku-load-once', 'wallpaper', 'state'])
     mode = parser.parse_args().mode
     if mode == 'paused': vod_cast(True)
     elif mode == 'playing': vod_cast(False)
@@ -311,5 +346,6 @@ if __name__ == '__main__':
     elif mode == 'subtitle-live': subtitle_live()
     elif mode == 'subtitle-options': subtitle_options()
     elif mode == 'danmaku-speed': danmaku_speed()
+    elif mode == 'danmaku-load-once': danmaku_load_once()
     elif mode == 'wallpaper': wallpaper_transaction()
     elif mode == 'state': print(json.dumps(cmd('state'), ensure_ascii=False))
