@@ -46,6 +46,12 @@ public class SearchSubtitleAdapter extends RecyclerView.Adapter<SearchSubtitleAd
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Subtitle item = items.get(position);
         holder.name.setText(item.getName());
+        List<String> metadata = new ArrayList<>();
+        if (item.getSource() != null && !item.getSource().isEmpty()) metadata.add(item.getSource());
+        if (!item.getLanguage().isEmpty()) metadata.add(item.getLanguage());
+        if (item.isExternal()) metadata.add(holder.itemView.getContext().getString(R.string.subtitle_website_result));
+        holder.meta.setText(android.text.TextUtils.join(" · ",metadata));
+        holder.meta.setVisibility(metadata.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
     }
 
     @Override
@@ -55,10 +61,12 @@ public class SearchSubtitleAdapter extends RecyclerView.Adapter<SearchSubtitleAd
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
         public TextView name;
+        public TextView meta;
 
         public ViewHolder(android.view.View itemView) {
             super(itemView);
             name = itemView.findViewById(R.id.name);
+            meta = itemView.findViewById(R.id.meta);
             itemView.setOnClickListener(v -> {
                 RecyclerView.Adapter<?> adapter = getBindingAdapter();
                 if (!(adapter instanceof SearchSubtitleAdapter)) return;

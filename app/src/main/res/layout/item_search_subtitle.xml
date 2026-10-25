@@ -16,4 +16,12 @@
         android:textSize="16sp"
         android:textColor="@android:color/white" />
 
+    <TextView
+        android:id="@+id/meta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:duplicateParentState="true"
+        android:textSize="12sp"
+        android:textColor="@color/white_70" />
+
 </LinearLayout>

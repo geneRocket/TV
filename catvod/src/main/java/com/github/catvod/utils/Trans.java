@@ -17,16 +17,24 @@ public class Trans {
         static volatile Trans INSTANCE = new Trans();
     }
 
+    private static class SearchConversion {
+        static final Trans INSTANCE = new Trans(true);
+    }
+
     private static Trans get() {
         return Loader.INSTANCE;
     }
 
     private Trans() {
+        this(false);
+    }
+
+    private Trans(boolean force) {
         s2t = new HashMap<>();
         t2s = new HashMap<>();
         z2p = new HashMap<>();
         trans = "TW".equals(Locale.getDefault().getCountry());
-        if (trans) init();
+        if (trans || force) init();
     }
 
     private void init() {
@@ -44,7 +52,7 @@ public class Trans {
     }
 
     private String get(String text, Map<Character, Character> map) {
-        if (TextUtils.isEmpty(text)) return text;
+        if (text == null || text.isEmpty()) return text;
         char[] chars = text.toCharArray();
         for (int i = 0; i < chars.length; ++i) {
             Character found = map.get(chars[i]);
@@ -65,6 +73,15 @@ public class Trans {
 
     public static boolean pass() {
         return !get().trans;
+    }
+
+    /** Search aliases must work independently of the device's display locale. */
+    public static String toTraditional(String text) {
+        return text == null ? "" : SearchConversion.INSTANCE.get(text, SearchConversion.INSTANCE.s2t);
+    }
+
+    public static String toSimplified(String text) {
+        return text == null ? "" : SearchConversion.INSTANCE.get(text, SearchConversion.INSTANCE.t2s);
     }
 
     public static String s2t(String text) {

@@ -335,4 +335,18 @@
     <string name="play_recovery_expired">自动恢复超时，请手动换源或重试</string>
     <string name="play_recovery_cancelled">已取消自动恢复，可手动换源或重试</string>
     <string name="play_recovery_running">正在尝试恢复播放（最多45秒）</string>
+    <string name="subtitle_sources">搜索来源</string>
+    <string name="subtitle_sort">排序</string>
+    <string name="subtitle_websites">网站搜索</string>
+    <string name="subtitle_source_all">全部站点</string>
+    <string name="subtitle_pref_chinese">中文优先</string>
+    <string name="subtitle_pref_cantonese">粤语优先</string>
+    <string name="subtitle_pref_traditional">繁体优先</string>
+    <string name="subtitle_pref_bilingual">双语优先</string>
+    <string name="subtitle_pref_all">相关度排序</string>
+    <string name="subtitle_partial">部分站点暂不可用：%1$s</string>
+    <string name="subtitle_open_website">打开网站</string>
+    <string name="subtitle_website_hint">此站点可能需要验证或登录。可打开浏览器，或用手机扫码，在网站下载字幕后通过播放器选择字幕文件。</string>
+    <string name="subtitle_no_browser">未找到浏览器，可用手机扫码打开。</string>
+    <string name="subtitle_website_result">前往网站下载</string>
 </resources>

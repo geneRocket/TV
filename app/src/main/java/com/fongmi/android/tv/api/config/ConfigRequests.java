@@ -9,8 +9,10 @@ final class ConfigRequests {
     private ConfigRequests() {}
     private static final ConfigLoadTask VOD = new ConfigLoadTask();
     private static final ConfigLoadTask LIVE = new ConfigLoadTask();
+    private static final ConfigLoadTask WALL = new ConfigLoadTask();
     static void vod(Consumer<VodConfig> load) { VOD.submit("vod-config", () -> load.accept(new VodConfig())); }
     static void live(Consumer<LiveConfig> load) { LIVE.submit("live-config", () -> load.accept(new LiveConfig())); }
+    static void wall(Consumer<WallConfig> load) { WALL.submit("wall-config", () -> load.accept(new WallConfig())); }
     static List<Config> capture(List<Config> configs) {
         List<Config> copy = new ArrayList<>(); for (Config config : configs) copy.add(config.copy());
         return Collections.unmodifiableList(copy);

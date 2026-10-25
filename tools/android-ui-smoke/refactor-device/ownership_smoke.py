@@ -43,6 +43,96 @@ def wait(label, predicate, timeout=20):
 def video(state, activity='VideoActivity', playing=True):
     return state.get('activity') == activity and state.get('playing') == playing and state.get('videoWidth', 0) > 0 and state.get('phase') in ('READY', 'PAUSED')
 
+def ui_hierarchy():
+    path = '/data/local/tmp/tv-subtitle-ui.xml'
+    subprocess.run([ADB, '-s', SERIAL, 'shell', 'uiautomator', 'dump', path], check=True, capture_output=True, timeout=15)
+    return subprocess.run([ADB, '-s', SERIAL, 'shell', 'cat', path], check=True, capture_output=True, text=True, timeout=5).stdout
+
+
+def choose_ui_text(*labels):
+    import xml.etree.ElementTree as ET
+    tree = ET.fromstring(ui_hierarchy())
+    node = next((node for node in tree.iter('node') if node.get('text') in labels), None)
+    assert node is not None, [(node.get('text'), node.get('bounds')) for node in tree.iter('node') if node.get('text')]
+    x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
+    subprocess.run([ADB, '-s', SERIAL, 'shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2)], check=True)
+
+
+def subtitle_options():
+    if 'subtitlePhase' in cmd('state'):
+        cmd('subtitleClose')
+        wait('previous subtitle closed', lambda s: 'subtitlePhase' not in s)
+    cmd('subtitleDialog')
+    wait('subtitle fixture ready', lambda s: s.get('subtitlePhase') == 'READY')
+    cmd('subtitleOpenSources')
+    choose_ui_text('SubHD')
+    source = wait('SubHD selected', lambda s: s.get('subtitleSource') == 'SUBHD' and s.get('subtitleCount') == 2)
+    cmd('subtitleOpenPreferences')
+    choose_ui_text('Cantonese first', '粤语优先', '粵語優先')
+    preferred = wait('Cantonese ordered', lambda s: s.get('subtitlePreference') == 'CANTONESE')
+    assert preferred['subtitleEntries'][0]['language'] == '粤语', preferred
+    cmd('subtitlePick')
+    state = cmd('state')
+    assert state.get('subtitleSelected', '') == '', state
+    ui = ui_hierarchy()
+    assert any(label in ui for label in ['Open website', '打开网站', '開啟網站']), ui[-1500:]
+    print(json.dumps({'source': source.get('subtitleSource'), 'preference': preferred.get('subtitlePreference'),
+                      'first': preferred.get('subtitleEntries')[0], 'website_dialog': True}, ensure_ascii=False), flush=True)
+
+
+def subtitle_live():
+    observations = []
+    for query in ['无间道', '英雄本色', '重慶森林']:
+        wait('live subtitle host', lambda s: bool(s.get('activity')))
+        cmd('subtitleLive', query=query)
+        result = wait('live subtitle search', lambda s: s.get('subtitleQuery') == query
+                      and s.get('subtitlePhase') in ('READY', 'ERROR'), timeout=50)
+        assert result.get('subtitleCount', 0) > 0, result
+        cmd('subtitleProbeDownload')
+        download = wait('real subtitle file', lambda s: s.get('subtitleDownload') != 'loading')
+        observations.append({'query': query, 'sources': result.get('subtitleSources'),
+                             'unavailable': result.get('subtitleUnavailable'), 'first': result.get('subtitleEntries'),
+                             'download': download.get('subtitleDownload')})
+        cmd('subtitleClose')
+        wait('subtitle closed', lambda s: 'subtitlePhase' not in s)
+    assert any(item['download'] == 'valid' for item in observations), observations
+    print(json.dumps(observations, ensure_ascii=False), flush=True)
+
+
+def wallpaper_transaction():
+    cmd('configWall', url=BASE + '/wallpaper.png')
+    good = wait('wallpaper success', lambda s: s.get('wallConfigStatus') == 'success')
+    assert good.get('wallHash') and good['wallConfigUrl'] == BASE + '/wallpaper.png', good
+    failures = []
+    for path in ('missing-wallpaper.png', 'invalid-wallpaper.png'):
+        cmd('configWall', url=BASE + '/' + path)
+        failed = wait('wallpaper failure', lambda s: s.get('wallConfigStatus', '').startswith('error:'))
+        assert failed['wallHash'] == good['wallHash'] and failed['wallConfigUrl'] == good['wallConfigUrl'], failed
+        failures.append(failed)
+    print(json.dumps({'scenario': 'wallpaper publication', 'good': good, 'failures': failures}, ensure_ascii=False), flush=True)
+
+
+def subtitle_screen():
+    wait('subtitle foreground host', lambda s: bool(s.get('activity')))
+    cmd('subtitleDialog')
+    first = wait('subtitle page one', lambda s: s.get('subtitlePhase') == 'READY'
+                 and s.get('subtitleCount') == 1 and s.get('subtitleNext'))
+    assert not first['subtitlePrevious'], first
+    cmd('subtitleNext')
+    failed = wait('subtitle page failure', lambda s: s.get('subtitlePhase') == 'ERROR')
+    assert failed['subtitlePage'] == 1 and failed['subtitleCount'] == 1, failed
+    assert not failed['subtitleNext'] and not failed['subtitlePrevious'], failed
+    cmd('subtitleRetry')
+    wait('subtitle retry', lambda s: s.get('subtitlePhase') == 'READY' and s.get('subtitleNext'))
+    cmd('subtitlePick')
+    files = wait('subtitle files', lambda s: s.get('subtitlePhase') == 'READY' and s.get('subtitleScreen') == 'FILES')
+    assert files['subtitleCount'] == 1 and not files['subtitleNext'] and not files['subtitlePrevious'], files
+    cmd('subtitlePick')
+    selected = wait('subtitle selected', lambda s: s.get('subtitleSelected') == 'https://fixture.test/movie.srt')
+    print(json.dumps({'scenario': 'subtitle screen state', 'first': first, 'failed': failed,
+                      'files': files, 'selected': selected}, ensure_ascii=False), flush=True)
+
+
 def configuration_transactions():
     cmd('clearLive')
     wait('clear live', lambda s: s.get('liveSources') == 0)
@@ -154,7 +244,7 @@ def live_cast():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'state'])
+    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'subtitle-screen', 'subtitle-options', 'subtitle-live', 'wallpaper', 'state'])
     mode = parser.parse_args().mode
     if mode == 'paused': vod_cast(True)
     elif mode == 'playing': vod_cast(False)
@@ -164,4 +254,8 @@ if __name__ == '__main__':
     elif mode == 'mobile-playing': vod_live(False)
     elif mode == 'page': page_boundaries()
     elif mode == 'config': configuration_transactions()
+    elif mode == 'subtitle-screen': subtitle_screen()
+    elif mode == 'subtitle-live': subtitle_live()
+    elif mode == 'subtitle-options': subtitle_options()
+    elif mode == 'wallpaper': wallpaper_transaction()
     elif mode == 'state': print(json.dumps(cmd('state'), ensure_ascii=False))

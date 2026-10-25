@@ -3,6 +3,7 @@ package com.fongmi.android.tv.viewmodel;
 import com.fongmi.android.tv.bean.Subtitle;
 import org.jsoup.nodes.Document;
 import org.junit.Test;
+import com.fongmi.android.tv.subtitle.AssrtSubtitleParser;
 import static org.junit.Assert.*;
 
 public class SubtitleDirectFileTest {
@@ -43,13 +44,13 @@ public class SubtitleDirectFileTest {
 
     @Test public void archivesAndMissingDownloadButtonsAreNotDirectSubtitles() throws Exception {
         assertNull(parse("https://cdn.example/movie.zip"));
-        assertNull(SubtitleViewModel.parseDirectSubtitle(Document.createShell(""), PAGE));
+        assertNull(AssrtSubtitleParser.parseDirectSubtitle(Document.createShell(""), PAGE));
     }
 
     private Subtitle parse(String href) throws Exception {
         Document document = Document.createShell("");
         document.body().appendElement("div").addClass("download").appendElement("a")
                 .attr("id", "btn_download").attr("href", href);
-        return SubtitleViewModel.parseDirectSubtitle(document, PAGE);
+        return AssrtSubtitleParser.parseDirectSubtitle(document, PAGE);
     }
 }

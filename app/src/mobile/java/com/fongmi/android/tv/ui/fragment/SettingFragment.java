@@ -375,6 +375,12 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
                 Notify.dismiss();
                 setCacheText();
             }
+
+            @Override
+            public void error(String message) {
+                Notify.dismiss();
+                Notify.show(message);
+            }
         });
     }
 

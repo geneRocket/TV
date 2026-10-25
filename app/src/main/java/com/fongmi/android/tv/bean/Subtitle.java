@@ -8,6 +8,9 @@ public class Subtitle implements Serializable {
     private String url;
     private Boolean isZip;
     private String source;
+    private String language;
+    private boolean external;
+    private String movieTitle;
 
     public Subtitle() {
     }
@@ -49,4 +52,11 @@ public class Subtitle implements Serializable {
     public void setSource(String source) {
         this.source = source;
     }
+
+    public String getLanguage() { return language == null ? "" : language; }
+    public void setLanguage(String language) { this.language = language; }
+    public boolean isExternal() { return external; }
+    public void setExternal(boolean external) { this.external = external; }
+    public String getMovieTitle() { return movieTitle == null ? "" : movieTitle; }
+    public void setMovieTitle(String movieTitle) { this.movieTitle = movieTitle; }
 }

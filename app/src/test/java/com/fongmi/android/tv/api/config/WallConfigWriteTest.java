@@ -44,15 +44,11 @@ public class WallConfigWriteTest {
 
     @Test public void imageProcessingCannotSeeAnAlreadyReplacedWallpaper() throws Exception {
         File target = wallpaper();
-        WallConfig owner = new WallConfig() {
-            @Override void readSource(File file) throws Exception { writeBytes(file, "raw image"); }
-            @Override File resize(File file) throws Exception {
-                assertEquals("working image", text(target));
-                writeBytes(file, "processed image");
-                return file;
-            }
-        };
-        assertEquals(target, owner.write(target));
+        WallpaperFileStore owner = new WallpaperFileStore((url, file) -> writeBytes(file, "raw image"), file -> {
+            assertEquals("working image", text(target));
+            writeBytes(file, "processed image");
+        });
+        assertEquals(target, write(owner, target));
         assertEquals("processed image", text(target));
         assertEquals(1, temporary.getRoot().list().length);
     }
@@ -60,10 +56,7 @@ public class WallConfigWriteTest {
     @Test public void cancelledImageProcessingCannotPublishWallpaper() throws Exception {
         File target = wallpaper();
         HttpCallScope scope = new HttpCallScope();
-        WallConfig owner = new WallConfig() {
-            @Override void readSource(File file) throws Exception { writeBytes(file, "raw image"); }
-            @Override File resize(File file) { scope.close(); return file; }
-        };
+        WallpaperFileStore owner = new WallpaperFileStore((url, file) -> writeBytes(file, "raw image"), file -> scope.close());
         scope.call(() -> { expectFailure(owner, target); return null; });
         assertEquals("working image", text(target));
         assertEquals(1, temporary.getRoot().list().length);
@@ -78,25 +71,51 @@ public class WallConfigWriteTest {
         assertEquals(1, temporary.getRoot().list().length);
     }
 
-    private WallConfig writer(boolean failRead, boolean failResize, boolean empty) {
-        return new WallConfig() {
-            @Override void readSource(File file) throws Exception {
-                writeBytes(file, empty ? "" : "raw image");
-                if (failRead) throw new IOException("Network read failed");
+    private WallpaperFileStore writer(boolean failRead, boolean failResize, boolean empty) {
+        return new WallpaperFileStore((url, file) -> {
+            assertEquals("https://fixture.test/wallpaper", url);
+            writeBytes(file, empty ? "" : "raw image");
+            if (failRead) throw new IOException("Network read failed");
+        }, file -> {
+            if (failResize) {
+                writeBytes(file, "partial JPEG");
+                throw new IOException("Image processing failed");
             }
-            @Override File resize(File file) throws Exception {
-                if (failResize) {
-                    writeBytes(file, "partial JPEG");
-                    throw new IOException("Image processing failed");
-                }
-                return file;
-            }
-        };
+        });
     }
 
-    private void expectFailure(WallConfig owner, File target) throws Exception {
+    private File write(WallpaperFileStore store, File target) throws Exception {
+        try (WallpaperFileStore.Prepared image = store.prepare("https://fixture.test/wallpaper", target)) {
+            return image.commit();
+        }
+    }
+
+    @Test public void preparedImageDoesNotPublishUntilExplicitCommit() throws Exception {
+        File target = wallpaper();
+        try (WallpaperFileStore.Prepared image = writer(false, false, false).prepare("https://fixture.test/wallpaper", target)) {
+            assertEquals("working image", text(target));
+        }
+        assertEquals("working image", text(target));
+        assertEquals(1, temporary.getRoot().list().length);
+    }
+
+    @Test public void cancellationAfterPrepareCannotReplaceTheVisibleImage() throws Exception {
+        File target = wallpaper();
+        HttpCallScope scope = new HttpCallScope();
+        scope.call(() -> {
+            try (WallpaperFileStore.Prepared image = writer(false, false, false).prepare("https://fixture.test/wallpaper", target)) {
+                scope.close();
+                try { image.commit(); fail(); } catch (IOException expected) { }
+            }
+            return null;
+        });
+        assertEquals("working image", text(target));
+        assertEquals(1, temporary.getRoot().list().length);
+    }
+
+    private void expectFailure(WallpaperFileStore owner, File target) throws Exception {
         try {
-            owner.write(target);
+            write(owner, target);
             fail("Failed wallpaper was treated as successful");
         } catch (IOException expected) { }
     }

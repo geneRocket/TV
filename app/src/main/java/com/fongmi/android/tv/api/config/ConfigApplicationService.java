@@ -44,7 +44,7 @@ final class ConfigApplicationService {
                 }
                 String wall = candidate.getWall();
                 if (!wall.isEmpty() && WallConfig.get().needSync(wall)) {
-                    WallConfig.get().config(ConfigRepository.get().find(wall, candidate.getConfig().getName(), 2).update());
+                    WallConfig.synchronize(ConfigRepository.get().find(wall, candidate.getConfig().getName(), 2));
                 }
                 ConfigNetworkService.refresh();
                 if (linked != null) linked.candidate.afterPublication();

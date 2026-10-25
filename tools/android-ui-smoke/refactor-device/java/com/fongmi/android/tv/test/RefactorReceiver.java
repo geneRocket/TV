@@ -34,7 +34,9 @@ public final class RefactorReceiver extends BroadcastReceiver {
     private static DirectPlaybackFlow lastDirect;
     private static String liveConfigStatus = "idle";
     private static String vodConfigStatus = "idle";
+    private static String wallConfigStatus = "idle";
     private static volatile JSONObject vodProbe;
+    private static volatile String subtitleDownloadStatus = "idle";
 
     @Override public void onReceive(Context context, Intent intent) {
         try {
@@ -49,6 +51,59 @@ public final class RefactorReceiver extends BroadcastReceiver {
             String command = intent.getStringExtra("cmd");
             if (command == null) command = "state";
             switch (command) {
+                case "subtitleLive":
+                    com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog.create().title(intent.getStringExtra("query"))
+                            .show((androidx.fragment.app.FragmentActivity) activity);
+                    break;
+                case "subtitleClose": searchSubtitleDialog(activity).dismiss(); break;
+                case "subtitleOpenSources": searchSubtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.source).performClick(); break;
+                case "subtitleOpenPreferences": searchSubtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.preference).performClick(); break;
+                case "subtitleSource":
+                    new androidx.lifecycle.ViewModelProvider(searchSubtitleDialog(activity)).get(com.fongmi.android.tv.viewmodel.SubtitleViewModel.class)
+                            .source(com.fongmi.android.tv.subtitle.SubtitleSource.valueOf(intent.getStringExtra("value")));
+                    break;
+                case "subtitlePreference":
+                    new androidx.lifecycle.ViewModelProvider(searchSubtitleDialog(activity)).get(com.fongmi.android.tv.viewmodel.SubtitleViewModel.class)
+                            .preference(com.fongmi.android.tv.subtitle.SubtitlePreference.valueOf(intent.getStringExtra("value")));
+                    break;
+                case "subtitleProbeDownload": {
+                    com.fongmi.android.tv.subtitle.SubtitleSearchState current = new androidx.lifecycle.ViewModelProvider(searchSubtitleDialog(activity))
+                            .get(com.fongmi.android.tv.viewmodel.SubtitleViewModel.class).searchResults().getValue();
+                    com.fongmi.android.tv.bean.Subtitle direct = null;
+                    for (com.fongmi.android.tv.bean.Subtitle item : current.items) if (!item.isExternal() && !Boolean.TRUE.equals(item.getIsZip())) { direct = item; break; }
+                    if (direct == null) { subtitleDownloadStatus = "unavailable"; break; }
+                    String url = direct.getUrl(); subtitleDownloadStatus = "loading";
+                    App.execute(() -> {
+                        try (okhttp3.Response response = com.github.catvod.net.OkHttp.client().newBuilder().callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
+                                .newCall(new okhttp3.Request.Builder().url(url).build()).execute()) {
+                            byte[] bytes = new byte[8192];
+                            int length = response.body() == null ? -1 : response.body().byteStream().read(bytes);
+                            String text = length <= 0 ? "" : new String(bytes, 0, length, java.nio.charset.StandardCharsets.UTF_8);
+                            subtitleDownloadStatus = response.isSuccessful() && (text.contains("-->") || text.contains("[Script Info]")) ? "valid" : "invalid:" + response.code();
+                        } catch (Exception error) { subtitleDownloadStatus = "error:" + error.getClass().getSimpleName(); }
+                    });
+                    break;
+                }
+                case "configWall":
+                    wallConfigStatus = "loading";
+                    com.fongmi.android.tv.api.config.WallConfig.load(Config.create(2, intent.getStringExtra("url")), new Callback() {
+                        @Override public void success() { wallConfigStatus = "success"; }
+                        @Override public void error(String message) { wallConfigStatus = "error: " + message; }
+                    });
+                    break;
+                case "subtitleDialog": {
+                    SubtitleFixtureDialog.selected = "";
+                    new SubtitleFixtureDialog().title("Movie").listener(item -> SubtitleFixtureDialog.selected = item.getUrl())
+                            .show((androidx.fragment.app.FragmentActivity) activity);
+                    break;
+                }
+                case "subtitleNext": subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.next).performClick(); break;
+                case "subtitleRetry": subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.search).performClick(); break;
+                case "subtitlePick": {
+                    androidx.recyclerview.widget.RecyclerView list = subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.recycler);
+                    list.findViewHolderForAdapterPosition(0).itemView.performClick();
+                    break;
+                }
                 case "across": Setting.putAcross(intent.getBooleanExtra("value", true)); break;
                 case "replayFuture":
                     EpgData future = new EpgData();
@@ -174,6 +229,41 @@ public final class RefactorReceiver extends BroadcastReceiver {
             }
             JSONObject data = new JSONObject();
             data.put("command", command);
+            data.put("wallConfigStatus", wallConfigStatus);
+            data.put("wallConfigUrl", com.fongmi.android.tv.api.config.WallConfig.getUrl());
+            java.io.File wallpaper = com.fongmi.android.tv.utils.FileUtil.getWall(0);
+            if (wallpaper.isFile()) {
+                java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                try (java.io.FileInputStream stream = new java.io.FileInputStream(wallpaper)) {
+                    byte[] bytes = new byte[8192]; int length;
+                    while ((length = stream.read(bytes)) != -1) digest.update(bytes, 0, length);
+                }
+                data.put("wallHash", android.util.Base64.encodeToString(digest.digest(), android.util.Base64.NO_WRAP));
+            }
+            data.put("subtitleSelected", SubtitleFixtureDialog.selected);
+            data.put("subtitleDownload", subtitleDownloadStatus);
+            com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog subtitleDialog = searchSubtitleDialog(activity);
+            if (subtitleDialog != null && subtitleDialog.getView() != null) {
+                com.fongmi.android.tv.viewmodel.SubtitleViewModel model = new androidx.lifecycle.ViewModelProvider(subtitleDialog).get(com.fongmi.android.tv.viewmodel.SubtitleViewModel.class);
+                com.fongmi.android.tv.subtitle.SubtitleSearchState state = model.searchResults().getValue();
+                if (state != null) {
+                    data.put("subtitlePhase", state.phase.name()); data.put("subtitleScreen", state.screen.name()); data.put("subtitlePage", state.page);
+                    data.put("subtitleQuery", state.query); data.put("subtitleSource", state.source.name()); data.put("subtitlePreference", state.preference.name());
+                    data.put("subtitleUnavailable", new org.json.JSONArray(state.unavailable));
+                    JSONObject counts = new JSONObject(); org.json.JSONArray entries = new org.json.JSONArray();
+                    for (com.fongmi.android.tv.bean.Subtitle item : state.items) {
+                        String source = item.getSource() == null ? "fixture" : item.getSource(); counts.put(source,counts.optInt(source)+1);
+                        if (entries.length() < 5) entries.put(new JSONObject().put("name", item.getName()).put("source", source)
+                                .put("language",item.getLanguage()).put("external",item.isExternal()));
+                    }
+                    data.put("subtitleSources", counts); data.put("subtitleEntries", entries);
+                }
+                View root = subtitleDialog.requireView();
+                androidx.recyclerview.widget.RecyclerView list = root.findViewById(com.fongmi.android.tv.R.id.recycler);
+                data.put("subtitleCount", list.getAdapter().getItemCount());
+                data.put("subtitlePrevious", root.findViewById(com.fongmi.android.tv.R.id.previous).isEnabled());
+                data.put("subtitleNext", root.findViewById(com.fongmi.android.tv.R.id.next).isEnabled());
+            }
             data.put("liveConfigStatus", liveConfigStatus);
             data.put("vodConfigStatus", vodConfigStatus);
             data.put("vodSites", VodConfig.get().getSites().size());
@@ -259,6 +349,22 @@ public final class RefactorReceiver extends BroadcastReceiver {
             catch (NoSuchFieldException ignored) { }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    private static SubtitleFixtureDialog subtitleDialog(Activity activity) {
+        if (!(activity instanceof androidx.fragment.app.FragmentActivity)) return null;
+        for (androidx.fragment.app.Fragment fragment : ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager().getFragments()) {
+            if (fragment instanceof SubtitleFixtureDialog) return (SubtitleFixtureDialog) fragment;
+        }
+        return null;
+    }
+
+    private static com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog searchSubtitleDialog(Activity activity) {
+        if (!(activity instanceof androidx.fragment.app.FragmentActivity)) return null;
+        for (androidx.fragment.app.Fragment fragment : ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager().getFragments()) {
+            if (fragment instanceof com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog) return (com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog) fragment;
+        }
+        return null;
     }
 
     private static Object path(Activity activity, String path) throws ReflectiveOperationException {

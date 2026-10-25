@@ -372,6 +372,12 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
                 Notify.dismiss();
                 setCacheText();
             }
+
+            @Override
+            public void error(String message) {
+                Notify.dismiss();
+                Notify.show(message);
+            }
         });
     }
 

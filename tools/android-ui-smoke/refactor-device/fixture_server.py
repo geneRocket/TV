@@ -18,6 +18,15 @@ class Fixtures(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split('?', 1)[0]
         base = 'http://127.0.0.1:18765'
+        if path in ('/wallpaper.png', '/invalid-wallpaper.png'):
+            image = pathlib.Path(__file__).resolve().parents[3] / 'app/src/main/res/mipmap-hdpi/ic_launcher.png'
+            data = image.read_bytes() if path == '/wallpaper.png' else b'not an image'
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path == '/live.m3u':
             epoch = int(parse_qs(urlsplit(self.path).query).get('epoch', [time.time()])[0])
             data = (f'#EXTM3U x-tvg-url="{base}/epg.xml?epoch={epoch}" catchup="append" catchup-source="?replay=1"\n'

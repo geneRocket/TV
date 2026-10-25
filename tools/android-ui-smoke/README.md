@@ -1,5 +1,16 @@
 # Android 手势释放回归检查
 
+字幕扩展验证（隔离包，应用需先进入前台，TV 启动 HomeActivity、手机启动 MainActivity）：
+
+```sh
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py subtitle-screen
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py subtitle-options
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py subtitle-live
+# 手机使用 TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile
+```
+
+`subtitle-options` 实际点击来源和语言菜单，检查粤语排序及网站二维码；结束后保留弹窗供目检。`subtitle-live` 查询三部港片，报告各站结果并下载直接字幕检查时间轴，依赖公网而非稳定回归夹具。网站验证下载仍需人工操作。这三项无需本地媒体服务。遇到系统首次全屏提示先按实际界面关闭。本轮使用 API34 Google APIs 临时只读 AVD，未关闭 Play Protect。结果与限制见 [字幕搜索扩展](/Users/wuwenjun/code/TV/docs/subtitle-search-expansion-2026-10-25.md)。
+
 ## 播放所有权与恢复验收
 
 按下文“隔离的实际播放验收包”构建/安装测试包、启动对应首页与本地 fixture_server.py，并完成 `adb reverse tcp:18765 tcp:18765` 后运行：
@@ -28,6 +39,10 @@ python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py config
 后续配置、存储、Presenter与串行执行边界见[边界重构记录](../../docs/architecture-boundaries-2026-10-25.md)。`page`模式用本地配置验证加载失败时保留旧配置，并先定位Working路线第1集，再切第2集，避免历史已选中第2集导致没有实际切集。
 
 `config`模式验证点播内嵌直播的关联发布，再混合加载文本、JSON及失效直播地址，确认有效源保留且两个源均能实际播放。
+
+`subtitle-screen`模式通过隔离包注入 Provider 数据，实际点击字幕弹窗按钮和列表，验证翻页失败保留列表、重试、文件列表分页禁用及选择回调。HTTP/站点解析由 JVM 测试独立验证。
+
+`wallpaper`模式需要 fixture server 和 reverse 18765，加载仓库图标作为本地图片，再验证 HTTP 失败和图片解码失败均保留当前配置 URL 与图片散列。后续边界见[字幕与壁纸重构记录](../../docs/architecture-subtitle-wallpaper-2026-10-25.md)。
 
 `GestureDetectorSmoke.java` 使用 Android 真实消息循环验证：调用手势处理器的 release 后，排队的长按与单击确认回调不再执行。TV 额外检查投屏临时倍速、点播亮度/音量的结束回调只执行一次。
 

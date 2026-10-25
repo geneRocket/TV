@@ -348,4 +348,18 @@
     <string name="play_recovery_expired">Recovery timed out. Choose another source or retry.</string>
     <string name="play_recovery_cancelled">Recovery cancelled. Choose a source or retry.</string>
     <string name="play_recovery_running">Trying another playback route (45-second limit).</string>
+    <string name="subtitle_sources">Sources</string>
+    <string name="subtitle_sort">Sort</string>
+    <string name="subtitle_websites">Website search</string>
+    <string name="subtitle_source_all">All sources</string>
+    <string name="subtitle_pref_chinese">Chinese first</string>
+    <string name="subtitle_pref_cantonese">Cantonese first</string>
+    <string name="subtitle_pref_traditional">Traditional Chinese first</string>
+    <string name="subtitle_pref_bilingual">Bilingual first</string>
+    <string name="subtitle_pref_all">Relevance</string>
+    <string name="subtitle_partial">Some sources are unavailable: %1$s</string>
+    <string name="subtitle_open_website">Open website</string>
+    <string name="subtitle_website_hint">This website may require verification or sign-in. Open it in a browser or scan the code with your phone to download subtitles. You can then choose the downloaded subtitle file in the player.</string>
+    <string name="subtitle_no_browser">No browser found. Scan the code with your phone.</string>
+    <string name="subtitle_website_result">Download on website</string>
 </resources>
