@@ -51,7 +51,7 @@ import java.util.regex.Pattern;
 
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
-import master.flame.danmaku.ui.widget.DanmakuView;
+import com.fongmi.android.tv.ui.custom.PlaybackDanmakuView;
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
 public class PlaybackController implements DirectPlaybackFlow.Engine {
@@ -187,11 +187,12 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     private void releaseEngine() { engines.releaseEngine(); }
 
-    public void setDanmuView(DanmakuView view) {
+    public void setDanmuView(PlaybackDanmakuView view) {
         danmaku.setView(view);
     }
 
     public void resetDanmu() {
+        App.removeCallbacks(danmakuPositionSync);
         danmaku.reset();
     }
 
@@ -406,6 +407,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     private void pauseDanmu() {
+        App.removeCallbacks(danmakuPositionSync);
         danmaku.pause();
     }
 
@@ -566,6 +568,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     public void stop() {
+        App.removeCallbacks(danmakuPositionSync);
         errors.invalidate();
         removeTimeoutCheck();
         stopParse();
@@ -594,6 +597,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     public void release() {
+        App.removeCallbacks(danmakuPositionSync);
         inputHandler = null;
         foregroundSurface = null;
         commands.close();
@@ -969,10 +973,19 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     public void setDanmuVisible(boolean visible) {
         danmaku.setVisible(visible, isPlaying(), isBuffering(), getPosition(), getSpeed());
+        scheduleDanmakuPositionSync();
     }
+
+    private final Runnable danmakuPositionSync = this::updateDanmuPlayingState;
 
     private void updateDanmuPlayingState() {
         danmaku.updatePlayingState(isPlaying(), isBuffering(), getPosition(), getSpeed());
+        scheduleDanmakuPositionSync();
+    }
+
+    private void scheduleDanmakuPositionSync() {
+        App.removeCallbacks(danmakuPositionSync);
+        if (danmaku.needsPositionSync()) App.post(danmakuPositionSync, 250);
     }
 
 }

@@ -999,7 +999,7 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
 
     private void setDanmuViewSettings() {
         float[] range = {2.4f, 1.8f, 1.2f, 0.8f};
-        float speed = range[safeIndex(Setting.getDanmuSpeed(), range.length)] / Math.max(mPlayers.getSpeed(), 0.1f);
+        float speed = range[safeIndex(Setting.getDanmuSpeed(), range.length)];
         float alpha = Setting.getDanmuAlpha() / 100.0f;
         float sizeScale = isFullscreen() ? 1.2f * Setting.getDanmuSize() : 0.8f * Setting.getDanmuSize();
         int maxLine = Setting.getDanmuLine(3);
@@ -2664,9 +2664,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
         if (Float.isNaN(mSpeedBeforeLongPress)) mSpeedBeforeLongPress = mPlayers.getSpeed();
         setPlainTextIfChanged(mBinding.control.speed, mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
-        setDanmuViewSettings();
-        
-        
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         setVisibilityIfChanged(mBinding.widget.speed, View.VISIBLE);
     }
@@ -2675,7 +2672,6 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     public void onSpeedEnd() {
         if (!Float.isNaN(mSpeedBeforeLongPress)) setPlainTextIfChanged(mBinding.control.speed, mPlayers.setSpeed(mSpeedBeforeLongPress));
         mSpeedBeforeLongPress = Float.NaN;
-        setDanmuViewSettings();
         setVisibilityIfChanged(mBinding.widget.speed, View.GONE);
         mBinding.widget.speed.clearAnimation();
     }

@@ -674,7 +674,7 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
 
     public void setDanmuViewSettings() {
         float[] range = {2.4f, 1.8f, 1.2f, 0.8f};
-        float speed = range[Setting.getDanmuSpeed()] / Math.max(mPlayers.getSpeed(), 0.1f);
+        float speed = range[Setting.getDanmuSpeed()];
         float alpha = Setting.getDanmuAlpha() / 100.0f;
         float sizeScale = Setting.getDanmuSize();
         int maxLine = Setting.getDanmuLine(2);
@@ -2062,9 +2062,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         if (!mPlayers.isPlaying() || !mPlayers.canAdjustSpeed()) return;
         if (Float.isNaN(mSpeedBeforeLongPress)) mSpeedBeforeLongPress = mPlayers.getSpeed();
         mBinding.control.action.speed.setText(mPlayers.setSpeed(mPlayers.getSpeed() < 3 ? 3 : 5));
-        setDanmuViewSettings();
-        
-        
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         mBinding.widget.speed.setVisibility(View.VISIBLE);
     }
@@ -2073,9 +2070,6 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     public void onSpeedEnd() {
         if (!Float.isNaN(mSpeedBeforeLongPress)) mBinding.control.action.speed.setText(mPlayers.setSpeed(mSpeedBeforeLongPress));
         mSpeedBeforeLongPress = Float.NaN;
-        setDanmuViewSettings();
-        
-        
         mBinding.widget.speed.setVisibility(View.GONE);
         mBinding.widget.speed.clearAnimation();
     }

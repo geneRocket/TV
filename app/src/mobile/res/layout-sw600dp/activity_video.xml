@@ -35,7 +35,7 @@
                 android:layout_height="match_parent"
                 android:visibility="gone" />
 
-            <master.flame.danmaku.ui.widget.DanmakuView
+            <com.fongmi.android.tv.ui.custom.PlaybackDanmakuView
                 android:id="@+id/danmaku"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

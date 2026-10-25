@@ -1,5 +1,7 @@
 # Android 手势释放回归检查
 
+弹幕倍速验收：启动本地 fixture_server（视频至少 90 秒）、安装隔离包并进入前台，执行 `ANDROID_SERIAL=设备序列号 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py danmaku-speed`。手机加 `TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile`，IJK 加 `TV_SMOKE_ENGINE=1`。脚本注入密集弹幕，检查原生渲染时间、切速前后弹幕索引/左坐标、1.25→3→5→1.25、暂停和跳转。TV 使用 Activity 的实际 KeyEvent 分发；手机调用实际加速处理函数，不能替代实体长按触摸验收。记录见 [弹幕计时修复](/Users/wuwenjun/code/TV/docs/danmaku-playback-clock-2026-10-25.md)。
+
 字幕扩展验证（隔离包，应用需先进入前台，TV 启动 HomeActivity、手机启动 MainActivity）：
 
 ```sh

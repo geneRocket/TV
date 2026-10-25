@@ -186,6 +186,59 @@ def load_live_config():
         except AssertionError:
             if attempt: raise
 
+def danmaku_speed():
+    """Exercise renderer with TV KeyEvents or mobile speed handlers, without a physical remote."""
+    cmd('open', url=BASE + '/fixture.mp4?danmaku=' + str(time.time_ns()))
+    initial = wait('VOD for danmaku', video)
+    engine = int(os.environ.get('TV_SMOKE_ENGINE', '2'))
+    if initial.get('engine') != engine:
+        cmd('player', value=engine)
+        wait('danmaku engine', lambda s: video(s) and s.get('engine') == engine)
+    if PACKAGE.endswith('.tv'):
+        cmd('click', path='video')
+        wait('fullscreen danmaku', lambda s: s.get('fullscreen'))
+    cmd('speed', value=1.25)
+    cmd('danmakuFixture')
+    wait('native comments', lambda s: s.get('danmakuReady') and bool(s.get('danmakuComments')))
+    observations = []
+    for command, rate in [('state', 1.25), ('speedHold', 3), ('speedHold', 5), ('speedRelease', 1.25)]:
+        before = cmd('state')
+        event = {'speedHold': 'speedKeyHold', 'speedRelease': 'speedKeyRelease'}.get(command, command) if PACKAGE.endswith('.tv') else command
+        cmd(event)
+        wait('speed handler', lambda s: abs(s.get('speed', 0) - rate) < .01 and video(s))
+        samples = []
+        for _ in range(6):
+            time.sleep(.25)
+            state = cmd('state')
+            assert state['danmakuReady'] and not state['danmakuPaused'], state
+            assert abs(state['danmakuScroll'] - 1.8) < .01, state
+            samples.append(state)
+        assert all(b['danmakuTime'] >= a['danmakuTime'] for a, b in zip(samples, samples[1:])), samples
+        state = samples[-1]
+        assert abs(state['position'] - state['danmakuTime']) < 1000, state
+        assert any(s.get('danmakuComments') for s in samples), samples
+        old = {c['index']: c for c in before.get('danmakuComments', [])}
+        common = [c for c in samples[0].get('danmakuComments', []) if c['index'] in old]
+        if command != 'state':
+            assert common, ('comments cleared during speed change', before, samples[0])
+            assert all(c['left'] <= old[c['index']]['left'] + 5 for c in common), common
+        observations.append({'rate': rate, 'video': state['position'], 'clock': state['danmakuTime'],
+                             'render': [c['time'] for c in state.get('danmakuComments', [])[:1]],
+                             'retained': len(common), 'comments': len(state.get('danmakuComments', []))})
+    cmd('mediaPause')
+    wait('danmaku paused', lambda s: video(s, playing=False) and s.get('danmakuPaused'))
+    time.sleep(.25)
+    paused = cmd('state')
+    time.sleep(.5)
+    assert cmd('state')['danmakuTime'] == paused['danmakuTime'], paused
+    cmd('mediaSeek', position=60_000)
+    wait('paused seek', lambda s: not s.get('playing') and abs(s.get('danmakuTime', 0) - 60_000) < 500)
+    cmd('mediaPlay')
+    wait('danmaku resume', lambda s: video(s) and bool(s.get('danmakuComments')) and s['danmakuTime'] >= 60_000)
+    print(json.dumps({'engine': engine, 'rates': observations, 'pause_seek_resume': True}, ensure_ascii=False), flush=True)
+    cmd('finish')
+
+
 def vod_cast(paused, engine=2):
     cmd('open', url=BASE + '/fixture.mp4?case=' + ('paused' if paused else 'playing'))
     initial = wait('initial VOD', video)
@@ -244,7 +297,7 @@ def live_cast():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'subtitle-screen', 'subtitle-options', 'subtitle-live', 'wallpaper', 'state'])
+    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'subtitle-screen', 'subtitle-options', 'subtitle-live', 'danmaku-speed', 'wallpaper', 'state'])
     mode = parser.parse_args().mode
     if mode == 'paused': vod_cast(True)
     elif mode == 'playing': vod_cast(False)
@@ -257,5 +310,6 @@ if __name__ == '__main__':
     elif mode == 'subtitle-screen': subtitle_screen()
     elif mode == 'subtitle-live': subtitle_live()
     elif mode == 'subtitle-options': subtitle_options()
+    elif mode == 'danmaku-speed': danmaku_speed()
     elif mode == 'wallpaper': wallpaper_transaction()
     elif mode == 'state': print(json.dumps(cmd('state'), ensure_ascii=False))

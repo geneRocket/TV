@@ -203,6 +203,37 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 case "decode": invoke(activity, "onDecode", true); break;
                 case "subtitle": player.setSub(Sub.from(intent.getStringExtra("url"))); break;
                 case "speed": player.setSpeed(intent.getFloatExtra("value", 1.5f)); break;
+                case "speedHold": invoke(activity, "onSpeedUp"); break;
+                case "speedRelease": invoke(activity, "onSpeedEnd"); break;
+                case "speedKeyHold": {
+                    long now = android.os.SystemClock.uptimeMillis();
+                    activity.dispatchKeyEvent(new android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN,
+                            android.view.KeyEvent.KEYCODE_DPAD_UP, 0));
+                    activity.dispatchKeyEvent(new android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN,
+                            android.view.KeyEvent.KEYCODE_DPAD_UP, 1, 0, -1, 0, android.view.KeyEvent.FLAG_LONG_PRESS));
+                    break;
+                }
+                case "speedKeyRelease": {
+                    long now = android.os.SystemClock.uptimeMillis();
+                    activity.dispatchKeyEvent(new android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP,
+                            android.view.KeyEvent.KEYCODE_DPAD_UP, 0));
+                    break;
+                }
+                case "danmakuFixture": {
+                    StringBuilder xml = new StringBuilder("<i>");
+                    for (int i = 0; i < 1200; i++) xml.append("<d p='").append(i * .2)
+                            .append(",1,25,16777215'>Smooth frame ").append(i).append("</d>");
+                    xml.append("</i>");
+                    player.resetDanmu();
+                    master.flame.danmaku.danmaku.model.android.DanmakuContext config =
+                            (master.flame.danmaku.danmaku.model.android.DanmakuContext) field(activity, "mDanmakuContext");
+                    java.util.Map<Integer,Integer> lines = new java.util.HashMap<>(); lines.put(1, 3);
+                    config.setMaximumLines(lines).setScrollSpeedFactor(1.8f);
+                    player.setDanmuVisible(true);
+                    ((View) path(activity, "danmaku")).setVisibility(View.VISIBLE);
+                    player.prepareDanmu(new com.fongmi.android.tv.player.danmu.Parser(xml.toString()), config);
+                    break;
+                }
                 case "mediaPause": player.getSession().getController().getTransportControls().pause(); break;
                 case "mediaPlay": player.getSession().getController().getTransportControls().play(); break;
                 case "mediaSeek": player.getSession().getController().getTransportControls().seekTo(intent.getLongExtra("position", 0)); break;
@@ -311,6 +342,23 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 }
             }
             if (activity != null && activity.getClass().getSimpleName().equals("VideoActivity")) {
+                com.fongmi.android.tv.ui.custom.PlaybackDanmakuView danmaku =
+                        (com.fongmi.android.tv.ui.custom.PlaybackDanmakuView) path(activity, "danmaku");
+                data.put("danmakuReady", danmaku.isPrepared());
+                data.put("danmakuPaused", danmaku.isPaused());
+                data.put("danmakuTime", danmaku.getCurrentTime());
+                data.put("danmakuScroll", danmaku.getConfig() == null ? -1 : danmaku.getConfig().scrollSpeedFactor);
+                org.json.JSONArray comments = new org.json.JSONArray();
+                master.flame.danmaku.danmaku.model.IDanmakus visible = danmaku.getCurrentVisibleDanmakus();
+                if (visible != null) visible.forEachSync(new master.flame.danmaku.danmaku.model.IDanmakus.Consumer<master.flame.danmaku.danmaku.model.BaseDanmaku, Void>() {
+                    public int accept(master.flame.danmaku.danmaku.model.BaseDanmaku comment) {
+                        try { comments.put(new JSONObject().put("index",comment.index).put("left",comment.getLeft())
+                                .put("time",comment.getTimer().currMillisecond)); }
+                        catch (org.json.JSONException ignored) {}
+                        return ACTION_CONTINUE;
+                    }
+                });
+                data.put("danmakuComments", comments);
                 data.put("fullscreen", invoke(activity, "isFullscreen"));
                 data.put("pip", activity.isInPictureInPictureMode());
                 for (String name : new String[]{"widget.progress", "widget.center", "widget.seek"}) {

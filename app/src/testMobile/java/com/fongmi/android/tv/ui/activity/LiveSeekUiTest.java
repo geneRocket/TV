@@ -112,7 +112,11 @@ public class LiveSeekUiTest {
             PlaybackController controller = allocate(PlaybackController.class);
             PlaybackEngineHost host = new PlaybackEngineHost();
             set(controller, "engines", host);
-            set(controller, "danmaku", allocate(Class.forName("com.fongmi.android.tv.player.DanmakuController")));
+            java.lang.reflect.Constructor<?> danmaku = Class.forName("com.fongmi.android.tv.player.DanmakuController")
+                    .getDeclaredConstructor(boolean.class, Runnable.class, java.util.function.LongSupplier.class,
+                            Class.forName("com.fongmi.android.tv.player.DanmakuController$Output"));
+            danmaku.setAccessible(true);
+            set(controller, "danmaku", danmaku.newInstance(false, (Runnable) () -> {}, (java.util.function.LongSupplier) () -> 0, null));
             set(host, "engine", Proxy.newProxyInstance(PlayerEngine.class.getClassLoader(), new Class<?>[]{PlayerEngine.class},
                     (proxy, method, args) -> { throw new AssertionError("Unexpected engine command " + method); }));
             set(host, "session", Proxy.newProxyInstance(PlayerSession.class.getClassLoader(), new Class<?>[]{PlayerSession.class},
