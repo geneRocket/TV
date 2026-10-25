@@ -43,6 +43,48 @@ def wait(label, predicate, timeout=20):
 def video(state, activity='VideoActivity', playing=True):
     return state.get('activity') == activity and state.get('playing') == playing and state.get('videoWidth', 0) > 0 and state.get('phase') in ('READY', 'PAUSED')
 
+def configuration_transactions():
+    cmd('clearLive')
+    wait('clear live', lambda s: s.get('liveSources') == 0)
+    cmd('config', url=BASE + '/combined-config.json')
+    linked = wait('combined config', lambda s: s.get('vodConfigStatus') == 'success'
+                  and s.get('liveConfigUrl') == s.get('vodConfigUrl')
+                  and 'Inherited Fixture' in s.get('liveNames', []))
+    cmd('configLiveBatch', urls='|'.join(BASE + '/' + path for path in ['live.m3u', 'live-config.json', 'missing-config.json']))
+    mixed = wait('mixed batch', lambda s: s.get('liveConfigStatus') == 'success' and s.get('liveSources') == 2)
+    assert 'JSON Fixture' in mixed.get('liveNames', []), mixed
+    cmd('openLive')
+    first = wait('text batch source', lambda s: video(s, 'LiveActivity'))
+    cmd('liveHome', value=1)
+    second = wait('JSON batch source', lambda s: video(s, 'LiveActivity')
+                  and s.get('sourceGeneration', 0) > first.get('sourceGeneration', 0))
+    print(json.dumps({'scenario': 'combined activation and mixed live batch', 'linked': linked,
+                      'mixed': mixed, 'before': first, 'after': second}, ensure_ascii=False), flush=True)
+    cmd('finish')
+
+
+def page_boundaries():
+    cmd('config', url=BASE + '/config.json')
+    configured = wait('VOD config', lambda s: s.get('vodConfigStatus') == 'success')
+    cmd('config', url=BASE + '/missing-config.json')
+    failed = wait('failed config', lambda s: s.get('vodConfigStatus', '').startswith('error:'))
+    assert failed['vodConfigUrl'] == configured['vodConfigUrl'], (configured, failed)
+    assert failed['vodSites'] == configured['vodSites'] > 0, (configured, failed)
+    cmd('open', key='fixture', url='fixture')
+    wait('page detail', lambda s: s.get('activity') == 'VideoActivity' and bool(s.get('selectedFlag')))
+    cmd('flag', value=1)
+    wait('working route', lambda s: video(s) and s.get('selectedFlag') == 'Working')
+    # Saved history may already point at episode 2; force a distinct transition.
+    cmd('episode', value=0)
+    first = wait('first episode', lambda s: video(s) and s.get('selectedEpisodeIndex') == 0)
+    cmd('episode', value=1)
+    second = wait('second episode', lambda s: video(s) and s.get('selectedEpisodeIndex') == 1)
+    assert first['historyKey'] == second['historyKey'], (first, second)
+    print(json.dumps({'scenario': 'config fallback and route/episode selection', 'configured': configured,
+                      'failed': failed, 'before': first, 'after': second}, ensure_ascii=False), flush=True)
+    cmd('finish')
+
+
 def load_live_config():
     # A cold app can still be submitting its startup configuration. If that
     # generation supersedes our first request, explicitly submit the fixture again.
@@ -112,7 +154,7 @@ def live_cast():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'state'])
+    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'state'])
     mode = parser.parse_args().mode
     if mode == 'paused': vod_cast(True)
     elif mode == 'playing': vod_cast(False)
@@ -120,4 +162,6 @@ if __name__ == '__main__':
     elif mode == 'ijk': vod_cast(True, 1)
     elif mode == 'mobile-paused': vod_live(True)
     elif mode == 'mobile-playing': vod_live(False)
+    elif mode == 'page': page_boundaries()
+    elif mode == 'config': configuration_transactions()
     elif mode == 'state': print(json.dumps(cmd('state'), ensure_ascii=False))

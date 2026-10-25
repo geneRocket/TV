@@ -6,12 +6,10 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.databinding.AdapterFlagBinding;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
@@ -49,31 +47,13 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
         return mItems.get(getPosition());
     }
 
-    public void setActivated(Flag flag) {
-        if (mItems.isEmpty() || flag == null) return;
-        int oldPosition = getPosition();
-        if (!mItems.contains(flag)) flag.setFlag(mItems.get(0).getFlag());
-        for (Flag item : mItems) item.setActivated(flag);
-        int newPosition = getPosition();
-        if (oldPosition == newPosition) {
-            notifyItemChanged(newPosition);
-        } else {
-            notifyItemChanged(oldPosition);
-            notifyItemChanged(newPosition);
-        }
-    }
-
-    public void toggle(Episode episode) {
-        if (episode == null) return;
-        for (Flag item : mItems) item.toggle(item.isActivated(), episode);
-    }
-
-    public void reverse() {
-        for (Flag item : mItems) Collections.reverse(item.getEpisodes());
-    }
-
     public boolean isEmpty() {
         return getItemCount() == 0;
+    }
+
+    public void selectionChanged(int previous, int current) {
+        if (previous >= 0 && previous < mItems.size()) notifyItemChanged(previous);
+        if (current != previous && current >= 0 && current < mItems.size()) notifyItemChanged(current);
     }
 
     @Override

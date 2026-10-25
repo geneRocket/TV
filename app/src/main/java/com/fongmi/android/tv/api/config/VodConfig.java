@@ -1,6 +1,6 @@
 package com.fongmi.android.tv.api.config;
 
-import android.text.TextUtils;
+import com.fongmi.android.tv.utils.TextValues;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
@@ -25,9 +25,7 @@ import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
-import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -62,19 +60,21 @@ public class VodConfig {
     private boolean persistCache = true;
     private final Map<Integer, JsonObject> loadedObjects = new HashMap<>();
     private List<Config> selectedConfigs = new ArrayList<>();
-    private final ConfigLoadTask loads = new ConfigLoadTask();
+    private final VodConfigLoader documents = new VodConfigLoader();
     private Config config = new Config();
+    private ConfigDocument document;
+    public ConfigDocument document() { return document; }
+    void document(ConfigDocument document) { this.document = document; }
     private Selection selection;
     private Parse parse;
     private String wall;
     private Site home;
 
-    private static class Loader {
-        static volatile VodConfig INSTANCE = new VodConfig();
-    }
+    static void publish(VodConfig state) { ConfigRuntime.publishVod(state); }
+    boolean loadsLive() { return loadLive; }
 
     public static VodConfig get() {
-        return Loader.INSTANCE;
+        return ConfigRuntime.snapshot().vod;
     }
 
     public static int getCid() {
@@ -90,7 +90,7 @@ public class VodConfig {
     }
 
     public static String siteKey(int cid, String key) {
-        if (TextUtils.isEmpty(key) || "all".equals(key)) return key == null ? "" : key;
+        if (TextValues.isEmpty(key) || "all".equals(key)) return key == null ? "" : key;
         if (isScopedSiteKey(key)) return key;
         cid = cid > 0 ? cid : getCid();
         return cid + "@" + key;
@@ -136,9 +136,10 @@ public class VodConfig {
     }
 
     public static void load(Config config, Callback callback) {
+        Config requested = config == null ? new Config() : config.copy();
         Selection selection = new Selection(config);
-        get().submit(() -> {
-            VodConfig target = get().reset().config(config);
+        ConfigRequests.vod(draft -> {
+            VodConfig target = draft.config(requested);
             target.selection = selection;
             target.loadConfig(callback);
         });
@@ -161,31 +162,35 @@ public class VodConfig {
     }
 
     public static void loadCached(Config config, Callback callback) {
-        get().submit(() -> {
-            VodConfig target = get().reset().config(config);
+        Config requested = config == null ? new Config() : config.copy();
+        ConfigRequests.vod(draft -> {
+            VodConfig target = draft.config(requested);
             target.loadConfigCache(callback);
         });
     }
 
-    public static void load(List<Config> configs, Callback callback) {
-        if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().reset().config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
+    public static void load(List<Config> input, Callback callback) {
+        if (input == null || input.isEmpty()) return;
+        List<Config> configs = ConfigRequests.capture(input);
+        ConfigRequests.vod(draft -> draft.config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
     }
 
-    public static void loadCached(List<Config> configs, Callback callback) {
-        if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().reset().config(configs.get(0)).setLoadLive(false).setPersistCache(false).loadConfigsCache(configs, callback));
+    public static void loadCached(List<Config> input, Callback callback) {
+        if (input == null || input.isEmpty()) return;
+        List<Config> configs = ConfigRequests.capture(input);
+        ConfigRequests.vod(draft -> draft.config(configs.get(0)).setLoadLive(false).setPersistCache(false).loadConfigsCache(configs, callback));
     }
 
-    public static void loadCachedWithLive(List<Config> configs, Callback callback) {
-        if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().reset().config(configs.get(0)).setLoadLive(true).setPersistCache(false).loadConfigsCache(configs, callback));
+    public static void loadCachedWithLive(List<Config> input, Callback callback) {
+        if (input == null || input.isEmpty()) return;
+        List<Config> configs = ConfigRequests.capture(input);
+        ConfigRequests.vod(draft -> draft.config(configs.get(0)).setLoadLive(true).setPersistCache(false).loadConfigsCache(configs, callback));
     }
 
     public static void reload(Callback callback) {
-        get().submit(() -> {
+        ConfigRequests.vod(draft -> {
             List<Config> configs = ConfigRepository.get().selected(0);
-            VodConfig target = get().reset().config(configs.get(0));
+            VodConfig target = draft.config(configs.get(0));
             if (configs.size() == 1) target.loadConfig(callback);
             else target.setPersistCache(false).loadConfigs(configs, callback);
         });
@@ -193,15 +198,7 @@ public class VodConfig {
 
     /** Clears shared state after already queued configuration work has finished. */
     public static void release() {
-        get().submit(get()::clear);
-    }
-
-    private void submit(Runnable task) {
-        loads.submit("vod-config", () -> {
-            synchronized (this) {
-                task.run();
-            }
-        });
+        ConfigRequests.vod(draft -> ConfigApplicationService.clearVod());
     }
 
     private VodConfig setLoadLive(boolean loadLive) {
@@ -222,7 +219,7 @@ public class VodConfig {
     }
 
     public synchronized VodConfig config(Config config) {
-        this.config = config;
+        this.config = config == null ? new Config() : config.copy();
         return this;
     }
 
@@ -247,7 +244,6 @@ public class VodConfig {
         this.flags = new ArrayList<>();
         this.parses = Collections.emptyList();
         this.loadLive = true;
-        BaseLoader.get().clear();
         return this;
     }
 
@@ -260,7 +256,7 @@ public class VodConfig {
             checkJson(object, callback);
         } catch (Throwable e) {
             ConfigLoadTask.check();
-            if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) ConfigLoadTask.post(() -> callback.error(""));
+            if (config.isEmpty() || TextValues.isEmpty(config.getUrl())) ConfigLoadTask.post(() -> callback.error(""));
             else loadCache(callback, e);
             ThreadPools.log(e, "VOD config operation failed.");
         }
@@ -281,7 +277,7 @@ public class VodConfig {
         JsonObject merged = new JsonObject();
         Throwable error = null;
         int success = 0;
-        for (ConfigResult result : loadConfigResults(configs, cache)) {
+        for (VodConfigLoader.Result result : loadConfigResults(configs, cache)) {
             try {
                 if (result.error != null) throw result.error;
                 if (result.cacheable) cacheConfig(result.config, result.object);
@@ -300,14 +296,14 @@ public class VodConfig {
         if (success > 0) {
             parseConfig(merged, callback);
         }
-        else if (!TextUtils.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
+        else if (!TextValues.isEmpty(config.getJson())) checkJson(Json.parse(config.getJson()).getAsJsonObject(), callback);
         else {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
             ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
         }
     }
 
-    private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
+    private List<VodConfigLoader.Result> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
         if (cache) return CacheFirstLoader.load(unique, this::readCachedConfig,
@@ -323,7 +319,7 @@ public class VodConfig {
 
     private void fetchMissingConfig(Config item) {
         ConfigLoadTask.background(() -> {
-            ConfigResult result = loadConfigResult(item);
+            VodConfigLoader.Result result = loadConfigResult(item);
             ConfigLoadTask.check();
             if (result.error != null) {
                 ThreadPools.log(result.error, "Missing config fetch failed.");
@@ -334,7 +330,31 @@ public class VodConfig {
         });
     }
 
-    private synchronized void appendMissingConfig(ConfigResult result) {
+    private synchronized VodConfig forkForAppend() {
+        VodConfig copy = new VodConfig();
+        copy.config = config.copy(); copy.home = home; copy.persistCache = false;
+        copy.selectedConfigs = new ArrayList<>(selectedConfigs);
+        for (Map.Entry<Integer, JsonObject> entry : loadedObjects.entrySet()) copy.loadedObjects.put(entry.getKey(), entry.getValue().deepCopy());
+        copy.doh = new ArrayList<>(doh);
+        copy.rules = new ArrayList<>(rules);
+        copy.ads = new ArrayList<>(ads);
+        copy.headers = new ArrayList<>(headers);
+        copy.proxy = new ArrayList<>(proxy);
+        copy.hosts = new ArrayList<>(hosts);
+        copy.ruleHosts = new ArrayList<>(ruleHosts);
+        copy.loadUrls = new ArrayList<>(loadUrls);
+        copy.flags = new ArrayList<>(flags);
+        copy.parses = new ArrayList<>(parses);
+        copy.sites.addAll(sites); copy.siteMap.putAll(siteMap); copy.parseMap = new LinkedHashMap<>(parseMap);
+        copy.parse = parse; copy.wall = wall; copy.loadLive = loadLive; copy.document = document;
+        return copy;
+    }
+
+    private void appendMissingConfig(VodConfigLoader.Result result) {
+        ConfigLoadTask.commit(() -> get().forkForAppend().appendResult(result));
+    }
+
+    private synchronized void appendResult(VodConfigLoader.Result result) {
         ConfigLoadTask.check();
         try {
             loadedObjects.put(result.config.getId(), result.object.deepCopy());
@@ -352,8 +372,7 @@ public class VodConfig {
             // Rebuild parser priority and global rules while retaining existing Site instances.
             initParse(merged);
             initOther(merged);
-            preloadJars(added);
-            if (loadLive && merged.has("lives") && LiveConfig.get().needSync(result.config.getUrl())) LiveConfig.get().parse(merged);
+            ConfigApplicationService.extendVod(this, new ConfigDocument(merged, getLoadUrls()));
             ConfigLoadTask.post(RefreshEvent::config);
         } catch (Throwable error) {
             ConfigLoadTask.check();
@@ -361,59 +380,15 @@ public class VodConfig {
         }
     }
 
-    private ConfigResult readCachedConfig(Config item) {
-        ConfigLoadTask.check();
-        if (TextUtils.isEmpty(item.getJson())) return null;
-        try {
-            JsonObject object = Json.parse(item.getJson()).getAsJsonObject();
-            ConfigPayloadValidator.vod(object);
-            return ConfigResult.success(item, object, false);
-        } catch (Throwable error) {
-            ConfigLoadTask.check();
-            return null;
-        }
-    }
+    private VodConfigLoader.Result readCachedConfig(Config item) { return documents.readCachedConfig(item); }
 
-    private ConfigResult loadConfigResult(Config item) {
-        try {
-            return ConfigResult.success(item, loadObject(item.getUrl(), 0), true);
-        } catch (Throwable e) {
-            ConfigLoadTask.check();
-            ConfigResult cached = readCachedConfig(item);
-            if (cached != null) return cached;
-            return ConfigResult.error(item, e);
-        }
-    }
+    private VodConfigLoader.Result loadConfigResult(Config item) { return documents.loadResult(item); }
 
-    private List<Config> getUniqueConfigs(List<Config> configs) {
-        List<Config> items = new ArrayList<>();
-        Set<String> loaded = new LinkedHashSet<>();
-        for (Config item : configs) {
-            String url = normalizeConfigUrl(item.getUrl());
-            if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
-            if (!url.equals(item.getUrl())) item.url(url);
-            items.add(item);
-        }
-        return items;
-    }
+    private List<Config> getUniqueConfigs(List<Config> configs) { return documents.getUniqueConfigs(configs); }
 
-    private List<String> getConfigUrls(List<Config> configs) {
-        List<String> urls = new ArrayList<>();
-        Set<String> loaded = new LinkedHashSet<>();
-        for (Config item : configs) {
-            String url = normalizeConfigUrl(item.getUrl());
-            if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
-            urls.add(url);
-        }
-        return urls;
-    }
+    private List<String> getConfigUrls(List<Config> configs) { return documents.getConfigUrls(configs); }
 
-    private void cacheConfig(Config item, JsonObject object) {
-        if (item == null || object == null || TextUtils.isEmpty(item.getUrl())) return;
-        ConfigLoadTask.check();
-        ConfigPayloadValidator.vod(object);
-        Config.cacheContent(item, object.toString(), ConfigLoadTask.startedAt());
-    }
+    private void cacheConfig(Config item, JsonObject object) { documents.cacheConfig(item, object); }
 
     private void setLoadUrls(List<String> urls) {
         this.loadUrls.clear();
@@ -421,88 +396,23 @@ public class VodConfig {
         Set<String> loaded = new LinkedHashSet<>();
         for (String url : urls) {
             String value = normalizeConfigUrl(url);
-            if (!TextUtils.isEmpty(value) && loaded.add(value)) this.loadUrls.add(value);
+            if (!TextValues.isEmpty(value) && loaded.add(value)) this.loadUrls.add(value);
         }
     }
 
-    private String normalizeConfigUrl(String url) {
-        return url == null ? "" : url.trim();
-    }
+    private String normalizeConfigUrl(String url) { return documents.normalizeConfigUrl(url); }
 
-    private JsonObject loadObject(String url, int depth) throws Throwable {
-        if (depth > 5) throw new IllegalStateException("Too many redirects.");
-        JsonObject object = Json.parse(Decoder.getJson(url)).getAsJsonObject();
-        if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
-        if (!object.has("urls")) {
-            ConfigPayloadValidator.vod(object);
-            return object;
-        }
-        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
-        if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-        return loadDepot(items, depth + 1);
-    }
+    private JsonObject loadObject(String url, int depth) throws Throwable { return documents.loadObject(url, depth); }
 
-    private JsonObject loadDepot(List<Depot> items, int depth) throws Throwable {
-        Throwable error = null;
-        for (Depot item : items) {
-            try {
-                return loadObject(item.getUrl(), depth);
-            } catch (Throwable e) {
-                ConfigLoadTask.check();
-                error = e;
-                ThreadPools.log(e, "VOD config operation failed.");
-            }
-        }
-        if (error != null) throw error;
-        throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-    }
 
-    private void mergeConfig(JsonObject target, JsonObject source, Config config) {
-        JsonObject root = source.has("video") ? source.getAsJsonObject("video") : source;
-        mergeSites(target, root, config);
-        LiveConfig.mergeLives(target, source);
-        if (root != source) LiveConfig.mergeLives(target, root);
-        appendArray(target, root, "parses");
-        appendArray(target, root, "rules");
-        appendArray(target, root, "doh");
-        appendArray(target, root, "headers");
-        appendArray(target, root, "proxy");
-        appendArray(target, root, "hosts");
-        appendArray(target, root, "flags");
-        appendArray(target, root, "ads");
-        copyIfEmpty(target, root, "notice");
-        copyIfEmpty(target, root, "logo");
-        copyIfEmpty(target, root, "wallpaper");
-        copyIfEmpty(target, root, "spider");
-    }
 
-    private void mergeSites(JsonObject target, JsonObject source, Config config) {
-        String spider = Json.safeString(source, "spider");
-        List<JsonElement> sites = Json.safeListElement(source, "sites");
-        if (!target.has("sites")) target.add("sites", new JsonArray());
-        JsonArray targetSites = target.getAsJsonArray("sites");
-        for (JsonElement element : sites) {
-            JsonObject item = element.getAsJsonObject().deepCopy();
-            String api = Json.safeString(item, "api");
-            String jar = Json.safeString(item, "jar");
-            String key = Json.safeString(item, "key");
-            if (TextUtils.isEmpty(jar) && api.startsWith("csp_")) item.addProperty("jar", spider);
-            item.addProperty("key", siteKey(config.getId(), key));
-            targetSites.add(item);
-        }
-    }
+    private void mergeConfig(JsonObject target, JsonObject source, Config config) { ConfigMerger.vod(target,source,config); }
 
-    private void appendArray(JsonObject target, JsonObject source, String key) {
-        if (!source.has(key) || source.get(key).isJsonNull()) return;
-        if (!target.has(key)) target.add(key, new JsonArray());
-        JsonArray targetArray = target.getAsJsonArray(key);
-        for (JsonElement element : source.getAsJsonArray(key)) targetArray.add(element.deepCopy());
-    }
 
-    private void copyIfEmpty(JsonObject target, JsonObject source, String key) {
-        if (target.has(key)) return;
-        if (source.has(key)) target.add(key, source.get(key).deepCopy());
-    }
+
+
+
+
 
     private void loadCache(Callback callback, Throwable e) {
         if (hasUsableCachedConfig(config)) {
@@ -513,7 +423,7 @@ public class VodConfig {
     }
 
     private boolean hasUsableCachedConfig(Config item) {
-        if (TextUtils.isEmpty(item.getJson())) return false;
+        if (TextValues.isEmpty(item.getJson())) return false;
         try {
             ConfigPayloadValidator.cachedVod(Json.parse(item.getJson()).getAsJsonObject());
             return true;
@@ -589,12 +499,7 @@ public class VodConfig {
         return loaded;
     }
 
-    private void refreshDepotCache(Config target) {
-        try {
-            cacheConfig(target, loadObject(target.getUrl(), 0));
-        } catch (Throwable ignored) {
-        }
-    }
+    private void refreshDepotCache(Config target) { documents.refreshDepotCache(target); }
 
     private void parseConfig(String text, Callback callback) {
         try {
@@ -613,18 +518,8 @@ public class VodConfig {
                 parseDepot(object, callback);
                 return;
             }
-            ConfigPayloadValidator.vod(object);
-            initSite(object);
-            initParse(object);
-            initOther(object);
-            preloadJars(object);
-            if (loadLive && object.has("lives") && !object.get("lives").isJsonNull()) initLive(object);
             String notice = Json.safeString(object, "notice");
-            config.logo(Json.safeString(object, "logo"));
-            if (persistCache) config.json(object.toString()).update();
-            ConfigLoadTask.check();
-            if (selection != null) selection.commit(config);
-            config.activate();
+            ConfigLoadTransaction.execute(() -> buildConfig(object), document -> ConfigApplicationService.replaceVod(this, document));
             postSuccess(callback, notice);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -633,9 +528,24 @@ public class VodConfig {
         }
     }
 
+    private ConfigDocument buildConfig(JsonObject object) {
+        ConfigPayloadValidator.vod(object);
+        initSite(object);
+        initParse(object);
+        initOther(object);
+        config.logo(Json.safeString(object, "logo"));
+        return new ConfigDocument(object, getLoadUrls());
+    }
+
+    void persistSelection(ConfigDocument document) {
+        if (persistCache) config.json(document.object().toString()).update();
+        if (selection != null) selection.commit(config);
+        config.saveHome(config.getHome()); config.saveParse(config.getParse()); config.activate();
+    }
+
     private void postSuccess(Callback callback, String notice) {
         if (callback == null) return;
-        if (TextUtils.isEmpty(notice)) ConfigLoadTask.post(callback::success);
+        if (TextValues.isEmpty(notice)) ConfigLoadTask.post(callback::success);
         else ConfigLoadTask.post(() -> callback.success(notice));
     }
 
@@ -654,7 +564,7 @@ public class VodConfig {
         }
         for (Site site : sites) {
             if (site.getKey().equals(config.getHome()) || site.getKey().equals(siteKey(config.getId(), config.getHome()))) {
-                setHome(site);
+                restoreHome(site);
             }
         }
     }
@@ -667,71 +577,16 @@ public class VodConfig {
         siteMap.put(site.getKey(), site);
     }
 
-    private void preloadJars(JsonObject object) {
+    void preloadJars(JsonObject object) {
         Set<String> jars = new LinkedHashSet<>();
         jars.add(Json.safeString(object, "spider"));
         for (Site site : sites) jars.add(site.getJar());
         for (String jar : jars) BaseLoader.get().parseJar(jar);
     }
 
-    private void initLive(JsonObject object) {
-        Config temp = ConfigRepository.get().find(config, 1).save();
-        boolean sync = false;
-        for (String url : loadUrls) {
-            if (LiveConfig.get().needSync(url)) {
-                sync = true;
-                break;
-            }
-        }
-        if (loadUrls.isEmpty()) sync = LiveConfig.get().needSync(config.getUrl());
-        if (sync) {
-            LiveConfig.get().reset().config(temp).parse(object);
-            putLiveSetting(loadUrls.isEmpty() ? Collections.singletonList(temp.getUrl()) : loadUrls);
-        }
-    }
 
-    private void putLiveSetting(List<String> urls) {
-        List<String> values = new ArrayList<>();
-        List<String> names = new ArrayList<>();
-        for (String url : urls) {
-            if (TextUtils.isEmpty(url) || values.contains(url)) continue;
-            values.add(url);
-            names.add(ConfigRepository.get().find(url, 1).getDesc());
-        }
-        if (values.isEmpty()) return;
-        StringBuilder sb = new StringBuilder();
-        for (String value : values) {
-            if (sb.length() > 0) sb.append('\n');
-            sb.append(value);
-        }
-        Setting.putLiveConfigUrls(sb.toString());
-        if (names.size() == 1) Setting.putLiveConfigDesc(names.get(0));
-        else if (names.size() == 2) Setting.putLiveConfigDesc(names.get(0) + " + " + names.get(1));
-        else Setting.putLiveConfigDesc(names.get(0) + " +" + (names.size() - 1));
-    }
 
-    private static class ConfigResult {
 
-        private final Config config;
-        private final JsonObject object;
-        private final Throwable error;
-        private final boolean cacheable;
-
-        private ConfigResult(Config config, JsonObject object, Throwable error, boolean cacheable) {
-            this.config = config;
-            this.object = object;
-            this.error = error;
-            this.cacheable = cacheable;
-        }
-
-        private static ConfigResult success(Config config, JsonObject object, boolean cacheable) {
-            return new ConfigResult(config, object, null, cacheable);
-        }
-
-        private static ConfigResult error(Config config, Throwable error) {
-            return new ConfigResult(config, null, error, false);
-        }
-    }
 
     private void initParse(JsonObject object) {
         List<Parse> entries = new ArrayList<>();
@@ -756,20 +611,19 @@ public class VodConfig {
         parses = updated;
         parseMap = ordered;
         Parse restored = ordered.get(selected);
-        if (restored != null && (retainSelection || restored.getType() > 1)) setParse(restored);
-        else if (!updated.isEmpty()) setParse(updated.get(0));
+        if (restored != null && (retainSelection || restored.getType() > 1)) restoreParse(restored);
+        else if (!updated.isEmpty()) restoreParse(updated.get(0));
         else parse = null;
     }
 
     private void initOther(JsonObject object) {
-        if ((home == null || home.isEmpty()) && !sites.isEmpty()) setHome(sites.get(0));
-        if ((parse == null || parse.isEmpty()) && !parses.isEmpty()) setParse(parses.get(0));
+        if ((home == null || home.isEmpty()) && !sites.isEmpty()) restoreHome(sites.get(0));
+        if ((parse == null || parse.isEmpty()) && !parses.isEmpty()) restoreParse(parses.get(0));
         setHeaders(Header.arrayFrom(object.get("headers")));
         setProxy(Proxy.arrayFrom(object.get("proxy")));
         setHosts(Json.safeListString(object, "hosts"));
         setRules(Rule.arrayFrom(object.get("rules")));
         setDoh(Doh.arrayFrom(object.get("doh")));
-        refreshNetwork();
         setFlags(Json.safeListString(object, "flags"));
         setWall(Json.safeString(object, "wallpaper"));
         setAds(Json.safeListString(object, "ads"));
@@ -803,21 +657,7 @@ public class VodConfig {
         this.hosts = hosts == null ? new ArrayList<>() : new ArrayList<>(hosts);
     }
 
-    public static void refreshNetwork() {
-        OkHttp.clearConfig();
-        OkHttp.get().setProxy(Setting.getProxy());
-        OkHttp.get().setDoh(Doh.objectFrom(Setting.getDoh()));
-        OkHttp.responseInterceptor().addAll(get().getHeaders());
-        OkHttp.responseInterceptor().addAll(LiveConfig.get().getHeaders());
-        OkHttp.authenticator().addAll(get().getProxy());
-        OkHttp.authenticator().addAll(LiveConfig.get().getProxy());
-        OkHttp.selector().addProxyAll(get().getProxy());
-        OkHttp.selector().addProxyAll(LiveConfig.get().getProxy());
-        OkHttp.resolver().addAll(get().getHosts());
-        OkHttp.resolver().addAll(LiveConfig.get().getHosts());
-        OkHttp.selector().addAll(get().getRuleHosts());
-        OkHttp.selector().addAll(LiveConfig.get().getRuleHosts());
-    }
+    public static void refreshNetwork() { ConfigNetworkService.refresh(); }
 
     public List<Doh> getDoh() {
         List<Doh> items = Doh.get(App.get());
@@ -832,7 +672,7 @@ public class VodConfig {
     }
 
     public List<Rule> getRules() {
-        return rules == null ? Collections.emptyList() : rules;
+        return rules == null ? Collections.emptyList() : Collections.unmodifiableList(rules);
     }
 
     public void setRules(List<Rule> rules) {
@@ -844,19 +684,19 @@ public class VodConfig {
     }
 
     public List<Header> getHeaders() {
-        return headers == null ? Collections.emptyList() : headers;
+        return headers == null ? Collections.emptyList() : Collections.unmodifiableList(headers);
     }
 
     public List<Proxy> getProxy() {
-        return proxy == null ? Collections.emptyList() : proxy;
+        return proxy == null ? Collections.emptyList() : Collections.unmodifiableList(proxy);
     }
 
     public List<String> getHosts() {
-        return hosts == null ? Collections.emptyList() : hosts;
+        return hosts == null ? Collections.emptyList() : Collections.unmodifiableList(hosts);
     }
 
     public List<String> getRuleHosts() {
-        return ruleHosts == null ? Collections.emptyList() : ruleHosts;
+        return ruleHosts == null ? Collections.emptyList() : Collections.unmodifiableList(ruleHosts);
     }
 
     public List<Site> getSites() {
@@ -881,7 +721,7 @@ public class VodConfig {
     }
 
     public List<String> getFlags() {
-        return flags == null ? Collections.emptyList() : flags;
+        return flags == null ? Collections.emptyList() : Collections.unmodifiableList(flags);
     }
 
     private void setFlags(List<String> flags) {
@@ -889,7 +729,7 @@ public class VodConfig {
     }
 
     public List<String> getAds() {
-        return ads == null ? Collections.emptyList() : ads;
+        return ads == null ? Collections.emptyList() : Collections.unmodifiableList(ads);
     }
 
     private void setAds(List<String> ads) {
@@ -913,15 +753,15 @@ public class VodConfig {
     }
 
     public String getWall() {
-        return TextUtils.isEmpty(wall) ? "" : wall;
+        return TextValues.isEmpty(wall) ? "" : wall;
     }
 
     public Parse getParse(String name) {
-        return TextUtils.isEmpty(name) ? null : parseMap.get(name);
+        return TextValues.isEmpty(name) ? null : parseMap.get(name);
     }
 
     public Site getSite(String key) {
-        if (TextUtils.isEmpty(key)) return new Site();
+        if (TextValues.isEmpty(key)) return new Site();
         Site site = siteMap.get(key);
         if (site == null && isScopedSiteKey(key)) site = siteMap.get(rawSiteKey(key));
         if (site == null && !isScopedSiteKey(key)) site = siteMap.get(siteKey(key));
@@ -937,18 +777,34 @@ public class VodConfig {
     }
 
     public void setParse(Parse parse) {
+        restoreParse(parse);
+        config.saveParse(this.parse.getName());
+    }
+
+    private void restoreParse(Parse parse) {
         Parse current = parseMap.get(parse.getName());
         this.parse = current == null ? parse : current;
         this.parse.setActivated(true);
-        config.saveParse(this.parse.getName());
+        config.setParse(this.parse.getName());
         for (Parse item : getParses()) item.setActivated(this.parse);
     }
 
     public void setHome(Site home) {
+        restoreHome(home);
+        config.saveHome(config.getHome());
+        prewarmHome();
+    }
+
+    private void restoreHome(Site home) {
         this.home = home;
         this.home.setActivated(true);
-        config.saveHome(isScopedSiteKey(home.getKey()) && siteCid(home.getKey(), config.getId()) != config.getId() ? home.getKey() : rawSiteKey(home.getKey()));
+        String selectedHome = isScopedSiteKey(home.getKey()) && siteCid(home.getKey(), config.getId()) != config.getId() ? home.getKey() : rawSiteKey(home.getKey());
+        config.setHome(selectedHome);
         for (Site item : getSites()) item.setActivated(home);
+    }
+
+    void prewarmHome() {
+        Site home = getHome();
         ConfigLoadTask.background(() -> {
             try {
                 String api = home.getApi();
@@ -961,9 +817,5 @@ public class VodConfig {
         });
     }
 
-    private void setWall(String wall) {
-        this.wall = wall;
-        boolean load = !TextUtils.isEmpty(wall) && WallConfig.get().needSync(wall);
-        if (load) WallConfig.get().config(ConfigRepository.get().find(wall, config.getName(), 2).update());
-    }
+    private void setWall(String wall) { this.wall = wall; }
 }

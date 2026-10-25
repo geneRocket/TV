@@ -8,33 +8,39 @@ import java.util.List;
 /** Single data-access boundary for persisted playback history. */
 public final class HistoryRepository {
 
-    private static final HistoryRepository INSTANCE = new HistoryRepository();
+    private static final class Default { static final HistoryRepository INSTANCE =
+            new HistoryRepository(PersistenceServices.history(), PersistenceServices::captureScope); }
 
     public static HistoryRepository get() {
-        return INSTANCE;
+        return Default.INSTANCE;
     }
 
-    private HistoryRepository() {
+    private final HistoryStorage storage;
+    private final java.util.function.Supplier<PersistenceScope> scopes;
+    public HistoryRepository(HistoryStorage storage, java.util.function.Supplier<PersistenceScope> scopes) {
+        this.storage = java.util.Objects.requireNonNull(storage); this.scopes = java.util.Objects.requireNonNull(scopes);
     }
+    public HistoryRepository in(PersistenceScope scope) { return new HistoryRepository(storage, () -> scope); }
+    public PersistenceScope captureScope() { return scopes.get(); }
 
     public History find(String key) {
-        return HistoryStore.find(key);
+        return storage.find(key, scopes.get().currentId());
     }
 
     public List<History> all() {
-        return HistoryStore.get();
+        return storage.get(scopes.get().currentId());
     }
 
     public List<History> all(int configId) {
-        return HistoryStore.get(configId);
+        return storage.get(configId);
     }
 
     public List<History> loaded() {
-        return HistoryStore.getLoaded();
+        return storage.getLoaded(scopes.get());
     }
 
     public History prepare(History history, String key, int cid, Vod vod, float speed, String mark) {
-        return HistoryStore.prepare(history, key, cid, vod, speed, mark);
+        return storage.prepare(history, key, cid, vod, speed, mark, scopes.get());
     }
 
     public History prepareDefault(String key, int cid, Vod vod, float speed, String mark) {
@@ -54,21 +60,22 @@ public final class HistoryRepository {
     }
 
     public History prepareBestMatch(String key, int cid, Vod vod, float speed, String mark) {
-        History prepared = HistoryStore.prepare(find(key), key, cid, vod, speed, mark);
-        History matched = HistoryStore.findBestMatch(prepared);
+        PersistenceScope scope = scopes.get();
+        History prepared = storage.prepare(storage.find(key, scope.currentId()), key, cid, vod, speed, mark, scope);
+        History matched = storage.findBestMatch(prepared, scope);
         return History.isNewerOrBetterSameVersion(matched, prepared)
-                ? HistoryStore.prepare(matched, key, cid, vod, speed, mark)
+                ? storage.prepare(matched, key, cid, vod, speed, mark, scope)
                 : prepared;
     }
 
     public History save(History history) {
-        return HistoryStore.save(history);
+        return storage.save(history);
     }
 
-    public void saveAsync(History history) { HistoryStore.saveAsync(history); }
+    public void saveAsync(History history) { storage.saveAsync(history); }
 
     public History delete(History history) {
-        return HistoryStore.delete(history);
+        return storage.delete(history, scopes.get());
     }
 
     public History fromJson(String value) {
@@ -80,34 +87,35 @@ public final class HistoryRepository {
     }
 
     public void delete(int cid) {
-        HistoryStore.delete(cid);
+        storage.delete(cid);
     }
 
     public void deleteLoaded() {
-        HistoryStore.deleteLoaded();
+        storage.deleteLoaded(scopes.get());
     }
 
     public Runnable prepareDeleteLoaded() {
-        return HistoryStore.prepareDeleteLoaded();
+        PersistenceScope captured = scopes.get();
+        return () -> storage.deleteLoaded(captured);
     }
 
     public void sync(List<History> targets) {
-        HistoryStore.sync(targets);
+        storage.sync(scopes.get().currentId(), targets, false);
     }
 
     public void sync(int cid, List<History> targets, boolean force) {
-        HistoryStore.sync(cid, targets, force);
+        storage.sync(cid, targets, force);
     }
 
     public void clearMemoryCache() {
-        HistoryStore.clearCache();
+        storage.clearCache();
     }
 
     public void cancelPendingWrites() {
-        HistoryStore.cancelPendingWrites();
+        storage.cancelPendingWrites();
     }
 
     public void withWritesPaused(Runnable action) {
-        HistoryStore.withWritesPaused(action);
+        storage.withWritesPaused(action);
     }
 }

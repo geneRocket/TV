@@ -34,6 +34,8 @@ import java.util.List;
 
 public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener {
 
+    private final com.fongmi.android.tv.ui.presenter.VodEpisodeSelection mSelection = new com.fongmi.android.tv.ui.presenter.VodEpisodeSelection();
+
     private ActivityDetailBinding mBinding;
     private EpisodeAdapter mEpisodeAdapter;
     private SiteViewModel mViewModel;
@@ -91,7 +93,7 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     }
 
     private Flag getFlag() {
-        return mFlagAdapter.getActivated();
+        return mSelection.flag();
     }
 
     private Episode getEpisode() {
@@ -163,7 +165,8 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
         setText(mBinding.content, 0, Html.fromHtml(item.getVodContent()).toString());
         setText(mBinding.director, R.string.detail_director, Html.fromHtml(item.getVodDirector()).toString());
         ImgUtil.rect(item.getVodName(), item.getVodPic(getPic()), mBinding.pic);
-        mFlagAdapter.addAll(item.getVodFlags());
+        mSelection.detail(item);
+        mFlagAdapter.addAll(mSelection.flags());
         checkHistory(item);
         checkFlag(item);
         checkKeepImg();
@@ -204,7 +207,7 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     }
 
     private void reverseEpisode(boolean scroll) {
-        mFlagAdapter.reverse();
+        mSelection.reverseEpisodes();
         setEpisodeAdapter(getFlag().getEpisodes());
         if (scroll) mBinding.episode.scrollToPosition(mEpisodeAdapter.getPosition());
     }
@@ -220,7 +223,10 @@ public class DetailActivity extends BaseActivity implements FlagAdapter.OnClickL
     @Override
     public void onItemClick(Flag item) {
         if (item.isActivated()) return;
-        mFlagAdapter.setActivated(item);
+        int previous = mSelection.flagIndex();
+        if (!mSelection.selectFlag(item, true)) return;
+        item = mSelection.flag();
+        mFlagAdapter.selectionChanged(previous, mSelection.flagIndex());
         mBinding.flag.scrollToPosition(mFlagAdapter.getPosition());
         setEpisodeAdapter(item.getEpisodes());
     }

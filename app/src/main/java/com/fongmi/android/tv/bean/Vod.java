@@ -2,7 +2,7 @@ package com.fongmi.android.tv.bean;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.text.TextUtils;
+import com.fongmi.android.tv.utils.TextValues;
 import android.view.View;
 
 import com.fongmi.android.tv.App;
@@ -128,7 +128,7 @@ public class Vod implements Parcelable {
     }
 
     public String getVodId() {
-        return TextUtils.isEmpty(vodId) ? "" : vodId.trim();
+        return TextValues.isEmpty(vodId) ? "" : vodId.trim();
     }
 
     public void setVodId(String vodId) {
@@ -136,7 +136,7 @@ public class Vod implements Parcelable {
     }
 
     public String getVodName() {
-        return TextUtils.isEmpty(vodName) ? "" : vodName.trim();
+        return TextValues.isEmpty(vodName) ? "" : vodName.trim();
     }
 
     public void setVodName(String vodName) {
@@ -144,11 +144,11 @@ public class Vod implements Parcelable {
     }
 
     public String getTypeName() {
-        return TextUtils.isEmpty(typeName) ? "" : typeName.trim();
+        return TextValues.isEmpty(typeName) ? "" : typeName.trim();
     }
 
     public String getVodPic() {
-        return TextUtils.isEmpty(vodPic) ? "" : vodPic.trim();
+        return TextValues.isEmpty(vodPic) ? "" : vodPic.trim();
     }
 
     public void setVodPic(String vodPic) {
@@ -156,7 +156,7 @@ public class Vod implements Parcelable {
     }
 
     public String getVodRemarks() {
-        return TextUtils.isEmpty(vodRemarks) ? "" : vodRemarks.trim();
+        return TextValues.isEmpty(vodRemarks) ? "" : vodRemarks.trim();
     }
 
     public void setVodRemarks(String vodRemarks) {
@@ -164,7 +164,7 @@ public class Vod implements Parcelable {
     }
 
     public String getVodYear() {
-        return TextUtils.isEmpty(vodYear) ? "" : vodYear.trim();
+        return TextValues.isEmpty(vodYear) ? "" : vodYear.trim();
     }
 
     public void setVodYear(String vodYear) {
@@ -172,35 +172,35 @@ public class Vod implements Parcelable {
     }
 
     public String getVodArea() {
-        return TextUtils.isEmpty(vodArea) ? "" : vodArea.trim();
+        return TextValues.isEmpty(vodArea) ? "" : vodArea.trim();
     }
 
     public String getVodDirector() {
-        return TextUtils.isEmpty(vodDirector) ? "" : vodDirector.trim();
+        return TextValues.isEmpty(vodDirector) ? "" : vodDirector.trim();
     }
 
     public String getVodActor() {
-        return TextUtils.isEmpty(vodActor) ? "" : vodActor.trim();
+        return TextValues.isEmpty(vodActor) ? "" : vodActor.trim();
     }
 
     public String getVodContent() {
-        return TextUtils.isEmpty(vodContent) ? "" : vodContent.trim().replace("\n", "<br>");
+        return TextValues.isEmpty(vodContent) ? "" : vodContent.trim().replace("\n", "<br>");
     }
 
     public String getVodPlayFrom() {
-        return TextUtils.isEmpty(vodPlayFrom) ? "" : vodPlayFrom;
+        return TextValues.isEmpty(vodPlayFrom) ? "" : vodPlayFrom;
     }
 
     public String getVodPlayUrl() {
-        return TextUtils.isEmpty(vodPlayUrl) ? "" : vodPlayUrl;
+        return TextValues.isEmpty(vodPlayUrl) ? "" : vodPlayUrl;
     }
 
     public String getVodTag() {
-        return TextUtils.isEmpty(vodTag) ? "" : vodTag;
+        return TextValues.isEmpty(vodTag) ? "" : vodTag;
     }
 
     public String getAction() {
-        return TextUtils.isEmpty(action) ? "" : action;
+        return TextValues.isEmpty(action) ? "" : action;
     }
 
     public Cate getCate() {

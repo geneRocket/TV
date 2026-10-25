@@ -91,10 +91,11 @@ public class PersistenceCacheIsolationTest {
     }
 
     private static <T> T cache(java.lang.Class<T> owner, T value) throws Exception {
-        java.lang.Class<?> storage = owner == History.class ? com.fongmi.android.tv.repository.HistoryStore.class
-                : owner == Keep.class ? com.fongmi.android.tv.repository.KeepStore.class : owner;
+        java.lang.Class<?> storage = owner == History.class ? com.fongmi.android.tv.repository.HistoryStorage.class
+                : owner == Keep.class ? com.fongmi.android.tv.repository.KeepStorage.class : owner;
         Method cache = storage.getDeclaredMethod("cache", owner);
         cache.setAccessible(true);
-        return owner.cast(cache.invoke(null, value));
+        return owner.cast(cache.invoke(owner == History.class ? com.fongmi.android.tv.repository.PersistenceServices.history()
+                : owner == Keep.class ? com.fongmi.android.tv.repository.PersistenceServices.keep() : null, value));
     }
 }

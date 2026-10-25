@@ -25,6 +25,13 @@ public final class ConfigLoadTask {
         if (Thread.currentThread().isInterrupted() || (session != null && session.cancelled)) throw new CancellationException("Config load superseded");
     }
 
+    /** Cancellation and publication use the same gate; a superseded draft cannot publish. */
+    public static void commit(Runnable apply) {
+        Session session = CURRENT.get();
+        if (session == null) { check(); apply.run(); return; }
+        synchronized (session) { check(); apply.run(); }
+    }
+
     public static long startedAt() {
         Session session = CURRENT.get();
         return session == null ? System.currentTimeMillis() : session.started;

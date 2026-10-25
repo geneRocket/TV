@@ -1,6 +1,5 @@
 package com.fongmi.android.tv.api.config;
 
-import android.net.Uri;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
@@ -31,13 +30,11 @@ import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
-import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -60,17 +57,19 @@ public class LiveConfig {
     private boolean persistCache = true;
     private final Map<Integer, JsonObject> loadedObjects = new HashMap<>();
     private List<Config> selectedConfigs = new ArrayList<>();
-    private final ConfigLoadTask loads = new ConfigLoadTask();
+    private final LiveConfigLoader documents = new LiveConfigLoader();
     private Config config = new Config();
+    private ConfigDocument document;
+    private String pendingContent;
+    public ConfigDocument document() { return document; }
     private boolean sync;
+    private boolean requestBoot;
     private Live home;
 
-    private static class Loader {
-        static volatile LiveConfig INSTANCE = new LiveConfig();
-    }
+    static void publish(LiveConfig state) { ConfigRuntime.publishLive(state); }
 
     public static LiveConfig get() {
-        return Loader.INSTANCE;
+        return ConfigRuntime.snapshot().live;
     }
 
     public static String getUrl() {
@@ -102,30 +101,34 @@ public class LiveConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().submit(() -> get().reset().config(config).loadConfig(callback));
+        Config requested = config == null ? new Config() : config.copy();
+        ConfigRequests.live(draft -> draft.config(requested).loadConfig(callback));
     }
 
     public static void loadCached(Config config, Callback callback) {
-        get().submit(() -> {
-            LiveConfig target = get().reset().config(config);
+        Config requested = config == null ? new Config() : config.copy();
+        ConfigRequests.live(draft -> {
+            LiveConfig target = draft.config(requested);
             target.loadConfigCache(callback);
         });
     }
 
-    public static void load(List<Config> configs, Callback callback) {
-        if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().reset().config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
+    public static void load(List<Config> input, Callback callback) {
+        if (input == null || input.isEmpty()) return;
+        List<Config> configs = ConfigRequests.capture(input);
+        ConfigRequests.live(draft -> draft.config(configs.get(0)).setPersistCache(false).loadConfigs(configs, callback));
     }
 
-    public static void loadCached(List<Config> configs, Callback callback) {
-        if (configs == null || configs.isEmpty()) return;
-        get().submit(() -> get().reset().config(configs.get(0)).setPersistCache(false).loadConfigsCache(configs, callback));
+    public static void loadCached(List<Config> input, Callback callback) {
+        if (input == null || input.isEmpty()) return;
+        List<Config> configs = ConfigRequests.capture(input);
+        ConfigRequests.live(draft -> draft.config(configs.get(0)).setPersistCache(false).loadConfigsCache(configs, callback));
     }
 
     public static void reload(Callback callback) {
-        get().submit(() -> {
+        ConfigRequests.live(draft -> {
             List<Config> configs = ConfigRepository.get().selected(1);
-            LiveConfig target = get().reset().config(configs.get(0));
+            LiveConfig target = draft.config(configs.get(0));
             if (configs.size() == 1) target.loadConfig(callback);
             else target.setPersistCache(false).loadConfigs(configs, callback);
         });
@@ -133,15 +136,7 @@ public class LiveConfig {
 
     /** Clears shared state after already queued configuration work has finished. */
     public static void release() {
-        get().submit(get()::clear);
-    }
-
-    private void submit(Runnable task) {
-        loads.submit("live-config", () -> {
-            synchronized (this) {
-                task.run();
-            }
-        });
+        ConfigRequests.live(ConfigApplicationService::live);
     }
 
     private LiveConfig setPersistCache(boolean persistCache) {
@@ -156,15 +151,18 @@ public class LiveConfig {
     }
 
     public synchronized LiveConfig config(Config config) {
-        this.config = config;
+        this.config = config == null ? new Config() : config.copy();
+        config = this.config;
         if (config.getUrl() == null) return this;
         this.sync = config.getUrl().equals(VodConfig.getUrl());
         return this;
     }
 
     public synchronized LiveConfig clear() {
-        for (Live live : getLives()) BaseLoader.get().clearLive(live.getName(), live.getApi(), live.getExt(), live.getJar());
         this.home = null;
+        this.pendingContent = null;
+        this.document = null;
+        this.requestBoot = false;
         this.loadedObjects.clear();
         this.selectedConfigs.clear();
         this.ads.clear();
@@ -181,7 +179,7 @@ public class LiveConfig {
     private void loadConfig(Callback callback) {
         try {
             if (config.isEmpty()) config(Config.live());
-            parseConfigOrThrow(Decoder.getJson(config.getUrl()));
+            commitBuild(() -> parseConfigOrThrow(Decoder.getJson(config.getUrl())));
             if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -204,7 +202,7 @@ public class LiveConfig {
         JsonObject merged = new JsonObject();
         Throwable error = null;
         int success = 0;
-        for (ConfigResult result : loadConfigResults(configs, cache)) {
+        for (LiveConfigLoader.Result result : loadConfigResults(configs, cache)) {
             try {
                 if (result.error != null) throw result.error;
                 if (result.live != null) {
@@ -223,19 +221,29 @@ public class LiveConfig {
             }
         }
         ConfigLoadTask.check();
-        if (merged.has("lives") || merged.has("headers") || merged.has("proxy") || merged.has("hosts") || merged.has("rules") || merged.has("ads")) parseConfig(merged, null);
-        if (success > 0) ConfigLoadTask.post(callback::success);
-        else {
+        if (success == 0) {
             Throwable cause = error == null ? new Throwable("No valid config") : error;
-            ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+            if (callback != null) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, cause)));
+            return;
+        }
+        try {
+            commitBuild(() -> {
+                if (!merged.entrySet().isEmpty()) parseConfigOrThrow(merged);
+            });
+            if (callback != null) ConfigLoadTask.post(callback::success);
+        } catch (Throwable failure) {
+            ConfigLoadTask.check();
+            ThreadPools.log(failure, "Live config activation failed.");
+            if (callback != null) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_parse, failure)));
         }
     }
+
 
     private synchronized void addLive(Live live) {
         if (liveMap.containsKey(live.getName())) return;
         lives.add(live);
         liveMap.put(live.getName(), live);
-        if (home == null) setHome(live, true);
+        if (home == null) restoreHome(live);
     }
 
     private boolean hasUsableCachedConfig(Config item) {
@@ -281,7 +289,7 @@ public class LiveConfig {
         else ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
     }
 
-    private List<ConfigResult> loadConfigResults(List<Config> configs, boolean cache) {
+    private List<LiveConfigLoader.Result> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
         if (cache) return CacheFirstLoader.load(unique, this::readCachedConfig,
@@ -297,7 +305,7 @@ public class LiveConfig {
 
     private void fetchMissingConfig(Config item) {
         ConfigLoadTask.background(() -> {
-            ConfigResult result = loadConfigResult(item);
+            LiveConfigLoader.Result result = loadConfigResult(item);
             ConfigLoadTask.check();
             if (result.error != null) {
                 ThreadPools.log(result.error, "Missing config fetch failed.");
@@ -308,19 +316,40 @@ public class LiveConfig {
         });
     }
 
-    private synchronized void appendMissingConfig(ConfigResult result) {
+    private synchronized LiveConfig forkForAppend() {
+        LiveConfig copy = new LiveConfig();
+        copy.config = config.copy(); copy.home = home; copy.persistCache = false;
+        copy.selectedConfigs = new ArrayList<>(selectedConfigs);
+        for (Map.Entry<Integer, JsonObject> entry : loadedObjects.entrySet()) copy.loadedObjects.put(entry.getKey(), entry.getValue().deepCopy());
+        copy.rules = new ArrayList<>(rules);
+        copy.ads = new ArrayList<>(ads);
+        copy.headers = new ArrayList<>(headers);
+        copy.proxy = new ArrayList<>(proxy);
+        copy.hosts = new ArrayList<>(hosts);
+        copy.ruleHosts = new ArrayList<>(ruleHosts);
+        copy.lives.addAll(lives); copy.liveMap.putAll(liveMap); copy.sync = sync; copy.document = document;
+        return copy;
+    }
+
+    private void appendMissingConfig(LiveConfigLoader.Result result) {
+        ConfigLoadTask.commit(() -> get().forkForAppend().appendResult(result));
+    }
+
+    private synchronized void appendResult(LiveConfigLoader.Result result) {
         ConfigLoadTask.check();
         try {
-            if (result.live != null) addLive(result.live);
-            else {
-                loadedObjects.put(result.config.getId(), result.object.deepCopy());
-                JsonObject merged = new JsonObject();
-                for (Config item : selectedConfigs) {
-                    JsonObject object = loadedObjects.get(item.getId());
-                    if (object != null) mergeConfig(merged, object);
+            commitBuild(() -> {
+                if (result.live != null) addLive(result.live);
+                else {
+                    loadedObjects.put(result.config.getId(), result.object.deepCopy());
+                    JsonObject merged = new JsonObject();
+                    for (Config item : selectedConfigs) {
+                        JsonObject object = loadedObjects.get(item.getId());
+                        if (object != null) mergeConfig(merged, object);
+                    }
+                    parseConfigOrThrow(merged);
                 }
-                parseConfigOrThrow(merged);
-            }
+            });
             ConfigLoadTask.post(RefreshEvent::config);
         } catch (Throwable error) {
             ConfigLoadTask.check();
@@ -328,121 +357,25 @@ public class LiveConfig {
         }
     }
 
-    private ConfigResult readCachedConfig(Config item) {
-        ConfigLoadTask.check();
-        if (TextUtils.isEmpty(item.getJson())) return null;
-        try {
-            if (Json.invalid(item.getJson())) {
-                Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
-                LiveParser.text(live, item.getJson());
-                requireChannels(live);
-                return ConfigResult.live(item, live);
-            }
-            JsonObject object = Json.parse(item.getJson()).getAsJsonObject();
-            ConfigPayloadValidator.live(object);
-            return ConfigResult.json(item, object, false);
-        } catch (Throwable error) {
-            ConfigLoadTask.check();
-            return null;
-        }
-    }
+    private LiveConfigLoader.Result readCachedConfig(Config item) { return documents.readCachedConfig(item); }
 
-    private ConfigResult loadConfigResult(Config item) {
-        try {
-            String text = Decoder.getJson(item.getUrl());
-            if (Json.invalid(text)) {
-                Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
-                LiveParser.text(live, text);
-                cacheConfig(item, text);
-                return ConfigResult.live(item, live);
-            }
-            return ConfigResult.json(item, loadObject(Json.parse(text).getAsJsonObject(), 0), true);
-        } catch (Throwable e) {
-            ConfigLoadTask.check();
-            ConfigResult cached = readCachedConfig(item);
-            if (cached != null) return cached;
-            return ConfigResult.error(item, e);
-        }
-    }
+    private LiveConfigLoader.Result loadConfigResult(Config item) { return documents.loadResult(item); }
 
-    private List<Config> getUniqueConfigs(List<Config> configs) {
-        List<Config> items = new ArrayList<>();
-        Set<String> loaded = new LinkedHashSet<>();
-        for (Config item : configs) {
-            String url = normalizeConfigUrl(item.getUrl());
-            if (TextUtils.isEmpty(url) || !loaded.add(url)) continue;
-            if (!url.equals(item.getUrl())) item.url(url);
-            items.add(item);
-        }
-        return items;
-    }
+    private List<Config> getUniqueConfigs(List<Config> configs) { return documents.getUniqueConfigs(configs); }
 
-    private String normalizeConfigUrl(String url) {
-        return url == null ? "" : url.trim();
-    }
+    private String normalizeConfigUrl(String url) { return documents.normalizeConfigUrl(url); }
 
-    private void cacheConfig(Config item, JsonObject object) {
-        cacheConfig(item, object.toString());
-    }
+    private void cacheConfig(Config item, JsonObject object) { documents.cacheConfig(item, object); }
 
-    private void cacheConfig(Config item, String text) {
-        if (item == null || TextUtils.isEmpty(text) || TextUtils.isEmpty(item.getUrl())) return;
-        ConfigLoadTask.check();
-        if (Json.invalid(text)) validateText(item.getUrl(), text);
-        else ConfigPayloadValidator.live(Json.parse(text).getAsJsonObject());
-        Config.cacheContent(item, text, ConfigLoadTask.startedAt());
-    }
+    private void cacheConfig(Config item, String text) { documents.cacheConfig(item, text); }
 
-    private JsonObject loadObject(JsonObject object, int depth) throws Throwable {
-        if (depth > 5) throw new IllegalStateException("Too many redirects.");
-        if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
-        if (!object.has("urls")) {
-            ConfigPayloadValidator.live(object);
-            return object;
-        }
-        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
-        if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-        return loadDepot(items, depth + 1);
-    }
+    private JsonObject loadObject(JsonObject object, int depth) throws Throwable { return documents.loadObject(object, depth); }
 
-    private JsonObject loadDepot(List<Depot> items, int depth) throws Throwable {
-        Throwable error = null;
-        for (Depot item : items) {
-            try {
-                return loadObject(Json.parse(Decoder.getJson(item.getUrl())).getAsJsonObject(), depth);
-            } catch (Throwable e) {
-                ConfigLoadTask.check();
-                error = e;
-                ThreadPools.log(e, "Live config operation failed.");
-            }
-        }
-        if (error != null) throw error;
-        throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-    }
 
-    private void mergeConfig(JsonObject target, JsonObject source) {
-        mergeLives(target, source);
-        appendArray(target, source, "rules");
-        appendArray(target, source, "headers");
-        appendArray(target, source, "proxy");
-        appendArray(target, source, "hosts");
-        appendArray(target, source, "ads");
-    }
 
-    static void mergeLives(JsonObject target, JsonObject source) {
-        if (!source.has("lives") || source.get("lives").isJsonNull()) return;
-        String spider = Json.safeString(source, "spider");
-        JsonArray lives = source.getAsJsonArray("lives");
-        if (!target.has("lives")) target.add("lives", new JsonArray());
-        JsonArray targetLives = target.getAsJsonArray("lives");
-        for (JsonElement element : lives) {
-            JsonObject item = element.getAsJsonObject().deepCopy();
-            String api = Json.safeString(item, "api");
-            String jar = Json.safeString(item, "jar");
-            if (jar.isEmpty() && api.startsWith("csp_")) item.addProperty("jar", spider);
-            targetLives.add(item);
-        }
-    }
+    private void mergeConfig(JsonObject target, JsonObject source) { ConfigMerger.live(target,source); }
+
+    static void mergeLives(JsonObject target, JsonObject source) { ConfigMerger.lives(target,source); }
 
     private void appendArray(JsonObject target, JsonObject source, String key) {
         if (!source.has(key) || source.get(key).isJsonNull()) return;
@@ -453,7 +386,7 @@ public class LiveConfig {
 
     private void parseConfig(String text, Callback callback) {
         try {
-            parseConfigOrThrow(text);
+            commitBuild(() -> parseConfigOrThrow(text));
             if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -464,7 +397,7 @@ public class LiveConfig {
 
     private void parseText(String text, Callback callback) {
         try {
-            parseTextOrThrow(text);
+            commitBuild(() -> parseTextOrThrow(text));
             if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -479,17 +412,10 @@ public class LiveConfig {
         if (liveMap.containsKey(live.getName())) return;
         lives.add(live);
         liveMap.put(live.getName(), live);
-        if (home == null) setHome(live, true);
+        if (home == null) restoreHome(live);
     }
 
-    private String parseName(String url) {
-        Uri uri = Uri.parse(url);
-        if ("file".equals(uri.getScheme())) return new File(url).getName();
-        if (uri.getLastPathSegment() != null) return uri.getLastPathSegment();
-        if (uri.getQuery() != null) return uri.getQuery();
-        if (uri.getHost() != null) return uri.getHost();
-        return url;
-    }
+    private String parseName(String url) { return documents.parseName(url); }
 
     private void checkJson(JsonObject object, Callback callback) {
         ConfigLoadTask.check();
@@ -504,7 +430,7 @@ public class LiveConfig {
 
     private void parseDepot(JsonObject object, Callback callback) {
         try {
-            parseDepotOrThrow(object);
+            commitBuild(() -> parseDepotOrThrow(object));
             if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -552,19 +478,12 @@ public class LiveConfig {
         return loaded.toString();
     }
 
-    private void refreshDepotCache(Config target) {
-        try {
-            String text = Decoder.getJson(target.getUrl());
-            if (Json.invalid(text)) cacheConfig(target, text);
-            else cacheConfig(target, loadObject(Json.parse(text).getAsJsonObject(), 0));
-        } catch (Throwable ignored) {
-        }
-    }
+    private void refreshDepotCache(Config target) { documents.refreshDepotCache(target); }
 
     private synchronized void parseConfig(JsonObject object, Callback callback) {
         try {
             ConfigLoadTask.check();
-            parseConfigOrThrow(object);
+            commitBuild(() -> parseConfigOrThrow(object));
             if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -584,18 +503,9 @@ public class LiveConfig {
         }
     }
 
-    private void validateText(String url, String text) {
-        Live candidate = new Live(parseName(url), url).sync();
-        LiveParser.text(candidate, text);
-        requireChannels(candidate);
-    }
+    private void validateText(String url, String text) { documents.validateText(url, text); }
 
-    private void requireChannels(Live live) {
-        for (Group group : live.getGroups()) {
-            for (Channel channel : group.getChannel()) if (!channel.getUrls().isEmpty()) return;
-        }
-        throw new IllegalStateException("Invalid live playlist; keeping cached configuration");
-    }
+    private void requireChannels(Live live) { documents.requireChannels(live); }
 
     private void parseTextOrThrow(String text) throws Throwable {
         ConfigLoadTask.check();
@@ -604,9 +514,8 @@ public class LiveConfig {
         requireChannels(live);
         lives.add(live);
         liveMap.put(live.getName(), live);
-        setHome(live, true);
-        if (persistCache) config.json(text).update();
-        config.activate();
+        restoreHome(live);
+        pendingContent = text;
     }
 
     private void parseConfigOrThrow(JsonObject object) throws Throwable {
@@ -614,9 +523,8 @@ public class LiveConfig {
         ConfigPayloadValidator.live(object);
         initLive(object);
         initOther(object);
-        preloadJars(object);
-        if (persistCache) config.json(object.toString()).update();
-        config.activate();
+        document = new ConfigDocument(object, Collections.singletonList(config.getUrl()));
+        pendingContent = object.toString();
     }
 
     private void initLive(JsonObject object) {
@@ -638,7 +546,7 @@ public class LiveConfig {
         }
         for (Live live : lives) {
             if (live.getName().equals(config.getHome())) {
-                setHome(live, true);
+                restoreHome(live);
             }
         }
     }
@@ -664,20 +572,35 @@ public class LiveConfig {
         return entries;
     }
 
-    private void preloadJars(JsonObject object) {
+    void preloadJars() {
         Set<String> jars = new LinkedHashSet<>();
-        jars.add(Json.safeString(object, "spider"));
+        if (document != null) jars.add(Json.safeString(document.object(), "spider"));
         for (Live live : lives) jars.add(live.getJar());
         for (String jar : jars) BaseLoader.get().parseJar(jar);
     }
 
+    void persistSelection() {
+        if (pendingContent != null && persistCache) config.json(pendingContent).update();
+        if (pendingContent != null || !lives.isEmpty()) {
+            config.saveHome(config.getHome()); config.activate();
+        }
+        pendingContent = null;
+    }
+
+    void retireReplacedBy(LiveConfig next) {
+        for (Live live : getLives()) {
+            Live retained = next.liveMap.get(live.getName());
+            if (retained == live) continue;
+            BaseLoader.get().clearLive(live.getName(), live.getApi(), live.getExt(), live.getJar());
+        }
+    }
+
     private void initOther(JsonObject object) {
-        if (home == null) setHome(lives.isEmpty() ? new Live() : lives.get(0), true);
+        if (home == null) restoreHome(lives.isEmpty() ? new Live() : lives.get(0));
         setHeaders(Header.arrayFrom(object.get("headers")));
         setProxy(Proxy.arrayFrom(object.get("proxy")));
         setHosts(Json.safeListString(object, "hosts"));
         setRules(Rule.arrayFrom(object.get("rules")));
-        VodConfig.refreshNetwork();
         setAds(Json.safeListString(object, "ads"));
     }
 
@@ -716,8 +639,15 @@ public class LiveConfig {
 
     public void parse(JsonObject object) {
         // A VOD merge is an active view, not the payload of this live URL.
-        setPersistCache(false);
-        parseConfig(object, null);
+        LiveConfig candidate = new LiveConfig().config(config).setPersistCache(false);
+        candidate.parseConfig(object, null);
+    }
+
+    static LiveConfig inherit(Config owner, JsonObject object) throws Throwable {
+        LiveConfig candidate = new LiveConfig().config(owner).setPersistCache(false);
+        candidate.sync = true;
+        candidate.parseConfigOrThrow(object);
+        return candidate;
     }
 
     public void setKeep(Channel channel) {
@@ -826,44 +756,28 @@ public class LiveConfig {
     }
 
     public void setHome(Live home) {
-        setHome(home, false);
+        restoreHome(home);
+        requestBoot = false;
+        config.saveHome(home.getName());
     }
 
-    private void setHome(Live home, boolean check) {
+    private void restoreHome(Live home) {
         this.home = home;
         this.home.setActivated(true);
-        config.saveHome(home.getName());
+        config.setHome(home.getName());
         for (Live item : getLives()) item.setActivated(home);
-        if (App.activity() != null && App.activity() instanceof LiveActivity) return;
-        if (check) if (home.isBoot() || Setting.isBootLive()) ConfigLoadTask.post(this::bootLive);
+        requestBoot = true;
     }
 
-    private static class ConfigResult {
+    void afterPublication() {
+        if (!requestBoot) return;
+        requestBoot = false;
+        if (App.activity() instanceof LiveActivity) return;
+        if (home != null && (home.isBoot() || Setting.isBootLive())) ConfigLoadTask.post(this::bootLive);
+    }
 
-        private final Config config;
-        private final JsonObject object;
-        private final Live live;
-        private final Throwable error;
-        private final boolean cacheable;
-
-        private ConfigResult(Config config, JsonObject object, Live live, Throwable error, boolean cacheable) {
-            this.config = config;
-            this.object = object;
-            this.live = live;
-            this.error = error;
-            this.cacheable = cacheable;
-        }
-
-        private static ConfigResult json(Config config, JsonObject object, boolean cacheable) {
-            return new ConfigResult(config, object, null, null, cacheable);
-        }
-
-        private static ConfigResult live(Config config, Live live) {
-            return new ConfigResult(config, null, live, null, false);
-        }
-
-        private static ConfigResult error(Config config, Throwable error) {
-            return new ConfigResult(config, null, null, error, false);
-        }
+    private interface Build { void run() throws Throwable; }
+    private void commitBuild(Build build) throws Throwable {
+        ConfigLoadTransaction.execute(() -> { build.run(); return this; }, ConfigApplicationService::live);
     }
 }

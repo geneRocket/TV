@@ -8,7 +8,8 @@ import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.player.engine.EngineSnapshot;
 import com.fongmi.android.tv.player.engine.EnginePhase;
 
-import java.util.ArrayDeque;
+import com.fongmi.android.tv.utils.SerialExecutor;
+import com.fongmi.android.tv.utils.ThreadPools;
 import java.util.concurrent.Executor;
 
 /** Shared transport, lifecycle and recovery ownership for live TV and the DLNA renderer. */
@@ -39,24 +40,22 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
 
     private final Engine engine;
     private final Port port;
-    private final Executor delivery;
+    private final SerialExecutor delivery;
     private final Subscription subscription;
     private final PlaybackRecovery recovery = new PlaybackRecovery();
-    private final ArrayDeque<Runnable> queue = new ArrayDeque<>();
-    private boolean draining;
-    private boolean closed;
-    private boolean wantsPlayback = true;
-    private boolean allowed = true;
+    private volatile boolean closed;
+    private volatile boolean wantsPlayback = true;
+    private volatile boolean allowed = true;
     private boolean recovering;
-    private long generation;
+    private volatile long generation;
     private long endedSession = -1;
-    private PlaybackState state = PlaybackState.IDLE;
+    private volatile PlaybackState state = PlaybackState.IDLE;
     private EngineSnapshot checkpoint = EngineSnapshot.EMPTY;
 
     public DirectPlaybackFlow(Engine engine, Port port, Executor delivery) {
         this.engine = engine;
         this.port = port;
-        this.delivery = delivery;
+        this.delivery = new SerialExecutor(delivery, error -> ThreadPools.log(error, "Direct playback input failed."));
         subscription = engine.observe(value -> {
             long expected = generation;
             enqueue(() -> {
@@ -103,7 +102,7 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
         if (closed) return;
         allowed = false;
         generation++;
-        queue.clear();
+        delivery.clear();
         recovery.reset();
         try { checkpoint = engine.snapshot(); }
         catch (RuntimeException ignored) {
@@ -173,15 +172,7 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
     private void enqueue(Runnable task) {
         delivery.execute(() -> {
             if (closed || !engine.isCurrent()) return;
-            queue.add(task);
-            if (draining) return;
-            draining = true;
-            try {
-                while (!closed && !queue.isEmpty()) {
-                    Runnable next = queue.remove();
-                    if (engine.isCurrent()) next.run();
-                }
-            } finally { draining = false; }
+            task.run();
         });
     }
 
@@ -189,6 +180,6 @@ public final class DirectPlaybackFlow implements PlaybackInput.Handler, AutoClos
         closed = true;
         generation++;
         subscription.cancel();
-        queue.clear();
+        delivery.close();
     }
 }

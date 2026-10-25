@@ -6,7 +6,8 @@ import com.fongmi.android.tv.event.ErrorEvent;
 import com.fongmi.android.tv.player.session.Subscription;
 import com.fongmi.android.tv.utils.TaskScheduler;
 
-import java.util.ArrayDeque;
+import com.fongmi.android.tv.utils.SerialExecutor;
+import com.fongmi.android.tv.utils.ThreadPools;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -33,16 +34,14 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
 
     private final VodPlaybackCoordinator coordinator;
     private final Port port;
-    private final ArrayDeque<Runnable> inputs = new ArrayDeque<>();
     private final Set<VodPlaybackObserver> observers = new LinkedHashSet<>();
-    private final Executor delivery;
+    private final SerialExecutor delivery;
     private final Subscription subscription;
-    private VodPlaybackState state;
+    private volatile VodPlaybackState state;
     private VodRecoveryFlow recovery;
     private VodSourceSearch sources;
     private final VodSourceSwitchState sourceSwitch = new VodSourceSwitchState();
-    private boolean dispatching;
-    private boolean closed;
+    private volatile boolean closed;
     private boolean loop;
     private Runnable handoff = () -> {};
     private long endedGeneration = -1;
@@ -58,7 +57,7 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
         if (coordinator == null || port == null) throw new IllegalArgumentException("coordinator and port required");
         this.coordinator = coordinator;
         this.port = port;
-        this.delivery = delivery;
+        this.delivery = new SerialExecutor(delivery, error -> ThreadPools.log(error, "VOD input failed."));
         state = coordinator.state();
         subscription = coordinator.observe(value -> {
             long generation = coordinator.generation();
@@ -74,7 +73,7 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
                 for (VodPlaybackObserver observer : new LinkedHashSet<>(observers)) {
                     if (closed || generation != coordinator.generation()) break;
                     try { observer.onVodPlaybackState(value); }
-                    catch (RuntimeException ignored) { }
+                    catch (RuntimeException error) { ThreadPools.log(error, "VOD observer failed."); }
                 }
                 if (value.getPhase() == VodPlaybackPhase.ERROR && generation == coordinator.generation()
                         && !port.errorAlreadyReported(value.getError())) {
@@ -222,23 +221,11 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
     }
 
     private void enqueue(Runnable input) {
-        delivery.execute(() -> accept(input));
+        delivery.execute(() -> { if (!closed) input.run(); });
     }
 
     private void enqueueOwned(Runnable input) {
         enqueue(() -> { if (port.isCurrent()) input.run(); });
-    }
-
-    private void accept(Runnable input) {
-        if (closed) return;
-        inputs.add(input);
-        if (dispatching) return;
-        dispatching = true;
-        try {
-            while (!closed && !inputs.isEmpty()) inputs.remove().run();
-        } finally {
-            dispatching = false;
-        }
     }
 
     private void handle(PlaybackInput input) {
@@ -294,7 +281,7 @@ public final class VodPlaybackFlow implements PlaybackInput.Handler, AutoCloseab
         if (recovery != null) recovery.close();
         if (sources != null) sources.close();
         sourceSwitch.clear();
-        inputs.clear();
+        delivery.close();
         observers.clear();
         coordinator.close();
         state = coordinator.state();

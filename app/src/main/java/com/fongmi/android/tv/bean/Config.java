@@ -3,7 +3,7 @@ package com.fongmi.android.tv.bean;
 import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.repository.KeepRepository;
 
-import android.text.TextUtils;
+import com.fongmi.android.tv.utils.TextValues;
 
 import androidx.annotation.NonNull;
 import androidx.room.Entity;
@@ -179,6 +179,8 @@ public class Config {
                 .id(item.getId());
     }
 
+    public Config copy() { return copy(this); }
+
     private static List<Config> copy(List<Config> items) {
         List<Config> copied = new ArrayList<>(items.size());
         for (Config item : items) copied.add(copy(item));
@@ -342,12 +344,12 @@ public class Config {
     }
 
     public boolean isEmpty() {
-        return TextUtils.isEmpty(getUrl());
+        return TextValues.isEmpty(getUrl());
     }
 
     public String getDesc() {
-        if (!TextUtils.isEmpty(getName())) return getName();
-        if (!TextUtils.isEmpty(getUrl())) return getUrl();
+        if (!TextValues.isEmpty(getName())) return getName();
+        if (!TextValues.isEmpty(getUrl())) return getUrl();
         return "";
     }
 
@@ -381,7 +383,7 @@ public class Config {
 
     private static Config selected(int type) {
         String url = Prefers.getString("config_" + type);
-        if (TextUtils.isEmpty(url)) return null;
+        if (TextValues.isEmpty(url)) return null;
         Config item = AppDatabase.get().getConfigDao().find(url, type);
         return item == null ? null : copy(cache(item));
     }
@@ -431,7 +433,7 @@ public class Config {
         if (item == null) item = cache(AppDatabase.get().getConfigDao().find(url, type));
         if (item == null) return copy(create(type, url, name));
         Config config = copy(item).type(type).name(name);
-        if (!TextUtils.isEmpty(name) && !name.equals(item.getName())) config.save();
+        if (!TextValues.isEmpty(name) && !name.equals(item.getName())) config.save();
         return config;
     }
 
@@ -444,7 +446,7 @@ public class Config {
         if (item == null) item = cache(AppDatabase.get().getConfigDao().find(config.getUrl(), type));
         if (item == null) return copy(create(type, config.getUrl(), config.getName()));
         Config result = copy(item).type(type).name(config.getName());
-        if (!TextUtils.isEmpty(config.getName()) && !config.getName().equals(item.getName())) result.save();
+        if (!TextValues.isEmpty(config.getName()) && !config.getName().equals(item.getName())) result.save();
         return result;
     }
 
@@ -453,7 +455,7 @@ public class Config {
         if (item == null) item = cache(AppDatabase.get().getConfigDao().find(depot.getUrl(), type));
         if (item == null) return copy(create(type, depot.getUrl(), depot.getName()));
         Config config = copy(item).type(type).name(depot.getName());
-        if (!TextUtils.isEmpty(depot.getName()) && !depot.getName().equals(item.getName())) config.save();
+        if (!TextValues.isEmpty(depot.getName()) && !depot.getName().equals(item.getName())) config.save();
         return config;
     }
 

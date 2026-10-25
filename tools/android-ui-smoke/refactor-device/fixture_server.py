@@ -43,10 +43,14 @@ class Fixtures(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if path in ('/config.json', '/api'):
+        if path in ('/config.json', '/combined-config.json', '/live-config.json', '/api'):
             query = parse_qs(urlsplit(self.path).query)
-            if path == '/config.json':
+            if path in ('/config.json', '/combined-config.json'):
                 payload = {'sites': [{'key': 'fixture', 'name': 'Fixture', 'type': 4, 'api': base + '/api', 'searchable': 1, 'changeable': 1}]}
+                if path == '/combined-config.json':
+                    payload['lives'] = [{'name': 'Inherited Fixture', 'url': base + '/live.m3u'}]
+            elif path == '/live-config.json':
+                payload = {'lives': [{'name': 'JSON Fixture', 'url': base + '/live.m3u'}], 'headers': []}
             elif 'play' in query:
                 payload = {'parse': 0, 'url': base + ('/missing.mp4' if query.get('flag', [''])[0] == 'Broken' else '/fixture.mp4')}
             else:

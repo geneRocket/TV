@@ -13,9 +13,9 @@ import static org.junit.Assert.*;
 
 public class DatabaseResetConcurrencyTest {
     @Test public void waitingForHistoryWritesDoesNotHoldTheDatabaseMonitor() throws Exception {
-        Field field = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("WRITE_LOCK");
+        Field field = com.fongmi.android.tv.repository.HistoryStorage.class.getDeclaredField("WRITE_LOCK");
         field.setAccessible(true);
-        Object writes = field.get(null);
+        Object writes = field.get(com.fongmi.android.tv.repository.PersistenceServices.history());
         CountDownLatch databaseAvailable = new CountDownLatch(1);
         AtomicReference<Throwable> error = new AtomicReference<>();
         Thread reset = new Thread(() -> {

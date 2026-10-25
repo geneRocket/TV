@@ -10,16 +10,24 @@ python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py paused
 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py playing
 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py live
 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py ijk
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py page
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py config
 
 # 切换到已安装的手机隔离包，并先启动其 MainActivity。
 export TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile
 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py mobile-paused
 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py mobile-playing
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py page
+python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py config
 ```
 
 脚本仅使用隔离包和本地视频。验证目标包括用户暂停、2倍速、30秒附近进度、引擎/页面切换和返回后的播放状态，并输出JSON。启动阶段若另一配置加载覆盖了测试配置加载，先等待首页初始化结束再重跑；不要将测试 Receiver 的广播返回等同于异步配置完成。手机测试在Android TV模拟器上只验证手机页面逻辑，不代表手机硬件/PiP验收。结束后卸载隔离包、移除reverse并重新构建普通APK。
 
 本轮结构与证据见 [架构重构记录](../../docs/playback-architecture-refactor-2026-10-24.md)。
+
+后续配置、存储、Presenter与串行执行边界见[边界重构记录](../../docs/architecture-boundaries-2026-10-25.md)。`page`模式用本地配置验证加载失败时保留旧配置，并先定位Working路线第1集，再切第2集，避免历史已选中第2集导致没有实际切集。
+
+`config`模式验证点播内嵌直播的关联发布，再混合加载文本、JSON及失效直播地址，确认有效源保留且两个源均能实际播放。
 
 `GestureDetectorSmoke.java` 使用 Android 真实消息循环验证：调用手势处理器的 release 后，排队的长按与单击确认回调不再执行。TV 额外检查投屏临时倍速、点播亮度/音量的结束回调只执行一次。
 

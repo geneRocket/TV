@@ -18,6 +18,7 @@ import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.player.PlaybackController;
 import com.fongmi.android.tv.player.DirectPlaybackFlow;
 import com.fongmi.android.tv.player.vod.VodPlaybackFlow;
+import com.fongmi.android.tv.ui.presenter.VodPagePresenter;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 
@@ -65,6 +66,17 @@ public final class RefactorReceiver extends BroadcastReceiver {
                         @Override public void error(String message) { liveConfigStatus = "error: " + message; }
                     });
                     break;
+                case "clearLive": LiveConfig.release(); break;
+                case "configLiveBatch": {
+                    liveConfigStatus = "loading";
+                    java.util.List<Config> configs = new java.util.ArrayList<>();
+                    for (String url : intent.getStringExtra("urls").split("\\|")) configs.add(Config.create(1, url));
+                    LiveConfig.load(configs, new Callback() {
+                        @Override public void success() { liveConfigStatus = "success"; }
+                        @Override public void error(String message) { liveConfigStatus = "error: " + message; }
+                    });
+                    break;
+                }
                 case "liveHome":
                     invoke(activity, "setLive", LiveConfig.get().getLives().get(intent.getIntExtra("value", 0)));
                     break;
@@ -120,6 +132,18 @@ public final class RefactorReceiver extends BroadcastReceiver {
                     break;
                 case "click": ((View) path(activity, intent.getStringExtra("path"))).performClick(); break;
                 case "route": invoke(activity, "onFlagClick", invoke(activity, "getFlag")); break;
+                case "flag": {
+                    VodPagePresenter page = (VodPagePresenter) field(activity, "mPage");
+                    invoke(activity, context.getPackageName().endsWith(".tv") ? "onFlagClick" : "onItemClick",
+                            page.flags().get(intent.getIntExtra("value", 0)));
+                    break;
+                }
+                case "episode": {
+                    VodPagePresenter page = (VodPagePresenter) field(activity, "mPage");
+                    invoke(activity, context.getPackageName().endsWith(".tv") ? "setEpisodeActivated" : "onItemClick",
+                            page.flag().getEpisodes().get(intent.getIntExtra("value", 0)));
+                    break;
+                }
                 case "player": invoke(activity, "onPlayerClick", intent.getIntExtra("value", 2)); break;
                 case "decode": invoke(activity, "onDecode", true); break;
                 case "subtitle": player.setSub(Sub.from(intent.getStringExtra("url"))); break;
@@ -153,8 +177,22 @@ public final class RefactorReceiver extends BroadcastReceiver {
             data.put("liveConfigStatus", liveConfigStatus);
             data.put("vodConfigStatus", vodConfigStatus);
             data.put("vodSites", VodConfig.get().getSites().size());
+            data.put("vodConfigUrl", VodConfig.getUrl());
+            if (activity != null && activity.getClass().getSimpleName().equals("VideoActivity")) {
+                VodPagePresenter page = (VodPagePresenter) field(activity, "mPage");
+                data.put("selectedFlag", page.flag() == null ? "" : page.flag().getFlag());
+                data.put("selectedEpisodeIndex", page.episodeIndex());
+                if (page.history() != null) {
+                    data.put("historyKey", page.history().getKey());
+                    data.put("historyCid", page.history().getCid());
+                }
+            }
             if (vodProbe != null) data.put("vodProbe", vodProbe);
             data.put("liveSources", LiveConfig.get().getLives().size());
+            data.put("liveConfigUrl", LiveConfig.getUrl());
+            org.json.JSONArray liveNames = new org.json.JSONArray();
+            for (com.fongmi.android.tv.bean.Live live : LiveConfig.get().getLives()) liveNames.put(live.getName());
+            data.put("liveNames", liveNames);
             data.put("removeAd", Setting.isRemoveAd());
             data.put("activity", activity == null ? JSONObject.NULL : activity.getClass().getSimpleName());
             if (lastFlow != null) {

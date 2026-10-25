@@ -17,11 +17,11 @@ public class HistoryTest {
 
     @Test
     public void cachedProgressAndPendingInsertsKeepHistoryInNewestFirstOrder() throws Exception {
-        java.lang.reflect.Field field = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("CACHE");
+        java.lang.reflect.Field field = com.fongmi.android.tv.repository.HistoryStorage.class.getDeclaredField("CACHE");
         field.setAccessible(true);
         @SuppressWarnings("unchecked")
-        java.util.Map<String, History> cache = (java.util.Map<String, History>) field.get(null);
-        java.lang.reflect.Method merge = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredMethod("withCached", java.util.List.class, java.util.List.class);
+        java.util.Map<String, History> cache = (java.util.Map<String, History>) field.get(com.fongmi.android.tv.repository.PersistenceServices.history());
+        java.lang.reflect.Method merge = com.fongmi.android.tv.repository.HistoryStorage.class.getDeclaredMethod("withCached", java.util.List.class, java.util.List.class);
         merge.setAccessible(true);
         History oldFirst = entry("first", 200);
         History oldSecond = entry("second", 100);
@@ -32,7 +32,7 @@ public class HistoryTest {
             cache.put("999@second", updatedSecond);
             cache.put("999@inserted", inserted);
             @SuppressWarnings("unchecked")
-            java.util.List<History> merged = (java.util.List<History>) merge.invoke(null,
+            java.util.List<History> merged = (java.util.List<History>) merge.invoke(com.fongmi.android.tv.repository.PersistenceServices.history(),
                     java.util.Collections.singletonList(999), java.util.Arrays.asList(oldFirst, oldSecond));
 
             assertEquals(java.util.Arrays.asList(inserted, updatedSecond, oldFirst), merged);
@@ -59,13 +59,13 @@ public class HistoryTest {
 
     @Test
     public void asyncSnapshotDoesNotWaitForDatabaseWriteLock() throws Exception {
-        java.lang.reflect.Field field = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("WRITE_LOCK");
+        java.lang.reflect.Field field = com.fongmi.android.tv.repository.HistoryStorage.class.getDeclaredField("WRITE_LOCK");
         field.setAccessible(true);
-        Object databaseLock = field.get(null);
-        java.lang.reflect.Field activeField = com.fongmi.android.tv.repository.HistoryStore.class.getDeclaredField("ACTIVE_WRITES");
+        Object databaseLock = field.get(com.fongmi.android.tv.repository.PersistenceServices.history());
+        java.lang.reflect.Field activeField = com.fongmi.android.tv.repository.HistoryStorage.class.getDeclaredField("ACTIVE_WRITES");
         activeField.setAccessible(true);
         @SuppressWarnings("unchecked")
-        java.util.Set<String> active = (java.util.Set<String>) activeField.get(null);
+        java.util.Set<String> active = (java.util.Set<String>) activeField.get(com.fongmi.android.tv.repository.PersistenceServices.history());
         // Model an existing writer waiting on the database; don't launch Android threads.
         String writeKey = "999@nonblocking-history-test";
         active.add(writeKey);

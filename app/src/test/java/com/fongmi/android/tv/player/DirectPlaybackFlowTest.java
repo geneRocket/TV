@@ -12,6 +12,32 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class DirectPlaybackFlowTest {
+    @Test public void concurrentTransportCallbacksAreSerializedEvenWithParallelDelivery() throws Exception {
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+        java.util.concurrent.atomic.AtomicInteger active = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger maximum = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(200);
+        DirectPlaybackFlow.Engine engine = new DirectPlaybackFlow.Engine() {
+            @Override public boolean isCurrent() { return true; }
+            @Override public int getPlayer() { return PlayerType.EXO; }
+            @Override public Subscription observe(PlaybackObserver observer) { return () -> {}; }
+            @Override public void executeInput(PlaybackInput input) {
+                maximum.accumulateAndGet(active.incrementAndGet(), Math::max);
+                Thread.yield(); active.decrementAndGet(); done.countDown();
+            }
+        };
+        DirectPlaybackFlow.Port port = (DirectPlaybackFlow.Port) java.lang.reflect.Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{DirectPlaybackFlow.Port.class},
+                (proxy, method, args) -> method.getReturnType() == boolean.class ? true : null);
+        DirectPlaybackFlow flow = new DirectPlaybackFlow(engine, port, pool);
+        try {
+            List<java.util.concurrent.Future<?>> submitted = new ArrayList<>();
+            for (int i = 0; i < 200; i++) submitted.add(pool.submit(() -> flow.dispatch(PlaybackInput.seek(1000))));
+            for (java.util.concurrent.Future<?> input : submitted) input.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            assertTrue(done.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(1, maximum.get());
+        } finally { flow.close(); pool.shutdownNow(); }
+    }
     @Test public void sharedDirectLifecycleRebuildsOnlyOnceAndPreservesUserPauseAndCheckpoint() {
         for (boolean paused : new boolean[]{false, true}) {
             Fixture f = new Fixture();

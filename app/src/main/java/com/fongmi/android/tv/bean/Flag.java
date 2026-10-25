@@ -2,7 +2,7 @@ package com.fongmi.android.tv.bean;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.text.TextUtils;
+import com.fongmi.android.tv.utils.TextValues;
 
 import androidx.annotation.NonNull;
 
@@ -52,11 +52,11 @@ public class Flag implements Parcelable {
     }
 
     public String getShow() {
-        return TextUtils.isEmpty(show) ? getFlag() : show;
+        return TextValues.isEmpty(show) ? getFlag() : show;
     }
 
     public String getFlag() {
-        return TextUtils.isEmpty(flag) ? "" : flag;
+        return TextValues.isEmpty(flag) ? "" : flag;
     }
 
     public void setFlag(String flag) {
