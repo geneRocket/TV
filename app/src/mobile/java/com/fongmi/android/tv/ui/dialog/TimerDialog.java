@@ -79,17 +79,18 @@ public class TimerDialog extends BaseDialog implements Timer.Callback {
 
     @Override
     public void onTick(long tick) {
-        binding.tick.setText(Util.format(builder, formatter, tick));
+        if (binding != null) binding.tick.setText(Util.format(builder, formatter, tick));
     }
 
     @Override
     public void onFinish() {
-        dismiss();
+        if (isAdded()) dismissAllowingStateLoss();
     }
 
     @Override
-    public void dismiss() {
-        Timer.get().setCallback(null);
-        super.dismiss();
+    public void onDestroyView() {
+        Timer.get().clearCallback(this);
+        binding = null;
+        super.onDestroyView();
     }
 }

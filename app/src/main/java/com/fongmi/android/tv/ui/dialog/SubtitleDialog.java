@@ -19,6 +19,7 @@ import com.fongmi.android.tv.databinding.DialogSubtitleBinding;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.bassaer.library.MDColor;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.google.android.material.color.MaterialColors;
 
 public final class SubtitleDialog extends BaseDialog {
 
@@ -69,8 +70,10 @@ public final class SubtitleDialog extends BaseDialog {
 
     @Override
     protected void initView() {
+        if (subtitleView == null) { dismiss(); return; }
         int count = binding.getRoot().getChildCount();
-        if (full) for (int i = 0; i < count; i++) ((ImageView) binding.getRoot().getChildAt(i)).getDrawable().setTint(MDColor.WHITE);
+        int tint = full ? MDColor.WHITE : MaterialColors.getColor(binding.search, androidx.appcompat.R.attr.colorControlNormal);
+        for (int i = 0; i < count; i++) ((ImageView) binding.getRoot().getChildAt(i)).getDrawable().mutate().setTint(tint);
     }
 
     @Override
@@ -151,6 +154,18 @@ public final class SubtitleDialog extends BaseDialog {
     public void onResume() {
         super.onResume();
         if (full) setDimAmount(0.5f);
-        if (getDialog() != null && getDialog().getWindow() != null) getDialog().getWindow().setLayout(ResUtil.dp2px(248), -1);
+        resize();
+    }
+
+    @Override public void onConfigurationChanged(@NonNull android.content.res.Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        resize();
+    }
+
+    private void resize() {
+        if (getDialog() != null && getDialog().getWindow() != null) {
+            int available = getResources().getDisplayMetrics().widthPixels - ResUtil.dp2px(16);
+            getDialog().getWindow().setLayout(Math.max(1, Math.min(ResUtil.dp2px(304), available)), -1);
+        }
     }
 }

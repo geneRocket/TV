@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
@@ -14,6 +15,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.databinding.DialogEpisodeGridBinding;
 import com.fongmi.android.tv.ui.fragment.EpisodeFragment;
+import com.fongmi.android.tv.ui.presenter.EpisodePageLabels;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.tabs.TabLayoutMediator;
@@ -24,7 +26,8 @@ import java.util.List;
 public class EpisodeGridDialog extends BaseDialog {
 
     private DialogEpisodeGridBinding binding;
-    private List<Episode> episodes;
+    private List<Episode> episodes = new ArrayList<>();
+    private TabLayoutMediator mediator;
     private final List<String> titles;
     private boolean download;
     private boolean reverse;
@@ -43,17 +46,35 @@ public class EpisodeGridDialog extends BaseDialog {
 
     public EpisodeGridDialog reverse(boolean reverse) {
         this.reverse = reverse;
+        arguments().putBoolean("reverse", reverse);
         return this;
     }
 
     public EpisodeGridDialog download(boolean download) {
         this.download = download;
+        arguments().putBoolean("download", download);
         return this;
     }
 
     public EpisodeGridDialog episodes(List<Episode> episodes) {
-        this.episodes = episodes;
+        this.episodes = episodes == null ? new ArrayList<>() : new ArrayList<>(episodes);
+        arguments().putParcelableArrayList("episodes", new ArrayList<>(this.episodes));
         return this;
+    }
+
+    private Bundle arguments() {
+        if (getArguments() == null) setArguments(new Bundle());
+        return getArguments();
+    }
+
+    @Override public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        Bundle args = getArguments();
+        if (args == null) return;
+        ArrayList<Episode> items = args.getParcelableArrayList("episodes");
+        episodes = items == null ? new ArrayList<>() : items;
+        reverse = args.getBoolean("reverse");
+        download = args.getBoolean("download");
     }
 
     public void show(FragmentActivity activity) {
@@ -76,9 +97,10 @@ public class EpisodeGridDialog extends BaseDialog {
 
     private void setSpanCount() {
         int total = 0;
+        spanCount = 5;
         int row = ResUtil.isLand(getActivity()) ? 5 : 10;
         for (Episode item : episodes) total += item.getName().length();
-        int offset = (int) Math.ceil((double) total / episodes.size());
+        int offset = (int) Math.ceil((double) total / Math.max(1, episodes.size()));
         if (offset >= 12) spanCount = 1;
         else if (offset >= 8) spanCount = 2;
         else if (offset >= 4) spanCount = 3;
@@ -87,13 +109,14 @@ public class EpisodeGridDialog extends BaseDialog {
     }
 
     private void setTitles() {
-        if (reverse) for (int i = episodes.size(); i > 0; i -= itemCount) titles.add(i + " - " + Math.max(i - itemCount - 1, 1));
-        else for (int i = 0; i < episodes.size(); i += itemCount) titles.add((i + 1) + " - " + Math.min(i + itemCount, episodes.size()));
+        titles.clear();
+        titles.addAll(EpisodePageLabels.create(episodes.size(), itemCount, reverse));
     }
 
     private void setPager() {
-        binding.pager.setAdapter(new PageAdapter(getActivity()));
-        new TabLayoutMediator(binding.tabs, binding.pager, (tab, position) -> tab.setText(titles.get(position))).attach();
+        binding.pager.setAdapter(new PageAdapter(this));
+        mediator = new TabLayoutMediator(binding.tabs, binding.pager, (tab, position) -> tab.setText(titles.get(position)));
+        mediator.attach();
         setCurrentPage();
     }
 
@@ -108,8 +131,8 @@ public class EpisodeGridDialog extends BaseDialog {
 
     class PageAdapter extends FragmentStateAdapter {
 
-        public PageAdapter(@NonNull FragmentActivity activity) {
-            super(activity);
+        public PageAdapter(@NonNull Fragment fragment) {
+            super(fragment);
         }
 
         @NonNull
@@ -122,5 +145,13 @@ public class EpisodeGridDialog extends BaseDialog {
         public int getItemCount() {
             return titles.size();
         }
+    }
+
+    @Override public void onDestroyView() {
+        if (mediator != null) mediator.detach();
+        mediator = null;
+        binding.pager.setAdapter(null);
+        binding = null;
+        super.onDestroyView();
     }
 }

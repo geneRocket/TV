@@ -343,4 +343,10 @@
     <string name="subtitle_website_hint">此網站可能需要驗證或登入。可開啟瀏覽器，或用手機掃碼，在網站下載字幕後透過播放器選擇字幕檔案。</string>
     <string name="subtitle_no_browser">找不到瀏覽器，可用手機掃碼開啟。</string>
     <string name="subtitle_website_result">前往網站下載</string>
+    <string name="subtitle_larger">放大字幕</string>
+    <string name="subtitle_smaller">縮小字幕</string>
+    <string name="subtitle_move_up">字幕上移</string>
+    <string name="subtitle_move_down">字幕下移</string>
+    <string name="subtitle_reset">重設字幕樣式</string>
+    <string name="browser_unavailable">未找到可用瀏覽器，請用其他裝置掃碼或開啟此網址。</string>
 </resources>

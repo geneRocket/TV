@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.view.View;
@@ -16,6 +17,7 @@ import com.fongmi.android.tv.utils.QRCode;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.Util;
+import com.fongmi.android.tv.utils.Notify;
 
 public class PushActivity extends BaseActivity {
 
@@ -63,6 +65,10 @@ public class PushActivity extends BaseActivity {
     private void onCode(View view) {
         Intent intent = new Intent(Intent.ACTION_VIEW);
         intent.setData(Uri.parse(Server.get().getAddress(getTab())));
-        startActivity(intent);
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException | SecurityException error) {
+            Notify.show(R.string.browser_unavailable);
+        }
     }
 }

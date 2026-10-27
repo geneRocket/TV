@@ -366,4 +366,10 @@
     <string name="subtitle_website_hint">This website may require verification or sign-in. Open it in a browser or scan the code with your phone to download subtitles. You can then choose the downloaded subtitle file in the player.</string>
     <string name="subtitle_no_browser">No browser found. Scan the code with your phone.</string>
     <string name="subtitle_website_result">Download on website</string>
+    <string name="subtitle_larger">Larger subtitles</string>
+    <string name="subtitle_smaller">Smaller subtitles</string>
+    <string name="subtitle_move_up">Move subtitles up</string>
+    <string name="subtitle_move_down">Move subtitles down</string>
+    <string name="subtitle_reset">Reset subtitle appearance</string>
+    <string name="browser_unavailable">No browser available. Scan the code or open this address on another device.</string>
 </resources>

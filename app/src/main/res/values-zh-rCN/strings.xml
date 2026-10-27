@@ -353,4 +353,10 @@
     <string name="subtitle_website_hint">此站点可能需要验证或登录。可打开浏览器，或用手机扫码，在网站下载字幕后通过播放器选择字幕文件。</string>
     <string name="subtitle_no_browser">未找到浏览器，可用手机扫码打开。</string>
     <string name="subtitle_website_result">前往网站下载</string>
+    <string name="subtitle_larger">放大字幕</string>
+    <string name="subtitle_smaller">缩小字幕</string>
+    <string name="subtitle_move_up">字幕上移</string>
+    <string name="subtitle_move_down">字幕下移</string>
+    <string name="subtitle_reset">重置字幕样式</string>
+    <string name="browser_unavailable">未找到可用浏览器，请用其他设备扫码或打开此地址。</string>
 </resources>

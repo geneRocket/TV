@@ -51,6 +51,51 @@ public final class RefactorReceiver extends BroadcastReceiver {
             String command = intent.getStringExtra("cmd");
             if (command == null) command = "state";
             switch (command) {
+                case "uiSubtitleToolbar":
+                    com.fongmi.android.tv.ui.dialog.SubtitleDialog.create()
+                            .view(new androidx.media3.ui.SubtitleView(activity)).full(intent.getBooleanExtra("full", false))
+                            .name("Movie").show((androidx.fragment.app.FragmentActivity) activity);
+                    break;
+                case "uiTimer": {
+                    Object dialog = Class.forName("com.fongmi.android.tv.ui.dialog.TimerDialog").getMethod("create").invoke(null);
+                    dialog.getClass().getMethod("show", androidx.fragment.app.FragmentActivity.class).invoke(dialog, activity);
+                    break;
+                }
+                case "uiPlayerDialog": {
+                    com.fongmi.android.tv.ui.dialog.PlayerDialog dialog = com.fongmi.android.tv.ui.dialog.PlayerDialog.create().select(2).title("Movie");
+                    java.lang.reflect.Field listener = dialog.getClass().getDeclaredField("listener");
+                    listener.setAccessible(true);
+                    listener.set(dialog, new com.fongmi.android.tv.ui.dialog.PlayerDialog.Listener() {
+                        public void onPlayerClick(Integer type) { }
+                        public void onPlayerShare(String title) { }
+                    });
+                    dialog.show(((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "fixture-player");
+                    break;
+                }
+                case "uiEpisodeGrid": {
+                    java.util.List<com.fongmi.android.tv.bean.Episode> episodes = new java.util.ArrayList<>();
+                    for (int i = 120; i > 0; i--) episodes.add(com.fongmi.android.tv.bean.Episode.create(String.valueOf(i), "https://fixture.test/" + i));
+                    Object dialog = Class.forName("com.fongmi.android.tv.ui.dialog.EpisodeGridDialog").getMethod("create").invoke(null);
+                    dialog.getClass().getMethod("episodes", java.util.List.class).invoke(dialog, episodes);
+                    dialog.getClass().getMethod("reverse", boolean.class).invoke(dialog, true);
+                    dialog.getClass().getMethod("show", androidx.fragment.app.FragmentActivity.class).invoke(dialog, activity);
+                    break;
+                }
+                case "uiRebuildDialog": {
+                    androidx.fragment.app.FragmentManager manager = ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager();
+                    for (androidx.fragment.app.Fragment fragment : manager.getFragments()) {
+                        if (fragment instanceof androidx.fragment.app.DialogFragment && fragment.isAdded()) {
+                            manager.beginTransaction().detach(fragment).commitNow();
+                            manager.beginTransaction().attach(fragment).commitNow();
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case "uiRecreateActivity": activity.recreate(); break;
+                case "uiOpenPage":
+                    activity.startActivity(new Intent(activity, Class.forName("com.fongmi.android.tv.ui.activity." + intent.getStringExtra("page"))));
+                    break;
                 case "subtitleLive":
                     com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog.create().title(intent.getStringExtra("query"))
                             .show((androidx.fragment.app.FragmentActivity) activity);
@@ -295,6 +340,16 @@ public final class RefactorReceiver extends BroadcastReceiver {
             }
             data.put("subtitleSelected", SubtitleFixtureDialog.selected);
             data.put("subtitleDownload", subtitleDownloadStatus);
+            try {
+                Object timer = Class.forName("com.fongmi.android.tv.utils.Timer").getMethod("get").invoke(null);
+                data.put("uiTimerAttached", field(timer, "callback") != null);
+            } catch (ClassNotFoundException ignored) { }
+            if (activity instanceof androidx.fragment.app.FragmentActivity) {
+                for (androidx.fragment.app.Fragment fragment : ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager().getFragments()) {
+                    if (fragment.getClass().getSimpleName().equals("EpisodeGridDialog"))
+                        data.put("uiEpisodeTitles", new org.json.JSONArray((java.util.List<?>) field(fragment, "titles")));
+                }
+            }
             com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog subtitleDialog = searchSubtitleDialog(activity);
             if (subtitleDialog != null && subtitleDialog.getView() != null) {
                 com.fongmi.android.tv.viewmodel.SubtitleViewModel model = new androidx.lifecycle.ViewModelProvider(subtitleDialog).get(com.fongmi.android.tv.viewmodel.SubtitleViewModel.class);

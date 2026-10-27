@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center"
@@ -8,55 +8,62 @@
 
     <ImageView
         android:id="@+id/large"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
-        android:layout_marginEnd="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/subtitle_larger"
         android:src="@drawable/ic_subtitle_large" />
 
     <ImageView
         android:id="@+id/small"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
-        android:layout_marginEnd="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/subtitle_smaller"
         android:src="@drawable/ic_subtitle_small" />
 
     <ImageView
         android:id="@+id/up"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
-        android:layout_marginEnd="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/subtitle_move_up"
         android:src="@drawable/ic_subtitle_up" />
 
     <ImageView
         android:id="@+id/down"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
-        android:layout_marginEnd="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/subtitle_move_down"
         android:src="@drawable/ic_subtitle_down" />
 
     <ImageView
         android:id="@+id/reset"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
-        android:layout_marginEnd="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/subtitle_reset"
         android:src="@drawable/ic_subtitle_reset" />
 
     <ImageView
         android:id="@+id/search"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
+        android:padding="12dp"
+        android:contentDescription="@string/search_subtitle"
         android:src="@drawable/ic_search" />
 
 </LinearLayout>

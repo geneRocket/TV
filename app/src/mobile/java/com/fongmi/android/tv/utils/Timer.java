@@ -28,6 +28,10 @@ public class Timer {
         this.callback = callback;
     }
 
+    public void clearCallback(Callback expected) {
+        if (callback == expected) callback = null;
+    }
+
     public long getTick() {
         return tick;
     }

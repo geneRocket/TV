@@ -55,10 +55,12 @@ public class PlayerDialog extends BaseDialog implements PlayerAdapter.OnClickLis
 
     @Override
     protected void initView() {
+        if (getActivity() instanceof Listener) listener = (Listener) getActivity();
         binding.recycler.setHasFixedSize(true);
         binding.recycler.setAdapter(adapter);
         binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 16));
-        binding.recycler.post(() -> binding.recycler.scrollToPosition(adapter.getSelected()));
+        androidx.recyclerview.widget.RecyclerView list = binding.recycler;
+        list.post(() -> { if (getView() != null) list.scrollToPosition(adapter.getSelected()); });
         binding.recycler.setVisibility(adapter.getItemCount() == 0 ? View.GONE : View.VISIBLE);
     }
 
@@ -89,6 +91,17 @@ public class PlayerDialog extends BaseDialog implements PlayerAdapter.OnClickLis
     @Override
     public void onResume() {
         super.onResume();
-        getDialog().getWindow().setLayout(ResUtil.dp2px(320), -1);
+        resize();
+    }
+
+    @Override public void onConfigurationChanged(@NonNull android.content.res.Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        resize();
+    }
+
+    private void resize() {
+        if (getDialog() == null || getDialog().getWindow() == null) return;
+        int available = getResources().getDisplayMetrics().widthPixels - ResUtil.dp2px(16);
+        getDialog().getWindow().setLayout(Math.max(1, Math.min(ResUtil.dp2px(320), available)), -1);
     }
 }

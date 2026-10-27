@@ -1,5 +1,7 @@
 # Android 手势释放回归检查
 
+通用弹窗 UI 检查：安装隔离测试包并进入首页后，运行 `ANDROID_SERIAL=隔离设备序列号 python3 tools/android-ui-smoke/refactor-device/ui_audit.py`，手机加 `TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile`。检查 6 个字幕按钮的边界、说明及 TV 遥控器可达性，手机另检查定时弹窗返回后解除回调、倒序页签、选集视图重建和 Activity 重建。无需本地视频服务器；需要可操作的前台页面。显示模式、窄屏和页面巡检的范围见 [2026-10-28 UI 检查记录](../../docs/ui-audit-2026-10-28.md)。
+
 字幕搜索 UI 验收：安装下述隔离测试包并进入首页，运行 `ANDROID_SERIAL=设备序列号 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py subtitle-ui-review`，手机加 `TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile`。无需本地服务器；检查失败页重试、返回保留结果、筛选菜单取消旧下载、硬件 Enter 单次搜索、空结果文案、配色对比度及控件边界。另用 `subtitle-options` 验证来源、粤语排序和网站二维码；该模式结束时保留网站弹窗，继续其他测试前需先关闭。此 fixture 不证明真实字幕网站可用。
 
 弹幕重复请求验收：本地 fixture_server 提供 `/danmaku-load.xml` 和 `/danmaku-load-counts`，运行 `ANDROID_SERIAL=设备序列号 python3 tools/android-ui-smoke/refactor-device/ownership_smoke.py danmaku-load-once`（手机加 `TV_SMOKE_PACKAGE=com.fongmi.android.tv.codextest.mobile`）。测试同一视频三次界面恢复、第二个视频使用同一弹幕地址及手动刷新，检查请求增量依次为 1、2、3，并检查第一次恢复未改变视频播放请求代次。测试会直接调用页面恢复方法，不能据此推断用户实际经历了三次生命周期恢复。详情见 [排查记录](/Users/wuwenjun/code/TV/docs/danmaku-load-once-2026-10-25.md)。
