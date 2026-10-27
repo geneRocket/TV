@@ -6,12 +6,14 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.DiffUtil;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Subtitle;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class SearchSubtitleAdapter extends RecyclerView.Adapter<SearchSubtitleAdapter.ViewHolder> {
 
@@ -34,6 +36,26 @@ public class SearchSubtitleAdapter extends RecyclerView.Adapter<SearchSubtitleAd
         int count = this.items.size();
         this.items.clear();
         if (count > 0) notifyItemRangeRemoved(0, count);
+    }
+
+    public void replace(List<Subtitle> values) {
+        List<Subtitle> previous = new ArrayList<>(items);
+        List<Subtitle> next = new ArrayList<>(values);
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            public int getOldListSize() { return previous.size(); }
+            public int getNewListSize() { return next.size(); }
+            public boolean areItemsTheSame(int oldPosition, int newPosition) {
+                Subtitle old = previous.get(oldPosition), value = next.get(newPosition);
+                return Objects.equals(old.getUrl(), value.getUrl()) && Objects.equals(old.getSource(), value.getSource());
+            }
+            public boolean areContentsTheSame(int oldPosition, int newPosition) {
+                Subtitle old = previous.get(oldPosition), value = next.get(newPosition);
+                return Objects.equals(old.getName(), value.getName()) && Objects.equals(old.getLanguage(), value.getLanguage())
+                        && Objects.equals(old.getIsZip(), value.getIsZip()) && old.isExternal() == value.isExternal();
+            }
+        });
+        items.clear(); items.addAll(next);
+        diff.dispatchUpdatesTo(this);
     }
 
     @NonNull

@@ -63,6 +63,16 @@ public class SubtitleSearchControllerTest {
         assertEquals(Arrays.asList(1,1),gateway.pages);
     }
 
+    @Test public void aFailedPageDoesNotMarkTheProviderAsExhaustedForRetry() {
+        controller.search("Movie",1); gateway.searches.get(0).success(page("first",true,3)); drain();
+        controller.search("Movie",2); gateway.searches.get(1).failure(new IOException()); drain();
+        controller.search("Movie",2);
+        assertEquals(3,gateway.searches.size());
+        assertEquals(Integer.valueOf(2),gateway.pages.get(2));
+        gateway.searches.get(2).success(page("second",true,3)); drain();
+        assertEquals(2,last().page);
+    }
+
     @Test public void nextPageUsesSimplifiedQueryAndCommitsOnlyAfterSuccess() {
         controller.search("Movie S01E02",1); gateway.searches.get(0).success(page(null,false,-1)); drain();
         gateway.searches.get(1).success(page("Movie",true,3)); drain();
@@ -199,6 +209,79 @@ public class SubtitleSearchControllerTest {
         controller.resolve(english,resolved::add);controller.preference(SubtitlePreference.CANTONESE);controller.cancelResolve();drain();
         assertEquals(1,gateway.searches.size());assertEquals(SubtitlePreference.CANTONESE,controller.state().preference);
         assertSame(cantonese,controller.state().items.get(0));assertFalse(controller.state().loading());
+    }
+
+    @Test public void retryRepeatsTheFailedPageAndIgnoresDoubleClicksWhileLoading() {
+        controller.search("Movie",1);gateway.searches.get(0).success(page("first",true,3));drain();
+        controller.next();gateway.searches.get(1).failure(new IOException());drain();
+        controller.retry();controller.retry();
+        assertEquals(Arrays.asList(1,2,2),gateway.pages);
+        gateway.searches.get(2).success(page("second",true,3));drain();
+        assertEquals(2,last().page);assertEquals("second",last().items.get(0).getName());
+    }
+
+    @Test public void returningFromFilesRestoresTheSearchPageWithoutRefetching() {
+        controller.search("Movie",1);gateway.searches.get(0).success(page("first",true,3));drain();
+        controller.next();gateway.searches.get(1).success(page("second",true,3));drain();
+        controller.details(sub("archive"));gateway.details.get(0).success(page("file",false,1));drain();
+        assertTrue(controller.backToSearch());drain();
+        assertEquals(2,last().page);assertEquals("second",last().items.get(0).getName());
+        assertTrue(last().canNext());assertTrue(last().canPrevious());assertEquals(2,gateway.searches.size());
+        controller.next();assertEquals(Integer.valueOf(3),gateway.pages.get(2));
+    }
+
+    @Test public void returningCancelsPendingFilesAndLateResolveCallbacks() {
+        controller.search("Movie",1);gateway.searches.get(0).success(page("archive",false,1));drain();
+        controller.details(sub("archive"));assertTrue(controller.backToSearch());
+        gateway.details.get(0).success(page("stale file",false,1));drain();
+        assertTrue(gateway.details.get(0).cancelled);assertEquals("archive",last().items.get(0).getName());
+        controller.details(sub("archive"));gateway.details.get(1).success(page("file",false,1));drain();
+        controller.resolve(sub("file"),resolved::add);assertTrue(controller.backToSearch());
+        gateway.resolves.get(0).success("https://example.com/stale");drain();
+        assertTrue(resolved.isEmpty());assertEquals(SubtitleSearchState.Screen.SEARCH,last().screen);
+    }
+
+    @Test public void fileFailureCanRetryOrReturnWithoutLosingTheSearch() {
+        controller.search("Movie",1);gateway.searches.get(0).success(page("archive",true,3));drain();
+        controller.details(sub("archive"));gateway.details.get(0).failure(new IOException());drain();
+        controller.retry();assertEquals(2,gateway.details.size());
+        gateway.details.get(1).failure(new IOException());drain();
+        assertTrue(controller.backToSearch());drain();
+        assertEquals(SubtitleSearchState.Phase.READY,last().phase);assertTrue(last().canNext());
+        assertEquals("archive",last().items.get(0).getName());
+    }
+
+    @Test public void newQueryAndSourceDiscardOldArchiveParents() {
+        controller.search("old",1);gateway.searches.get(0).success(page("old",false,1));drain();
+        controller.details(sub("archive"));controller.search("new",1);
+        assertFalse(controller.backToSearch());
+        gateway.searches.get(1).success(page("new",false,1));drain();
+        controller.details(sub("archive"));controller.source(SubtitleSource.SUBHD);
+        assertFalse(controller.backToSearch());
+        gateway.searches.get(2).success(page("subhd",false,1));drain();
+        assertEquals(SubtitleSource.SUBHD,last().source);
+    }
+
+    @Test public void returningAppliesTheCurrentSortPreferenceToTheOriginalSearchItems() {
+        Subtitle english=sub("English"), cantonese=sub("Cantonese");
+        english.setMovieTitle("Movie");english.setLanguage("English");
+        cantonese.setMovieTitle("Movie");cantonese.setLanguage("粤语");
+        controller.preference(SubtitlePreference.ALL);
+        controller.search("Movie",1);gateway.searches.get(0).success(new SubtitleGateway.Page(Arrays.asList(english,cantonese),false,true,3));drain();
+        controller.details(sub("archive"));gateway.details.get(0).success(page("file",false,1));drain();
+        controller.preference(SubtitlePreference.CANTONESE);
+        assertTrue(controller.backToSearch());drain();
+        assertSame(cantonese,last().items.get(0));assertEquals(1,gateway.searches.size());
+        assertEquals(SubtitlePreference.CANTONESE,last().preference);
+    }
+
+    @Test public void returningToAFailedSearchKeepsItsOriginalRetryTarget() {
+        controller.search("Movie",1);gateway.searches.get(0).success(page("archive",true,3));drain();
+        controller.next();gateway.searches.get(1).failure(new IOException());drain();
+        controller.details(sub("archive"));gateway.details.get(0).success(page("file",false,1));drain();
+        assertTrue(controller.backToSearch());drain();
+        assertEquals(SubtitleSearchState.Phase.ERROR,last().phase);
+        controller.retry();assertEquals(Arrays.asList(1,2,2),gateway.pages);
     }
 
     private SubtitleSearchState last() { return results.get(results.size()-1); }

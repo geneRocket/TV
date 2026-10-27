@@ -349,6 +349,10 @@
     <string name="play_recovery_cancelled">Recovery cancelled. Choose a source or retry.</string>
     <string name="play_recovery_running">Trying another playback route (45-second limit).</string>
     <string name="subtitle_sources">Sources</string>
+    <string name="subtitle_return_results">Back to results</string>
+    <string name="subtitle_retry">Retry</string>
+    <string name="subtitle_page">Page %1$d</string>
+    <string name="subtitle_qr_code">Scan to open the subtitle website</string>
     <string name="subtitle_sort">Sort</string>
     <string name="subtitle_websites">Website search</string>
     <string name="subtitle_source_all">All sources</string>

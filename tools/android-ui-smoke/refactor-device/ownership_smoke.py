@@ -58,6 +58,64 @@ def choose_ui_text(*labels):
     subprocess.run([ADB, '-s', SERIAL, 'shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2)], check=True)
 
 
+def subtitle_ui_review():
+    import xml.etree.ElementTree as ET
+    if 'subtitlePhase' in cmd('state'):
+        cmd('subtitleClose')
+        wait('previous subtitle closed', lambda s: 'subtitlePhase' not in s)
+    cmd('subtitleDialog')
+    wait('review initial results', lambda s: s.get('subtitlePhase') == 'READY')
+    cmd('subtitleNext')
+    failed = wait('review page failure', lambda s: s.get('subtitlePhase') == 'ERROR')
+    assert failed['subtitlePage'] == 1 and failed['subtitleCount'] == 1, failed
+    cmd('subtitleRetry')
+    second = wait('retry the failed second page', lambda s: s.get('subtitlePhase') == 'READY' and s.get('subtitlePage') == 2)
+    assert second['subtitleSearchCount'] == 3, second
+    cmd('subtitlePick')
+    wait('review file list', lambda s: s.get('subtitleScreen') == 'FILES' and s.get('subtitlePhase') == 'READY')
+    subprocess.run([ADB, '-s', SERIAL, 'shell', 'input', 'keyevent', '4'], check=True)
+    back = wait('back key restores page two', lambda s: s.get('subtitleScreen') == 'SEARCH' and s.get('subtitlePage') == 2)
+    assert back['subtitleSearchCount'] == 3 and back['subtitleCount'] == 1, back
+    cmd('subtitlePick')
+    wait('files again', lambda s: s.get('subtitleScreen') == 'FILES' and s.get('subtitlePhase') == 'READY')
+    cmd('subtitleSlowResolve', value=True)
+    for menu in ('subtitleOpenSources', 'subtitleOpenPreferences'):
+        cmd('subtitlePick')
+        cmd(menu)
+        time.sleep(1.3)
+        cancelled = cmd('state')
+        assert cancelled.get('subtitlePhase') == 'READY' and cancelled.get('subtitleSelected', '') == '', cancelled
+        subprocess.run([ADB, '-s', SERIAL, 'shell', 'input', 'keyevent', '4'], check=True)
+    cmd('subtitleSlowResolve', value=False)
+    cmd('subtitleBack')
+    wait('back button restores results', lambda s: s.get('subtitleScreen') == 'SEARCH' and s.get('subtitlePage') == 2)
+    cmd('subtitleInput', query='Empty')
+    cmd('subtitleEnter')
+    empty = wait('hardware enter searches once', lambda s: s.get('subtitleQuery') == 'Empty' and s.get('subtitlePhase') == 'READY')
+    assert empty['subtitleSearchCount'] == 4 and empty['subtitleCount'] == 0, empty
+    assert empty['subtitleEmptyText'] in ('No results', '无结果', '無結果'), empty
+    cmd('subtitleInput', query='')
+    cmd('subtitleIme')
+    cleared = wait('empty IME search', lambda s: s.get('subtitleQuery') == '' and s.get('subtitlePhase') in ('READY', 'IDLE'))
+    assert cleared['subtitleSearchCount'] == 4, cleared
+    for name, color in cleared['subtitleColors'].items():
+        assert color['contrast'] >= (4.5 if name in ('input', 'empty') else 3), (name, color)
+        if name in ('search', 'source', 'preference', 'websites'):
+            assert color['background'] & 0xFFFFFF != 0, (name, color)
+    tree = ET.fromstring(ui_hierarchy())
+    root = next(n for n in tree.iter('node') if n.get('resource-id', '').endswith('/subtitle_search_root'))
+    bounds = list(map(int, re.findall(r'\d+', root.get('bounds'))))
+    checked = {}
+    for name in ('input', 'search', 'source', 'preference', 'websites', 'previous', 'next', 'subtitle_content'):
+        node = next(n for n in tree.iter('node') if n.get('resource-id', '').endswith('/' + name))
+        b = list(map(int, re.findall(r'\d+', node.get('bounds'))))
+        assert bounds[0] <= b[0] < b[2] <= bounds[2] and bounds[1] <= b[1] < b[3] <= bounds[3], (name, bounds, b)
+        checked[name] = b
+        if name == 'subtitle_content': assert b[3] - b[1] >= 40, b
+    print(json.dumps({'page_retry': second['subtitlePage'], 'back_without_fetch': back['subtitleSearchCount'],
+                      'hardware_enter_count': empty['subtitleSearchCount'], 'dialog_bounds': bounds, 'controls': checked}), flush=True)
+
+
 def subtitle_options():
     if 'subtitlePhase' in cmd('state'):
         cmd('subtitleClose')
@@ -332,7 +390,7 @@ def live_cast():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'subtitle-screen', 'subtitle-options', 'subtitle-live', 'danmaku-speed', 'danmaku-load-once', 'wallpaper', 'state'])
+    parser.add_argument('mode', choices=['paused', 'playing', 'live', 'ijk', 'mobile-paused', 'mobile-playing', 'page', 'config', 'subtitle-screen', 'subtitle-ui-review', 'subtitle-options', 'subtitle-live', 'danmaku-speed', 'danmaku-load-once', 'wallpaper', 'state'])
     mode = parser.parse_args().mode
     if mode == 'paused': vod_cast(True)
     elif mode == 'playing': vod_cast(False)
@@ -343,6 +401,7 @@ if __name__ == '__main__':
     elif mode == 'page': page_boundaries()
     elif mode == 'config': configuration_transactions()
     elif mode == 'subtitle-screen': subtitle_screen()
+    elif mode == 'subtitle-ui-review': subtitle_ui_review()
     elif mode == 'subtitle-live': subtitle_live()
     elif mode == 'subtitle-options': subtitle_options()
     elif mode == 'danmaku-speed': danmaku_speed()

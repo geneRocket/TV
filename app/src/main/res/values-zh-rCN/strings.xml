@@ -336,6 +336,10 @@
     <string name="play_recovery_cancelled">已取消自动恢复，可手动换源或重试</string>
     <string name="play_recovery_running">正在尝试恢复播放（最多45秒）</string>
     <string name="subtitle_sources">搜索来源</string>
+    <string name="subtitle_return_results">返回搜索结果</string>
+    <string name="subtitle_retry">重试</string>
+    <string name="subtitle_page">第 %1$d 页</string>
+    <string name="subtitle_qr_code">扫码打开字幕网站</string>
     <string name="subtitle_sort">排序</string>
     <string name="subtitle_websites">网站搜索</string>
     <string name="subtitle_source_all">全部站点</string>

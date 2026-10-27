@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/subtitle_search_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="16dp">
+        android:layout_marginBottom="8dp">
 
         <EditText
             android:id="@+id/input"
@@ -17,13 +18,17 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/search_subtitle"
-            android:textColor="@color/white_90"
+            android:textColor="?attr/colorOnSurface"
             android:layout_marginEnd="8dp"
             android:padding="8dp"
+            android:imeOptions="actionSearch"
+            android:maxLines="1"
+            android:singleLine="true"
             android:inputType="text" />
 
         <Button
             android:id="@+id/search"
+            style="@style/SubtitleButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/search" />
@@ -37,22 +42,46 @@
 
         <Button
             android:id="@+id/source"
+            style="@style/SubtitleButton"
+            android:layout_marginEnd="4dp"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textSize="14sp"
             android:text="@string/subtitle_sources" />
 
         <Button
             android:id="@+id/preference"
+            style="@style/SubtitleButton"
+            android:layout_marginEnd="4dp"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textSize="14sp"
             android:text="@string/subtitle_sort" />
 
         <Button
             android:id="@+id/websites"
-            android:layout_width="wrap_content"
+            style="@style/SubtitleButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textSize="14sp"
             android:text="@string/subtitle_websites" />
     </LinearLayout>
 
@@ -61,30 +90,38 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone"
-        android:textColor="@color/white_70" />
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="?android:attr/textColorSecondary" />
 
-    <ProgressBar
-        android:id="@+id/loading"
-        android:layout_width="match_parent"
-        android:layout_height="100dp"
-        android:layout_gravity="center"
-        style="?android:attr/progressBarStyle" />
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler"
+    <FrameLayout
+        android:id="@+id/subtitle_content"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="8dp">
 
-    <TextView
-        android:id="@+id/empty"
-        android:layout_width="match_parent"
-        android:layout_height="100dp"
-        android:gravity="center"
-        android:textColor="@color/white_90"
-        android:text="@string/no_results"
-        android:textSize="16sp" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ProgressBar
+            android:id="@+id/loading"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            style="?android:attr/progressBarStyle" />
+
+        <TextView
+            android:id="@+id/empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:textColor="?attr/colorOnSurface"
+            android:text="@string/no_results"
+            android:textSize="16sp" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -93,18 +130,45 @@
         android:gravity="center">
 
         <Button
+            android:id="@+id/back_results"
+            style="@style/SubtitleButton"
+            android:layout_marginEnd="8dp"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text="@string/subtitle_return_results" />
+
+        <Button
             android:id="@+id/previous"
-            android:layout_width="wrap_content"
+            style="@style/SubtitleButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
             android:layout_height="wrap_content"
             android:text="@string/previous_page"
             android:layout_marginEnd="8dp" />
 
         <Button
-            android:id="@+id/next"
-            android:layout_width="wrap_content"
+            android:id="@+id/retry"
+            style="@style/SubtitleButton"
+            android:layout_marginEnd="8dp"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
             android:layout_height="wrap_content"
-            android:text="@string/next_page"
-            android:layout_marginEnd="8dp" />
+            android:visibility="gone"
+            android:text="@string/subtitle_retry" />
+
+        <Button
+            android:id="@+id/next"
+            style="@style/SubtitleButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/next_page" />
 
     </LinearLayout>
 

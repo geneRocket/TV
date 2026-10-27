@@ -40,6 +40,8 @@ public class SubtitleViewModel extends ViewModel {
     public void searchResult(String title, int page) { controller.search(title, page); }
     public void previous() { controller.previous(); }
     public void next() { controller.next(); }
+    public void retry() { controller.retry(); }
+    public boolean backToSearch() { return controller.backToSearch(); }
     public void source(SubtitleSource value) { controller.source(value); }
     public void preference(SubtitlePreference value) { controller.preference(value); }
     public void getSearchResultSubtitleUrls(Subtitle subtitle) { controller.details(subtitle); }

@@ -93,12 +93,28 @@ public final class RefactorReceiver extends BroadcastReceiver {
                     break;
                 case "subtitleDialog": {
                     SubtitleFixtureDialog.selected = "";
+                    SubtitleFixtureDialog.slowResolve = false;
+                    SubtitleFixtureDialog.searches = SubtitleFixtureDialog.details = 0;
                     new SubtitleFixtureDialog().title("Movie").listener(item -> SubtitleFixtureDialog.selected = item.getUrl())
                             .show((androidx.fragment.app.FragmentActivity) activity);
                     break;
                 }
                 case "subtitleNext": subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.next).performClick(); break;
-                case "subtitleRetry": subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.search).performClick(); break;
+                case "subtitleSlowResolve": SubtitleFixtureDialog.slowResolve = intent.getBooleanExtra("value", true); break;
+                case "subtitleRetry": subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.retry).performClick(); break;
+                case "subtitleBack": subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.back_results).performClick(); break;
+                case "subtitleInput": {
+                    android.widget.EditText input = subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.input);
+                    input.setText(intent.getStringExtra("query")); input.requestFocus(); break;
+                }
+                case "subtitleEnter": {
+                    android.widget.EditText input = subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.input);
+                    input.dispatchKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER));
+                    input.dispatchKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ENTER));
+                    break;
+                }
+                case "subtitleIme": ((android.widget.EditText) subtitleDialog(activity).requireView()
+                        .findViewById(com.fongmi.android.tv.R.id.input)).onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH); break;
                 case "subtitlePick": {
                     androidx.recyclerview.widget.RecyclerView list = subtitleDialog(activity).requireView().findViewById(com.fongmi.android.tv.R.id.recycler);
                     list.findViewHolderForAdapterPosition(0).itemView.performClick();
@@ -300,6 +316,24 @@ public final class RefactorReceiver extends BroadcastReceiver {
                 data.put("subtitleCount", list.getAdapter().getItemCount());
                 data.put("subtitlePrevious", root.findViewById(com.fongmi.android.tv.R.id.previous).isEnabled());
                 data.put("subtitleNext", root.findViewById(com.fongmi.android.tv.R.id.next).isEnabled());
+                data.put("subtitleSearchCount", SubtitleFixtureDialog.searches);
+                data.put("subtitleDetailsCount", SubtitleFixtureDialog.details);
+                data.put("subtitleEmptyText", ((android.widget.TextView) root.findViewById(com.fongmi.android.tv.R.id.empty)).getText());
+                data.put("subtitleStatus", ((android.widget.TextView) root.findViewById(com.fongmi.android.tv.R.id.status)).getText());
+                JSONObject colors = new JSONObject();
+                for (int id : new int[]{com.fongmi.android.tv.R.id.search, com.fongmi.android.tv.R.id.source,
+                        com.fongmi.android.tv.R.id.preference, com.fongmi.android.tv.R.id.websites,
+                        com.fongmi.android.tv.R.id.input, com.fongmi.android.tv.R.id.empty}) {
+                    android.widget.TextView item = root.findViewById(id);
+                    int surface = com.google.android.material.color.MaterialColors.getColor(item, com.google.android.material.R.attr.colorSurface);
+                    android.content.res.ColorStateList tint = item.getBackgroundTintList();
+                    int background = tint == null ? surface : androidx.core.graphics.ColorUtils.compositeColors(
+                            tint.getColorForState(item.getDrawableState(), tint.getDefaultColor()), surface);
+                    int text = androidx.core.graphics.ColorUtils.compositeColors(item.getCurrentTextColor(), background);
+                    colors.put(item.getResources().getResourceEntryName(id), new JSONObject().put("text", text).put("background", background)
+                            .put("contrast", androidx.core.graphics.ColorUtils.calculateContrast(text, background)));
+                }
+                data.put("subtitleColors", colors);
             }
             data.put("liveConfigStatus", liveConfigStatus);
             data.put("vodConfigStatus", vodConfigStatus);
