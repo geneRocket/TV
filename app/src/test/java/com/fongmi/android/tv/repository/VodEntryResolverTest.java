@@ -16,6 +16,42 @@ import java.util.Set;
 import static org.junit.Assert.*;
 
 public class VodEntryResolverTest {
+    @Test public void selectionIsSavedOnlyAfterTheRequestedSiteLoadsSuccessfully() {
+        Harness h = new Harness();
+        h.open(2); h.drain();
+        assertEquals(Collections.singletonList(1), h.selectedIds());
+        h.sites.add("2@site"); h.callback.success(); h.drain();
+        assertEquals(Arrays.asList(1, 2), h.selectedIds());
+        assertEquals(1, h.played);
+    }
+
+    @Test public void failedOrPartialLoadsKeepTheOriginalSelection() {
+        Harness h = new Harness();
+        h.open(2); h.drain(); h.callback.error("offline"); h.drain();
+        assertEquals(Collections.singletonList(1), h.selectedIds());
+        h.open(2); h.drain(); h.callback.success(); h.drain();
+        assertEquals(Collections.singletonList(1), h.selectedIds());
+        assertEquals(1, h.fallbacks);
+    }
+
+    @Test public void cancellingAnInFlightLoadCannotSaveItsSelection() {
+        Harness h = new Harness();
+        h.open(2); h.drain(); h.resolver.cancel();
+        h.sites.add("2@site"); h.callback.success(); h.drain();
+        assertEquals(Collections.singletonList(1), h.selectedIds());
+        assertEquals(0, h.played);
+    }
+
+    @Test public void anotherConfigurationChoiceInvalidatesThePendingSelectionAndPlay() {
+        Harness h = new Harness();
+        h.open(2); h.drain();
+        h.selectionGeneration++;
+        h.selected = Collections.singletonList(config(3));
+        h.sites.add("2@site"); h.callback.success(); h.drain();
+        assertEquals(Collections.singletonList(3), h.selectedIds());
+        assertEquals(0, h.played);
+    }
+
     @Test public void leavingPageBeforeClickDoesNotLoadOrPlayAnything() {
         Harness h = new Harness();
         h.ready = false;
@@ -158,6 +194,7 @@ public class VodEntryResolverTest {
         boolean ready = true;
         final VodEntryResolver resolver = new VodEntryResolver(() -> ready, this);
         int played, fallbacks, errors, changes;
+        long selectionGeneration;
         Config owner = config(2);
         List<Config> selected = Collections.singletonList(config(1));
         List<Config> loaded;
@@ -176,11 +213,23 @@ public class VodEntryResolverTest {
             for (Config config : loaded) ids.add(config.getId());
             return ids;
         }
+        List<Integer> selectedIds() {
+            List<Integer> ids = new ArrayList<>();
+            for (Config config : selected) ids.add(config.getId());
+            return ids;
+        }
         @Override public boolean hasSite(String key) { return sites.contains(key); }
         @Override public Config find(int id) { return owner; }
         @Override public List<Config> selected() { return selected; }
         @Override public void execute(Runnable task) { worker.add(task); }
         @Override public void post(Runnable task) { main.add(task); }
+        @Override public long beginSelection() { return ++selectionGeneration; }
+        @Override public boolean commitSelection(long token, List<Config> configs) {
+            if (token != selectionGeneration) return false;
+            selectionGeneration++;
+            selected = new ArrayList<>(configs);
+            return true;
+        }
         @Override public void load(List<Config> configs, Callback result) { loaded = configs; callback = result; }
         @Override public void changed() { changes++; }
     }

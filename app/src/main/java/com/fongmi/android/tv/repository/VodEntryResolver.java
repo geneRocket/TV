@@ -20,6 +20,9 @@ public final class VodEntryResolver {
         List<Config> selected();
         void execute(Runnable task);
         void post(Runnable task);
+        long beginSelection();
+        boolean commitSelection(long token, List<Config> configs);
+        /** Load runtime sources without changing the saved configuration selection. */
         void load(List<Config> configs, Callback callback);
         void changed();
     }
@@ -70,11 +73,14 @@ public final class VodEntryResolver {
                         fallback.run();
                         return;
                     }
+                    long selection = backend.beginSelection();
                     backend.load(configs, new Callback() {
                         @Override public void success() {
                             backend.post(() -> {
                                 if (current(request)) {
-                                    if (backend.hasSite(key)) play.run();
+                                    if (backend.hasSite(key)) {
+                                        if (backend.commitSelection(selection, configs)) play.run();
+                                    }
                                     else fallback.run();
                                 }
                                 backend.changed();
@@ -102,17 +108,19 @@ public final class VodEntryResolver {
         @Override public List<Config> selected() { return ConfigRepository.get().selected(0); }
         @Override public void execute(Runnable task) { App.execute(task); }
         @Override public void post(Runnable task) { App.post(task); }
-
-        @Override public void load(List<Config> configs, Callback callback) {
+        @Override public long beginSelection() { return Setting.beginVodConfigSelection(); }
+        @Override public boolean commitSelection(long token, List<Config> configs) {
             List<String> urls = new ArrayList<>();
             for (Config config : configs) urls.add(config.getUrl());
-            Setting.putVodConfigUrls(String.join("\n", urls));
             String desc = configs.get(0).getDesc();
             if (configs.size() == 2) desc += " + " + configs.get(1).getDesc();
             else if (configs.size() > 2) desc += " +" + (configs.size() - 1);
-            Setting.putVodConfigDesc(desc);
-            if (configs.size() == 1) VodConfig.load(configs.get(0), callback);
-            else VodConfig.load(configs, callback);
+            return Setting.commitVodConfigSelection(token, String.join("\n", urls), desc);
+        }
+
+        @Override public void load(List<Config> configs, Callback callback) {
+            // The list overload does not persist a single-config selection internally.
+            VodConfig.load(configs, callback);
         }
 
         @Override public void changed() {

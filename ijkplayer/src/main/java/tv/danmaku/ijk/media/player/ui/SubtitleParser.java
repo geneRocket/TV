@@ -12,6 +12,8 @@ import java.util.regex.Pattern;
 public class SubtitleParser {
 
     private static final Pattern BRACES_PATTERN = Pattern.compile("\\{([^}]*)\\}");
+    private static final Pattern FORMATTING_TAG = Pattern.compile(
+            "</?(?:b|i|u|s|strike|del|big|small|tt|sub|sup|font|br|strong|em|cite|dfn|span|a)(?:\\s+[^<>]*)?\\s*/?>", Pattern.CASE_INSENSITIVE);
     private static final String DIALOGUE_LINE_PREFIX = "Dialogue:";
 
     public static List<Cue> parse(String text) {
@@ -25,8 +27,21 @@ public class SubtitleParser {
         text = text.replaceAll("\\{\\\\.*?\\}", "");
         text = text.replace("\r\n", "\n").replace("\r", "\n");
         if (text.endsWith("\n")) text = text.substring(0, text.lastIndexOf("\n"));
-        // Let Html.fromHtml decode entities once and retain supported subtitle styling.
-        return text.replace("\n", "<br>");
+        // Preserve supported inline styling; unknown labels such as <Alice> are text.
+        StringBuilder html = new StringBuilder();
+        java.util.regex.Matcher tags = FORMATTING_TAG.matcher(text);
+        int start = 0;
+        while (tags.find()) {
+            html.append(escapeAngles(text.substring(start, tags.start()))).append(tags.group());
+            start = tags.end();
+        }
+        html.append(escapeAngles(text.substring(start)));
+        return html.toString().replace("\n", "<br>");
+    }
+
+    private static String escapeAngles(String text) {
+        // Keep existing entities for exactly one decoding pass in Html.fromHtml.
+        return text.replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static String parseDialogueLine(String text) {
