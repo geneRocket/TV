@@ -1,0 +1,13 @@
+// Opt-in layout benchmark, isolated from the user's app and normal builds.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.plugins.withId('com.android.application') {
+            def fixture = new File(project.rootProject.projectDir, 'tools/android-ui-smoke/row-layout')
+            project.android.sourceSets.maybeCreate('leanback').java.srcDir(new File(fixture, 'java'))
+            project.android.sourceSets.leanback.manifest.srcFile(new File(fixture, 'AndroidManifest.xml'))
+            project.androidComponents.finalizeDsl { android ->
+                android.productFlavors.getByName('leanback').applicationIdSuffix = '.rowbench'
+            }
+        }
+    }
+}

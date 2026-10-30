@@ -40,7 +40,9 @@ public class CustomRowPresenter extends ListRowPresenter {
         vh.getGridView().setFocusScrollStrategy(strategy);
         vh.getGridView().setHorizontalSpacing(ResUtil.dp2px(spacing));
         vh.getGridView().setItemAnimator(null);
-        vh.getGridView().setHasFixedSize(true);
+        // Row height is WRAP_CONTENT: Leanback must measure a card before the
+        // parent fills its viewport, otherwise empty rows initially measure 0.
+        vh.getGridView().setHasFixedSize(false);
         vh.getGridView().setItemViewCacheSize(12);
     }
 }
