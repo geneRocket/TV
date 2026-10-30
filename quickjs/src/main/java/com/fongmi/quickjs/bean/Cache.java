@@ -22,11 +22,14 @@ public class Cache {
 
     private void updatePdfh(String html) {
         if (html.equals(pdfhHtml)) return;
-        pdfhDoc = Jsoup.parse(pdfhHtml = html);
+        // Both parser paths only select nodes; exclusions clone before removing.
+        pdfhDoc = html.equals(pdfaHtml) ? pdfaDoc : Jsoup.parse(html);
+        pdfhHtml = html;
     }
 
     private void updatePdfa(String html) {
         if (html.equals(pdfaHtml)) return;
-        pdfaDoc = Jsoup.parse(pdfaHtml = html);
+        pdfaDoc = html.equals(pdfhHtml) ? pdfhDoc : Jsoup.parse(html);
+        pdfaHtml = html;
     }
 }
