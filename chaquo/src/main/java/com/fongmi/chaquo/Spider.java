@@ -3,8 +3,6 @@ package com.fongmi.chaquo;
 import android.content.Context;
 
 import com.chaquo.python.PyObject;
-import com.github.catvod.utils.Path;
-import com.github.catvod.utils.UriUtil;
 import com.github.catvod.utils.Util;
 import com.google.gson.Gson;
 
@@ -29,10 +27,6 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void init(Context context, String extend) {
-        PyObject dependence = app.callAttr("getDependence", obj);
-        if (dependence != null) {
-            for (PyObject item : dependence.asList()) download(item + ".py");
-        }
         obj.put("siteKey", siteKey);
         app.callAttr("init", obj, extend);
     }
@@ -137,9 +131,4 @@ public class Spider extends com.github.catvod.crawler.Spider {
         return new ByteArrayInputStream(base64 ? Util.decode(content) : content.getBytes());
     }
 
-    private void download(String name) {
-        String path = Path.py(name).getAbsolutePath();
-        String url = UriUtil.resolve(api, name);
-        app.callAttr("download", path, url);
-    }
 }

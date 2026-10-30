@@ -73,6 +73,9 @@ class Spider(metaclass=ABCMeta):
         return self.loadModule(name).Spider()
 
     def loadModule(self, name):
+        if hasattr(self, '_tv_dependency_context'):
+            from app import load_dependency
+            return load_dependency(self, name)
         cache_dir = Python.getPlatform().getApplication().getCacheDir().getAbsolutePath()
         path = os.path.join(os.path.join(cache_dir, 'py'), f'{name}.py')
         return SourceFileLoader(name, path).load_module()

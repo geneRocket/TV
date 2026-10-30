@@ -3,6 +3,7 @@ import pathlib
 import sys
 import tempfile
 import types
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -45,7 +46,121 @@ class SpiderModuleTest(unittest.TestCase):
                 sys.modules[name] = module
 
     def get(self, url, **kwargs):
-        return types.SimpleNamespace(content=self.sources[url].encode(), headers={})
+        return types.SimpleNamespace(content=self.sources[url].encode(), headers={}, status_code=200)
+
+    def test_http_error_preserves_the_last_good_file(self):
+        path = pathlib.Path(self.cache.name) / "cached.py"
+        path.write_text("GOOD = True\n")
+        with patch.object(self.app, "redirect", return_value=types.SimpleNamespace(
+                status_code=503, content=b"<html>unavailable</html>")):
+            with self.assertRaises(Exception):
+                self.app.download(str(path), "https://source.example/spider.py")
+        self.assertEqual("GOOD = True\n", path.read_text())
+
+    def test_invalid_python_preserves_the_last_good_file(self):
+        path = pathlib.Path(self.cache.name) / "cached.py"
+        path.write_text("GOOD = True\n")
+        self.sources["https://source.example/spider.py"] = "<html>error</html>"
+        with self.assertRaises(SyntaxError):
+            self.app.download(str(path), "https://source.example/spider.py")
+        self.assertEqual("GOOD = True\n", path.read_text())
+
+    def test_dependencies_are_isolated_between_sites_and_reload_generations(self):
+        # Exercise the real base loader while stubbing only Android-only imports.
+        shared = pathlib.Path(self.cache.name) / "py"
+        shared.mkdir()
+        platform = types.SimpleNamespace(getApplication=lambda: types.SimpleNamespace(
+            getCacheDir=lambda: types.SimpleNamespace(getAbsolutePath=lambda: self.cache.name)))
+        with patch.dict(sys.modules, {
+            "com.chaquo.python": types.SimpleNamespace(Python=types.SimpleNamespace(getPlatform=lambda: platform)),
+            "com.github.catvod": types.SimpleNamespace(Proxy=None),
+            "lxml": types.SimpleNamespace(etree=None),
+            "app": self.app,
+        }):
+            spec = importlib.util.spec_from_file_location("audit_base", APP_PATH.parent / "base/spider.py")
+            base = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(base)
+            with patch.dict(sys.modules, {"audit_base": base}):
+                for host, marker in [("first", "first"), ("second", "second")]:
+                    self.sources[f"https://{host}.example/spider.py"] = '''
+from audit_base import Spider as Base
+class Spider(Base):
+    def getDependence(self): return ["helper"]
+    def init(self, extend=""):
+        self.helper = self.loadModule("helper")
+    def value(self): return self.helper.MARKER
+'''
+                    self.sources[f"https://{host}.example/helper.py"] = f"MARKER = {marker!r}\n"
+                first = self.app.spider(self.cache.name, "https://first.example/spider.py", "a")
+                (shared / "helper.py").write_text("MARKER = 'first'\n")
+                self.app.init(first, "")
+                second = self.app.spider(self.cache.name, "https://second.example/spider.py", "b")
+                (shared / "helper.py").write_text("MARKER = 'second'\n")
+                self.app.init(second, "")
+                self.sources["https://first.example/helper.py"] = "MARKER = 'later'\n"
+                later = self.app.spider(self.cache.name, "https://first.example/spider.py", "a")
+                (shared / "helper.py").write_text("MARKER = 'later'\n")
+                self.app.init(later, "")
+                self.assertEqual("first", first.value())
+                self.assertEqual("second", second.value())
+                self.assertEqual("later", later.value())
+                dependency_name = first.helper.__name__
+                dependency_directory = first._tv_dependency_context["directory"]
+                self.app.destroy(first)
+                self.assertNotIn(dependency_name, sys.modules)
+                self.assertFalse(pathlib.Path(dependency_directory).exists())
+                self.assertIn(later.helper.__name__, sys.modules)
+                self.assertEqual("later", later.value())
+
+    def test_download_failure_and_invalid_source_leave_no_partial_files(self):
+        path = pathlib.Path(self.cache.name) / "cached.py"
+        path.write_text("GOOD = True\n")
+        with patch.object(self.app, "redirect", side_effect=OSError("offline")):
+            with self.assertRaises(OSError):
+                self.app.download(str(path), "https://source.example/spider.py")
+        self.assertEqual("GOOD = True\n", path.read_text())
+        self.assertEqual([path], list(pathlib.Path(self.cache.name).iterdir()))
+
+    def test_dependency_path_cannot_escape_its_scope(self):
+        url = "https://source.example/spider.py"
+        self.script(url, "valid")
+        spider = self.app.spider(self.cache.name, url, "site")
+        with self.assertRaises(ValueError):
+            self.app.load_dependency(spider, "../other-site/helper")
+
+    def test_concurrent_dependency_load_never_returns_a_half_initialized_module(self):
+        url = "https://source.example/spider.py"
+        self.script(url, "valid")
+        spider = self.app.spider(self.cache.name, url)
+        entered, resume, second_done = threading.Event(), threading.Event(), threading.Event()
+        errors, values = [], []
+        barrier = types.SimpleNamespace(entered=entered, resume=resume)
+        self.sources["https://source.example/helper.py"] = (
+            "import dependency_barrier\ndependency_barrier.entered.set()\n"
+            "dependency_barrier.resume.wait(3)\nMARKER = 'ready'\n")
+        def load(done=None):
+            try:
+                values.append(self.app.load_dependency(spider, "helper").MARKER)
+            except Exception as error:
+                errors.append(error)
+            finally:
+                if done:
+                    done.set()
+        with patch.dict(sys.modules, {"dependency_barrier": barrier}):
+            first = threading.Thread(target=load)
+            second = threading.Thread(target=load, args=(second_done,))
+            first.start()
+            try:
+                self.assertTrue(entered.wait(2))
+                second.start()
+                self.assertFalse(second_done.wait(0.1), "Returned an incomplete dependency")
+            finally:
+                resume.set()
+                first.join(3)
+                if second.ident:
+                    second.join(3)
+        self.assertEqual([], errors)
+        self.assertEqual(["ready", "ready"], values)
 
     def script(self, url, marker):
         self.sources[url] = SCRIPT.format(marker=marker)
