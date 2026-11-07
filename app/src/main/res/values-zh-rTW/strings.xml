@@ -166,6 +166,9 @@
     <string name="error_play_url">播放網址載入失敗\n錯誤代碼：<xliff:g name="name">%s</xliff:g></string>
     <string name="error_play_flag">暫無線路資料</string>
     <string name="error_play_timeout">連線逾時</string>
+    <string name="detail_fallback_title">從其他來源開啟</string>
+    <string name="detail_fallback_searching">正在搜尋其他來源…</string>
+    <string name="detail_fallback_empty">其他來源暫無相符影片</string>
     <string name="error_detail">暫無播放資料</string>
     <string name="error_empty">找不到資料</string>
     <string name="error_load_retry">內容載入失敗，點擊或下拉重試</string>

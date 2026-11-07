@@ -10,6 +10,8 @@ import com.fongmi.android.tv.bean.ClearKey;
 import com.fongmi.android.tv.bean.Drm;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Live;
+import com.fongmi.android.tv.exception.ExtractException;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
@@ -23,9 +25,13 @@ import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import okhttp3.Call;
+import okhttp3.Response;
+
 public class LiveParser {
 
     private static final Pattern CATCHUP_SOURCE = Pattern.compile("catchup-source=\"(.*?)\"");
+    private static final Pattern CATCHUP_REPLACE = Pattern.compile("catchup-replace=\"(.*?)\"");
     private static final Pattern CATCHUP = Pattern.compile("catchup=\"(.*?)\"");
     private static final Pattern TVG_NAME = Pattern.compile("tvg-name=\"(.*?)\"");
     private static final Pattern TVG_ID = Pattern.compile("tvg-id=\"(.*?)\"");
@@ -117,6 +123,7 @@ public class LiveParser {
             } else if (line.startsWith("#EXTM3U")) {
                 catchup.setType(extract(line, CATCHUP));
                 catchup.setSource(extract(line, CATCHUP_SOURCE));
+                catchup.setReplace(extract(line, CATCHUP_REPLACE));
                 if (live.getEpg().isEmpty()) live.setEpg(extract(line, TVG_URL));
             } else if (line.startsWith("#EXTINF:")) {
                 String groupName = extract(line, GROUP);
@@ -138,6 +145,7 @@ public class LiveParser {
                 Catchup unknown = Catchup.create();
                 unknown.setType(extract(line, CATCHUP));
                 unknown.setSource(extract(line, CATCHUP_SOURCE));
+                unknown.setReplace(extract(line, CATCHUP_REPLACE));
                 channel.setCatchup(Catchup.decide(unknown, catchup));
             } else if (!line.startsWith("#") && line.contains("://")) {
                 String[] split = line.split("\\|");
@@ -177,11 +185,11 @@ public class LiveParser {
         }
     }
 
-    private static String getText(Live live) {
+    private static String getText(Live live) throws Exception {
         return getText(live.getUrl(), live.getHeaders());
     }
 
-    private static String getText(String url, Map<String, String> header) {
+    private static String getText(String url, Map<String, String> header) throws Exception {
         if (url == null) return "";
         Map<String, String> headers = new HashMap<>();
         if (header != null) headers.putAll(header);
@@ -190,10 +198,19 @@ public class LiveParser {
         if (clean.startsWith("file")) return Path.read(clean);
         url = UrlUtil.stripTag(UrlUtil.normalize(url, ""));
         if (url.startsWith("file")) return Path.read(url);
+        if (url.startsWith(Server.get().getAddress("/proxy?"))) return readProxyPlaylist(OkHttp.newCall(url, headers));
         if (url.startsWith("http")) return OkHttp.string(url, headers);
-        if (url.startsWith("assets") || url.startsWith("proxy")) return getText(UrlUtil.convert(url), headers);
+        if (url.startsWith("proxy://")) return readProxyPlaylist(OkHttp.newCall(UrlUtil.convert(url), headers));
+        if (url.startsWith("assets")) return getText(UrlUtil.convert(url), headers);
         if (url.length() > 0 && url.length() % 4 == 0) return getText(new String(Base64.decode(url, Base64.DEFAULT)), headers);
         return "";
+    }
+
+    static String readProxyPlaylist(Call call) throws Exception {
+        try (Response response = call.execute()) {
+            if (!response.isSuccessful()) throw new ExtractException("Live proxy HTTP " + response.code());
+            return response.body() == null ? "" : response.body().string();
+        }
     }
 
     private static class Setting {

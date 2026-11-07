@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.function.Supplier;
 
@@ -22,7 +23,7 @@ public final class SearchSorter {
     private static final String QUALITY_LABEL = "(?:4k|8k|2160p|1080p|720p|uhd|hdr|蓝光|超清|高清|原盘|完整版)";
     private static final Pattern TITLE_QUALITY = Pattern.compile("(?i)[\\p{P}\\p{Z}\\s&&[^\\p{Pe}\\p{Pf}]]+" + QUALITY_LABEL
             + "(?:[\\p{P}\\p{Z}\\s]+" + QUALITY_LABEL + ")*[\\p{P}\\p{Z}\\s]*$");
-    private static final Pattern TITLE_BRACKETED_YEAR = Pattern.compile("[\\p{Z}\\s]*[（(\\[【{][\\p{Z}\\s]*(?:19|20)\\d{2}[\\p{Z}\\s]*[）)\\]】}][\\p{Z}\\s]*$");
+    private static final Pattern TITLE_BRACKETED_YEAR = Pattern.compile("[\\p{Z}\\s]*[（(\\[【{][\\p{Z}\\s]*((?:19|20)\\d{2})[\\p{Z}\\s]*[）)\\]】}][\\p{Z}\\s]*$");
 
     private SearchSorter() {
     }
@@ -83,6 +84,15 @@ public final class SearchSorter {
         return !normalizedSource.isEmpty() && normalizedSource.equals(normalizedTarget);
     }
 
+    public static boolean matchesDetailFallback(String title, String candidate, String year) {
+        if (!matchesTitle(title, candidate)) return false;
+        Matcher expected = TITLE_BRACKETED_YEAR.matcher(TITLE_QUALITY.matcher(title).replaceFirst(""));
+        if (!expected.find()) return true;
+        Matcher embedded = TITLE_BRACKETED_YEAR.matcher(TITLE_QUALITY.matcher(candidate).replaceFirst(""));
+        if (embedded.find() && !expected.group(1).equals(embedded.group(1))) return false;
+        return year == null || !year.matches("(?:19|20)\\d{2}") || expected.group(1).equals(year);
+    }
+
     /** Automatic replacement requires the same title; manual suggestions retain fuzzy ranking. */
     public static boolean isSourceCandidate(Vod item, String keyword, boolean automatic, double minimumScore) {
         if (item == null) return false;
@@ -101,14 +111,18 @@ public final class SearchSorter {
 
     private static String normalizeTitle(String value) {
         if (value == null) return "";
-        String normalized = value.toLowerCase(Locale.ROOT).trim();
+        return TITLE_SEPARATORS.matcher(detailFallbackKeyword(value).toLowerCase(Locale.ROOT)).replaceAll(" ").trim();
+    }
+
+    public static String detailFallbackKeyword(String title) {
+        String normalized = title.trim();
         String previous;
         do {
             previous = normalized;
             normalized = TITLE_BRACKETED_YEAR.matcher(normalized).replaceFirst("").trim();
             normalized = TITLE_QUALITY.matcher(normalized).replaceFirst("").trim();
         } while (!normalized.equals(previous));
-        return TITLE_SEPARATORS.matcher(normalized).replaceAll(" ").trim();
+        return normalized;
     }
 
     private static int comparePrepared(Vod left, Vod right, int leftActorRank, int rightActorRank) {

@@ -15,6 +15,14 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class XmlTvReaderTest {
+    @Test public void usesFirstNonBlankProgrammeTitle() throws Exception {
+        List<XmlTvReader.Programme> programmes = new ArrayList<>();
+        String xml = "<tv><programme><title/><title>  </title>"
+                + "<title lang='zh'>新闻</title><title lang='en'>News</title></programme></tv>";
+        XmlTvReader.read(new StringReader(xml), null, programmes::add);
+        assertEquals("新闻", programmes.get(0).title);
+    }
+
     @Test public void readsAliasesIconsUnicodeCdataAndEntitiesIgnoringUnknownSubtrees() throws Exception {
         List<XmlTvReader.Channel> channels = new ArrayList<>();
         List<XmlTvReader.Programme> programmes = new ArrayList<>();

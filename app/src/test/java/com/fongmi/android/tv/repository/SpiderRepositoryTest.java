@@ -10,6 +10,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.*;
 
 public class SpiderRepositoryTest {
+    @Test public void legacySpiderStillSearchesFirstPage() throws Exception {
+        com.github.catvod.crawler.Spider spider = new com.github.catvod.crawler.Spider() {
+            @Override public String searchContent(String key, boolean quick) {
+                return key + ":" + quick;
+            }
+        };
+        assertEquals("news:true", spider.searchContent("news", true, "1"));
+        assertEquals("", spider.searchContent("news", true, "2"));
+    }
+
     @Test public void detailsExpandPlaylistsAfterInitializingFlags() throws Exception {
         Flag flag = new Flag();
         AtomicBoolean initialized = new AtomicBoolean();

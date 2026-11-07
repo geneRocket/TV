@@ -165,6 +165,9 @@
     <string name="error_play_url">播放地址加载失败\n错误代码：<xliff:g name="name">%s</xliff:g></string>
     <string name="error_play_flag">暂无线路数据</string>
     <string name="error_play_timeout">连接超时</string>
+    <string name="detail_fallback_title">从其他源打开</string>
+    <string name="detail_fallback_searching">正在搜索其他源…</string>
+    <string name="detail_fallback_empty">其他源暂无匹配影片</string>
     <string name="error_detail">暂无播放数据</string>
     <string name="error_empty">找不到数据</string>
     <string name="error_load_retry">内容加载失败，点击或下拉重试</string>

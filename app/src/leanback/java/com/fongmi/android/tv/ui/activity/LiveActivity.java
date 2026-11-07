@@ -305,7 +305,12 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
             @Override public Channel channel() { return mChannel; }
             @Override public void play(Channel channel) { mPlayers.start(channel, getTimeout()); }
             @Override public void renderEpg() { setEpg(); }
-            @Override public void renderLive(Live live) { hideProgress(); setGroup(live); mListLayout.render(live); }
+            @Override public void renderLive(Live live) {
+                hideProgress();
+                setGroup(live);
+                mListLayout.render(live);
+                if (live.getLoadError() != null) showError(live.getLoadError());
+            }
         });
         mLiveData.connect();
     }

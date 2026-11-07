@@ -1,7 +1,6 @@
 package com.fongmi.android.tv.bean;
 
-import android.net.Uri;
-import android.text.TextUtils;
+import com.fongmi.android.tv.utils.TextValues;
 
 import com.google.gson.annotations.SerializedName;
 
@@ -9,6 +8,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Catchup {
+
+    private static final Pattern TOKEN = Pattern.compile("\\$?\\{[^}]*\\}");
 
     @SerializedName("type")
     private String type;
@@ -18,6 +19,8 @@ public class Catchup {
     private String regex;
     @SerializedName("source")
     private String source;
+    @SerializedName("replace")
+    private String replace;
 
     public static Catchup PLTV() {
         Catchup item = new Catchup();
@@ -39,7 +42,7 @@ public class Catchup {
     }
 
     public String getType() {
-        return TextUtils.isEmpty(type) ? "" : type;
+        return TextValues.isEmpty(type) ? "" : type;
     }
 
     public void setType(String type) {
@@ -47,7 +50,7 @@ public class Catchup {
     }
 
     public String getDays() {
-        return TextUtils.isEmpty(days) ? "" : days;
+        return TextValues.isEmpty(days) ? "" : days;
     }
 
     public void setDays(String days) {
@@ -55,7 +58,7 @@ public class Catchup {
     }
 
     public String getRegex() {
-        return TextUtils.isEmpty(regex) ? "" : regex;
+        return TextValues.isEmpty(regex) ? "" : regex;
     }
 
     public void setRegex(String regex) {
@@ -63,11 +66,15 @@ public class Catchup {
     }
 
     public String getSource() {
-        return TextUtils.isEmpty(source) ? "" : source;
+        return TextValues.isEmpty(source) ? "" : source;
     }
 
     public void setSource(String source) {
         this.source = source;
+    }
+
+    public void setReplace(String replace) {
+        this.replace = replace;
     }
 
     public boolean match(String url) {
@@ -87,16 +94,36 @@ public class Catchup {
     }
 
     private String format(String url, String result) {
-        if (!TextUtils.isEmpty(Uri.parse(url).getQuery())) result = result.replace("?", "&");
-        if (url.contains("/PLTV/")) url = url.replace("/PLTV/", "/TVOD/");
+        url = rewrite(url);
+        int fragment = url.indexOf('#');
+        int query = url.indexOf('?');
+        if (result.startsWith("?") && query >= 0 && query + 1 < (fragment < 0 ? url.length() : fragment)) {
+            result = "&" + result.substring(1);
+        }
         return url + result;
+    }
+
+    private String rewrite(String url) {
+        if (!TextValues.isEmpty(replace)) {
+            String[] parts = replace.split(",", 2);
+            if (parts.length == 2 && !parts[0].isEmpty()) {
+                try {
+                    return url.replaceAll(parts[0], parts[1]);
+                } catch (IllegalArgumentException | IndexOutOfBoundsException ignored) {
+                    // Fall back to legacy PLTV rewriting for invalid rules.
+                }
+            }
+        }
+        return url.replace("/PLTV/", "/TVOD/");
     }
 
     public String format(String url, EpgData data) {
         String result = getSource();
         if (data.isInRange()) return url;
-        Matcher matcher = Pattern.compile("(\\$\\{[^}]*\\})").matcher(result);
-        while (matcher.find()) result = result.replace(matcher.group(1), data.format(matcher.group(1)));
+        Matcher matcher = TOKEN.matcher(result);
+        StringBuffer formatted = new StringBuffer();
+        while (matcher.find()) matcher.appendReplacement(formatted, Matcher.quoteReplacement(data.format(matcher.group())));
+        result = matcher.appendTail(formatted).toString();
         return isDefault() ? result : format(url, result);
     }
 }

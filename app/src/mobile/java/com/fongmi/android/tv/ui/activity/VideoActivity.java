@@ -45,6 +45,7 @@ import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.ui.presenter.VodPagePresenter;
+import com.fongmi.android.tv.ui.dialog.DetailFallbackDialog;
 import com.fongmi.android.tv.ui.presenter.VodDetailPresenter;
 import com.fongmi.android.tv.repository.HistoryRepository;
 import com.fongmi.android.tv.repository.DoubanRecommendRepository;
@@ -368,6 +369,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         @Override public void showFallbackName() { mBinding.name.setText(getName()); }
         @Override public void scheduleEmptyFallback() { mUiCallbacks.post(mR4, 10000); }
         @Override public void recoverSource() { checkSearch(false); }
+        @Override public void offerOtherSources() {
+            showEmpty();
+            DetailFallbackDialog.show(VideoActivity.this, mViewModel, getKey(), getName(), item -> {
+                finish();
+                start(VideoActivity.this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+            });
+        }
         @Override public void notifyMessage(String message) { Notify.show(message); }
     });
 

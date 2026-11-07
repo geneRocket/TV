@@ -94,13 +94,10 @@ final class XmlTvReader {
         programme.channel = attribute(parser, "channel");
         programme.start = attribute(parser, "start");
         programme.stop = attribute(parser, "stop");
-        boolean hasTitle = false;
         while (next(parser) != XmlPullParser.END_TAG) {
             if (parser.getEventType() != XmlPullParser.START_TAG) continue;
-            if (parser.getName().equals("title") && !hasTitle) {
-                programme.title = text(parser);
-                hasTitle = true;
-            } else skip(parser);
+            if (parser.getName().equals("title") && programme.title.isEmpty()) programme.title = text(parser);
+            else skip(parser);
         }
         return programme;
     }

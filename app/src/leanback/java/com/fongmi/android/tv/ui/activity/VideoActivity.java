@@ -115,6 +115,7 @@ import com.fongmi.android.tv.ui.presenter.QuickPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.ui.player.TvVodPlaybackStateBinder;
 import com.fongmi.android.tv.ui.player.TvVodPlaybackNavigation;
+import com.fongmi.android.tv.ui.dialog.DetailFallbackDialog;
 import com.fongmi.android.tv.ui.presenter.VodDetailPresenter;
 import com.fongmi.android.tv.player.vod.VodHistoryController;
 import com.fongmi.android.tv.ui.player.TvVodSourceCandidates;
@@ -378,6 +379,13 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
         @Override public void showFallbackName() { mBinding.name.setText(getName()); }
         @Override public void scheduleEmptyFallback() { mUiCallbacks.post(mR4, 10000); }
         @Override public void recoverSource() { mPlaybackFlow.sources().recover(); }
+        @Override public void offerOtherSources() {
+            showDetailEmpty();
+            DetailFallbackDialog.show(VideoActivity.this, mViewModel, getKey(), getName(), item -> {
+                finish();
+                start(VideoActivity.this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+            });
+        }
         @Override public void notifyMessage(String message) { Notify.show(message); }
     }
 

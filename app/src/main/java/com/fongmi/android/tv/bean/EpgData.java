@@ -89,11 +89,20 @@ public class EpgData {
     }
 
     public String format(String group) {
+        int open = group.indexOf('{');
+        String token = group.substring(open + 1);
+        if (token.startsWith("utc:")) return String.valueOf(getStartTime() / 1000);
+        if (token.startsWith("utcend:")) return String.valueOf(getEndTime() / 1000);
         String pattern = extractPattern(group);
         if (pattern.isEmpty()) return "";
-        if (group.contains("(b)")) return new SimpleDateFormat(pattern, Locale.getDefault()).format(getStartTime());
-        if (group.contains("(e)")) return new SimpleDateFormat(pattern, Locale.getDefault()).format(getEndTime());
+        if (token.startsWith("(b)")) return formatTime(getStartTime(), pattern);
+        if (token.startsWith("(e)")) return formatTime(getEndTime(), pattern);
         return "";
+    }
+
+    private String formatTime(long time, String pattern) {
+        if ("timestamp".equals(pattern)) return String.valueOf(time / 1000);
+        return new SimpleDateFormat(pattern, Locale.getDefault()).format(time);
     }
 
     private String extractPattern(String group) {

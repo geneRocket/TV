@@ -10,6 +10,7 @@ import com.fongmi.android.tv.server.process.Media;
 import com.fongmi.android.tv.server.process.Parse;
 import com.fongmi.android.tv.server.process.Process;
 import com.fongmi.android.tv.server.process.Proxy;
+import com.fongmi.android.tv.server.process.SpiderTest;
 import com.github.catvod.utils.Asset;
 import com.google.common.net.HttpHeaders;
 
@@ -41,6 +42,7 @@ public class Nano extends NanoHTTPD {
         process.add(new Media());
         process.add(new Parse());
         process.add(new Proxy());
+        process.add(new SpiderTest());
     }
 
     public static Response success() {

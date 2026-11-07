@@ -13,6 +13,14 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 public class SearchSorterTest {
+    @Test public void detailFallbackRejectsOtherSeasonsAndKnownYearConflicts() {
+        org.junit.Assert.assertEquals("Example: Season 2", SearchSorter.detailFallbackKeyword("Example: Season 2 (2020) 4K"));
+        org.junit.Assert.assertTrue(SearchSorter.matchesDetailFallback("Example Season 2 (2020)", "Example Season 2", "2020"));
+        org.junit.Assert.assertFalse(SearchSorter.matchesDetailFallback("Example Season 2 (2020)", "Example Season 1", "2020"));
+        org.junit.Assert.assertFalse(SearchSorter.matchesDetailFallback("Example Season 2 (2020)", "Example Season 2", "2024"));
+        org.junit.Assert.assertFalse(SearchSorter.matchesDetailFallback("Example Season 2 (2020)", "Example Season 2 (2024)", ""));
+    }
+
 
     @Test
     public void matchesTitle_allowsOnlyMetadataDifferences() {

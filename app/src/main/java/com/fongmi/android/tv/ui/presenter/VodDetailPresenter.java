@@ -30,6 +30,7 @@ public final class VodDetailPresenter {
         void showFallbackName();
         void scheduleEmptyFallback();
         void recoverSource();
+        void offerOtherSources();
         void notifyMessage(String message);
     }
 
@@ -71,7 +72,7 @@ public final class VodDetailPresenter {
     public void accept(Result result) {
         if (!accepts(result)) return;
         port.clearSourceTimeout();
-        if (result.getList().isEmpty()) empty(result.hasMsg());
+        if (result.getList().isEmpty()) empty(result.hasMsg() || result.isRequestFailed());
         else {
             Vod vod = result.getList().get(0);
             port.render(vod);
@@ -84,7 +85,8 @@ public final class VodDetailPresenter {
             port.resumeSourceSearch();
             port.continueSourceSwitch();
         } else if (failed || port.shouldFinishWhenEmpty()) {
-            port.finishScreen();
+            if (port.hasFallbackName()) port.offerOtherSources();
+            else port.finishScreen();
         } else if (!port.hasFallbackName()) {
             port.showEmptyState();
         } else {

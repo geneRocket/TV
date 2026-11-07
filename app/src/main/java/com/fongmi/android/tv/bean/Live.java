@@ -33,6 +33,13 @@ import java.util.Objects;
 @Entity
 public class Live {
 
+    @Ignore
+    private transient String loadError;
+
+    public String getLoadError() { return loadError; }
+
+    public void setLoadError(String loadError) { this.loadError = loadError; }
+
     @NonNull
     @PrimaryKey
     @SerializedName("name")

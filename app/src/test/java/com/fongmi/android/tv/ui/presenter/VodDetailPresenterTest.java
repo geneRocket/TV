@@ -32,8 +32,9 @@ public class VodDetailPresenterTest {
             Harness h=new Harness(); h.collect=collect; h.name=name;
             VodDetailPresenter page=new VodDetailPresenter(h); page.request();
             page.accept(result("site","video",page.token(),false,failed?"failed":""));
-            assertEquals(collect||failed?1:0,h.finished);
+            assertEquals((collect||failed)&&!name?1:0,h.finished);
             assertEquals(!collect&&!failed&&!name?1:0,h.empty);
+            assertEquals((collect||failed)&&name?1:0,h.offered);
             assertEquals(!collect&&!failed&&name?1:0,h.recovered);
         }
     }
@@ -47,7 +48,7 @@ public class VodDetailPresenterTest {
         result.setList(content?Collections.singletonList(new Vod()):Collections.emptyList()); return result;
     }
     private static final class Harness implements VodDetailPresenter.Port {
-        int sequence,renders,cleared,cancelled,resumed,continued,finished,empty,recovered;
+        int sequence,renders,cleared,cancelled,resumed,continued,finished,empty,recovered,offered;
         boolean switching,collect,name; String message;
         @Override public String nextRequestToken(){return "request-"+(++sequence);}
         @Override public String siteKey(){return "site";}
@@ -70,6 +71,7 @@ public class VodDetailPresenterTest {
         @Override public void showFallbackName(){}
         @Override public void scheduleEmptyFallback(){}
         @Override public void recoverSource(){recovered++;}
+        public void offerOtherSources(){offered++;}
         @Override public void notifyMessage(String value){message=value;}
     }
 }

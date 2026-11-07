@@ -5,6 +5,7 @@ import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.Live;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import org.junit.Test;
 
@@ -16,6 +17,36 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class LiveParserTest {
+
+    @Test public void proxyHttpErrorDoesNotBecomePlaylistData() throws Exception {
+        okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder().addInterceptor(chain ->
+                new okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                        .code(503).message("Unavailable").body(okhttp3.ResponseBody.create(
+                                "#EXTM3U", okhttp3.MediaType.get("text/plain"))).build()).build();
+        okhttp3.Call call = client.newCall(new okhttp3.Request.Builder().url("http://127.0.0.1/proxy").build());
+        try {
+            LiveParser.readProxyPlaylist(call);
+            org.junit.Assert.fail("503 response was accepted as a playlist");
+        } catch (com.fongmi.android.tv.exception.ExtractException expected) {
+            org.junit.Assert.assertTrue(expected.getMessage().contains("503"));
+        }
+    }
+
+    @Test public void readsCatchupRewriteFromPlaylistAndChannel() throws Exception {
+        Live live = new Live() {
+            @Override public String getEpg() { return ""; }
+        };
+        Method parse = LiveParser.class.getDeclaredMethod("m3u", Live.class, String.class);
+        parse.setAccessible(true);
+        parse.invoke(null, live, "#EXTM3U catchup=\"append\" catchup-source=\"?start={utc:timestamp}\" catchup-replace=\"/live/,/replay/\"\n"
+                + "#EXTINF:-1 group-title=\"News\",First\nhttps://example.com/live/first\n"
+                + "#EXTINF:-1 group-title=\"News\" catchup=\"append\" catchup-source=\"?start={utc:timestamp}\" catchup-replace=\"/live/,/archive/\",Second\n"
+                + "https://example.com/live/second\n");
+        List<Channel> channels = live.getGroups().get(0).getChannel();
+        Gson gson = new Gson();
+        assertEquals(new JsonPrimitive("/live/,/replay/"), gson.toJsonTree(channels.get(0).getCatchup()).getAsJsonObject().get("replace"));
+        assertEquals(new JsonPrimitive("/live/,/archive/"), gson.toJsonTree(channels.get(1).getCatchup()).getAsJsonObject().get("replace"));
+    }
 
     @Test public void txtHeaderUpdatesDoNotRewriteEarlierChannels() throws Exception {
         List<Channel> channels = parseTxtChannels("News,#genre#\n"
