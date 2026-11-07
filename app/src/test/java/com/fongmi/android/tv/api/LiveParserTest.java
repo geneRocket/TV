@@ -48,6 +48,15 @@ public class LiveParserTest {
         assertEquals(new JsonPrimitive("/live/,/archive/"), gson.toJsonTree(channels.get(1).getCatchup()).getAsJsonObject().get("replace"));
     }
 
+    @Test public void vlcCookiePreservesHeaderValues() throws Exception {
+        List<Channel> channels = parseTxtChannels("News,#genre#\n"
+                + "#EXTHTTP:{\"X-Common\":\"shared\"}\n"
+                + "#EXTVLCOPT:http-cookie=\"session=a=b; token=\"signed\"&x\"\n"
+                + "First,https://example.com/first\n");
+        assertEquals("session=a=b; token=\"signed\"&x", channels.get(0).getHeader().get("Cookie"));
+        assertEquals("shared", channels.get(0).getHeader().get("X-Common"));
+    }
+
     @Test public void txtHeaderUpdatesDoNotRewriteEarlierChannels() throws Exception {
         List<Channel> channels = parseTxtChannels("News,#genre#\n"
                 + "#KODIPROP:inputstream.adaptive.stream_headers=Cookie=first&X-Common=shared\n"

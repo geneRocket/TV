@@ -242,6 +242,7 @@ public class LiveParser {
             else if (line.startsWith("origin")) origin(line);
             else if (line.startsWith("referer")) referer(line);
             else if (line.startsWith("#EXTHTTP:")) header(line);
+            else if (line.startsWith("#EXTVLCOPT:http-cookie=")) cookie(line);
             else if (line.startsWith("#EXTVLCOPT:http-origin")) origin(line);
             else if (line.startsWith("#EXTVLCOPT:http-user-agent")) ua(line);
             else if (line.startsWith("#EXTVLCOPT:http-referrer")) referer(line);
@@ -339,6 +340,14 @@ public class LiveParser {
             } catch (Exception e) {
                 header = null;
             }
+        }
+
+        private void cookie(String line) {
+            String value = extractValue(line, "#EXTVLCOPT:http-cookie=");
+            if (value.isEmpty()) return;
+            if (header == null) header = new HashMap<>();
+            header.keySet().removeIf("Cookie"::equalsIgnoreCase);
+            header.put("Cookie", value);
         }
 
         private void headers(String line) {

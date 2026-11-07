@@ -21,18 +21,15 @@ import okhttp3.dnsoverhttps.DnsOverHttps;
 public class OkDns implements Dns {
 
     private final ConcurrentHashMap<String, String> map;
-    private DnsOverHttps doh;
+    private volatile DnsOverHttps doh;
 
     public OkDns() {
         this.map = new ConcurrentHashMap<>();
     }
 
     public void setDoh(Doh item) {
-        if (item.getUrl().isEmpty()) {
-            this.doh = null;
-            return;
-        }
-        this.doh = new DnsOverHttps.Builder().client(new OkHttpClient()).url(HttpUrl.get(item.getUrl())).bootstrapDnsHosts(item.getHosts()).build();
+        HttpUrl url = HttpUrl.parse(item.getUrl());
+        doh = url == null ? null : new DnsOverHttps.Builder().client(new OkHttpClient()).url(url).bootstrapDnsHosts(item.getHosts()).build();
     }
 
     public void clear() {
@@ -54,6 +51,7 @@ public class OkDns implements Dns {
     @NonNull
     @Override
     public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
-        return (doh != null ? doh : Dns.SYSTEM).lookup(get(hostname));
+        Dns resolver = doh;
+        return (resolver != null ? resolver : Dns.SYSTEM).lookup(get(hostname));
     }
 }
