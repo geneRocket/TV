@@ -32,6 +32,7 @@ public class LiveParser {
 
     private static final Pattern CATCHUP_SOURCE = Pattern.compile("catchup-source=\"(.*?)\"");
     private static final Pattern CATCHUP_REPLACE = Pattern.compile("catchup-replace=\"(.*?)\"");
+    private static final Pattern CATCHUP_DAYS = Pattern.compile("catchup-days=\"(.*?)\"");
     private static final Pattern CATCHUP = Pattern.compile("catchup=\"(.*?)\"");
     private static final Pattern TVG_NAME = Pattern.compile("tvg-name=\"(.*?)\"");
     private static final Pattern TVG_ID = Pattern.compile("tvg-id=\"(.*?)\"");
@@ -124,6 +125,7 @@ public class LiveParser {
                 catchup.setType(extract(line, CATCHUP));
                 catchup.setSource(extract(line, CATCHUP_SOURCE));
                 catchup.setReplace(extract(line, CATCHUP_REPLACE));
+                catchup.setDays(extract(line, CATCHUP_DAYS));
                 if (live.getEpg().isEmpty()) live.setEpg(extract(line, TVG_URL));
             } else if (line.startsWith("#EXTINF:")) {
                 String groupName = extract(line, GROUP);
@@ -146,6 +148,7 @@ public class LiveParser {
                 unknown.setType(extract(line, CATCHUP));
                 unknown.setSource(extract(line, CATCHUP_SOURCE));
                 unknown.setReplace(extract(line, CATCHUP_REPLACE));
+                unknown.setDays(extract(line, CATCHUP_DAYS));
                 channel.setCatchup(Catchup.decide(unknown, catchup));
             } else if (!line.startsWith("#") && line.contains("://")) {
                 String[] split = line.split("\\|");

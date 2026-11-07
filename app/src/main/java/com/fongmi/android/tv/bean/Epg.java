@@ -40,8 +40,13 @@ public class Epg {
     }
 
     public static Epg objectFrom(String str, String key, List<SimpleDateFormat> formats) throws Exception {
+        return objectFrom(str, key, formats, "");
+    }
+
+    public static Epg objectFrom(String str, String key, List<SimpleDateFormat> formats, String fallbackDate) throws Exception {
         if (!Json.valid(str)) return EpgParser.getEpg(str, key);
         Epg item = App.gson().fromJson(str, Epg.class);
+        if (!fallbackDate.isEmpty() && item.getDate().isEmpty()) item.setDate(fallbackDate);
         item.setTime(formats);
         item.setKey(key);
         return item;

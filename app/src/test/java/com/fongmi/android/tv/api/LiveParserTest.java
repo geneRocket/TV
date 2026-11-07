@@ -38,14 +38,18 @@ public class LiveParserTest {
         };
         Method parse = LiveParser.class.getDeclaredMethod("m3u", Live.class, String.class);
         parse.setAccessible(true);
-        parse.invoke(null, live, "#EXTM3U catchup=\"append\" catchup-source=\"?start={utc:timestamp}\" catchup-replace=\"/live/,/replay/\"\n"
+        parse.invoke(null, live, "#EXTM3U catchup=\"append\" catchup-source=\"?start={utc:timestamp}\" catchup-replace=\"/live/,/replay/\" catchup-days=\"5\"\n"
                 + "#EXTINF:-1 group-title=\"News\",First\nhttps://example.com/live/first\n"
                 + "#EXTINF:-1 group-title=\"News\" catchup=\"append\" catchup-source=\"?start={utc:timestamp}\" catchup-replace=\"/live/,/archive/\",Second\n"
-                + "https://example.com/live/second\n");
+                + "https://example.com/live/second\n"
+                + "#EXTINF:-1 group-title=\"News\" catchup-days=\"2\",Third\nhttps://example.com/live/third\n");
         List<Channel> channels = live.getGroups().get(0).getChannel();
         Gson gson = new Gson();
         assertEquals(new JsonPrimitive("/live/,/replay/"), gson.toJsonTree(channels.get(0).getCatchup()).getAsJsonObject().get("replace"));
         assertEquals(new JsonPrimitive("/live/,/archive/"), gson.toJsonTree(channels.get(1).getCatchup()).getAsJsonObject().get("replace"));
+        assertEquals("5", channels.get(0).getCatchup().getDays());
+        assertEquals("5", channels.get(1).getCatchup().getDays());
+        assertEquals("2", channels.get(2).getCatchup().getDays());
     }
 
     @Test public void vlcCookiePreservesHeaderValues() throws Exception {

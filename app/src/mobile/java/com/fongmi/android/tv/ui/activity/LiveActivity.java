@@ -41,6 +41,7 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.LiveCallback;
 import com.fongmi.android.tv.impl.PassCallback;
 import com.fongmi.android.tv.model.LiveViewModel;
+import com.fongmi.android.tv.ui.dialog.LiveHistoryDialog;
 import com.fongmi.android.tv.player.live.LiveChannelNavigator;
 import com.fongmi.android.tv.player.live.LiveDataConnection;
 import com.fongmi.android.tv.ui.custom.LiveListLayout;
@@ -242,6 +243,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mBinding.widget.epgData.setItemAnimator(null);
         mBinding.group.setAdapter(mGroupAdapter = new GroupAdapter(this));
         mBinding.channel.setAdapter(mChannelAdapter = new ChannelAdapter(this));
+        mBinding.widget.epgHistory.setOnClickListener(view -> showHistory());
         mBinding.widget.epgData.setAdapter(mEpgDataAdapter = new EpgDataAdapter(this));
     }
 
@@ -497,10 +499,29 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     }
 
     private void showEpg(Channel item) {
-        if (mChannel == null || mChannel.getData().getList().isEmpty() || mEpgDataAdapter.getItemCount() == 0 || !mChannel.equals(item) || !mChannel.getGroup().equals(mGroup)) return;
-        mBinding.widget.epgData.scrollToPosition(item.getData().getSelected());
+        if (mChannel == null || !mChannel.equals(item) || !mChannel.getGroup().equals(mGroup)) return;
+        boolean history = hasHistory(mChannel);
+        if (mChannel.getData().getList().isEmpty() && !history) return;
+        setEpg();
+        mBinding.widget.epgHistory.setVisibility(history ? View.VISIBLE : View.GONE);
+        int position = mChannel.getData().getSelected();
+        if (position >= 0) mBinding.widget.epgData.scrollToPosition(position);
         mBinding.widget.epg.setVisibility(View.VISIBLE);
         hideUI();
+    }
+
+    private boolean hasHistory(Channel channel) {
+        return mViewModel.hasHistory(LiveConfig.get().getHome(), channel);
+    }
+
+    private void showHistory() {
+        Channel channel = mChannel;
+        if (channel == null || !hasHistory(channel)) return;
+        int line = channel.getLine();
+        Live source = LiveConfig.get().getHome();
+        LiveHistoryDialog.show(this, mViewModel, source, channel, program -> {
+            if (mChannel == channel && channel.getLine() == line && LiveConfig.get().getHome() == source) replayProgram(program, true);
+        });
     }
 
     private void hideEpg() {
@@ -632,7 +653,8 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     public void onItemClick(Channel item) {
-        if (item.getData().getList().size() > 0 && item.isSelected() && mChannel != null && mChannel.equals(item) && mChannel.getGroup().equals(mGroup)) {
+        if (item.isSelected() && mChannel != null && mChannel.equals(item) && mChannel.getGroup().equals(mGroup)
+                && (!mChannel.getData().getList().isEmpty() || hasHistory(mChannel))) {
             showEpg(item);
         } else {
             mPlaybackFlow.beginSource();
@@ -659,10 +681,14 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     @Override
     public void onItemClick(EpgData item) {
+        replayProgram(item, false);
+    }
+
+    private void replayProgram(EpgData item, boolean historical) {
         mLiveData.replay(item, () -> {
             mPlaybackFlow.beginSource();
             Notify.show(getString(R.string.play_ready, item.getTitle()));
-            mEpgDataAdapter.setSelected(item);
+            if (!historical) mEpgDataAdapter.setSelected(item);
             mPlayers.clear();
             mPlayers.stop();
             showProgress();

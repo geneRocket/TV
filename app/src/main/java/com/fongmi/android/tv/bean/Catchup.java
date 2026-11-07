@@ -36,9 +36,17 @@ public class Catchup {
     }
 
     public static Catchup decide(Catchup major, Catchup minor) {
-        if (!major.isEmpty()) return major;
-        if (!minor.isEmpty()) return minor;
-        return null;
+        Catchup selected = !major.isEmpty() ? major : minor;
+        if (selected.isEmpty()) return null;
+        String days = major.getDays().isEmpty() ? minor.getDays() : major.getDays();
+        if (days.equals(selected.getDays())) return selected;
+        Catchup result = new Catchup();
+        result.type = selected.type;
+        result.regex = selected.regex;
+        result.source = selected.source;
+        result.replace = selected.replace;
+        result.days = days;
+        return result;
     }
 
     public String getType() {

@@ -375,4 +375,7 @@
     <string name="subtitle_move_down">Move subtitles down</string>
     <string name="subtitle_reset">Reset subtitle appearance</string>
     <string name="browser_unavailable">No browser available. Scan the code or open this address on another device.</string>
+    <string name="live_history_date">Previous dates</string>
+    <string name="live_history_loading">Loading programme guide for %1$s…</string>
+    <string name="live_history_empty">No programme guide for %1$s</string>
 </resources>

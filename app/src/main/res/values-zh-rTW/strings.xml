@@ -352,4 +352,7 @@
     <string name="subtitle_move_down">字幕下移</string>
     <string name="subtitle_reset">重設字幕樣式</string>
     <string name="browser_unavailable">未找到可用瀏覽器，請用其他裝置掃碼或開啟此網址。</string>
+    <string name="live_history_date">往日節目表</string>
+    <string name="live_history_loading">正在載入 %1$s 的節目表…</string>
+    <string name="live_history_empty">%1$s 暫無節目表</string>
 </resources>

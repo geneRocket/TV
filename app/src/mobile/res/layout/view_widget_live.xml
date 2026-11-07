@@ -233,10 +233,18 @@
         android:visibility="gone"
         tools:visibility="visible">
 
+        <Button
+            android:id="@+id/epg_history"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/live_history_date"
+            android:visibility="gone" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/epg_data"
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:padding="8dp"

@@ -265,10 +265,18 @@
         android:visibility="gone"
         tools:visibility="visible">
 
+        <Button
+            android:id="@+id/epg_history"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/live_history_date"
+            android:visibility="gone" />
+
         <androidx.leanback.widget.VerticalGridView
             android:id="@+id/epg_data"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             tools:itemCount="5"
             tools:listitem="@layout/adapter_epg_data" />
 

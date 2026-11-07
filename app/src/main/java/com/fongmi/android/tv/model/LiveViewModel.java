@@ -11,6 +11,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.EpgParser;
+import com.fongmi.android.tv.api.EpgDay;
 import com.fongmi.android.tv.api.LiveParser;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Channel;
@@ -24,6 +25,7 @@ import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.net.HttpCallScope;
+import com.github.catvod.utils.Json;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -35,6 +37,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Consumer;
 import com.fongmi.android.tv.utils.TaskScope;
 
 import okhttp3.Call;
@@ -111,6 +114,53 @@ public class LiveViewModel extends ViewModel {
             if (!item.getData().equal(date)) item.setData(Epg.objectFrom(requestString(url, Constant.TIMEOUT_EPG), item.getTvgId(), formats));
             return item.getData().selected();
         });
+    }
+
+    public boolean hasHistory(Live source, Channel channel) {
+        return channel.hasCatchup() && EpgDay.days(channel.getCatchup().getDays()) > 0
+                && (channel.getEpg().contains("{date}") || !source.getEpgXml().isEmpty());
+    }
+
+    public List<String> historyDates(Channel channel) {
+        TimeZone zone = resolveTimeZone(null, channel.getEpg(), currentTimeZone);
+        return EpgDay.previousDates(zone, System.currentTimeMillis(), channel.getCatchup().getDays());
+    }
+
+    public void getHistoryEpg(Live source, Channel channel, String date, Consumer<Epg> delivery) {
+        TimeZone zone = resolveTimeZone(null, channel.getEpg(), currentTimeZone);
+        HttpCallScope calls = new HttpCallScope();
+        tasks.submit("epg-history", () -> calls.call(() -> loadHistory(source, channel, date, zone)),
+                Constant.TIMEOUT_EPG + Constant.TIMEOUT_EPG, delivery, error -> new Epg(), calls::close);
+    }
+
+    public void cancelHistoryEpg() {
+        tasks.cancel("epg-history");
+    }
+
+    private Epg loadHistory(Live source, Channel channel, String date, TimeZone zone) throws Exception {
+        String template = channel.getEpg();
+        if (template.contains("{date}")) {
+            String url = UrlUtil.normalize(template.replace("{date}", date), "");
+            if (url.startsWith("http")) {
+                try {
+                    EpgDay day = new EpgDay(date, zone);
+                    String body = requestString(url, Constant.TIMEOUT_EPG);
+                    Epg result = Json.valid(body) ? Epg.objectFrom(body, channel.getTvgId(), createTimeFormats(zone), date)
+                            : EpgParser.readHistory(body, source, channel, date, zone);
+                    List<EpgData> programmes = new ArrayList<>(result.getList());
+                    programmes.removeIf(item -> !day.contains(item));
+                    programmes.sort(java.util.Comparator.comparingLong(EpgData::getStartTime));
+                    if (!programmes.isEmpty()) {
+                        result.setList(programmes);
+                        return result;
+                    }
+                } catch (Exception error) {
+                    HttpCallScope.throwIfCancelled();
+                    if (source.getEpgXml().isEmpty()) throw error;
+                }
+            }
+        }
+        return EpgParser.getHistory(source, channel, date, zone);
     }
 
     private String requestString(String url, int timeout) throws Exception {

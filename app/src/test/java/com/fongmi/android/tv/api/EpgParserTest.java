@@ -22,6 +22,51 @@ import java.util.concurrent.Future;
 import static org.junit.Assert.*;
 
 public class EpgParserTest {
+    @Test public void historicalDatesUseProviderCalendarAndDeclaredDays() {
+        java.util.TimeZone zone = java.util.TimeZone.getTimeZone("Asia/Shanghai");
+        long now = Instant.parse("2026-10-16T17:30:00Z").toEpochMilli();
+        assertEquals(Arrays.asList("2026-10-16", "2026-10-15"), EpgDay.previousDates(zone, now, "2"));
+        assertTrue(EpgDay.previousDates(zone, now, "0").isEmpty());
+    }
+
+    @Test public void historicalDayEndsAtNextMidnightOnDstChange() throws Exception {
+        EpgDay day = new EpgDay("2026-03-08", java.util.TimeZone.getTimeZone("America/New_York"));
+        EpgData crossing = new EpgData();
+        crossing.setStartTime(Instant.parse("2026-03-09T03:45:00Z").toEpochMilli());
+        crossing.setEndTime(Instant.parse("2026-03-09T04:15:00Z").toEpochMilli());
+        assertTrue(day.contains(crossing));
+        crossing.setStartTime(Instant.parse("2026-03-09T04:00:00Z").toEpochMilli());
+        assertFalse(day.contains(crossing));
+    }
+
+    @Test public void historicalXmlIncludesMidnightOverlapAndUsesChannelAndDate() throws Exception {
+        Channel news = namedChannel("news", "News", "News");
+        Channel other = namedChannel("other", "Other", "Other");
+        Group group = new Group("Test");
+        group.setChannel(Arrays.asList(news, other));
+        Live live = new Live() { @Override public List<Group> getGroups() { return Arrays.asList(group); } };
+        java.nio.file.Path xml = java.nio.file.Files.createTempFile("historical-guide", ".xml");
+        try {
+            String payload = "<tv>"
+                    + "<programme channel='provider-news' start='20261015233000 +0800' stop='20261016003000 +0800'><title>Late</title></programme>"
+                    + "<programme channel='other' start='20261016100000 +0800' stop='20261016110000 +0800'><title>Other</title></programme>"
+                    + "<programme channel='provider-news' start='20261016230000 +0800' stop='20261017000000 +0800'><title>Evening</title></programme>"
+                    + "<programme channel='provider-news' start='20261017000000 +0800' stop='20261017010000 +0800'><title>Tomorrow</title></programme>"
+                    + "<channel id='provider-news'><display-name>News</display-name></channel></tv>";
+            java.nio.file.Files.write(xml, payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            java.util.TimeZone zone = java.util.TimeZone.getTimeZone("Asia/Shanghai");
+            Epg result = EpgParser.readHistory(xml.toFile(), live, news, "2026-10-16", zone);
+            Epg response = EpgParser.readHistory(payload, live, news, "2026-10-16", zone);
+            assertEquals(2, response.getList().size());
+            assertEquals("23:30", new com.google.gson.Gson().toJsonTree(response.getList().get(0)).getAsJsonObject().get("start").getAsString());
+            assertEquals(2, result.getList().size());
+            assertEquals(Instant.parse("2026-10-15T15:30:00Z").toEpochMilli(), result.getList().get(0).getStartTime());
+            assertEquals(Instant.parse("2026-10-16T15:00:00Z").toEpochMilli(), result.getList().get(1).getStartTime());
+        } finally {
+            java.nio.file.Files.deleteIfExists(xml);
+        }
+    }
+
     @Test public void emptyProviderIdRemainsAnAliasFallback() {
         Channel channel = new Channel();
         assertFalse(channel.hasTvgId());

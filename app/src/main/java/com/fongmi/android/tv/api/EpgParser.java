@@ -27,6 +27,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiPredicate;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 import okio.ByteString;
@@ -78,17 +80,69 @@ public class EpgParser {
     }
 
     public static boolean start(Live live, String url) throws Exception {
+        readXml(live, xmlFile(url));
+        return true;
+    }
+
+    private static File xmlFile(String url) throws Exception {
         HttpCallScope.throwIfCancelled();
         File file = Path.epg(cacheName(url));
         boolean refresh = shouldRefresh(file);
         if (refresh) Download.create(url, file).sync();
-        if (isGzip(file)) readGzip(live, file, refresh);
-        else readXml(live, file);
-        return true;
+        if (!isGzip(file)) return file;
+        File xml = Path.epg(file.getName() + ".xml");
+        prepareGzip(file, xml, refresh);
+        return xml;
     }
 
     static String cacheName(String url) {
         return ByteString.encodeUtf8(url.trim()).sha256().hex() + ".epg";
+    }
+
+    public static Epg getHistory(Live live, Channel channel, String date, TimeZone zone) throws Exception {
+        Epg result = Epg.create(channel.getTvgId(), date);
+        for (String url : live.getEpgXml()) {
+            try {
+                result.getList().addAll(readHistory(xmlFile(url), live, channel, date, zone).getList());
+            } catch (Exception error) {
+                HttpCallScope.throwIfCancelled();
+                error.printStackTrace();
+            }
+        }
+        result.setList(new ArrayList<>(new LinkedHashSet<>(result.getList())));
+        result.getList().sort(Comparator.comparingLong(EpgData::getStartTime));
+        return result;
+    }
+
+    static Epg readHistory(File file, Live live, Channel channel, String date, TimeZone zone) throws Exception {
+        try (FileInputStream input = new FileInputStream(file)) {
+            return readHistory(filePass(input), live, channel, date, zone);
+        }
+    }
+
+    public static Epg readHistory(String xml, Live live, Channel channel, String date, TimeZone zone) throws Exception {
+        return readHistory((channels, programmes) -> XmlTvReader.read(new StringReader(xml), channels, programmes),
+                live, channel, date, zone);
+    }
+
+    private static Epg readHistory(XmlPass pass, Live live, Channel channel, String date, TimeZone zone) throws Exception {
+        refreshFormats();
+        Epg result = Epg.create(channel.getTvgId(), date);
+        EpgDay day = new EpgDay(date, zone);
+        SimpleDateFormat time = createFormat("HH:mm", Locale.getDefault(), zone);
+        Map<String, Channel> index = prepareLiveChannels(live);
+        index.putIfAbsent(channel.getTvgId(), channel);
+        scanXml(pass, index, null, (target, programme) -> {
+            if (!channel.getTvgId().equals(target.getTvgId())) return false;
+            EpgData item = getEpgData(programme);
+            if (item == null || !day.contains(item)) return false;
+            item.setStart(time.format(new Date(item.getStartTime())));
+            item.setEnd(time.format(new Date(item.getEndTime())));
+            result.getList().add(item);
+            return true;
+        });
+        result.getList().sort(Comparator.comparingLong(EpgData::getStartTime));
+        return result;
     }
 
     public static Epg getEpg(String xml, String key) throws Exception {
@@ -128,12 +182,6 @@ public class EpgParser {
         return calendar.get(Calendar.YEAR) == today.get(Calendar.YEAR) && calendar.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR);
     }
 
-    private static void readGzip(Live live, File file, boolean refresh) throws Exception {
-        File xml = Path.epg(file.getName() + ".xml");
-        prepareGzip(file, xml, refresh);
-        readXml(live, xml);
-    }
-
     static void prepareGzip(File file, File xml, boolean refresh) throws IOException {
         HttpCallScope.throwIfCancelled();
         if (xml.exists() && !refresh && xml.lastModified() >= file.lastModified()) return;
@@ -148,35 +196,18 @@ public class EpgParser {
         HttpCallScope.throwIfCancelled();
         refreshFormats();
         FormatContext context = FORMAT_CONTEXT.get();
-        Map<String, Channel> liveChannelMap = prepareLiveChannels(live);
-        Map<String, List<XmlTvReader.Channel>> xmlChannelMap = new HashMap<>();
         Map<String, Epg> epgMap = new HashMap<>();
         Map<String, String> srcMap = new HashMap<>();
+        String today = FORMAT_DATE.get().format(new Date());
         try (FileInputStream input = new FileInputStream(file)) {
-            // Index late channel declarations; keep the same file open across cache replacements.
-            XmlTvReader.read(new BufferedInputStream(input), channel -> xmlChannelMap.computeIfAbsent(channel.id, k -> new ArrayList<>()).add(channel), null);
-            input.getChannel().position(0);
-            String today = FORMAT_DATE.get().format(new Date());
-            XmlTvReader.read(new BufferedInputStream(input), null, programme -> {
-                Channel channel = findTargetChannel(programme.channel, liveChannelMap, xmlChannelMap);
-                if (channel == null) return;
+            scanXml(filePass(input), prepareLiveChannels(live), srcMap, (channel, programme) -> {
                 Date startDate = parse(programme.start);
                 Date endDate = parse(programme.stop);
-                if (startDate == null || endDate == null) return;
-                boolean startToday = isToday(startDate.getTime(), context);
-                boolean endToday = isToday(endDate.getTime(), context);
-                if (!startToday && !endToday) return;
+                if (startDate == null || endDate == null) return false;
+                if (!isToday(startDate.getTime(), context) && !isToday(endDate.getTime(), context)) return false;
                 String key = channel.getTvgId();
                 epgMap.computeIfAbsent(key, k -> Epg.create(k, today)).getList().add(getEpgData(startDate, endDate, programme));
-                List<XmlTvReader.Channel> xmlChannels = xmlChannelMap.get(programme.channel);
-                if (xmlChannels != null) {
-                    for (XmlTvReader.Channel item : xmlChannels) {
-                        if (!item.logo.isEmpty()) {
-                            srcMap.putIfAbsent(key, item.logo);
-                            break;
-                        }
-                    }
-                }
+                return true;
             });
         }
         for (Group group : live.getGroups()) {
@@ -185,6 +216,34 @@ public class EpgParser {
                 merge(channel, epgMap.get(channel.getTvgId()), srcMap.get(channel.getTvgId()));
             }
         }
+    }
+
+    private interface XmlPass {
+        void read(XmlTvReader.Consumer<XmlTvReader.Channel> channels, XmlTvReader.Consumer<XmlTvReader.Programme> programmes) throws Exception;
+    }
+
+    private static XmlPass filePass(FileInputStream input) {
+        return (channels, programmes) -> {
+            // Rewind the same descriptor even if another request replaced the cache file.
+            input.getChannel().position(0);
+            XmlTvReader.read(new BufferedInputStream(input), channels, programmes);
+        };
+    }
+
+    private static void scanXml(XmlPass pass, Map<String, Channel> index, Map<String, String> logos,
+                                BiPredicate<Channel, XmlTvReader.Programme> accept) throws Exception {
+        Map<String, List<XmlTvReader.Channel>> channels = new HashMap<>();
+        pass.read(channel -> channels.computeIfAbsent(channel.id, k -> new ArrayList<>()).add(channel), null);
+        pass.read(null, programme -> {
+            Channel target = findTargetChannel(programme.channel, index, channels);
+            if (target == null || !accept.test(target, programme)) return;
+            if (logos == null || !channels.containsKey(programme.channel)) return;
+            for (XmlTvReader.Channel channel : channels.get(programme.channel)) {
+                if (channel.logo.isEmpty()) continue;
+                logos.putIfAbsent(target.getTvgId(), channel.logo);
+                break;
+            }
+        });
     }
 
     private static Map<String, Channel> prepareLiveChannels(Live live) {
