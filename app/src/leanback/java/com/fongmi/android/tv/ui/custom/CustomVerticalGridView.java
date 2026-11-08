@@ -21,7 +21,6 @@ public class CustomVerticalGridView extends VerticalGridView {
 
     private List<View> views;
     private boolean pressDown;
-    private boolean pressUp;
     private boolean moveTop;
 
     public CustomVerticalGridView(@NonNull Context context) {
@@ -44,11 +43,8 @@ public class CustomVerticalGridView extends VerticalGridView {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable ViewHolder child, int position, int subposition) {
                 if (pressDown && position == 1) hideHeader();
-                if (pressUp && position == 0) showHeader();
-                if (position >= 0) {
-                    pressDown = false;
-                    pressUp = false;
-                }
+                if (position == 0 && parent.hasFocus()) showHeader();
+                if (position >= 0) pressDown = false;
             }
         });
     }
@@ -82,7 +78,6 @@ public class CustomVerticalGridView extends VerticalGridView {
                 return true;
             }
         }
-        pressUp = KeyUtil.isUpKey(event);
         pressDown = KeyUtil.isDownKey(event);
         return super.dispatchKeyEvent(event);
     }
