@@ -89,20 +89,26 @@ public class EpgData {
     }
 
     public String format(String group) {
+        return format(group, TimeZone.getDefault());
+    }
+
+    String format(String group, TimeZone timeZone) {
         int open = group.indexOf('{');
         String token = group.substring(open + 1);
         if (token.startsWith("utc:")) return String.valueOf(getStartTime() / 1000);
         if (token.startsWith("utcend:")) return String.valueOf(getEndTime() / 1000);
         String pattern = extractPattern(group);
         if (pattern.isEmpty()) return "";
-        if (token.startsWith("(b)")) return formatTime(getStartTime(), pattern);
-        if (token.startsWith("(e)")) return formatTime(getEndTime(), pattern);
+        if (token.startsWith("(b)")) return formatTime(getStartTime(), pattern, timeZone);
+        if (token.startsWith("(e)")) return formatTime(getEndTime(), pattern, timeZone);
         return "";
     }
 
-    private String formatTime(long time, String pattern) {
+    private String formatTime(long time, String pattern, TimeZone timeZone) {
         if ("timestamp".equals(pattern)) return String.valueOf(time / 1000);
-        return new SimpleDateFormat(pattern, Locale.getDefault()).format(time);
+        SimpleDateFormat format = new SimpleDateFormat(pattern, Locale.getDefault());
+        format.setTimeZone(timeZone);
+        return format.format(time);
     }
 
     private String extractPattern(String group) {

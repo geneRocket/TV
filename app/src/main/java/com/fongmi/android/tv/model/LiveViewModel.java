@@ -15,6 +15,7 @@ import com.fongmi.android.tv.api.EpgDay;
 import com.fongmi.android.tv.api.LiveParser;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Channel;
+import com.fongmi.android.tv.bean.Catchup;
 import com.fongmi.android.tv.bean.Epg;
 import com.fongmi.android.tv.bean.EpgData;
 import com.fongmi.android.tv.bean.Group;
@@ -49,7 +50,7 @@ import okhttp3.ResponseBody;
 public class LiveViewModel extends ViewModel {
 
     private final TimeZone defaultTimeZone;
-    private volatile TimeZone currentTimeZone;
+    private volatile TimeZone sourceTimeZone;
 
     private final MutableLiveData<Channel> url;
     private final MutableLiveData<Boolean> xml;
@@ -63,7 +64,6 @@ public class LiveViewModel extends ViewModel {
 
     public LiveViewModel() {
         this.defaultTimeZone = TimeZone.getDefault();
-        this.currentTimeZone = defaultTimeZone;
         this.live = new MutableLiveData<>();
         this.epg = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
@@ -75,7 +75,7 @@ public class LiveViewModel extends ViewModel {
     }
 
     public void getLive(Live item) {
-        currentTimeZone = resolveTimeZone(item.getTimeZone(), item.getEpg(), defaultTimeZone);
+        sourceTimeZone = resolveTimeZone(item.getTimeZone(), item.getEpg(), null);
         submitLive(() -> {
             LiveParser.start(item.recent());
             verify(item);
@@ -104,7 +104,7 @@ public class LiveViewModel extends ViewModel {
     }
 
     public void getEpg(Channel item) {
-        TimeZone timeZone = resolveTimeZone(null, item.getEpg(), currentTimeZone);
+        TimeZone timeZone = epgTimeZone(item);
         String date = createDateFormat(timeZone).format(new Date());
         String epg = item.getEpg().replace("{date}", date);
         String url = epg.startsWith("file") ? epg : UrlUtil.normalize(epg, "");
@@ -122,12 +122,12 @@ public class LiveViewModel extends ViewModel {
     }
 
     public List<String> historyDates(Channel channel) {
-        TimeZone zone = resolveTimeZone(null, channel.getEpg(), currentTimeZone);
+        TimeZone zone = epgTimeZone(channel);
         return EpgDay.previousDates(zone, System.currentTimeMillis(), channel.getCatchup().getDays());
     }
 
     public void getHistoryEpg(Live source, Channel channel, String date, Consumer<Epg> delivery) {
-        TimeZone zone = resolveTimeZone(null, channel.getEpg(), currentTimeZone);
+        TimeZone zone = epgTimeZone(channel);
         HttpCallScope calls = new HttpCallScope();
         tasks.submit("epg-history", () -> calls.call(() -> loadHistory(source, channel, date, zone)),
                 Constant.TIMEOUT_EPG + Constant.TIMEOUT_EPG, delivery, error -> new Epg(), calls::close);
@@ -193,9 +193,10 @@ public class LiveViewModel extends ViewModel {
 
     public void getUrl(Channel item, EpgData data) {
         Channel request = snapshot(item);
+        TimeZone timeZone = epgTimeZone(request);
         request.setReplay(true);
         submitUrl(() -> {
-            request.setUrl(UrlUtil.normalize(request.getCatchup().format(request.getCurrent(), data), ""));
+            request.setUrl(UrlUtil.normalize(request.getCatchup().format(request.getCurrent(), data, timeZone), ""));
             return request;
         }, error -> urlFallback(request, error));
     }
@@ -207,6 +208,12 @@ public class LiveViewModel extends ViewModel {
         request.setMsg(item.getMsg());
         request.setSelected(item.isSelected());
         return request;
+    }
+
+    private TimeZone epgTimeZone(Channel channel) {
+        TimeZone zone = sourceTimeZone;
+        if (zone == null) zone = Catchup.defaultTimeZone(channel.getCurrent(), defaultTimeZone);
+        return resolveTimeZone(null, channel.getEpg(), zone);
     }
 
     private TimeZone resolveTimeZone(String value, String epg, TimeZone fallback) {

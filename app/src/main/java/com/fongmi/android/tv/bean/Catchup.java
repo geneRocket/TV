@@ -4,6 +4,7 @@ import com.fongmi.android.tv.utils.TextValues;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -126,11 +127,19 @@ public class Catchup {
     }
 
     public String format(String url, EpgData data) {
+        return format(url, data, defaultTimeZone(url, TimeZone.getDefault()));
+    }
+
+    public static TimeZone defaultTimeZone(String url, TimeZone deviceTimeZone) {
+        return url.contains("/PLTV/") ? TimeZone.getTimeZone("Asia/Shanghai") : deviceTimeZone;
+    }
+
+    public String format(String url, EpgData data, TimeZone timeZone) {
         String result = getSource();
         if (data.isInRange()) return url;
         Matcher matcher = TOKEN.matcher(result);
         StringBuffer formatted = new StringBuffer();
-        while (matcher.find()) matcher.appendReplacement(formatted, Matcher.quoteReplacement(data.format(matcher.group())));
+        while (matcher.find()) matcher.appendReplacement(formatted, Matcher.quoteReplacement(data.format(matcher.group(), timeZone)));
         result = matcher.appendTail(formatted).toString();
         return isDefault() ? result : format(url, result);
     }
