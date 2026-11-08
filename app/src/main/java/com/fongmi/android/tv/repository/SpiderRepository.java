@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import okhttp3.Call;
 import okhttp3.Response;
@@ -287,13 +288,31 @@ public class SpiderRepository {
     private Result fetchPic(Site site, Result result, java.util.function.Consumer<Call> callTracker) throws Exception {
         if (site.getType() > 2 || result.getList().isEmpty() || !result.getList().get(0).getVodPic().isEmpty()) return result;
         ArrayList<String> ids = new ArrayList<>();
-        if (site.getCategories().isEmpty()) for (Vod item : result.getList()) ids.add(item.getVodId());
-        else for (Vod item : result.getList()) if (site.getCategories().contains(item.getTypeName())) ids.add(item.getVodId());
+        List<Vod> listed = new ArrayList<>();
+        for (Vod item : result.getList()) {
+            if (!site.getCategories().isEmpty() && !site.getCategories().contains(item.getTypeName())) continue;
+            listed.add(item);
+            ids.add(item.getVodId());
+        }
         if (ids.isEmpty()) return result.clear();
         ArrayMap<String, String> params = new ArrayMap<>();
         params.put("ac", site.getType() == 0 ? "videolist" : "detail");
         params.put("ids", TextUtils.join(",", ids));
-        result.setList(Result.fromType(site.getType(), call(OkHttp.newCall(site.getApi(), site.getHeaders(), params), callTracker)).getList());
+        applyPictures(result, listed, Result.fromType(site.getType(), call(OkHttp.newCall(site.getApi(), site.getHeaders(), params), callTracker)).getList());
         return result;
+    }
+
+    static void applyPictures(Result result, List<Vod> listed, List<Vod> details) {
+        HashMap<String, String> pictures = new HashMap<>();
+        for (Vod item : details) {
+            if (!item.getVodId().isEmpty() && !item.getVodPic().isEmpty()) {
+                pictures.putIfAbsent(item.getVodId(), item.getVodPic());
+            }
+        }
+        for (Vod item : listed) {
+            String picture = pictures.get(item.getVodId());
+            if (picture != null && item.getVodPic().isEmpty()) item.setVodPic(picture);
+        }
+        result.setList(listed);
     }
 }

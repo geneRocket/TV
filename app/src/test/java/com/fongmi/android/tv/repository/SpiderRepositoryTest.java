@@ -10,6 +10,30 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.*;
 
 public class SpiderRepositoryTest {
+    @Test public void posterHydrationKeepsListingOrderAndMissingEntries() {
+        Vod first = vod("a", "");
+        Vod missing = vod("b", "");
+        Vod existing = vod("c", "original.jpg");
+        Result result = Result.empty();
+        SpiderRepository.applyPictures(result, Arrays.asList(first, missing, existing),
+                Arrays.asList(vod("c", "alternate.jpg"), vod("a", "a.jpg"), vod("unknown", "extra.jpg")));
+
+        assertEquals(3, result.getList().size());
+        assertSame(first, result.getList().get(0));
+        assertSame(missing, result.getList().get(1));
+        assertSame(existing, result.getList().get(2));
+        assertEquals("a.jpg", first.getVodPic());
+        assertEquals("", missing.getVodPic());
+        assertEquals("original.jpg", existing.getVodPic());
+    }
+
+    private static Vod vod(String id, String picture) {
+        Vod vod = new Vod();
+        vod.setVodId(id);
+        vod.setVodPic(picture);
+        return vod;
+    }
+
     @Test public void legacySpiderStillSearchesFirstPage() throws Exception {
         com.github.catvod.crawler.Spider spider = new com.github.catvod.crawler.Spider() {
             @Override public String searchContent(String key, boolean quick) {
