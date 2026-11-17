@@ -10,6 +10,10 @@ import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.hook.PackageManager;
 import com.google.gson.annotations.SerializedName;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
 public class Core extends PackageManager {
 
     @SerializedName("auth")
@@ -20,6 +24,10 @@ public class Core extends PackageManager {
     private String pass;
     @SerializedName("broker")
     private String broker;
+    @SerializedName("domain")
+    private String domain;
+    @SerializedName("option")
+    private List<Option> options;
     @SerializedName("resp")
     private String resp;
     @SerializedName("sign")
@@ -45,6 +53,14 @@ public class Core extends PackageManager {
         return TextUtils.isEmpty(broker) ? "" : broker;
     }
 
+    public String getDomain() {
+        return Objects.toString(domain, "");
+    }
+
+    public List<Option> getOptions() {
+        return options == null ? Collections.emptyList() : options;
+    }
+
     public String getResp() {
         return TextUtils.isEmpty(resp) ? "" : resp;
     }
@@ -58,7 +74,7 @@ public class Core extends PackageManager {
     }
 
     public String getSo() {
-        return TextUtils.isEmpty(so) ? "" : so;
+        return Objects.toString(so, "");
     }
 
     public boolean hook() {
@@ -77,6 +93,40 @@ public class Core extends PackageManager {
         if (this == obj) return true;
         if (!(obj instanceof Core)) return false;
         Core it = (Core) obj;
-        return getSo().equals(it.getSo());
+        return getSo().equals(it.getSo()) && getDomain().equals(it.getDomain()) && getOptions().equals(it.getOptions());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(getSo(), getDomain(), getOptions());
+    }
+
+    public static class Option {
+
+        @SerializedName("key")
+        private String key;
+        @SerializedName("values")
+        private List<String> values;
+
+        public String getKey() {
+            return Objects.toString(key, "");
+        }
+
+        public List<String> getValues() {
+            return values == null ? Collections.emptyList() : values;
+        }
+
+        @Override
+        public boolean equals(@Nullable Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof Option)) return false;
+            Option other = (Option) obj;
+            return getKey().equals(other.getKey()) && getValues().equals(other.getValues());
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(getKey(), getValues());
+        }
     }
 }

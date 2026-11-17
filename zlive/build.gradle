@@ -15,5 +15,6 @@ android {
 }
 
 dependencies {
-    api 'net.java.dev.jna:jna:5.6.0'
+    // Keep jniLibs/armeabi-v7a/libjnidispatch.so from the AAR of the same JNA release.
+    api 'net.java.dev.jna:jna:5.19.1'
 }

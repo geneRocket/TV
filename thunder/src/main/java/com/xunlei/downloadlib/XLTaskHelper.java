@@ -52,12 +52,14 @@ public class XLTaskHelper {
     }
 
     public synchronized GetTaskId parse(String url, File savePath) {
+        url = ThunderUrl.normalize(url);
+        if (url == null) return new GetTaskId(savePath);
         if (url.startsWith("file://")) return new GetTaskId(url, savePath);
-        if (url.startsWith("thunder://")) url = getManager().parserThunderUrl(url);
+        if (url.startsWith("thunder://")) url = ThunderUrl.normalize(getManager().parserThunderUrl(url));
         if (url == null) return new GetTaskId(savePath);
         String fileName = getManager().getFileNameFromUrl(url);
         GetTaskId taskId = new GetTaskId(savePath, fileName, url);
-        if (!url.startsWith("magnet:?")) return taskId;
+        if (!url.startsWith(ThunderUrl.MAGNET_QUERY)) return taskId;
         MagnetTaskParam param = new MagnetTaskParam();
         param.setFilePath(savePath.getAbsolutePath());
         param.setFileName(fileName);

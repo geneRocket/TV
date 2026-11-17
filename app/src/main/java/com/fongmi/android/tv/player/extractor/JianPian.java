@@ -40,16 +40,22 @@ public class JianPian implements Source.Extractor {
 
     private void start(String url) throws Exception {
         String lastPath = path;
-        path = URLDecoder.decode(url, "UTF-8").split("\\|")[0];
-        path = path.replace("jianpian://pathtype=url&path=", "");
-        path = path.replace("tvbox-xg://", "").replace("tvbox-xg:", "");
-        path = path.replace("xg://", "ftp://").replace("xgplay://", "ftp://");
+        path = decodePath(url);
         boolean isDiff = lastPath != null && !lastPath.equals(path);
         if (isDiff) p2p.P2Pdoxdel(lastPath.getBytes("GBK"));
         p2p.P2Pdoxstart(path.getBytes("GBK"));
         if (lastPath == null || isDiff) p2p.P2Pdoxadd(path.getBytes("GBK"));
         if (isDiff && pathPaused.containsKey(lastPath)) pathPaused.remove(lastPath);
         pathPaused.put(path, false);
+    }
+
+    static String decodePath(String url) throws java.io.UnsupportedEncodingException {
+        int end = url.indexOf('|');
+        String path = end < 0 ? url : url.substring(0, end);
+        return URLDecoder.decode(path.replace("+", "%2B"), "UTF-8")
+                .replaceFirst("(?i)^jianpian://pathtype=url&path=", "")
+                .replaceFirst("(?i)^tvbox-xg:(?://)?", "")
+                .replaceFirst("(?i)^xg(?:play)?://", "ftp://");
     }
 
     @Override

@@ -71,6 +71,24 @@ public class TVCore {
         }
     }
 
+    public TVCore domain(String value) {
+        try {
+            if (!value.isEmpty()) setDomainSuffix(handle, value);
+        } catch (UnsatisfiedLinkError ignored) {
+            // The optional setter is absent in older cores.
+        }
+        return this;
+    }
+
+    public void option(String key, String value) {
+        if (key.isEmpty() || value == null || value.isEmpty()) return;
+        try {
+            setOption(handle, key, value);
+        } catch (UnsatisfiedLinkError ignored) {
+            // The optional setter is absent in older cores.
+        }
+    }
+
     public TVCore name(String str) {
         try {
             if (str.length() > 0) setUsername(handle, str);
@@ -141,6 +159,10 @@ public class TVCore {
     private native void setRunningMode(long handle, int mode);
 
     private native void setAuthUrl(long handle, String str);
+
+    private native void setDomainSuffix(long handle, String value);
+
+    private native void setOption(long handle, String key, String value);
 
     private native void setMKBroker(long handle, String str);
 
