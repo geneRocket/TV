@@ -25,6 +25,11 @@ public abstract class ConfigDao extends BaseDao<Config> {
     @Query("SELECT * FROM Config WHERE url = :url AND type = :type")
     public abstract Config find(String url, int type);
 
+    @Query("UPDATE OR IGNORE Config SET url = :url, name = :name, "
+            + "json = CASE WHEN url = :url THEN json ELSE '' END, "
+            + "time = CASE WHEN url = :url THEN time ELSE 0 END WHERE url = :previousUrl AND type = :type")
+    public abstract int edit(String previousUrl, String url, String name, int type);
+
     @Query("DELETE FROM Config WHERE url = :url AND type = :type")
     public abstract void delete(String url, int type);
 

@@ -57,4 +57,22 @@ public class ScopedPersistenceTest {
         assertEquals(Arrays.asList(1,2),scope.ids());
         try { scope.ids().clear(); fail(); } catch(UnsupportedOperationException expected) { }
     }
+
+    @Test public void deletingHistoryKeepsADifferentWorkWithTheSameTitle() {
+        MemoryPersistence db = new MemoryPersistence();
+        HistoryStorage storage = storage(db, new ArrayList<>(), new AtomicInteger());
+        History first = MemoryPersistence.entry(10, "film-1933", 120000);
+        first.setVodName("King Kong");
+        first.setDuration(100 * 60000L);
+        History second = MemoryPersistence.entry(20, "film-2005", 180000);
+        second.setVodName("King Kong");
+        second.setDuration(187 * 60000L);
+        storage.save(first);
+        storage.save(second);
+
+        storage.delete(first, new PersistenceScope(10, java.util.Arrays.asList(10, 20)));
+
+        assertNull(db.history.find(10, first.getKey()));
+        assertEquals(180000L, db.history.find(20, second.getKey()).getPosition());
+    }
 }

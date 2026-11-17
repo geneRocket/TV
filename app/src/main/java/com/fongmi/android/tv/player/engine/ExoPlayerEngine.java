@@ -71,7 +71,7 @@ public final class ExoPlayerEngine implements PlayerEngine, Player.Listener {
     @Override public void pause() {
         requireActive();
         player.pause();
-        if (phase != EnginePhase.PAUSED) {
+        if (player.getPlaybackState() == Player.STATE_READY && phase != EnginePhase.PAUSED) {
             phase = EnginePhase.PAUSED;
             emit(null);
         }

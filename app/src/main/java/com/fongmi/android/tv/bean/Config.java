@@ -13,6 +13,7 @@ import androidx.room.PrimaryKey;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.db.dao.ConfigDao;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Prefers;
@@ -425,7 +426,15 @@ public class Config {
     public static Config find(String url, int type) {
         Config item = URL_CACHE.get(cacheKey(url, type));
         if (item == null) item = cache(AppDatabase.get().getConfigDao().find(url, type));
-        return item == null ? copy(create(type, url)) : copy(item).type(type);
+        return item == null ? copy(create(type, url)) : copy(item);
+    }
+
+    public static boolean edit(String previousUrl, String url, String name, int type) {
+        ConfigDao dao = AppDatabase.get().getConfigDao();
+        if (dao.edit(previousUrl, url, name, type) == 0) return false;
+        if (!previousUrl.equals(url)) removeCache(previousUrl, type);
+        cache(dao.find(url, type));
+        return true;
     }
 
     public static Config find(String url, String name, int type) {

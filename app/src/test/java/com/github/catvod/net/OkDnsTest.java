@@ -20,6 +20,13 @@ public class OkDnsTest {
         assertEquals(Dns.SYSTEM.lookup("127.0.0.1"), dns.lookup("stream.invalid"));
     }
 
+    @Test public void literalHostOverridesWorkWithDohEnabled() throws Exception {
+        OkDns dns = new OkDns();
+        dns.addAll(Collections.singletonList("stream.invalid=127.0.0.1"));
+        dns.setDoh(endpoint("https://127.0.0.1:1/dns-query"));
+        assertEquals(Dns.SYSTEM.lookup("127.0.0.1"), dns.lookup("stream.invalid"));
+    }
+
     private static Doh endpoint(String url) {
         return new Doh() {
             @Override public String getUrl() {

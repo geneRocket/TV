@@ -19,6 +19,9 @@ import com.github.catvod.net.OkHttp;
 
 import java.io.InputStream;
 
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+
 @GlideModule
 public class OkHttpGlideModule extends AppGlideModule {
 
@@ -31,6 +34,27 @@ public class OkHttpGlideModule extends AppGlideModule {
 
     @Override
     public void registerComponents(@NonNull Context context, @NonNull Glide glide, @NonNull Registry registry) {
-        registry.replace(GlideUrl.class, InputStream.class, new OkHttpUrlLoader.Factory(OkHttp.client()));
+        registry.replace(GlideUrl.class, InputStream.class, new OkHttpUrlLoader.Factory(imageClient(OkHttp.client())));
+    }
+
+    static OkHttpClient imageClient(OkHttpClient client) {
+        return client.newBuilder()
+                .addInterceptor(chain -> {
+                    Request original = chain.request();
+                    return chain.proceed(original.newBuilder().tag(Request.class, original).build());
+                })
+                .addNetworkInterceptor(chain -> {
+                    Request request = chain.request();
+                    Request original = request.tag(Request.class);
+                    if (original == null || UrlUtil.sameOrigin(original.url(), request.url())) return chain.proceed(request);
+                    Request.Builder redirected = request.newBuilder();
+                    for (String name : original.headers().names()) {
+                        if (original.headers().values(name).equals(request.headers().values(name))) {
+                            redirected.removeHeader(name);
+                        }
+                    }
+                    return chain.proceed(redirected.build());
+                })
+                .build();
     }
 }

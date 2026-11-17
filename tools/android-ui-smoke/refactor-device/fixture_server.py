@@ -17,7 +17,7 @@ class Fixtures(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split('?', 1)[0]
-        base = 'http://127.0.0.1:18765'
+        base = f'http://127.0.0.1:{self.server.server_port}'
         if path == '/danmaku-load-counts':
             with self.lock:
                 counts = {'/danmaku-load.xml': self.counts.get('/danmaku-load.xml', 0)}

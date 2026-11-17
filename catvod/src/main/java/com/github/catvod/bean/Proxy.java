@@ -60,7 +60,7 @@ public class Proxy implements Comparable<Proxy> {
 
     private java.net.Proxy create(String url) {
         Uri uri = Uri.parse(url);
-        if (uri.getScheme() == null || uri.getHost() == null || uri.getPort() <= 0) return null;
+        if (uri.getScheme() == null || uri.getHost() == null || uri.getPort() <= 0 || uri.getPort() > 65535) return null;
         if (uri.getScheme().startsWith("http")) return new java.net.Proxy(java.net.Proxy.Type.HTTP, InetSocketAddress.createUnresolved(uri.getHost(), uri.getPort()));
         if (uri.getScheme().startsWith("socks")) return new java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress.createUnresolved(uri.getHost(), uri.getPort()));
         return null;

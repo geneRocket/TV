@@ -4,6 +4,9 @@ import androidx.annotation.NonNull;
 
 import com.github.catvod.bean.Doh;
 import com.github.catvod.utils.Util;
+import com.google.common.net.InetAddresses;
+
+import java.util.Collections;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -51,7 +54,9 @@ public class OkDns implements Dns {
     @NonNull
     @Override
     public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
+        String target = get(hostname);
+        if (InetAddresses.isInetAddress(target)) return Collections.singletonList(InetAddresses.forString(target));
         Dns resolver = doh;
-        return (resolver != null ? resolver : Dns.SYSTEM).lookup(get(hostname));
+        return (resolver != null ? resolver : Dns.SYSTEM).lookup(target);
     }
 }

@@ -73,6 +73,7 @@ public final class VodPlaybackResolver implements PlaybackResolver, AutoCloseabl
                 finish(task);
                 return;
             }
+            callback.onParsing();
             sourceResolver.resolve(result, useParse.test(result), false, new PlaybackSourceResolver.Callback() {
                 @Override public void onResolved(ResolvedMedia media) {
                     if (closed || task.cancelled) {

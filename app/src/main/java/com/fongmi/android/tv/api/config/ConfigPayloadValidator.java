@@ -63,10 +63,37 @@ final class ConfigPayloadValidator {
                     || key.equals("rules") || key.equals("doh") || key.equals("headers") || key.equals("proxy");
             for (JsonElement entry : value.getAsJsonArray()) {
                 if (objects ? !entry.isJsonObject() : !entry.isJsonPrimitive()) throw invalid();
+                if (key.equals("proxy")) validateProxy(entry.getAsJsonObject());
             }
             found = true;
         }
         return found;
+    }
+
+    private static void validateProxy(JsonObject rule) {
+        for (String key : new String[]{"hosts", "urls"}) {
+            JsonElement value = rule.get(key);
+            if (value == null || value.isJsonNull()) continue;
+            if (!value.isJsonArray()) throw invalid();
+            for (JsonElement entry : value.getAsJsonArray()) {
+                if (!entry.isJsonPrimitive() || !entry.getAsJsonPrimitive().isString()
+                        || entry.getAsString().trim().isEmpty()) throw invalid();
+                if (key.equals("urls")) {
+                    try {
+                        java.net.URI url = java.net.URI.create(entry.getAsString());
+                        String authority = url.getRawAuthority();
+                        if (authority == null) throw invalid();
+                        int colon = authority.lastIndexOf(':');
+                        if (colon > Math.max(authority.lastIndexOf('@'), authority.lastIndexOf(']'))) {
+                            String port = authority.substring(colon + 1);
+                            if (!port.matches("[0-9]+") || Long.parseLong(port) > 65535) throw invalid();
+                        }
+                    } catch (IllegalArgumentException error) {
+                        throw invalid();
+                    }
+                }
+            }
+        }
     }
 
     private static IllegalStateException invalid() {

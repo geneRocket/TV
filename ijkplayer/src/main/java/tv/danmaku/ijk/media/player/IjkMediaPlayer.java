@@ -165,9 +165,27 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private int mVideoSarNum;
     private int mVideoSarDen;
 
+    private static boolean legacyLibrary;
+
     private static final IjkLibLoader LOADER = new IjkLibLoader("ijkffmpeg", "ijksdl", "ijkplayer") {
         @Override
         protected void loadLibrary(@NonNull String name) {
+            if ("ijkplayer".equals(name)) {
+                // ARM ships the original full demuxer and decoder set. x86 uses the GSY build.
+                try {
+                    System.loadLibrary("player");
+                    legacyLibrary = true;
+                    return;
+                } catch (UnsatisfiedLinkError legacyError) {
+                    try {
+                        System.loadLibrary(name);
+                        return;
+                    } catch (UnsatisfiedLinkError error) {
+                        error.addSuppressed(legacyError);
+                        throw error;
+                    }
+                }
+            }
             System.loadLibrary(name);
         }
     };
@@ -177,6 +195,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private static void initNativeOnce() {
         if (mIsNativeInitialized) return;
         native_init();
+        if (legacyLibrary) native_setDot(0);
         native_setLogLevel(IjkMediaPlayer.IJK_LOG_SILENT);
         mIsNativeInitialized = true;
     }
@@ -479,6 +498,9 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
     @Override
     public native long getCurrentPosition();
+
+    // Registered by the legacy ARM JNI library.
+    public native boolean getCurrentFrame(Bitmap bitmap);
 
     @Override
     public native long getDuration();
@@ -977,5 +999,9 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     public static native void native_profileEnd();
 
     public static native void native_setLogLevel(int level);
+
+    public static native void native_setReqLevel(int level);
+
+    public static native void native_setDot(int port);
 
 }

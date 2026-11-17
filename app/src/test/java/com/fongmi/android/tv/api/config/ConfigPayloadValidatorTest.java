@@ -110,4 +110,10 @@ public class ConfigPayloadValidatorTest {
             fail("Accepted invalid payload: " + text);
         } catch (IllegalStateException expected) { }
     }
+
+    @Test(expected = IllegalStateException.class)
+    public void proxyWithOutOfRangePortCannotPublish() {
+        ConfigPayloadValidator.vod(com.google.gson.JsonParser.parseString(
+                "{\"sites\":[],\"proxy\":[{\"hosts\":[\"example.com\"],\"urls\":[\"http://localhost:65536\"]}]}").getAsJsonObject());
+    }
 }

@@ -483,6 +483,11 @@ public class SettingFragment extends BaseFragment implements BackupCallback, Con
         PermissionX.init(this).permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE).request((allGranted, grantedList, deniedList) -> {
             if (allGranted) AppDatabase.backup(new Callback() {
                 @Override
+                public void error(String msg) {
+                    Notify.show(msg);
+                }
+
+                @Override
                 public void success(String path) {
                     Notify.show(R.string.backed);
                 }

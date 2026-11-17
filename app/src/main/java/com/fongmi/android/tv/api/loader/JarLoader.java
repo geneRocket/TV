@@ -123,15 +123,15 @@ public class JarLoader {
         return null;
     }
 
-    private File download(String url, String md5) {
+    private void download(String url, File file, String md5) {
         try {
             try (Response response = OkHttp.newCall(url).execute()) {
-                if (!response.isSuccessful() || response.body() == null) return Path.jar(url);
-                JarCache.replace(Path.jar(url), response.body().bytes(), md5);
-                return Path.jar(url);
+                if (response.isSuccessful() && response.body() != null) {
+                    JarCache.replace(file, response.body().bytes(), md5);
+                }
             }
-        } catch (Exception e) {
-            return Path.jar(url);
+        } catch (Exception error) {
+            ThreadPools.log(error, "JAR download failed.");
         }
     }
 
@@ -142,14 +142,14 @@ public class JarLoader {
         String md5Url = texts.length > 1 ? texts[1].trim() : "";
         String jarUrl = texts[0];
         Object lock = lockFor(key);
-        
+
         File file = Path.jar(jarUrl);
-        if (file.exists() && file.length() > 0) {
+        if (md5Url.isEmpty() && file.isFile() && file.length() > 0) {
             synchronized (lock) {
                 if (!ownsLock(key, lock)) return;
                 if (!loaders.containsKey(key)) load(key, file, lock);
             }
-            if (jarUrl.startsWith("http")) ThreadPools.loader().execute(() -> checkUpdate(jarUrl, md5Url));
+            if (jarUrl.startsWith("http")) ThreadPools.loader().execute(() -> download(jarUrl, file, ""));
             return;
         }
 
@@ -157,27 +157,41 @@ public class JarLoader {
             if (!ownsLock(key, lock)) return;
             if (loaders.containsKey(key)) return;
             String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
-            if (md5.length() > 0 && Util.equals(jarUrl, md5)) {
-                load(key, Path.jar(jarUrl), lock);
-            } else if (jarUrl.startsWith("img+")) {
-                load(key, Decoder.getSpider(jarUrl), lock);
-            } else if (jarUrl.startsWith("http")) {
-                load(key, download(jarUrl, md5), lock);
-            } else if (jarUrl.startsWith("file")) {
-                load(key, Path.local(jarUrl), lock);
+            if (jarUrl.startsWith("http")) {
+                loadHttpJar(key, jarUrl, md5Url, md5, file, lock);
+            } else if (jarUrl.startsWith("img+") || jarUrl.startsWith("file")) {
+                File local = jarUrl.startsWith("img+") ? Decoder.getSpider(jarUrl) : Path.local(jarUrl);
+                if (md5Url.isEmpty() || (!md5.isEmpty() && Util.md5(local).equalsIgnoreCase(md5))) {
+                    load(key, local, lock);
+                }
             } else {
                 String converted = UrlUtil.convert(jarUrl);
-                if (ownsLock(key, lock) && !jarUrl.equals(converted)) parseJar(key, converted);
+                if (ownsLock(key, lock) && !jarUrl.equals(converted)) {
+                    parseJar(key, md5Url.isEmpty() ? converted : converted + ";md5;" + md5Url);
+                }
             }
         }
     }
 
-    private void checkUpdate(String jarUrl, String md5Url) {
-        try {
-            String md5 = md5Url.startsWith("http") ? OkHttp.string(md5Url, 5000).trim() : md5Url;
-            if (md5.length() > 0 && Util.equals(jarUrl, md5)) return;
-            download(jarUrl, md5);
-        } catch (Throwable ignored) {
+    private void loadHttpJar(String key, String url, String checksumUrl, String checksum, File unpinned, Object lock) {
+        if (checksumUrl.isEmpty()) {
+            download(url, unpinned, "");
+            load(key, unpinned, lock);
+            return;
+        }
+        File verified = Path.jar(url + ";md5;" + checksumUrl);
+        if (checksum.isEmpty()) {
+            // Only the cache for this descriptor was previously checked against its digest.
+            load(key, verified, lock);
+            return;
+        }
+        if (!Util.md5(verified).equalsIgnoreCase(checksum)) {
+            download(url, verified, checksum);
+        }
+        if (Util.md5(verified).equalsIgnoreCase(checksum)) {
+            load(key, verified, lock);
+        } else if (Util.md5(unpinned).equalsIgnoreCase(checksum)) {
+            load(key, unpinned, lock);
         }
     }
 

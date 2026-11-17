@@ -78,6 +78,7 @@ android {
     }
 
     compileOptions {
+        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
@@ -89,6 +90,7 @@ android {
     }
 
     android.applicationVariants.all { variant ->
+        if (variant.buildType.name != 'release') return
         variant.mergeAssetsProvider.configure { task ->
             task.doLast {
                 delete(fileTree(dir: task.outputDir, includes: ['x5.tbs.apk']))
@@ -108,6 +110,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     implementation project(':core')
     implementation project(':hook')
     implementation project(':tvbus')
@@ -186,6 +189,7 @@ tasks.register('verifyRefactor') {
     description = 'Runs the regression checks required by the app refactor.'
     dependsOn(
             ':core:test',
+            ':catvod:testDebugUnitTest',
             ':chaquo:testPythonBridge',
             ':quickjs:testDebugUnitTest',
             ':ijkplayer:testDebugUnitTest',

@@ -34,7 +34,8 @@ public final class EngineRequest {
         this.format = format;
         this.drm = drm;
         this.subtitles = Collections.unmodifiableList(new ArrayList<>(subtitles == null ? Collections.emptyList() : subtitles));
-        this.startPosition = Math.max(startPosition, 0);
+        this.startPosition = startPosition == androidx.media3.common.C.TIME_UNSET
+                ? startPosition : Math.max(startPosition, 0);
         this.forceLive = forceLive;
         this.playWhenReady = playWhenReady;
     }

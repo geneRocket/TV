@@ -2085,7 +2085,24 @@ public class M3u8AdFilterTest {
         return readFixture(path);
     }
 
+    private static final java.util.Map<String, String> FIXTURE_ALIASES = java.util.Map.ofEntries(
+            java.util.Map.entry("/m3u8/live/odyssey-01-live.m3u8", "/m3u8/real/odyssey-01.m3u8"),
+            java.util.Map.entry("/m3u8/live/odyssey-03-live.m3u8", "/m3u8/real/odyssey-01.m3u8"),
+            java.util.Map.entry("/m3u8/live/odyssey-04-live.m3u8", "/m3u8/real/odyssey-04.m3u8"),
+            java.util.Map.entry("/m3u8/live/odyssey-05-live.m3u8", "/m3u8/real/odyssey-05.m3u8"),
+            java.util.Map.entry("/m3u8/live/odyssey-06-live.m3u8", "/m3u8/real/odyssey-06.m3u8"),
+            java.util.Map.entry("/m3u8/live/odyssey-09-live.m3u8", "/m3u8/real/odyssey-09.m3u8"),
+            java.util.Map.entry("/m3u8/real/chimi-16.m3u8", "/m3u8/real/chimi-14.m3u8"),
+            java.util.Map.entry("/m3u8/real/odyssey-03.m3u8", "/m3u8/real/odyssey-01.m3u8"),
+            java.util.Map.entry("/m3u8/research/ffzy-20260926.m3u8", "/m3u8/real/real-feifan.m3u8"),
+            java.util.Map.entry("/m3u8/research/ruyi-dense-20260926.m3u8", "/m3u8/real/real-ruyi.m3u8"),
+            java.util.Map.entry("/m3u8/tvbox/tvbox-baidu-2.m3u8", "/m3u8/tvbox/tvbox-baidu.m3u8"),
+            java.util.Map.entry("/m3u8/tvbox/tvbox-feifan-2.m3u8", "/m3u8/tvbox/tvbox-dytt.m3u8"),
+            java.util.Map.entry("/m3u8/tvbox/tvbox-feifan.m3u8", "/m3u8/tvbox/tvbox-dytt.m3u8"),
+            java.util.Map.entry("/m3u8/tvbox/tvbox-uku-2.m3u8", "/m3u8/tvbox/tvbox-uku.m3u8"));
+
     private static String readFixture(String path) throws IOException {
+        path = FIXTURE_ALIASES.getOrDefault(path, path);
         try (InputStream input = M3u8AdFilterTest.class.getResourceAsStream(path)) {
             if (input == null) throw new IOException("Missing test resource: " + path);
             ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -2106,5 +2123,22 @@ public class M3u8AdFilterTest {
             this.baseUrl = baseUrl == null ? "https://fixture.invalid/" + name : baseUrl;
             this.adUris = adUris;
         }
+    }
+
+    @Test public void overlappingCueAndDateRangeRemoveTheAdOnlyOnce() {
+        String playlist = "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:5\n#EXT-X-PLAYLIST-TYPE:VOD\n"
+                + "#EXT-X-PROGRAM-DATE-TIME:2026-10-11T00:00:00Z\n"
+                + segment(5, "content-before.ts")
+                + "#EXT-X-DATERANGE:ID=\"break\",CLASS=\"ad\",START-DATE=\"2026-10-11T00:00:05Z\",DURATION=10\n"
+                + "#EXT-X-CUE-OUT:DURATION=10\n"
+                + segment(5, "break-first.ts") + segment(5, "break-second.ts")
+                + segment(5, "content-after-1.ts") + segment(5, "content-after-2.ts")
+                + segment(5, "content-after-3.ts") + "#EXT-X-ENDLIST\n";
+        String result = new String(M3u8AdFilter.filterMinorHost(playlist.getBytes(StandardCharsets.UTF_8),
+                "https://media.example/video/playlist.m3u8"), StandardCharsets.UTF_8);
+        assertFalse(result.contains("break-first.ts"));
+        assertFalse(result.contains("break-second.ts"));
+        assertTrue(result.contains("content-after-1.ts"));
+        assertTrue(result.contains("content-after-2.ts"));
     }
 }

@@ -36,7 +36,10 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     private long opening;
     private boolean closed;
     private com.fongmi.android.tv.utils.TaskScheduler timeoutScheduler;
-    private long timeoutMillis;
+    private long resolveTimeoutMillis;
+    private java.util.function.LongSupplier prepareTimeoutMillis;
+    private boolean resolveDeadline;
+    private boolean parsing;
     private Runnable timeoutTask;
     private long timeoutGeneration;
     private boolean playWhenReady = true;
@@ -64,10 +67,16 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         this.sessionSubscription = subscription;
     }
 
-    public synchronized void configureTimeout(com.fongmi.android.tv.utils.TaskScheduler scheduler, long millis) {
+    public void configureTimeout(com.fongmi.android.tv.utils.TaskScheduler scheduler, long millis) {
+        configureTimeout(scheduler, millis, () -> millis);
+    }
+
+    public synchronized void configureTimeout(com.fongmi.android.tv.utils.TaskScheduler scheduler,
+                                              long resolveMillis, java.util.function.LongSupplier prepareMillis) {
         clearTimeout();
         timeoutScheduler = scheduler;
-        timeoutMillis = Math.max(1, millis);
+        resolveTimeoutMillis = resolveMillis;
+        prepareTimeoutMillis = prepareMillis;
     }
 
     public synchronized void clearTimeout() {
@@ -84,10 +93,14 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
     }
 
     private void updateTimeout(VodPlaybackPhase phase) {
-        boolean waiting = phase == VodPlaybackPhase.RESOLVING || phase == VodPlaybackPhase.PREPARING
-                || phase == VodPlaybackPhase.BUFFERING;
-        if (!waiting) { clearTimeout(); return; }
-        if (timeoutScheduler == null || timeoutTask != null) return;
+        boolean resolving = phase == VodPlaybackPhase.RESOLVING;
+        boolean waiting = resolving || phase == VodPlaybackPhase.PREPARING || phase == VodPlaybackPhase.BUFFERING;
+        if (!waiting || !playbackAllowed || (resolving && parsing)) { clearTimeout(); return; }
+        if (timeoutScheduler == null || (timeoutTask != null && resolveDeadline == resolving)) return;
+        clearTimeout();
+        long timeoutMillis = resolving ? resolveTimeoutMillis : prepareTimeoutMillis.getAsLong();
+        if (timeoutMillis <= 0) return;
+        resolveDeadline = resolving;
         long expected = requestId;
         long timer = timeoutGeneration;
         timeoutTask = () -> {
@@ -174,6 +187,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         long currentPosition = state.getEpisode() == null ? -1 : currentPosition();
         long currentRequest = ++requestId;
         pendingRequestId = currentRequest;
+        parsing = false;
         acceptingSession = false;
         cancelResolve();
         // Stop only after capturing progress and invalidating old callbacks. A
@@ -189,6 +203,7 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         if (closed || currentRequest != requestId) return;
         try {
             ResolveHandle handle = resolver.resolve(new ResolveRequest(currentRequest, episode.getSiteKey(), episode.getFlag(), episode.getResolverUrl()), new PlaybackResolver.Callback() {
+                @Override public void onParsing() { beginParsing(currentRequest); }
                 @Override public void onResolved(ResolveResult result) { applyResolved(currentRequest, episode, index, startPosition, result); }
                 @Override public void onFailure(ResolveFailure failure) { applyFailure(currentRequest, episode, index, failure); }
             });
@@ -205,6 +220,12 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
                 publish(new VodPlaybackState(VodPlaybackPhase.ERROR, episode, index, startPosition, -1, error));
             }
         }
+    }
+
+    private synchronized void beginParsing(long request) {
+        if (pendingRequestId != request || requestId != request || closed) return;
+        parsing = true;
+        clearTimeout();
     }
 
     public synchronized boolean next() {
@@ -291,6 +312,8 @@ public final class VodPlaybackCoordinator implements AutoCloseable {
         requireOpen();
         if (playbackAllowed == allowed) return;
         playbackAllowed = allowed;
+        if (allowed) updateTimeout(state.getPhase());
+        else clearTimeout();
         // Another playback owner can release the delegate before Activity teardown/recreation.
         if (session.state().getPhase() == PlaybackPhase.RELEASED) return;
         if (!allowed) session.pause();

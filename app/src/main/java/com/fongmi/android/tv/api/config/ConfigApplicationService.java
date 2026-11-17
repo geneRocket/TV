@@ -4,6 +4,7 @@ import com.fongmi.android.tv.Setting;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.repository.ConfigRepository;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.ThreadPools;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
@@ -80,12 +81,23 @@ final class ConfigApplicationService {
         if (!vod.loadsLive() || !object.has("lives") || object.get("lives").isJsonNull()) return null;
         List<String> urls = vod.getLoadUrls();
         if (urls.isEmpty()) urls = Collections.singletonList(vod.getConfig().getUrl());
-        boolean sync = false;
+        String savedSelection = Setting.getLiveConfigUrls();
+        List<String> selected = ConfigUrlParser.parse(savedSelection);
+        if (selected.isEmpty()) {
+            String saved = current.getConfig().isEmpty() ? Config.live().getUrl() : current.getConfig().getUrl();
+            if (!saved.isEmpty()) selected = Collections.singletonList(saved);
+        }
+        boolean inherited = !savedSelection.isEmpty() && savedSelection.equals(Setting.getInheritedLiveUrls());
+        if (!inherited && !selected.isEmpty() && !(urls.containsAll(selected) && selected.containsAll(urls))) return null;
+        boolean sync = inherited;
         for (String url : urls) if (current.needSync(url)) { sync = true; break; }
         if (!sync) return null;
         try {
             Config owner = ConfigRepository.get().find(vod.getConfig(), 1).save();
             LiveConfig candidate = LiveConfig.inherit(owner, object);
+            if (!inherited && !selected.isEmpty()) {
+                return new LinkedLive(candidate, Collections.emptyList(), Collections.emptyList());
+            }
             List<String> values = new ArrayList<>(), names = new ArrayList<>();
             for (String url : urls) {
                 if (url == null || url.isEmpty() || values.contains(url)) continue;
@@ -107,9 +119,9 @@ final class ConfigApplicationService {
         }
         void saveSelection() {
             if (urls.isEmpty()) return;
-            Setting.putLiveConfigUrls(android.text.TextUtils.join("\n", urls));
-            Setting.putLiveConfigDesc(names.size() == 1 ? names.get(0) : names.size() == 2
-                    ? names.get(0) + " + " + names.get(1) : names.get(0) + " +" + (names.size() - 1));
+            String description = names.size() == 1 ? names.get(0) : names.size() == 2
+                    ? names.get(0) + " + " + names.get(1) : names.get(0) + " +" + (names.size() - 1);
+            Setting.putInheritedLiveConfig(String.join("\n", urls), description);
         }
     }
 }

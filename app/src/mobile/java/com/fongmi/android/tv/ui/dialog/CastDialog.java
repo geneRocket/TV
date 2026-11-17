@@ -262,7 +262,6 @@ public class CastDialog extends BaseDialog implements DeviceAdapter.OnClickListe
         releaseLock();
         DLNADevice.get().disconnect();
         DLNACastManager.INSTANCE.unregisterListener(this);
-        DLNACastManager.INSTANCE.unbindCastService(App.get());
         super.onDestroyView();
     }
 

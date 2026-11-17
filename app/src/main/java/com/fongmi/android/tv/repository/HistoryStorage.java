@@ -351,7 +351,6 @@ public final class HistoryStorage {
     }
 
     public History delete(History subject, PersistenceScope scope) {
-        for (History item : find(subject, scope)) deleteSelf(item, false);
         return deleteSelf(subject, true);
     }
 

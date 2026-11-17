@@ -59,7 +59,7 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
-public class CastActivity extends BaseActivity implements CustomKeyDownCast.Listener, TrackDialog.Listener, PlayerDialog.Listener, RenderControl, Clock.Callback {
+public class CastActivity extends BaseActivity implements com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog.Listener, CustomKeyDownCast.Listener, TrackDialog.Listener, PlayerDialog.Listener, RenderControl, Clock.Callback {
 
     private static String textOf(TextView view) {
         return view == null || view.getText() == null ? "" : view.getText().toString();
@@ -479,6 +479,16 @@ public class CastActivity extends BaseActivity implements CustomKeyDownCast.List
 
     @Override
     public void onTrackClick(Track item) {
+    }
+
+    @Override
+    public String subtitlePlaybackKey() {
+        return mAction == null ? "" : java.util.Objects.toString(mAction.getCurrentURI(), "");
+    }
+
+    @Override
+    public void onSubtitleSelected(com.fongmi.android.tv.bean.Subtitle subtitle) {
+        if (isCurrentPlayer()) mPlayers.setSub(Sub.from(subtitle.getUrl()));
     }
 
     @Override

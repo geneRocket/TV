@@ -598,7 +598,7 @@ public class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    public void timeoutCoversResolveAndPrepareWithoutRestartingClock() {
+    public void prepareStartsWithItsOwnTimeoutAfterResolve() {
         ManualResolver resolver = new ManualResolver();
         FakeEngine engine = new FakeEngine();
         VodPlaybackCoordinator coordinator = coordinator(resolver, engine);
@@ -607,9 +607,11 @@ public class VodPlaybackCoordinatorTest {
         coordinator.play(0, StartPolicy.FRESH);
         Runnable deadline = scheduler.task;
         resolver.resolve(resolver.lastRequestId);
-        assertTrue(deadline == scheduler.task);
-        int stopsBeforeTimeout = engine.stops;
+        Runnable playbackDeadline = scheduler.task;
         deadline.run();
+        assertEquals(VodPlaybackPhase.PREPARING, coordinator.state().getPhase());
+        int stopsBeforeTimeout = engine.stops;
+        playbackDeadline.run();
         assertEquals(stopsBeforeTimeout + 1, engine.stops);
         assertEquals(VodPlaybackPhase.ERROR, coordinator.state().getPhase());
         engine.emit(EngineEvent.state(engine.request.getSessionId(), EnginePhase.READY, 0, 100));

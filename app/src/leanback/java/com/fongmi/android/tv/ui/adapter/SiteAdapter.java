@@ -15,19 +15,20 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.AdapterSiteBinding;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
 
 public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
 
     private final OnClickListener mListener;
     private final List<Site> mItems;
-    private final AtomicInteger batchVersion;
+    private final com.fongmi.android.tv.utils.SerialExecutor persistence =
+            new com.fongmi.android.tv.utils.SerialExecutor(App::execute,
+                    error -> com.fongmi.android.tv.utils.ThreadPools.log(error, "Site settings save failed."));
     private int type;
 
     public SiteAdapter(OnClickListener listener) {
         this.mListener = listener;
         this.mItems = VodConfig.get().getSites();
-        this.batchVersion = new AtomicInteger();
     }
 
     public interface OnClickListener {
@@ -89,12 +90,12 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
 
     private void saveSearchable(Site item) {
         item.setSearchable(!item.isSearchable());
-        App.execute(item::save);
+        persistence.execute(item::save);
     }
 
     private void saveChangeable(Site item) {
         item.setChangeable(!item.isChangeable());
-        App.execute(item::save);
+        persistence.execute(item::save);
     }
 
     private boolean setLongListener(@NonNull ViewHolder holder) {
@@ -107,14 +108,13 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     }
 
     private void setEnable(boolean enable) {
-        final int mode = type;
-        final int version = batchVersion.incrementAndGet();
-        App.execute(() -> {
-            if (version != batchVersion.get()) return;
-            if (mode == 1) for (Site site : VodConfig.get().getSites()) site.setSearchable(enable).save();
-            if (mode == 2) for (Site site : VodConfig.get().getSites()) site.setChangeable(enable).save();
-            if (version == batchVersion.get()) App.post(() -> notifyItemRangeChanged(0, getItemCount()));
-        });
+        List<Site> selected = new ArrayList<>(mItems);
+        for (Site site : selected) {
+            if (type == 1) site.setSearchable(enable);
+            if (type == 2) site.setChangeable(enable);
+        }
+        persistence.execute(() -> selected.forEach(Site::save));
+        notifyItemRangeChanged(0, getItemCount());
     }
 
     class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener, View.OnLongClickListener {

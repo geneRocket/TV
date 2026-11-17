@@ -6,6 +6,7 @@ import android.view.LayoutInflater;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.databinding.DialogTransmitActionBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Callback;
@@ -67,6 +68,11 @@ public class TransmitActionDialog {
 
     private void pushRestore() {
         AppDatabase.backup(new Callback() {
+            @Override
+            public void error(String msg) {
+                Notify.show(msg);
+            }
+
             @Override
             public void success(String path) {
                 TransmitDialog.create().pushRetore(path).show(fragment);

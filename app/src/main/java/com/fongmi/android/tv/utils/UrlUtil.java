@@ -66,6 +66,11 @@ public class UrlUtil {
         return url;
     }
 
+    static boolean sameOrigin(okhttp3.HttpUrl first, okhttp3.HttpUrl second) {
+        return first != null && second != null && first.scheme().equals(second.scheme())
+                && first.host().equals(second.host()) && first.port() == second.port();
+    }
+
     public static String normalize(String url, String baseUri) {
         url = TextUtils.isEmpty(url) ? "" : url.trim().replace("&amp;", "&");
         if ((url.startsWith("\"") && url.endsWith("\"")) || (url.startsWith("'") && url.endsWith("'"))) url = url.substring(1, url.length() - 1).trim();

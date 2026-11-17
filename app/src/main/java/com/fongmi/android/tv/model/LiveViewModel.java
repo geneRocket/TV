@@ -75,7 +75,6 @@ public class LiveViewModel extends ViewModel {
     }
 
     public void getLive(Live item) {
-        sourceTimeZone = resolveTimeZone(item.getTimeZone(), item.getEpg(), null);
         submitLive(() -> {
             LiveParser.start(item.recent());
             verify(item);
@@ -262,7 +261,10 @@ public class LiveViewModel extends ViewModel {
 
     private void submitLive(java.util.concurrent.Callable<Live> task) {
         HttpCallScope calls = new HttpCallScope();
-        tasks.submit("live", () -> calls.call(task), Constant.TIMEOUT_LIVE, live::setValue, error -> {
+        tasks.submit("live", () -> calls.call(task), Constant.TIMEOUT_LIVE, item -> {
+            sourceTimeZone = resolveTimeZone(item.getTimeZone(), item.getEpg(), null);
+            live.setValue(item);
+        }, error -> {
             Live failed = new Live();
             if (error instanceof com.fongmi.android.tv.exception.ExtractException) failed.setLoadError(error.getMessage());
             return failed;

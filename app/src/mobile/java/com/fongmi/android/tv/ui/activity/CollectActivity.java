@@ -209,7 +209,7 @@ public class CollectActivity extends BaseActivity implements CustomScroller.Call
 
     private boolean isCurrentSearchResult(Result result) {
         return result != null
-                && TextUtils.equals(result.getKeyword(), mBinding.keyword.getText().toString().trim())
+                && TextUtils.equals(result.getKeyword(), mSearchKeyword)
                 && TextUtils.equals(result.getRequestToken(), mSearchToken);
     }
 

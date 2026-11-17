@@ -171,32 +171,33 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
             Notify.show(R.string.error_empty);
             return;
         }
-        if (edit) ConfigRepository.get().find(url, type).url(text).name(name).update();
+        List<String> enabled = type == 0 || type == 1 ? getEnabledUrls() : java.util.Collections.emptyList();
+        boolean editingSelection = edit && enabled.contains(this.url);
+        if (edit && !text.isEmpty() && !ConfigRepository.get().edit(this.url, text, name, type)) {
+            Notify.show(R.string.error_config_exists);
+            return;
+        }
         if (text.isEmpty()) ConfigRepository.get().delete(url, type);
         Config config = name.isEmpty() ? ConfigRepository.get().find(text, type) : ConfigRepository.get().find(text, name, type);
-        if (!edit && (type == 0 || type == 1) && !config.isEmpty()) callback.setConfigs(mergeConfigs(config));
-        else callback.setConfig(config);
+        if (editingSelection || (!edit && (type == 0 || type == 1) && !config.isEmpty())) {
+            List<Config> selection = mergeConfigs(config, enabled);
+            if (selection.isEmpty()) callback.setConfig(config);
+            else callback.setConfigs(selection);
+        } else callback.setConfig(config);
         dialog.dismiss();
         reopenHistory(config);
     }
 
-    private List<Config> mergeConfigs(Config config) {
+    private List<Config> mergeConfigs(Config config, List<String> enabled) {
         List<Config> items = new ArrayList<>();
         Set<String> urls = new LinkedHashSet<>();
-        for (String url : getEnabledUrls()) {
-            if (!urls.add(url)) continue;
-            items.add(ConfigRepository.get().find(url, type));
+        for (String oldUrl : enabled) {
+            String url = edit && oldUrl.equals(this.url) ? config.getUrl() : oldUrl;
+            if (url.isEmpty() || !urls.add(url)) continue;
+            items.add(url.equals(config.getUrl()) ? config : ConfigRepository.get().find(url, type));
         }
-        if (urls.add(config.getUrl())) items.add(config);
-        else items.set(findConfigIndex(items, config.getUrl()), config);
+        if (!config.isEmpty() && urls.add(config.getUrl())) items.add(config);
         return items;
-    }
-
-    private int findConfigIndex(List<Config> items, String url) {
-        for (int i = 0; i < items.size(); i++) {
-            if (items.get(i).getUrl().equals(url)) return i;
-        }
-        return 0;
     }
 
     private List<String> getEnabledUrls() {

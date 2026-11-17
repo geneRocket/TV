@@ -163,7 +163,7 @@
 
         <service
             android:name=".service.StableDLNARendererService"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.android.cast.dlna.dmr.ACTION_CAST" />
             </intent-filter>

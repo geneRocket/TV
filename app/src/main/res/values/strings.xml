@@ -378,4 +378,5 @@
     <string name="live_history_date">Previous dates</string>
     <string name="live_history_loading">Loading programme guide for %1$s…</string>
     <string name="live_history_empty">No programme guide for %1$s</string>
+    <string name="error_config_exists">This configuration URL already exists.</string>
 </resources>

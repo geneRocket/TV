@@ -59,7 +59,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     private static final String TAG = PlaybackController.class.getSimpleName();
     private final StringBuilder builder;
     private final Formatter formatter;
-    private final Runnable runnable;
+    private Runnable timeoutCheck;
     private final PlaybackErrors errors;
     private final PlaybackCommands commands;
     private final ExternalPlayer externalPlayer;
@@ -125,7 +125,6 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
                 ThreadPools.log(failure, "Playback error callback failed.");
             }
         });
-        runnable = () -> reportError(ErrorEvent.timeout());
         externalPlayer = new ExternalPlayer(this);
         danmaku = new DanmakuController(Setting.isDanmu(), this::prepared);
         formatter = new Formatter(builder, Locale.getDefault());
@@ -169,7 +168,6 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     public PlayerSession session() {
-        ensureSession();
         return engines.session();
     }
 
@@ -340,10 +338,6 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     public void setPosition(long position) {
         this.position = position;
-    }
-
-    private void ensureSession() {
-        if (position == C.TIME_UNSET) position = 0;
     }
 
     public void reset() {
@@ -562,7 +556,6 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     private void pauseDirect() {
         if (engines.session() != null) engines.session().pause();
-        mediaSession.setActive(false);
         pauseDanmu();
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
     }
@@ -635,7 +628,6 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     public void start(Channel channel, int timeout) {
         errors.invalidate();
-        ensureSession();
         String url = getChannelUrl(channel);
         replay = channel.isReplay();
         boolean forceLive = shouldForceLive(url, channel.getFormat(), replay);
@@ -654,7 +646,6 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
 
     public void start(Result result, boolean useParse, int timeout) {
         errors.invalidate();
-        ensureSession();
         replay = false;
         this.timeout = timeout;
         this.forceLive = false;
@@ -691,7 +682,7 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     public void restoreCheckpoint(EngineSnapshot checkpoint) {
-        if (checkpoint != null) setPosition(forceLive ? 0 : checkpoint.getPosition());
+        if (checkpoint != null) setPosition(forceLive ? C.TIME_UNSET : checkpoint.getPosition());
         setMediaSource();
         if (checkpoint != null) setSpeed(checkpoint.getSpeed());
     }
@@ -754,26 +745,41 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
             return;
         }
         ensureCompatiblePlayer(this.drm);
+        removeTimeoutCheck();
         try {
-            if (engines.session() == null) throw new IllegalStateException("player session is not initialized");
-            long startPosition = position == C.TIME_UNSET ? 0 : Math.max(position, 0);
+            PlayerSession session = engines.session();
+            if (session == null) throw new IllegalStateException("player session is not initialized");
+            long startPosition = position;
             position = C.TIME_UNSET;
             String itemIdentity = TextUtils.isEmpty(identity) ? this.url : identity;
             boolean effectivePlayWhenReady = inputHandler == null ? playWhenReady : inputHandler.playWhenReady(playWhenReady);
-            activeSessionId = engines.session().prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm, this.subs, startPosition, this.forceLive, effectivePlayWhenReady));
+            long id = session.prepare(new PlaybackItem(itemIdentity, this.url, this.headers, this.format, this.drm,
+                    this.subs, startPosition, this.forceLive, effectivePlayWhenReady));
+            if (isPreparing(session, id)) {
+                timeoutCheck = () -> {
+                    if (isPreparing(session, id)) reportError(ErrorEvent.timeout());
+                };
+                App.post(timeoutCheck, timeout);
+            }
         } catch (RuntimeException e) {
             removeTimeoutCheck();
             ThreadPools.log(e, "Player media source setup failed.");
             reportError(ErrorEvent.url(ExoUtil.getRetry(PlaybackException.ERROR_CODE_UNSPECIFIED), PlaybackException.ERROR_CODE_UNSPECIFIED));
             return;
         }
-        removeTimeoutCheck();
-        App.post(runnable, timeout);
         Logger.t(TAG).d(url);
     }
 
+    private boolean isPreparing(PlayerSession session, long id) {
+        if (engines.session() != session || !isCurrent()) return false;
+        PlaybackState state = session.state();
+        return state.getSessionId() == id
+                && (state.getPhase() == PlaybackPhase.PREPARING || state.getPhase() == PlaybackPhase.BUFFERING);
+    }
+
     private void removeTimeoutCheck() {
-        App.removeCallbacks(runnable);
+        if (timeoutCheck != null) App.removeCallbacks(timeoutCheck);
+        timeoutCheck = null;
     }
 
     private void setPlayerState(int state) {
@@ -837,7 +843,8 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
     }
 
     private void onPlaybackState(PlaybackState state) {
-        if (state.getItem() != null) {
+        PlaybackPhase phase = state.getPhase();
+        if (state.getItem() != null && phase != PlaybackPhase.STOPPED && phase != PlaybackPhase.RELEASED) {
             PlaybackItem item = state.getItem();
             url = item.getUrl();
             headers = item.getHeaders();
@@ -856,7 +863,6 @@ public class PlaybackController implements DirectPlaybackFlow.Engine {
             }
         }
         if (engines.session() == null || engines.session().state() != state) return;
-        PlaybackPhase phase = state.getPhase();
         mediaSession.setActive(isCurrent() && phase != PlaybackPhase.IDLE && phase != PlaybackPhase.STOPPED
                 && phase != PlaybackPhase.ERROR && phase != PlaybackPhase.RELEASED);
         switch (phase) {

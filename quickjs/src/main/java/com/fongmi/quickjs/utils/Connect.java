@@ -46,15 +46,6 @@ public class Connect {
         }
     }
 
-    public static JSObject success(QuickJSContext ctx, String content) {
-        JSObject jsObject = ctx.createNewJSObject();
-        JSObject jsHeader = ctx.createNewJSObject();
-        jsObject.setProperty("code", 200);
-        jsObject.setProperty("headers", jsHeader);
-        jsObject.setProperty("content", content);
-        return jsObject;
-    }
-
     public static JSObject error(QuickJSContext ctx) {
         JSObject jsObject = ctx.createNewJSObject();
         JSObject jsHeader = ctx.createNewJSObject();

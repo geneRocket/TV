@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.Manifest;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
@@ -62,7 +63,6 @@ import com.fongmi.android.tv.ui.fragment.VodFragment;
 import com.fongmi.android.tv.ui.presenter.TypePresenter;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.ConfigUrlParser;
-import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -114,6 +114,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         checkAction(intent);
     }
 
@@ -163,18 +164,23 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         });
     }
 
-    private void checkAction(Intent intent) {
+    private Intent handledAction;
+    private boolean openingPlaylist;
+
+    private boolean checkAction(Intent intent) {
+        if (handledAction == intent) return openingPlaylist;
+        handledAction = intent;
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             if ("text/plain".equals(intent.getType()) || UrlUtil.path(intent.getData()).endsWith(".m3u")) {
-                String path = FileChooser.getPathFromUri(this, intent.getData());
-                if (TextUtils.isEmpty(path)) Notify.show(R.string.error_empty);
-                else loadLive("file:/" + path);
+                loadLive(intent.getData());
+                return true;
             } else {
                 VideoActivity.push(this, intent.getData().toString());
             }
         }
+        return false;
     }
 
     private void setTitleView() {
@@ -491,7 +497,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                     showHomeContent();
                     setLoading(false);
                     Notify.show(Notify.getError(R.string.error_config_parse, e));
-                    loadStartupLive();
+                    if (!checkAction(getIntent())) loadStartupLive();
                 });
             }
         });
@@ -538,11 +544,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             @Override
             public void success() {
                 if (isFinishing() || isDestroyed()) return;
-                checkAction(getIntent());
+                boolean openedPlaylist = checkAction(getIntent());
                 RefreshEvent.video();
                 setLogo();
                 if (!TextUtils.isEmpty(success)) Notify.show(success);
-                if (startup) loadStartupLiveOnce();
+                if (startup && !openedPlaylist) loadStartupLiveOnce();
             }
 
             @Override
@@ -555,7 +561,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 mResult = Result.empty();
                 Notify.show(msg);
                 setLoading(false);
-                if (startup) loadStartupLiveOnce();
+                if (startup && !checkAction(getIntent())) loadStartupLiveOnce();
             }
 
             private void loadStartupLiveOnce() {
@@ -567,10 +573,14 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void loadStartupLive() {
+        if (openingPlaylist) return;
         ThreadPools.config().execute(() -> {
             List<Config> configs = getStartupConfigs(1);
-            if (configs.size() == 1) LiveConfig.loadCached(configs.get(0), getLiveCallback());
-            else LiveConfig.loadCached(configs, getLiveCallback());
+            App.post(() -> {
+                if (openingPlaylist || isFinishing() || isDestroyed()) return;
+                if (configs.size() == 1) LiveConfig.loadCached(configs.get(0), getLiveCallback());
+                else LiveConfig.loadCached(configs, getLiveCallback());
+            });
         });
     }
 
@@ -612,18 +622,22 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         return sb.toString();
     }
 
-    private void loadLive(String url) {
-        App.execute(() -> {
-            Config config = ConfigRepository.get().find(url, 1);
-            App.post(() -> {
+    private void loadLive(Uri uri) {
+        openingPlaylist = true;
+        LiveConfig.loadPlaylist(this, uri, new Callback() {
+            @Override
+            public void success() {
                 if (isFinishing() || isDestroyed()) return;
-                LiveConfig.load(config, new Callback() {
-                    @Override
-                    public void success() {
-                        LiveActivity.start(getActivity());
-                    }
-                });
-            });
+                LiveActivity.start(getActivity());
+            }
+
+            @Override
+            public void error(String message) {
+                openingPlaylist = false;
+                if (isFinishing() || isDestroyed()) return;
+                Notify.show(message);
+                loadStartupLive();
+            }
         });
     }
 

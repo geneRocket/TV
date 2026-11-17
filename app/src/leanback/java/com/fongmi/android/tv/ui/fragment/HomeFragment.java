@@ -188,7 +188,7 @@ public class HomeFragment extends BaseFragment implements VodPresenter.OnClickLi
     }
 
     private String getStyleKey(Style style) {
-        return style.getViewType() + "_" + style.getRatio();
+        return style.getViewType() + "_" + style.getRatio() + "_" + Setting.getSize();
     }
 
     private boolean hasRecommendRows(int index) {

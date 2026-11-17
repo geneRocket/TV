@@ -166,7 +166,7 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
-public class VideoActivity extends BaseActivity implements CustomKeyDownVod.Listener, TrackDialog.Listener, TrackDialog.ChooserListener, PlayerDialog.Listener, ArrayPresenter.OnClickListener, Clock.Callback {
+public class VideoActivity extends BaseActivity implements com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog.Listener, CustomKeyDownVod.Listener, TrackDialog.Listener, TrackDialog.ChooserListener, PlayerDialog.Listener, ArrayPresenter.OnClickListener, Clock.Callback {
 
     private static final long SOURCE_SWITCH_DETAIL_TIMEOUT_MS = 5000;
     private static final long HISTORY_LOAD_TIMEOUT_MS = 5000;
@@ -812,7 +812,8 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
                 this::prepareResolvedResult, result -> isUseParse());
         mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
         mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
-        mPlaybackCoordinator.configureTimeout(com.fongmi.android.tv.utils.AppTaskScheduler.get(), Constant.TIMEOUT_PLAY);
+        mPlaybackCoordinator.configureTimeout(com.fongmi.android.tv.utils.AppTaskScheduler.get(), Constant.TIMEOUT_VOD,
+                () -> getSite().isChangeable() ? getSite().getTimeout() : -1);
         createPlaybackFlow();
         mPlaybackSubscription = mPlaybackFlow.observe(this::renderPlayback);
         mR1 = this::hideControl;
@@ -2119,6 +2120,17 @@ public class VideoActivity extends BaseActivity implements CustomKeyDownVod.List
     @Override
     public void onTrackClick(Track item) {
         TrackRepository.get().save(item, getHistoryKey());
+    }
+
+    @Override
+    public String subtitlePlaybackKey() {
+        com.fongmi.android.tv.player.vod.VodEpisode episode = mPlaybackFlow.state().getEpisode();
+        return episode == null ? "" : getHistoryKey() + "\n" + episode.getIdentity();
+    }
+
+    @Override
+    public void onSubtitleSelected(com.fongmi.android.tv.bean.Subtitle subtitle) {
+        if (mPlayers.isCurrent()) mPlayers.setSub(Sub.from(subtitle.getUrl()));
     }
 
     @Override

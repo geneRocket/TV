@@ -65,8 +65,10 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
 
     public void show(FragmentActivity activity) {
         for (Fragment f : activity.getSupportFragmentManager().getFragments()) if (f instanceof SearchSubtitleDialog) return;
-        if (activity instanceof Listener && this.listener == null) {
-            this.listener = (Listener) activity;
+        if (activity instanceof Listener) {
+            Bundle arguments = getArguments() == null ? new Bundle() : getArguments();
+            arguments.putString("subtitle_playback", ((Listener) activity).subtitlePlaybackKey());
+            setArguments(arguments);
         }
         show(activity.getSupportFragmentManager(), null);
     }
@@ -226,7 +228,17 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
         } else {
             viewModel.getSubtitleUrl(item, subtitle -> {
                 if (!isAdded() || getDialog() == null || !getDialog().isShowing()) return;
-                if (listener != null) listener.onSubtitleSelected(subtitle);
+                Listener target = listener;
+                if (target == null && getActivity() instanceof Listener && getArguments() != null) {
+                    Listener host = (Listener) getActivity();
+                    String savedKey = getArguments().getString("subtitle_playback", "");
+                    if (!savedKey.isEmpty() && savedKey.equals(host.subtitlePlaybackKey())) target = host;
+                }
+                if (target == null) {
+                    viewModel.cancelSubtitleResolve();
+                    return;
+                }
+                target.onSubtitleSelected(subtitle);
                 dismiss();
             });
         }
@@ -286,5 +298,6 @@ public class SearchSubtitleDialog extends BaseDialog implements SearchSubtitleAd
 
     public interface Listener {
         void onSubtitleSelected(Subtitle subtitle);
+        default String subtitlePlaybackKey() { return ""; }
     }
 }

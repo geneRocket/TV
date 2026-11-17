@@ -163,7 +163,7 @@ import master.flame.danmaku.danmaku.model.IDisplayer;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import tv.danmaku.ijk.media.player.ui.IjkVideoView;
 
-public class VideoActivity extends BaseActivity implements Clock.Callback, CustomKeyDownVod.Listener, TrackDialog.Listener, PlayerDialog.Listener, ControlDialog.Listener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener {
+public class VideoActivity extends BaseActivity implements com.fongmi.android.tv.ui.dialog.SearchSubtitleDialog.Listener, Clock.Callback, CustomKeyDownVod.Listener, TrackDialog.Listener, PlayerDialog.Listener, ControlDialog.Listener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener {
 
     private static final int REQUEST_DANMAKU_FILE = 9998;
     private long mDanmakuPickerGeneration = -1;
@@ -633,7 +633,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
                 new SpiderPlaybackGateway(), this::prepareResolvedResult, result -> isUseParse());
         mPlayerSession = new SwitchablePlayerSession(mPlayers.session());
         mPlaybackCoordinator = new VodPlaybackCoordinator(mVodResolver, new DefaultPlaybackItemFactory(mPlayers::getSub), mPlayerSession);
-        mPlaybackCoordinator.configureTimeout(com.fongmi.android.tv.utils.AppTaskScheduler.get(), Constant.TIMEOUT_PLAY);
+        mPlaybackCoordinator.configureTimeout(com.fongmi.android.tv.utils.AppTaskScheduler.get(), Constant.TIMEOUT_VOD,
+                () -> getSite().isChangeable() ? getSite().getTimeout() : -1);
         createPlaybackFlow();
         mPlaybackSubscription = mPlaybackFlow.observe(this::renderPlayback);
     }
@@ -1238,8 +1239,8 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.action.speed.setText(mPlayers.addSpeed());
         mPage.history().setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        
-        
+
+
         setR1Callback();
     }
 
@@ -1248,13 +1249,13 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
         mBinding.control.action.speed.setText(mPlayers.toggleSpeed());
         mPage.history().setSpeed(mPlayers.getSpeed());
         setDanmuViewSettings();
-        
-        
+
+
         setR1Callback();
         return true;
     }
 
-  
+
 
 
     private void onRefresh() {
@@ -1618,6 +1619,17 @@ public class VideoActivity extends BaseActivity implements Clock.Callback, Custo
     @Override
     public void onTrackClick(Track item) {
         TrackRepository.get().save(item, getHistoryKey());
+    }
+
+    @Override
+    public String subtitlePlaybackKey() {
+        com.fongmi.android.tv.player.vod.VodEpisode episode = mPlaybackFlow.state().getEpisode();
+        return episode == null ? "" : getHistoryKey() + "\n" + episode.getIdentity();
+    }
+
+    @Override
+    public void onSubtitleSelected(com.fongmi.android.tv.bean.Subtitle subtitle) {
+        if (mPlayers.isCurrent()) mPlayers.setSub(Sub.from(subtitle.getUrl()));
     }
 
     @Override

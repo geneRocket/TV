@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.api.config;
 
+import android.content.Context;
+import android.net.Uri;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
@@ -22,6 +24,7 @@ import com.fongmi.android.tv.repository.LiveRepository;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
+import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.OrderedParallelMapper;
 import com.fongmi.android.tv.utils.CacheFirstLoader;
@@ -63,6 +66,7 @@ public class LiveConfig {
     private String pendingContent;
     public ConfigDocument document() { return document; }
     private boolean sync;
+    private boolean explicitPlaylist;
     private boolean requestBoot;
     private Live home;
 
@@ -103,6 +107,28 @@ public class LiveConfig {
     public static void load(Config config, Callback callback) {
         Config requested = config == null ? new Config() : config.copy();
         ConfigRequests.live(draft -> draft.config(requested).loadConfig(callback));
+    }
+
+    public static void loadPlaylist(Context context, Uri uri, Callback callback) {
+        ConfigRequests.live(draft -> {
+            Config requested;
+            try {
+                String path = FileChooser.getPathFromUri(context, uri);
+                ConfigLoadTask.check();
+                if (TextUtils.isEmpty(path)) {
+                    ConfigLoadTask.post(() -> callback.error(ResUtil.getString(R.string.error_empty)));
+                    return;
+                }
+                requested = ConfigRepository.get().find("file:/" + path, 1);
+            } catch (RuntimeException error) {
+                ConfigLoadTask.check();
+                ThreadPools.log(error, "Live playlist lookup failed.");
+                ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, error)));
+                return;
+            }
+            draft.explicitPlaylist = true;
+            draft.config(requested).loadConfig(callback);
+        });
     }
 
     public static void loadCached(Config config, Callback callback) {
@@ -183,7 +209,8 @@ public class LiveConfig {
             if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
-            if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) ConfigLoadTask.post(() -> callback.error(""));
+            if (explicitPlaylist) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
+            else if (config.isEmpty() || TextUtils.isEmpty(config.getUrl())) ConfigLoadTask.post(() -> callback.error(""));
             else loadCache(callback, e);
             ThreadPools.log(e, "Live config operation failed.");
         }
@@ -772,7 +799,7 @@ public class LiveConfig {
     void afterPublication() {
         if (!requestBoot) return;
         requestBoot = false;
-        if (App.activity() instanceof LiveActivity) return;
+        if (explicitPlaylist || App.activity() instanceof LiveActivity) return;
         if (home != null && (home.isBoot() || Setting.isBootLive())) ConfigLoadTask.post(this::bootLive);
     }
 

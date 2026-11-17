@@ -134,7 +134,10 @@ public class ImgUtil {
         url = normalizeUrl(url, site);
         if (url.startsWith("data:")) return url;
         LazyHeaders.Builder builder = new LazyHeaders.Builder();
-        for (Map.Entry<String, String> entry : imageHeaders(url, site == null ? null : site.getHeaders()).entrySet()) {
+        okhttp3.HttpUrl image = okhttp3.HttpUrl.parse(stripParam(url));
+        okhttp3.HttpUrl api = site == null ? null : okhttp3.HttpUrl.parse(site.getApi());
+        boolean sameOrigin = UrlUtil.sameOrigin(image, api);
+        for (Map.Entry<String, String> entry : imageHeaders(url, sameOrigin ? site.getHeaders() : null).entrySet()) {
             builder.setHeader(entry.getKey(), entry.getValue());
         }
         url = stripParam(url);

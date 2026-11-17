@@ -16,21 +16,12 @@ android {
         disable 'UnsafeOptInUsageError'
     }
 
-    sourceSets {
-        main {
-            // Native IJK is supplied by the maintained GSY community artifacts.
-            // Do not package the legacy copies under src/main/jniLibs as well.
-            jniLibs.srcDirs = []
-        }
-    }
 }
 
 dependencies {
     implementation project(':catvod')
     implementation 'androidx.media3:media3-ui:' + media3Version
     implementation 'androidx.media3:media3-common:' + media3Version
-    implementation 'io.github.carguo:gsyvideoplayer-arm64:' + gsyIjkVersion
-    implementation 'io.github.carguo:gsyvideoplayer-armv7a:' + gsyIjkVersion
     implementation 'io.github.carguo:gsyvideoplayer-x86:' + gsyIjkVersion
     testImplementation 'junit:junit:4.13.2'
 }

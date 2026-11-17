@@ -110,6 +110,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private List<Group> mHides;
     private PlaybackController mPlayers;
     private Channel mChannel;
+    private boolean historicalReplay;
     private Group mGroup;
     private Runnable mR0;
     private Runnable mR1;
@@ -688,6 +689,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
         mLiveData.replay(item, () -> {
             mPlaybackFlow.beginSource();
             Notify.show(getString(R.string.play_ready, item.getTitle()));
+            historicalReplay = historical;
             if (!historical) mEpgDataAdapter.setSelected(item);
             mPlayers.clear();
             mPlayers.stop();
@@ -744,6 +746,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
 
     private void fetch() {
         if (mChannel == null) return;
+        historicalReplay = false;
         LiveConfig.get().setKeep(mChannel);
         mLiveData.loadChannel();
         mPlayers.clear();
@@ -973,6 +976,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, Custom
     private void nextChannel() { mNavigation.channel(true, Setting.isAcross()); }
 
     private void checkNext() {
+        if (historicalReplay) return;
         int current = mChannel.getData().getInRange();
         int position = mChannel.getData().getSelected() + 1;
         boolean hasNext = position <= current && position > 0;

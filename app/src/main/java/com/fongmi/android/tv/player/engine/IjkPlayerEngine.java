@@ -52,7 +52,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         this.pendingReady = true;
         scheduler.remove(readyFallback);
         scheduler.post(readyFallback, READY_FALLBACK_MS);
-        player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), request.getStartPosition(), playWhenReady);
+        player.setMediaSource(IjkUtil.getSource(request.getHeaders(), request.getUrl()), Math.max(request.getStartPosition(), 0), playWhenReady);
         if (phase == EnginePhase.PREPARING) { if (playWhenReady) player.start(); else player.pause(); }
     }
 
@@ -60,7 +60,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         requireActive();
         playWhenReady = true;
         player.start();
-        if (player.isPlaying() && phase != EnginePhase.READY) {
+        if (player.isPlaying() && phase == EnginePhase.PAUSED) {
             phase = EnginePhase.READY;
             emit(null);
         }
@@ -70,7 +70,7 @@ public final class IjkPlayerEngine implements PlayerEngine, IMediaPlayer.Listene
         requireActive();
         playWhenReady = false;
         player.pause();
-        if (phase != EnginePhase.PAUSED) {
+        if (phase == EnginePhase.READY) {
             phase = EnginePhase.PAUSED;
             emit(null);
         }

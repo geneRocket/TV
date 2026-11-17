@@ -298,8 +298,15 @@ public final class M3u8AdFilter {
         int originalSegmentCount = countSegments(records);
         List<Record> originalRecords = records;
         Set<String> repeatedSegments = collectRepeatedSegments(records);
-        records = filterTimedAdRanges(records);
-        records = filterAdTagSegments(records, baseUrl, vod);
+        List<Record> timed = filterTimedAdRanges(originalRecords);
+        records = filterAdTagSegments(originalRecords, baseUrl, vod);
+        if (timed != originalRecords) {
+            // Cue durations describe the original sequence, even when DATERANGE marks the same break.
+            Set<Record> outsideTimedBreaks = new HashSet<>(timed);
+            List<Record> kept = new ArrayList<>(records);
+            kept.removeIf(record -> !outsideTimedBreaks.contains(record));
+            records = kept;
+        }
         records = filterRepeatedDiscontinuityPods(records, baseUrl, vod);
         if (vod) records = filterShortAdClusters(records);
         Set<String> confirmedRepeatedAds = collectRemovedRepeatedMedia(originalRecords, records, repeatedSegments);

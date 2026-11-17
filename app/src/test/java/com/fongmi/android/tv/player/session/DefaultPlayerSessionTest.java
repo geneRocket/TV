@@ -261,6 +261,17 @@ public class DefaultPlayerSessionTest {
         assertEquals("episode-2", session.state().getItem().getIdentity());
     }
 
+    @Test
+    public void preparePreservesTheDefaultLiveStartPosition() {
+        FakeEngine engine = new FakeEngine();
+        DefaultPlayerSession session = new DefaultPlayerSession(engine);
+        long liveDefault = androidx.media3.common.C.TIME_UNSET;
+        PlaybackItem existing = item("live", liveDefault);
+        session.prepare(existing);
+
+        assertEquals(liveDefault, engine.request.getStartPosition());
+    }
+
     private PlaybackItem item(String identity, long position) {
         return new PlaybackItem(identity, "https://example.com/video.m3u8", Collections.emptyMap(), "m3u8", null, Collections.emptyList(), position, false);
     }

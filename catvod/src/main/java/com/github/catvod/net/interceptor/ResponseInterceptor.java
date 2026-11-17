@@ -64,7 +64,12 @@ public class ResponseInterceptor implements Interceptor {
     private Request check(Request request) {
         String host = request.url().host();
         Request.Builder builder = request.newBuilder();
-        for (Header item : headers) if (Util.containOrMatch(host, item.getHost())) Json.toMap(item.getHeader()).forEach(builder::header);
+        for (Header item : headers) {
+            String pattern = item.getHost().trim();
+            if (!pattern.isEmpty() && Util.containOrMatch(host, pattern)) {
+                Json.toMap(item.getHeader()).forEach(builder::header);
+            }
+        }
         return builder.build();
     }
 

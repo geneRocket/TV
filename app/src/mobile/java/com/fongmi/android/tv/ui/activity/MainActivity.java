@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
@@ -38,7 +39,6 @@ import com.fongmi.android.tv.ui.fragment.SettingCustomFragment;
 import com.fongmi.android.tv.ui.fragment.SettingFragment;
 import com.fongmi.android.tv.ui.fragment.SettingPlayerFragment;
 import com.fongmi.android.tv.ui.fragment.VodFragment;
-import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -66,6 +66,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         checkAction(intent);
     }
 
@@ -83,16 +84,23 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         mBinding.navigation.findViewById(R.id.live).setOnLongClickListener(this::addShortcut);
     }
 
-    private void checkAction(Intent intent) {
+    private Intent handledAction;
+    private boolean openingPlaylist;
+
+    private boolean checkAction(Intent intent) {
+        if (handledAction == intent) return openingPlaylist;
+        handledAction = intent;
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
             if ("text/plain".equals(intent.getType()) || UrlUtil.path(intent.getData()).endsWith(".m3u")) {
-                loadLive("file:/" + FileChooser.getPathFromUri(this, intent.getData()));
+                loadLive(intent.getData());
+                return true;
             } else {
                 VideoActivity.push(this, intent.getData().toString());
             }
         }
+        return false;
     }
 
     private void initFragment(Bundle savedInstanceState) {
@@ -124,7 +132,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                     if (isFinishing() || isDestroyed()) return;
                     mConfigState.failed();
                     Notify.show(Notify.getError(R.string.error_config_parse, e));
-                    loadStartupLive();
+                    if (!checkAction(getIntent())) loadStartupLive();
                 });
             }
         });
@@ -154,10 +162,10 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                 loading = false;
                 if (isFinishing() || isDestroyed()) return;
                 mConfigState.ready();
-                checkAction(getIntent());
+                boolean openedPlaylist = checkAction(getIntent());
                 RefreshEvent.config();
                 RefreshEvent.video();
-                loadStartupLive();
+                if (!openedPlaylist) loadStartupLive();
             }
 
             @Override
@@ -167,7 +175,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                 RefreshEvent.config();
                 mConfigState.failed();
                 Notify.show(msg);
-                loadStartupLive();
+                if (!checkAction(getIntent())) loadStartupLive();
             }
 
             private void loadStartupLive() {
@@ -179,6 +187,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
     }
 
     private void loadStartupLive() {
+        if (openingPlaylist) return;
         List<Config> configs = getStartupConfigs(1);
         Callback callback = new Callback() {
             @Override
@@ -190,11 +199,22 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         else LiveConfig.loadCached(configs, callback);
     }
 
-    private void loadLive(String url) {
-        LiveConfig.load(ConfigRepository.get().find(url, 1), new Callback() {
+    private void loadLive(Uri uri) {
+        openingPlaylist = true;
+        LiveConfig.loadPlaylist(this, uri, new Callback() {
             @Override
             public void success() {
+                if (isFinishing() || isDestroyed()) return;
+                setNavigation();
                 openLive();
+            }
+
+            @Override
+            public void error(String message) {
+                openingPlaylist = false;
+                if (isFinishing() || isDestroyed()) return;
+                Notify.show(message);
+                loadStartupLive();
             }
         });
     }

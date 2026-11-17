@@ -325,6 +325,11 @@ public class Action implements Process {
         if (TextUtils.isEmpty(ip)) return;
         AppDatabase.backup(new Callback() {
             @Override
+            public void error(String msg) {
+                Notify.show(msg);
+            }
+
+            @Override
             public void success(String path) {
                 String type = "push_restore";
                 File file = new File(path);

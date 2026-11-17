@@ -17,3 +17,5 @@ These files are unmodified final media playlists captured through the Android ap
 Exact repeated short Pods bounded by discontinuities are retained as strong structural evidence. `odyssey-07` and `chimi-18` additionally have semantic assertions for the removed Pod URI and preserved neighboring main-content segments; fixtures whose output is unchanged act as false-positive controls.
 
 See [dataset audit](../DATASET_AUDIT.md) for master/media coverage and label limitations. An unchanged fixture is a preservation control, not proof that every frame is ad-free.
+
+Captures that are byte-identical share one playlist file. The test harness resolves the original names through its fixture alias table, retaining each capture’s base URL and test expectations.

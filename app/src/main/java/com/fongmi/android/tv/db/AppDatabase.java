@@ -82,29 +82,56 @@ public abstract class AppDatabase extends RoomDatabase {
     public static void backup(com.fongmi.android.tv.impl.Callback callback) {
         App.execute(() -> {
             synchronized (BACKUP_LOCK) {
-                File restore = prepareRestoreDirectory();
-                if (restore == null) return;
-                SupportSQLiteDatabase database = get().getOpenHelper().getWritableDatabase();
-                if (!checkpoint(database)) return;
-                File file;
-                database.beginTransaction();
                 try {
-                    File db = App.get().getDatabasePath(NAME).getAbsoluteFile();
-                    if (!db.exists() || !Path.tryCopy(db, new File(restore, db.getName()))) return;
-                    // A writer may commit after checkpoint() but before beginTransaction().
-                    // Keep its committed frames with the main file while the write lock is held.
-                    File wal = App.get().getDatabasePath(NAME + "-wal").getAbsoluteFile();
-                    if (wal.exists() && !Path.tryCopy(wal, new File(restore, wal.getName()))) return;
-                    Prefers.backup(new File(restore, NAME + "-pref"));
-                    String time = Util.format(new SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault()), (new File(restore, db.getName())).lastModified());
-                    file = new File(Path.tv(), time + "." + BACKUP_SUFFIX);
-                } finally {
-                    database.endTransaction();
+                    File file = writeBackup();
+                    App.post(() -> callback.success(file.getAbsolutePath()));
+                } catch (Exception error) {
+                    if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                    com.fongmi.android.tv.utils.ThreadPools.log(error, "Database backup failed.");
+                    App.post(() -> callback.error(error.getMessage()));
                 }
-                if (!FileUtil.zipFolder(restore, file)) return;
-                App.post(() -> callback.success(file.getAbsolutePath()));
             }
         });
+    }
+
+    private static File writeBackup() throws IOException, InterruptedException {
+        File restore = prepareRestoreDirectory();
+        if (restore == null) throw new IOException("Cannot stage backup");
+        SupportSQLiteDatabase database = get().getOpenHelper().getWritableDatabase();
+        boolean checkpointed = checkpoint(database);
+        for (int retry = 0; !checkpointed && retry < 2; retry++) {
+            Thread.sleep(100L * (retry + 1));
+            checkpointed = checkpoint(database);
+        }
+        if (!checkpointed) throw new IOException("Database is busy; try backing up again");
+        File file;
+        database.beginTransaction();
+        try {
+            File db = App.get().getDatabasePath(NAME).getAbsoluteFile();
+            File copy = new File(restore, db.getName());
+            if (!db.isFile() || !Path.tryCopy(db, copy)) throw new IOException("Cannot copy database");
+            // A writer may commit between the checkpoint and the backup transaction.
+            File wal = App.get().getDatabasePath(NAME + "-wal").getAbsoluteFile();
+            if (wal.exists() && !Path.tryCopy(wal, new File(restore, wal.getName()))) {
+                throw new IOException("Cannot copy database log");
+            }
+            File prefs = new File(restore, NAME + "-pref");
+            Prefers.backup(prefs);
+            if (!Prefers.validateBackup(prefs)) throw new IOException("Cannot copy preferences");
+            String time = Util.format(new SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault()), copy.lastModified());
+            file = new File(Path.tv(), time + "." + BACKUP_SUFFIX);
+        } finally {
+            database.endTransaction();
+        }
+        File archive = File.createTempFile("backup-", ".tmp", file.getParentFile());
+        try {
+            if (!FileUtil.zipFolder(restore, archive) || !archive.renameTo(file)) {
+                throw new IOException("Cannot write backup archive");
+            }
+            return file;
+        } finally {
+            archive.delete();
+        }
     }
 
     public static void restore(File file, com.fongmi.android.tv.impl.Callback callback) {
