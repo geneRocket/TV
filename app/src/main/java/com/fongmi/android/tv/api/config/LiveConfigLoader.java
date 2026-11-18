@@ -7,33 +7,49 @@ import com.fongmi.android.tv.api.Decoder;
 import com.fongmi.android.tv.api.LiveParser;
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.bean.Depot;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.bean.Live;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /** Document loading/validation with no dependency on the active live or VOD configuration. */
 final class LiveConfigLoader {
     interface Reader { String read(String url) throws Throwable; }
     private final Reader reader;
-    LiveConfigLoader() { this(Decoder::getJson); }
-    LiveConfigLoader(Reader reader) { this.reader = reader; }
+    private final Consumer<Depot> register;
+    private final BiConsumer<String, String> validatePlaylist;
+    LiveConfigLoader() {
+        this(Decoder::getJson, item -> ConfigRepository.get().find(item, 1), null);
+    }
+    LiveConfigLoader(Reader reader, Consumer<Depot> register, BiConsumer<String, String> validatePlaylist) {
+        this.reader = reader;
+        this.register = register;
+        this.validatePlaylist = validatePlaylist == null ? this::validateText : validatePlaylist;
+    }
     Result loadResult(Config item) {
         try {
-            String text = reader.read(item.getUrl());
-            if (Json.invalid(text)) {
-                Live live = new Live(parseName(item.getUrl()), item.getUrl()).sync();
-                LiveParser.text(live, text);
-                cacheConfig(item, text);
+            Payload payload = resolvePayload(item.getUrl(), reader.read(item.getUrl()), 0);
+            if (payload.object == null) {
+                Live live = new Live(parseName(item.getUrl()), payload.url).sync();
+                LiveParser.text(live, payload.text);
+                requireChannels(live);
+                Config.cacheContent(item, payload.text, ConfigLoadTask.startedAt());
                 return Result.live(item, live);
             }
-            return Result.json(item, loadObject(Json.parse(text).getAsJsonObject(), 0), true);
+            return Result.json(item, payload.object, true);
         } catch (Throwable e) {
             ConfigLoadTask.check();
             Result cached = readCachedConfig(item);
@@ -73,7 +89,42 @@ final class LiveConfigLoader {
         Config.cacheContent(item, text, ConfigLoadTask.startedAt());
     }
 
-    JsonObject loadObject(JsonObject object, int depth) throws Throwable { return new ConfigJsonLoader(reader::read, ConfigPayloadValidator::live).resolve(object, depth); }
+    Payload resolvePayload(String url, String text, int depth) throws Throwable {
+        ConfigLoadTask.check();
+        ConfigJsonLoader.requireDepth(depth);
+        JsonObject object = parseObject(text);
+        if (object == null) {
+            if (depth > 0) validatePlaylist.accept(url, text);
+            return new Payload(url, text, null);
+        }
+        if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
+        if (object.has("urls")) {
+            return ConfigJsonLoader.resolveDepot(object, register,
+                    source -> resolvePayload(source, reader.read(source), depth + 1));
+        }
+        ConfigPayloadValidator.live(object);
+        return new Payload(url, text, object);
+    }
+
+    private static JsonObject parseObject(String text) {
+        try {
+            JsonElement value = JsonParser.parseString(text);
+            return value.isJsonObject() ? value.getAsJsonObject() : null;
+        } catch (JsonParseException error) {
+            return null;
+        }
+    }
+
+    static final class Payload {
+        final String url, text;
+        final JsonObject object;
+
+        Payload(String url, String text, JsonObject object) {
+            this.url = url;
+            this.text = text;
+            this.object = object;
+        }
+    }
 
     List<Config> getUniqueConfigs(List<Config> configs) {
         List<Config> items = new ArrayList<>();
@@ -115,9 +166,7 @@ final class LiveConfigLoader {
 
     void refreshDepotCache(Config target) {
         try {
-            String text = reader.read(target.getUrl());
-            if (Json.invalid(text)) cacheConfig(target, text);
-            else cacheConfig(target, loadObject(Json.parse(text).getAsJsonObject(), 0));
+            cacheConfig(target, resolvePayload(target.getUrl(), reader.read(target.getUrl()), 0).text);
         } catch (Throwable ignored) {
         }
     }

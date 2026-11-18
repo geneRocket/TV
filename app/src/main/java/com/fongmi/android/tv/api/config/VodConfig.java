@@ -251,7 +251,8 @@ public class VodConfig {
         try {
             if (config.isEmpty()) config = Config.vod();
             setLoadUrls(Collections.singletonList(config.getUrl()));
-            JsonObject object = Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject();
+            JsonObject object = config.isUrlEdit() ? loadObject(config.getUrl(), 0)
+                    : Json.parse(Decoder.getJson(config.getUrl())).getAsJsonObject();
             if (!object.has("urls")) ConfigPayloadValidator.vod(object);
             checkJson(object, callback);
         } catch (Throwable e) {
@@ -289,6 +290,10 @@ public class VodConfig {
                 ConfigLoadTask.check();
                 error = e;
                 ThreadPools.log(e, "VOD config operation failed.");
+                if (result.config.isUrlEdit()) {
+                    if (callback != null) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
+                    return;
+                }
             }
         }
         ConfigLoadTask.check();
@@ -306,11 +311,15 @@ public class VodConfig {
     private List<VodConfigLoader.Result> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
-        if (cache) return CacheFirstLoader.load(unique, this::readCachedConfig,
+        boolean editing = unique.stream().anyMatch(Config::isUrlEdit);
+        if (cache && !editing) return CacheFirstLoader.load(unique, this::readCachedConfig,
                 item -> !item.isCache(), item -> ConfigLoadTask.background(() -> refreshDepotCache(item)),
                 this::fetchMissingConfig, () -> loadConfigResults(unique, false));
         try {
-            return OrderedParallelMapper.map(ThreadPools.config(), unique, ConfigLoadTask.bind(this::loadConfigResult), error -> ThreadPools.log(error, "VOD config operation failed."));
+            return OrderedParallelMapper.map(ThreadPools.config(), unique, ConfigLoadTask.bind(item -> {
+                VodConfigLoader.Result cached = cache ? readCachedConfig(item) : null;
+                return cached == null ? loadConfigResult(item) : cached;
+            }), error -> ThreadPools.log(error, "VOD config operation failed."));
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             return Collections.emptyList();
@@ -463,16 +472,19 @@ public class VodConfig {
     }
 
     private void parseDepot(JsonObject object, Callback callback) {
-        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
+        List<Depot> items = ConfigJsonLoader.entries(object);
         if (items.isEmpty()) {
             if (callback != null) ConfigLoadTask.post(() -> callback.error(ResUtil.getString(R.string.error_config_parse)));
             return;
         }
-        ConfigRepository.get().delete(config.getUrl());
+        List<Config> sources = new ArrayList<>();
+        ConfigLoadTask.commit(() -> {
+            for (Depot item : items) sources.add(ConfigRepository.get().find(item, 0));
+        });
+        ConfigRepository.get().delete(config.getUrl(), 0);
         Throwable error = null;
-        for (Depot item : items) {
+        for (Config target : sources) {
             try {
-                Config target = ConfigRepository.get().find(item, 0);
                 JsonObject loaded = loadDepotObject(target);
                 config = target;
                 setLoadUrls(Collections.singletonList(target.getUrl()));
@@ -538,6 +550,8 @@ public class VodConfig {
     }
 
     void persistSelection(ConfigDocument document) {
+        if (config.isUrlEdit() && persistCache) config.json(document.object().toString()).time(System.currentTimeMillis());
+        ConfigApplicationService.commitUrlEdit(config, selectedConfigs);
         if (persistCache) config.json(document.object().toString()).update();
         if (selection != null) selection.commit(config);
         config.saveHome(config.getHome()); config.saveParse(config.getParse()); config.activate();

@@ -51,6 +51,13 @@ public class CatchupTest {
                 catchup.format("https://example.com/live/42/index.m3u8?token=signed", programme()));
     }
 
+    @Test public void appendsReplayParametersBeforeFragmentAndInlineHeaders() {
+        String tags = "@Headers={\"X-Token\":\"auth?scope=live\"}@User-Agent=IPTV";
+        String base = "https://example.com/PLTV/live.m3u8?token=signed#player";
+        String expected = "https://example.com/TVOD/live.m3u8?token=signed&playseek=20231115061320-20231115071320#player";
+        assertEquals(expected + tags, Catchup.PLTV().format(base + tags, programme()));
+    }
+
     @Test public void ignoresInvalidRewriteAndKeepsLegacyPltvFallback() {
         Catchup catchup = new Gson().fromJson("{\"replace\":\"[,/replay/\",\"source\":\"?start={utc:timestamp}\"}", Catchup.class);
         assertEquals("https://example.com/TVOD/index.m3u8?start=1700000000",

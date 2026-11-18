@@ -52,8 +52,12 @@ public final class ConfigRepository {
         return Config.find(url, name, type);
     }
 
-    public boolean edit(String previousUrl, String url, String name, int type) {
-        return previousUrl.isEmpty() || Config.edit(previousUrl, url, name, type);
+    public Config prepareEdit(String previousUrl, String url, String name, int type) {
+        return Config.prepareEdit(previousUrl, url, name, type);
+    }
+
+    public boolean rename(String url, String name, int type) {
+        return Config.rename(url, name, type);
     }
 
     public Config find(Config config) {

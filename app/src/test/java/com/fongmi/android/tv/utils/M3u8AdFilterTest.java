@@ -2076,8 +2076,16 @@ public class M3u8AdFilterTest {
     }
 
     private static String readLiveFixture(String name) throws IOException {
-        String path = "/m3u8/live/" + name;
-        return readFixture(path);
+        if ("odyssey-07-live.m3u8".equals(name)) {
+            // The recapture only changes timestamps and the final duration in each ad pod.
+            return readRealFixture("odyssey-07.m3u8")
+                    .replace("#EXTINF:2,\n/video/adjump/time/17766952867690000008.ts",
+                            "#EXTINF:2.04,\n/video/adjump/time/17766952867690000008.ts")
+                    .replace("/video/adjump/time/1776695286767", "/video/adjump/time/1786728636808")
+                    .replace("/video/adjump/time/1776695286768", "/video/adjump/time/1786728636809")
+                    .replace("/video/adjump/time/1776695286769", "/video/adjump/time/1786728636809");
+        }
+        return readFixture("/m3u8/live/" + name);
     }
 
     private static String readTvBoxFixture(String name) throws IOException {

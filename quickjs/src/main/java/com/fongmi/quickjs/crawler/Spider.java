@@ -21,18 +21,33 @@ import com.whl.quickjs.wrapper.QuickJSContext;
 import org.json.JSONArray;
 
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import java9.util.concurrent.CompletableFuture;
 
 public class Spider extends com.github.catvod.crawler.Spider {
 
-    private final ExecutorService executor;
+    private static final long DESTROY_TIMEOUT_SECONDS = 5;
+
+    private final ScheduledExecutorService executor;
+    private final AtomicBoolean destroying = new AtomicBoolean();
+    private final Set<CompletableFuture<Object>> pendingCalls = new HashSet<>();
+    private Global global;
     private QuickJSContext ctx;
     private JSObject jsObject;
     private final String key;
@@ -40,9 +55,7 @@ public class Spider extends com.github.catvod.crawler.Spider {
     private boolean cat;
 
     public Spider(String key, String api) throws Exception {
-        this.executor = Executors.newSingleThreadExecutor();
-        this.key = key;
-        this.api = api;
+        this(key, api, null, createExecutor());
         try {
             initializeJS();
         } catch (Exception e) {
@@ -51,21 +64,44 @@ public class Spider extends com.github.catvod.crawler.Spider {
         }
     }
 
+    Spider(String key, String api, JSObject jsObject, ScheduledExecutorService executor) {
+        this.key = key;
+        this.api = api;
+        this.jsObject = jsObject;
+        this.executor = executor;
+    }
+
+    private static ScheduledExecutorService createExecutor() {
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
+        executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        return executor;
+    }
+
     private void releaseAfterInitializeFailure() {
         executor.submit(this::release);
         executor.shutdown();
     }
 
     private void submit(Runnable runnable) {
-        executor.submit(runnable);
+        executor.submit(() -> {
+            if (!executor.isShutdown()) runnable.run();
+        });
     }
 
     private <T> Future<T> submit(Callable<T> callable) {
-        return executor.submit(com.github.catvod.net.HttpCallScope.bind(callable));
+        return executor.submit(com.github.catvod.net.HttpCallScope.bind(() -> {
+            if (executor.isShutdown()) throw new CancellationException("QuickJS spider is closed");
+            return callable.call();
+        }));
     }
 
     private Object call(String func, Object... args) throws Exception {
-        return submit(() -> Async.run(jsObject, func, args)).get().get();
+        return submit(() -> {
+            CompletableFuture<Object> result = Async.run(jsObject, func, args);
+            pendingCalls.add(result);
+            result.whenComplete((value, error) -> pendingCalls.remove(result));
+            return result;
+        }).get().get();
     }
 
     @Override
@@ -75,8 +111,8 @@ public class Spider extends com.github.catvod.crawler.Spider {
             call("init", cfg);
             submit(cfg::release);
         } else {
-            if (Module.get().isRemote(extend)) Module.get().fetch(extend);
-            Object obj = submit(() -> Json.valid(extend) ? ctx.parse(extend) : extend).get();
+            Object obj = Module.get().isRemote(extend) ? extend :
+                    submit(() -> Json.valid(extend) ? ctx.parse(extend) : extend).get();
             call("init", obj);
             if (obj instanceof JSObject) submit(((JSObject) obj)::release);
         }
@@ -161,23 +197,43 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void destroy() {
-        submit(() -> {
-            try {
-                Async.run(jsObject, "destroy", new Object[0]);
-            } catch (Throwable e) {
-                e.printStackTrace();
-            } finally {
-                release();
-                executor.shutdownNow();
-            }
+        if (!destroying.compareAndSet(false, true)) return;
+        executor.execute(() -> {
+            ScheduledFuture<?> timeout = executor.schedule(this::finishDestroy, DESTROY_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            Async.run(jsObject, "destroy", new Object[0]).whenComplete((result, error) -> {
+                if (error != null) error.printStackTrace();
+                try {
+                    // The completion may run on the native callback stack. Release after it returns.
+                    executor.execute(() -> {
+                        timeout.cancel(false);
+                        finishDestroy();
+                    });
+                } catch (RejectedExecutionException ignored) {
+                    // The cleanup timeout has already shut the executor down.
+                }
+            });
         });
     }
 
+    private void finishDestroy() {
+        if (executor.isShutdown()) return;
+        executor.shutdown();
+        for (CompletableFuture<Object> result : new ArrayList<>(pendingCalls)) result.cancel(false);
+        release();
+    }
+
     private void release() {
-        if (jsObject != null) jsObject.release();
-        if (ctx != null) ctx.destroy();
-        jsObject = null;
-        ctx = null;
+        if (global != null) global.close();
+        try {
+            if (jsObject != null) jsObject.release();
+        } finally {
+            try {
+                if (ctx != null) ctx.destroy();
+            } finally {
+                jsObject = null;
+                ctx = null;
+            }
+        }
     }
 
     private void initializeJS() throws Exception {
@@ -192,7 +248,8 @@ public class Spider extends com.github.catvod.crawler.Spider {
         ctx = QuickJSContext.create();
         ctx.setConsole(new Console());
         ctx.evaluate(Asset.read("js/lib/http.js"));
-        Global.create(ctx, executor).setProperty();
+        global = Global.create(ctx, executor);
+        global.setProperty();
         ctx.getGlobalObject().setProperty("local", Local.class);
         ctx.setModuleLoader(new QuickJSContext.BytecodeModuleLoader() {
             @Override
@@ -223,8 +280,7 @@ public class Spider extends com.github.catvod.crawler.Spider {
         JSObject cfg = ctx.createNewJSObject();
         cfg.setProperty("stype", 3);
         cfg.setProperty("skey", key);
-        if (Json.invalid(ext)) {
-            if (Module.get().isRemote(ext)) Module.get().fetch(ext);
+        if (Module.get().isRemote(ext) || Json.invalid(ext)) {
             cfg.setProperty("ext", ext);
         } else {
             JSObject obj = (JSObject) ctx.parse(ext);

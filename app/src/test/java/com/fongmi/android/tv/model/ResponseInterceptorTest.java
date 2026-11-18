@@ -25,6 +25,10 @@ public class ResponseInterceptorTest {
         followFallback(false, false);
     }
 
+    @Test(timeout = 10000) public void redirectWithFollowingDisabledCannotAffectAnotherCall() throws Exception {
+        followFallback(false, false, false);
+    }
+
     @Test(timeout = 10000) public void decodesStandardZlibWrappedDeflate() throws Exception {
         withCompressedResponse(false, "deflate", response -> {
             assertEquals("playlist body", response.body().string());
@@ -102,14 +106,20 @@ public class ResponseInterceptorTest {
     }
 
     private void followFallback(boolean compressedRedirect, boolean compressedRejection) throws Exception {
+        followFallback(compressedRedirect, compressedRejection, true);
+    }
+
+    private void followFallback(boolean compressedRedirect, boolean compressedRejection, boolean follow) throws Exception {
         ExecutorService worker = Executors.newSingleThreadExecutor();
-        OkHttpClient client = new OkHttpClient.Builder().addNetworkInterceptor(new ResponseInterceptor()).build();
+        OkHttpClient client = new OkHttpClient.Builder().addNetworkInterceptor(new ResponseInterceptor())
+                .followRedirects(follow).build();
+        int expectedRequests = follow ? 3 : 2;
         AtomicInteger requests = new AtomicInteger();
         try (ServerSocket server = new ServerSocket(0)) {
             server.setSoTimeout(3000);
             Future<?> serving = worker.submit(() -> {
                 try {
-                    for (int i = 0; i < 3; i++) {
+                    for (int i = 0; i < expectedRequests; i++) {
                         try (Socket socket = server.accept()) {
                             socket.setSoTimeout(3000);
                             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
@@ -134,13 +144,19 @@ public class ResponseInterceptorTest {
                     if (!server.isClosed()) throw new RuntimeException(error);
                 }
             });
-            try (Response response = client.newCall(new Request.Builder()
-                    .url("http://127.0.0.1:" + server.getLocalPort() + "/origin").build()).execute()) {
-                assertEquals(200, response.code());
-                assertEquals("success", response.body().string());
+            String origin = "http://127.0.0.1:" + server.getLocalPort();
+            try (Response response = client.newCall(new Request.Builder().url(origin + "/origin").build()).execute()) {
+                assertEquals(follow ? 200 : 302, response.code());
+                if (follow) assertEquals("success", response.body().string());
+            }
+            if (!follow) {
+                try (Response response = client.newCall(new Request.Builder().url(origin + "/target").build()).execute()) {
+                    assertEquals(406, response.code());
+                    assertEquals("rejected", response.body().string());
+                }
             }
             serving.get(3, TimeUnit.SECONDS);
-            assertEquals(3, requests.get());
+            assertEquals(expectedRequests, requests.get());
         } finally {
             worker.shutdownNow();
             client.connectionPool().evictAll();

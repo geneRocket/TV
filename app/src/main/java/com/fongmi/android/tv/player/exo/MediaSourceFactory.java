@@ -21,9 +21,13 @@ import androidx.media3.extractor.ts.TsExtractor;
 
 import com.fongmi.android.tv.App;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.net.interceptor.AuthInterceptor;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import okhttp3.HttpUrl;
+import okhttp3.OkHttpClient;
 
 public class MediaSourceFactory implements MediaSource.Factory {
 
@@ -60,14 +64,11 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @NonNull
     @Override
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
-        MediaSource.Factory factory = buildMediaSourceFactory(getHeaders(mediaItem));
-        if (drmSessionManagerProvider != null) factory.setDrmSessionManagerProvider(drmSessionManagerProvider);
-        if (loadErrorHandlingPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
+        Map<String, String> headers = getHeaders(mediaItem);
         if (mediaItem.mediaId.contains("***") && mediaItem.mediaId.contains("|||")) {
-            return createConcatenatingMediaSource(factory, mediaItem);
-        } else {
-            return factory.createMediaSource(mediaItem);
+            return createConcatenatingMediaSource(mediaItem, headers);
         }
+        return buildMediaSourceFactory(headers, authenticationOrigin(mediaItem)).createMediaSource(mediaItem);
     }
 
     private Map<String, String> getHeaders(MediaItem mediaItem) {
@@ -81,13 +82,17 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return headers;
     }
 
-    private MediaSource createConcatenatingMediaSource(MediaSource.Factory factory, MediaItem mediaItem) {
+    private MediaSource createConcatenatingMediaSource(MediaItem mediaItem, Map<String, String> headers) {
         ConcatenatingMediaSource2.Builder builder = new ConcatenatingMediaSource2.Builder();
+        MediaSource.Factory unscoped = buildMediaSourceFactory(headers, null);
         for (String split : mediaItem.mediaId.split("\\*\\*\\*")) {
             String[] info = split.split("\\|\\|\\|");
             if (info.length >= 2) {
                 try {
-                    builder.add(factory.createMediaSource(mediaItem.buildUpon().setUri(Uri.parse(info[0])).build()), Long.parseLong(info[1]));
+                    MediaItem child = mediaItem.buildUpon().setUri(Uri.parse(info[0])).build();
+                    HttpUrl origin = authenticationOrigin(child);
+                    MediaSource.Factory factory = origin == null ? unscoped : buildMediaSourceFactory(headers, origin);
+                    builder.add(factory.createMediaSource(child), Long.parseLong(info[1]));
                 } catch (Exception ignored) {
                 }
             }
@@ -100,10 +105,20 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return extractorsFactory;
     }
 
-    private MediaSource.Factory buildMediaSourceFactory(Map<String, String> headers) {
-        HttpDataSource.Factory httpFactory = new MyOkhttpDataSource.Factory(OkHttp.client());
-        if (headers != null && !headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
+    private HttpUrl authenticationOrigin(MediaItem item) {
+        HttpUrl url = item.localConfiguration == null ? null : HttpUrl.parse(item.localConfiguration.uri.toString());
+        return url != null && AuthInterceptor.hasCredentials(url) ? url : null;
+    }
+
+    private MediaSource.Factory buildMediaSourceFactory(Map<String, String> headers, HttpUrl mediaUrl) {
+        OkHttpClient client = OkHttp.client();
+        HttpDataSource.Factory httpFactory = new MyOkhttpDataSource.Factory(
+                mediaUrl == null ? client : request -> client.newCall(AuthInterceptor.apply(request, mediaUrl)));
+        if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
         DataSource.Factory upstreamFactory = new DefaultDataSource.Factory(App.get(), httpFactory);
-        return new DefaultMediaSourceFactory(upstreamFactory, getExtractorsFactory(), subtitleParserFactory);
+        MediaSource.Factory factory = new DefaultMediaSourceFactory(upstreamFactory, getExtractorsFactory(), subtitleParserFactory);
+        if (drmSessionManagerProvider != null) factory.setDrmSessionManagerProvider(drmSessionManagerProvider);
+        if (loadErrorHandlingPolicy != null) factory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy);
+        return factory;
     }
 }

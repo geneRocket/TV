@@ -283,11 +283,16 @@ public class Setting {
     }
 
     public static void putLiveConfigUrls(String urls) {
-        getEditor().putString("live_config_urls", urls).remove("inherited_live_urls").apply();
+        getEditor().putString("live_config_urls", urls).putString("inherited_live_urls", "").apply();
+    }
+
+    public static void putExplicitLiveConfig(String urls, String description) {
+        getEditor().putString("live_config_urls", urls).putString("inherited_live_urls", "")
+                .putString("live_config_desc", description).apply();
     }
 
     public static String getInheritedLiveUrls() {
-        return Prefers.getString("inherited_live_urls", "");
+        return Prefers.getString("inherited_live_urls", null);
     }
 
     public static void putInheritedLiveConfig(String urls, String description) {

@@ -38,7 +38,6 @@ public class OkHttp {
     private final Map<Integer, OkHttpClient> timeoutClients = new ConcurrentHashMap<>();
     private final Map<Integer, OkHttpClient> noRedirectClients = new ConcurrentHashMap<>();
     private OkAuthenticator authenticator;
-    private AuthInterceptor authInterceptor;
     private RequestInterceptor requestInterceptor;
     private ResponseInterceptor responseInterceptor;
     private OkProxySelector selector;
@@ -86,11 +85,6 @@ public class OkHttp {
         return get().authenticator = new OkAuthenticator();
     }
 
-    public static AuthInterceptor authInterceptor() {
-        if (get().authInterceptor != null) return get().authInterceptor;
-        return get().authInterceptor = new AuthInterceptor();
-    }
-
     public static RequestInterceptor requestInterceptor() {
         if (get().requestInterceptor != null) return get().requestInterceptor;
         return get().requestInterceptor = new RequestInterceptor();
@@ -105,7 +99,6 @@ public class OkHttp {
         resolver().clear();
         selector().clear();
         authenticator().clear();
-        authInterceptor().clear();
         requestInterceptor().clear();
         responseInterceptor().clear();
         get().resetClient();
@@ -201,7 +194,7 @@ public class OkHttp {
         dispatcher.setMaxRequestsPerHost(BUDGET.networkPerHost);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .addInterceptor(requestInterceptor())
-                .addInterceptor(authInterceptor())
+                .addInterceptor(new AuthInterceptor())
                 .addNetworkInterceptor(responseInterceptor())
                 .addInterceptor(new ProxyRequestInterceptor(selector()))
                 .connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS)

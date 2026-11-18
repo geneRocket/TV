@@ -15,6 +15,7 @@ import com.github.catvod.utils.Util;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -191,7 +192,15 @@ public class JarLoader {
         if (Util.md5(verified).equalsIgnoreCase(checksum)) {
             load(key, verified, lock);
         } else if (Util.md5(unpinned).equalsIgnoreCase(checksum)) {
-            load(key, unpinned, lock);
+            File fallback = unpinned;
+            try {
+                if (JarCache.promote(unpinned, verified, checksum)) fallback = verified;
+                else return;
+            } catch (IOException error) {
+                ThreadPools.log(error, "Cannot promote verified JAR cache.");
+                if (!Util.md5(unpinned).equalsIgnoreCase(checksum)) return;
+            }
+            load(key, fallback, lock);
         }
     }
 

@@ -25,31 +25,36 @@ public class AuthInterceptorTest {
         try (Response response = client.newCall(request.build()).execute()) { return response.code(); }
     }
 
-    @Test public void playlistCredentialsAreSentPreemptivelyToSegments() throws Exception {
+    @Test public void preemptiveCredentialsStayWithTheRequestThatProvidesThem() throws Exception {
         assertEquals(200, fetch("https://alice:secret@media.example/master.m3u8", null));
-        String credentials = sent.get().header("Authorization");
-        assertEquals("Basic YWxpY2U6c2VjcmV0", credentials);
-        assertEquals(200, fetch("https://media.example/segment.ts", null));
-        assertEquals(credentials, sent.get().header("Authorization"));
+        assertEquals("Basic YWxpY2U6c2VjcmV0", sent.get().header("Authorization"));
+        assertEquals(403, fetch("https://media.example/independent.m3u8", null));
+        assertNull(sent.get().header("Authorization"));
     }
 
-    @Test public void cachedCredentialsDoNotReplaceExplicitAuthorization() throws Exception {
+    @Test public void urlCredentialsDoNotReplaceExplicitAuthorization() throws Exception {
         fetch("https://alice:secret@media.example/master.m3u8", null);
-        fetch("https://media.example/segment.ts", "Bearer token");
+        fetch("https://alice:secret@media.example/segment.ts", "Bearer token");
         assertEquals("Bearer token", sent.get().header("Authorization"));
     }
 
-    @Test public void cachedCredentialsStayWithinTheirOrigin() throws Exception {
+    @Test public void unrelatedRequestsAcrossOriginsStayUnauthenticated() throws Exception {
         fetch("https://alice:secret@media.example/master.m3u8", null);
         assertEquals(403, fetch("https://media.example:8443/segment.ts", null));
         assertEquals(403, fetch("http://media.example/segment.ts", null));
         assertEquals(403, fetch("https://other.example/segment.ts", null));
     }
 
-    @Test public void clearingConfigurationForgetsCredentials() throws Exception {
-        fetch("https://alice:secret@media.example/master.m3u8", null);
-        auth.clear();
-        assertEquals(403, fetch("https://media.example/segment.ts", null));
+    @Test public void mediaCredentialsAuthorizeOnlyRelatedSameOriginSegments() {
+        HttpUrl playlist = HttpUrl.get("https://alice:secret@media.example/master.m3u8");
+        Request segment = new Request.Builder().url("https://media.example/segment.ts").build();
+        assertEquals("Basic YWxpY2U6c2VjcmV0", AuthInterceptor.apply(segment, playlist).header("Authorization"));
+        Request alternateAccount = segment.newBuilder().url("https://bob:other@media.example/segment.ts").build();
+        assertEquals("Basic Ym9iOm90aGVy", AuthInterceptor.apply(alternateAccount, playlist).header("Authorization"));
+        Request alternateOrigin = segment.newBuilder().url("https://media.example:8443/segment.ts").build();
+        assertNull(AuthInterceptor.apply(alternateOrigin, playlist).header("Authorization"));
+        Request bearer = segment.newBuilder().header("Authorization", "Bearer token").build();
+        assertEquals("Bearer token", AuthInterceptor.apply(bearer, playlist).header("Authorization"));
     }
 
     @Test public void challengeOnAnotherPortCannotReuseCachedCredentials() throws Exception {

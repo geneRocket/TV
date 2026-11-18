@@ -82,6 +82,22 @@ public class JarCacheTest {
         preservesOldCache(valid, "<html>MD5 server error</html>");
     }
 
+    @Test public void promotesOnlyMatchingLegacyCacheForOfflineReuse() throws Exception {
+        File legacy = folder.newFile();
+        File target = new File(folder.getRoot(), "verified.jar");
+        byte[] valid = archive("classes.dex", dex());
+        Files.write(legacy.toPath(), valid);
+        assertFalse(JarCache.promote(legacy, target, "00000000000000000000000000000000"));
+        assertFalse(target.exists());
+        StringBuilder checksum = new StringBuilder();
+        for (byte value : MessageDigest.getInstance("MD5").digest(valid)) {
+            checksum.append(String.format("%02x", value & 255));
+        }
+        assertTrue(JarCache.promote(legacy, target, checksum.toString()));
+        assertArrayEquals(valid, Files.readAllBytes(target.toPath()));
+        assertArrayEquals(valid, Files.readAllBytes(legacy.toPath()));
+    }
+
     @Test public void validUpdateReplacesReadOnlyCacheAndChecksMd5() throws Exception {
         File target = folder.newFile();
         Files.write(target.toPath(), new byte[]{1});

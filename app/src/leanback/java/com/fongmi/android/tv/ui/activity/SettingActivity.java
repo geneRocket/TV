@@ -173,21 +173,25 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
             case 0:
                 Notify.progress(this);
                 VodConfig.loadCached(config, getCallback());
-                Setting.putVodConfigDesc(config.getDesc());
-                Setting.putVodConfigUrls(config.getUrl());
-                mBinding.vodUrl.setText(config.getDesc());
+                if (!config.isUrlEdit()) {
+                    Setting.putVodConfigDesc(config.getDesc());
+                    Setting.putVodConfigUrls(config.getUrl());
+                    mBinding.vodUrl.setText(config.getDesc());
+                }
                 break;
             case 1:
                 Notify.progress(this);
                 LiveConfig.loadCached(config, getCallback());
-                Setting.putLiveConfigDesc(config.getDesc());
-                Setting.putLiveConfigUrls(config.getUrl());
-                mBinding.liveUrl.setText(config.getDesc());
+                if (!config.isUrlEdit()) {
+                    Setting.putLiveConfigDesc(config.getDesc());
+                    Setting.putLiveConfigUrls(config.getUrl());
+                    mBinding.liveUrl.setText(config.getDesc());
+                }
                 break;
             case 2:
                 Notify.progress(this);
                 WallConfig.load(config, getCallback());
-                mBinding.wallUrl.setText(config.getDesc());
+                if (!config.isUrlEdit()) mBinding.wallUrl.setText(config.getDesc());
                 break;
         }
     }
@@ -195,25 +199,30 @@ public class SettingActivity extends BaseActivity implements BackupCallback, Con
     private void load(List<Config> configs) {
         Config first = configs.get(0);
         type = first.getType();
+        boolean editingUrl = configs.stream().anyMatch(Config::isUrlEdit);
         switch (first.getType()) {
             case 0:
                 Notify.progress(this);
                 VodConfig.loadCached(configs, getCallback());
-                Setting.putVodConfigDesc(getConfigsDesc(configs));
-                Setting.putVodConfigUrls(getConfigsUrls(configs));
-                mBinding.vodUrl.setText(getVodConfigDesc());
+                if (!editingUrl) {
+                    Setting.putVodConfigDesc(getConfigsDesc(configs));
+                    Setting.putVodConfigUrls(getConfigsUrls(configs));
+                    mBinding.vodUrl.setText(getVodConfigDesc());
+                }
                 break;
             case 1:
                 Notify.progress(this);
                 LiveConfig.loadCached(configs, getCallback());
-                Setting.putLiveConfigDesc(getConfigsDesc(configs));
-                Setting.putLiveConfigUrls(getConfigsUrls(configs));
-                mBinding.liveUrl.setText(getLiveConfigDesc());
+                if (!editingUrl) {
+                    Setting.putLiveConfigDesc(getConfigsDesc(configs));
+                    Setting.putLiveConfigUrls(getConfigsUrls(configs));
+                    mBinding.liveUrl.setText(getLiveConfigDesc());
+                }
                 break;
             case 2:
                 Notify.progress(this);
                 WallConfig.load(first, getCallback());
-                mBinding.wallUrl.setText(first.getDesc());
+                if (!editingUrl) mBinding.wallUrl.setText(first.getDesc());
                 break;
         }
     }

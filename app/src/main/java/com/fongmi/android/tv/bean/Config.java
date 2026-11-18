@@ -35,6 +35,10 @@ public class Config {
     private static final Map<Integer, List<Config>> TYPE_CACHE = new ConcurrentHashMap<>();
 
     public static void cacheContent(Config item, String text, long started) {
+        if (item.isUrlEdit()) {
+            item.json(text).time(System.currentTimeMillis());
+            return;
+        }
         int changed = AppDatabase.get().getConfigDao().updateCache(item.getId(), item.getUrl(), item.getType(), text, System.currentTimeMillis(), started);
         if (changed > 0) {
             // Read the persisted metadata instead of republishing the caller's old snapshot.
@@ -116,6 +120,8 @@ public class Config {
     private String home;
     @SerializedName("parse")
     private String parse;
+    @androidx.room.Ignore
+    private transient String previousUrl;
 
     public static List<Config> arrayFrom(String str) {
         Type listType = new TypeToken<List<Config>>() {}.getType();
@@ -144,7 +150,7 @@ public class Config {
     }
 
     private static Config cache(Config item) {
-        if (item == null || item.getUrl().isEmpty()) return item;
+        if (item == null || item.getId() <= 0 || item.getUrl().isEmpty()) return item;
         Config old = ID_CACHE.get(item.getId());
         if (old != null) {
             String oldKey = cacheKey(old.getUrl(), old.getType());
@@ -168,7 +174,7 @@ public class Config {
 
     private static Config copy(Config item) {
         if (item == null) return null;
-        return new Config()
+        Config copy = new Config()
                 .type(item.getType())
                 .url(item.getUrl())
                 .json(item.getJson())
@@ -178,6 +184,8 @@ public class Config {
                 .parse(item.getParse())
                 .time(item.getTime())
                 .id(item.getId());
+        copy.previousUrl = item.previousUrl;
+        return copy;
     }
 
     public Config copy() { return copy(this); }
@@ -429,10 +437,48 @@ public class Config {
         return item == null ? copy(create(type, url)) : copy(item);
     }
 
-    public static boolean edit(String previousUrl, String url, String name, int type) {
+    public static Config prepareEdit(String previousUrl, String url, String name, int type) {
         ConfigDao dao = AppDatabase.get().getConfigDao();
-        if (dao.edit(previousUrl, url, name, type) == 0) return false;
-        if (!previousUrl.equals(url)) removeCache(previousUrl, type);
+        Config original = dao.find(previousUrl, type);
+        if (original == null || dao.find(url, type) != null) return null;
+        return original.editUrl(url, name);
+    }
+
+    public Config editUrl(String url, String name) {
+        Config draft = copy().url(url).name(name).json("").time(0);
+        draft.previousUrl = getUrl();
+        return draft;
+    }
+
+    public boolean isUrlEdit() {
+        return previousUrl != null;
+    }
+
+    public void commitUrlEdit() {
+        commitUrlEdit(() -> { });
+    }
+
+    public void commitUrlEdit(Runnable apply) {
+        if (!isUrlEdit()) {
+            apply.run();
+            return;
+        }
+        AppDatabase database = AppDatabase.get();
+        ConfigDao dao = database.getConfigDao();
+        database.runInTransaction(() -> {
+            if (dao.commitUrlEdit(getId(), previousUrl, getUrl(), getName(), getJson(), getTime()) == 0) {
+                throw new IllegalStateException(com.fongmi.android.tv.utils.ResUtil.getString(com.fongmi.android.tv.R.string.error_config_exists));
+            }
+            apply.run();
+        });
+        removeCache(previousUrl, getType());
+        previousUrl = null;
+        cache(dao.findById(getId()));
+    }
+
+    public static boolean rename(String url, String name, int type) {
+        ConfigDao dao = AppDatabase.get().getConfigDao();
+        if (dao.rename(url, name, type) == 0) return false;
         cache(dao.find(url, type));
         return true;
     }
@@ -471,7 +517,17 @@ public class Config {
     // Synchronous write methods (safe if caller is in App.execute())
     public Config insert() {
         if (isEmpty()) return this;
-        setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
+        return insert(AppDatabase.get().getConfigDao());
+    }
+
+    Config insert(ConfigDao dao) {
+        long id = dao.insert(this);
+        if (id == -1) {
+            Config existing = dao.find(getUrl(), getType());
+            if (existing != null) return cache(existing);
+            throw new IllegalStateException("Configuration insert was ignored without an existing row");
+        }
+        setId(Math.toIntExact(id));
         return cache(this);
     }
 

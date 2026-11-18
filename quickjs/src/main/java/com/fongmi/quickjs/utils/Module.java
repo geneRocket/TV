@@ -1,11 +1,10 @@
 package com.fongmi.quickjs.utils;
 
-import android.net.Uri;
-import android.system.Os;
 import android.util.Base64;
 
 import com.fongmi.android.tv.utils.BoundedCache;
 import com.fongmi.android.tv.utils.RemoteContentValidator;
+import com.github.catvod.net.HttpCallScope;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Path;
@@ -14,17 +13,23 @@ import com.google.common.net.HttpHeaders;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
+import okhttp3.Call;
 import okhttp3.Headers;
 
 public class Module {
@@ -42,8 +47,10 @@ public class Module {
     private final BoundedCache<String, Long> attempts;
     private final Set<String> refreshing;
     private final ExecutorService executor;
+    private final Function<String, File> cacheFile;
+    private final Function<String, Call> newCall;
     private volatile boolean closed;
-    private final ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<String>> downloads = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CompletableFuture<String>> downloads = new ConcurrentHashMap<>();
 
     private static class Loader {
         static volatile Module INSTANCE = new Module();
@@ -66,13 +73,20 @@ public class Module {
     }
 
     public Module() {
+        this(createExecutor(), url -> Path.js(Util.md5(url).concat(".js")),
+                url -> OkHttp.newCall(url, Headers.of(HttpHeaders.USER_AGENT, "Mozilla/5.0")));
+    }
+
+    Module(ExecutorService executor, Function<String, File> cacheFile, Function<String, Call> newCall) {
         this.cache = new BoundedCache<>(MODULE_CACHE_BYTES, value -> value.length() * Character.BYTES);
         this.attempts = new BoundedCache<>(ATTEMPT_CACHE_SIZE);
         this.refreshing = ConcurrentHashMap.newKeySet();
-        this.executor = createExecutor();
+        this.executor = executor;
+        this.cacheFile = cacheFile;
+        this.newCall = newCall;
     }
 
-    private ExecutorService createExecutor() {
+    private static ExecutorService createExecutor() {
         ThreadPoolExecutor executor = new ThreadPoolExecutor(REFRESH_THREADS, REFRESH_THREADS, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(REFRESH_QUEUE_SIZE), new RefreshThreadFactory(), new ThreadPoolExecutor.AbortPolicy());
         executor.allowCoreThreadTimeOut(true);
         return executor;
@@ -89,12 +103,10 @@ public class Module {
     }
 
     public String fetch(String name) {
+        if (name.startsWith("http")) return request(name);
         String cached = cache.get(name);
-        if (cached != null) {
-            if (name.startsWith("http")) refresh(name);
-            return cached;
-        }
-        String content = load(name);
+        if (cached != null) return cached;
+        String content = loadAsset(name);
         synchronized (CACHE_WRITE_LOCK) {
             if (!closed && !content.isEmpty()) cache.put(name, content);
         }
@@ -111,15 +123,24 @@ public class Module {
         return name != null && (name.startsWith("http://") || name.startsWith("https://"));
     }
 
-    private String load(String name) {
-        if (name.startsWith("http")) return request(name);
+    private String loadAsset(String name) {
         if (name.startsWith("assets")) return Asset.read(name);
         if (name.startsWith("lib/")) return Asset.read("js/" + name);
         return "";
     }
 
     private String request(String url) {
-        String cached = cache(url);
+        String cached = cache.get(url);
+        if (cached == null) {
+            synchronized (CACHE_WRITE_LOCK) {
+                if (closed) return "";
+                cached = cache.get(url);
+                if (cached == null) {
+                    cached = cache(url);
+                    if (!cached.isEmpty()) cache.put(url, cached);
+                }
+            }
+        }
         if (!cached.isEmpty()) {
             refresh(url);
             return cached;
@@ -128,19 +149,43 @@ public class Module {
     }
 
     private String download(String url) {
-        if (closed) return "";
-        java.util.concurrent.CompletableFuture<String> pending = new java.util.concurrent.CompletableFuture<>();
-        java.util.concurrent.CompletableFuture<String> previous = downloads.putIfAbsent(url, pending);
-        if (previous != null) {
-            try { return previous.get(); }
-            catch (InterruptedException error) { Thread.currentThread().interrupt(); return cache(url); }
-            catch (java.util.concurrent.ExecutionException error) { return cache(url); }
+        try {
+            while (!closed) {
+                HttpCallScope.throwIfCancelled();
+                CompletableFuture<String> pending = new CompletableFuture<>();
+                CompletableFuture<String> previous = downloads.putIfAbsent(url, pending);
+                if (previous != null) {
+                    try {
+                        String content = previous.get();
+                        HttpCallScope.throwIfCancelled();
+                        return content;
+                    } catch (CancellationException cancelled) {
+                        // The previous download belonged to a different request.
+                        continue;
+                    } catch (ExecutionException error) {
+                        return cache(url);
+                    }
+                }
+                return downloadOwned(url, pending);
+            }
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+        } catch (InterruptedIOException cancelled) {
+            // The caller's cancellation scope has closed.
         }
+        return "";
+    }
+
+    private String downloadOwned(String url, CompletableFuture<String> pending) throws InterruptedIOException {
         try {
             String content = downloadContent(url);
             pending.complete(content);
             return content;
-        } catch (Throwable error) {
+        } catch (InterruptedIOException cancelled) {
+            downloads.remove(url, pending);
+            pending.cancel(false);
+            throw cancelled;
+        } catch (RuntimeException | Error error) {
             pending.completeExceptionally(error);
             throw error;
         } finally {
@@ -148,12 +193,13 @@ public class Module {
         }
     }
 
-    private String downloadContent(String url) {
+    private String downloadContent(String url) throws InterruptedIOException {
         try {
-            Uri uri = Uri.parse(url);
             File file = file(url);
-            boolean cacheable = !"127.0.0.1".equals(uri.getHost());
-            try (okhttp3.Response response = OkHttp.newCall(url, Headers.of(HttpHeaders.USER_AGENT, "Mozilla/5.0")).execute()) {
+            Call call = newCall.apply(url);
+            boolean cacheable = !"127.0.0.1".equals(call.request().url().host());
+            try (okhttp3.Response response = call.execute()) {
+                HttpCallScope.throwIfCancelled();
                 if (!response.isSuccessful() || response.body() == null) return cache(url);
                 byte[] data = response.body().bytes();
                 if (data.length == 0) return cache(url);
@@ -161,11 +207,14 @@ public class Module {
                 if (RemoteContentValidator.isHtml(content)) return cache(url);
                 synchronized (CACHE_WRITE_LOCK) {
                     if (closed) return "";
+                    HttpCallScope.throwIfCancelled();
                     if (cacheable) write(file, data);
+                    cache.put(url, content);
                 }
                 return content;
             }
         } catch (Exception e) {
+            HttpCallScope.throwIfCancelled();
             return cache(url);
         }
     }
@@ -182,10 +231,7 @@ public class Module {
         try {
             executor.execute(() -> {
                 try {
-                    String content = download(url);
-                    synchronized (CACHE_WRITE_LOCK) {
-                        if (!closed && !content.isEmpty()) cache.put(url, content);
-                    }
+                    download(url);
                 } finally {
                     refreshing.remove(url);
                 }
@@ -203,7 +249,8 @@ public class Module {
                 output.flush();
                 output.getFD().sync();
             }
-            Os.rename(temp.getAbsolutePath(), file.getAbsolutePath());
+            // Same-directory rename atomically replaces the path on Android/Linux.
+            temp.renameTo(file);
         } catch (Exception ignored) {
         } finally {
             if (temp.exists()) temp.delete();
@@ -220,7 +267,7 @@ public class Module {
     }
 
     private File file(String url) {
-        return Path.js(Util.md5(url).concat(".js"));
+        return cacheFile.apply(url);
     }
 
     public byte[] bb(String content) {

@@ -86,6 +86,13 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
     private Intent handledAction;
     private boolean openingPlaylist;
+    private boolean startupLiveStarted;
+    private boolean startupLiveFailed;
+
+    private boolean isPlaylistIntent(Intent intent) {
+        return Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null
+                && ("text/plain".equals(intent.getType()) || UrlUtil.path(intent.getData()).endsWith(".m3u"));
+    }
 
     private boolean checkAction(Intent intent) {
         if (handledAction == intent) return openingPlaylist;
@@ -93,7 +100,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
-            if ("text/plain".equals(intent.getType()) || UrlUtil.path(intent.getData()).endsWith(".m3u")) {
+            if (isPlaylistIntent(intent)) {
                 loadLive(intent.getData());
                 return true;
             } else {
@@ -121,6 +128,9 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
         if (loading) return;
         loading = true;
         mConfigState.loading();
+        if (startupLiveFailed) startupLiveStarted = false;
+        if (isPlaylistIntent(getIntent())) checkAction(getIntent());
+        if (!openingPlaylist && LiveConfig.hasIndependentStartupSelection()) loadStartupLive();
         App.execute(() -> {
             try {
                 List<Config> vodConfigs = getStartupConfigs(0);
@@ -149,8 +159,6 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
     private Callback getCallback() {
         return new Callback() {
-            private boolean liveStarted;
-
             @Override
             public void success(String result) {
                 Notify.show(result);
@@ -178,21 +186,23 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
                 if (!checkAction(getIntent())) loadStartupLive();
             }
 
-            private void loadStartupLive() {
-                if (liveStarted) return;
-                liveStarted = true;
-                MainActivity.this.loadStartupLive();
-            }
         };
     }
 
     private void loadStartupLive() {
-        if (openingPlaylist) return;
+        if (openingPlaylist || startupLiveStarted) return;
+        startupLiveStarted = true;
+        startupLiveFailed = false;
         List<Config> configs = getStartupConfigs(1);
         Callback callback = new Callback() {
             @Override
             public void success() {
                 if (!isFinishing() && !isDestroyed()) setNavigation();
+            }
+
+            @Override
+            public void error(String message) {
+                startupLiveFailed = true;
             }
         };
         if (configs.size() == 1) LiveConfig.loadCached(configs.get(0), callback);
@@ -201,6 +211,7 @@ public class MainActivity extends BaseActivity implements NavigationBarView.OnIt
 
     private void loadLive(Uri uri) {
         openingPlaylist = true;
+        startupLiveStarted = false;
         LiveConfig.loadPlaylist(this, uri, new Callback() {
             @Override
             public void success() {

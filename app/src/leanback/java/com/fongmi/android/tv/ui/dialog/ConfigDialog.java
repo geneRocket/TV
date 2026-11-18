@@ -173,12 +173,21 @@ public class ConfigDialog implements DialogInterface.OnDismissListener {
         }
         List<String> enabled = type == 0 || type == 1 ? getEnabledUrls() : java.util.Collections.emptyList();
         boolean editingSelection = edit && enabled.contains(this.url);
-        if (edit && !text.isEmpty() && !ConfigRepository.get().edit(this.url, text, name, type)) {
-            Notify.show(R.string.error_config_exists);
-            return;
+        Config config;
+        if (edit && !this.url.isEmpty() && !text.isEmpty() && !this.url.equals(text)) {
+            config = ConfigRepository.get().prepareEdit(this.url, text, name, type);
+            if (config == null) {
+                Notify.show(R.string.error_config_exists);
+                return;
+            }
+        } else {
+            if (text.isEmpty()) ConfigRepository.get().delete(this.url, type);
+            else if (edit && !this.url.isEmpty() && !ConfigRepository.get().rename(text, name, type)) {
+                Notify.show(R.string.error_config_exists);
+                return;
+            }
+            config = name.isEmpty() ? ConfigRepository.get().find(text, type) : ConfigRepository.get().find(text, name, type);
         }
-        if (text.isEmpty()) ConfigRepository.get().delete(url, type);
-        Config config = name.isEmpty() ? ConfigRepository.get().find(text, type) : ConfigRepository.get().find(text, name, type);
         if (editingSelection || (!edit && (type == 0 || type == 1) && !config.isEmpty())) {
             List<Config> selection = mergeConfigs(config, enabled);
             if (selection.isEmpty()) callback.setConfig(config);

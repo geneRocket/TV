@@ -1,8 +1,7 @@
 package com.fongmi.android.tv.bean;
 
-import android.text.TextUtils;
-
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.utils.TextValues;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
@@ -18,6 +17,11 @@ public class Depot {
     @SerializedName("name")
     private String name;
 
+    public Depot(String url, String name) {
+        this.url = url;
+        this.name = name;
+    }
+
     public static List<Depot> arrayFrom(String str) {
         Type listType = new TypeToken<List<Depot>>() {}.getType();
         List<Depot> items = App.gson().fromJson(str, listType);
@@ -25,10 +29,10 @@ public class Depot {
     }
 
     public String getUrl() {
-        return TextUtils.isEmpty(url) ? "" : UrlUtil.fixUrl(url);
+        return TextValues.isEmpty(url) ? "" : UrlUtil.fixUrl(url);
     }
 
     public String getName() {
-        return TextUtils.isEmpty(name) ? getUrl() : name;
+        return TextValues.isEmpty(name) ? getUrl() : name;
     }
 }

@@ -89,15 +89,6 @@ android {
         }
     }
 
-    android.applicationVariants.all { variant ->
-        if (variant.buildType.name != 'release') return
-        variant.mergeAssetsProvider.configure { task ->
-            task.doLast {
-                delete(fileTree(dir: task.outputDir, includes: ['x5.tbs.apk']))
-            }
-        }
-    }
-
     configurations.configureEach {
         resolutionStrategy {
             force 'com.squareup.okhttp3:okhttp:' + okhttpVersion

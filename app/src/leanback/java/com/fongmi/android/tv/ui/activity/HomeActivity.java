@@ -166,6 +166,13 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private Intent handledAction;
     private boolean openingPlaylist;
+    private boolean startupLiveStarted;
+    private boolean startupLiveFailed;
+
+    private boolean isPlaylistIntent(Intent intent) {
+        return Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null
+                && ("text/plain".equals(intent.getType()) || UrlUtil.path(intent.getData()).endsWith(".m3u"));
+    }
 
     private boolean checkAction(Intent intent) {
         if (handledAction == intent) return openingPlaylist;
@@ -173,7 +180,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
-            if ("text/plain".equals(intent.getType()) || UrlUtil.path(intent.getData()).endsWith(".m3u")) {
+            if (isPlaylistIntent(intent)) {
                 loadLive(intent.getData());
                 return true;
             } else {
@@ -485,6 +492,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     public void initConfig() {
         if (isLoading()) return;
         setLoading(true);
+        if (startupLiveFailed) startupLiveStarted = false;
+        if (isPlaylistIntent(getIntent())) checkAction(getIntent());
+        if (!openingPlaylist && LiveConfig.hasIndependentStartupSelection()) loadStartupLive();
         ThreadPools.config().execute(() -> {
             try {
                 List<Config> vodConfigs = getStartupConfigs(0);
@@ -512,6 +522,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
             @Override
             public void error(String msg) {
+                startupLiveFailed = true;
                 Notify.show(msg);
             }
         };
@@ -532,8 +543,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private Callback getCallback(String success, boolean startup) {
         return new Callback() {
-            private boolean liveStarted;
-
             @Override
             public void success(String result) {
                 if (isFinishing() || isDestroyed()) return;
@@ -548,7 +557,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 RefreshEvent.video();
                 setLogo();
                 if (!TextUtils.isEmpty(success)) Notify.show(success);
-                if (startup && !openedPlaylist) loadStartupLiveOnce();
+                if (startup && !openedPlaylist) loadStartupLive();
             }
 
             @Override
@@ -561,19 +570,15 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 mResult = Result.empty();
                 Notify.show(msg);
                 setLoading(false);
-                if (startup && !checkAction(getIntent())) loadStartupLiveOnce();
-            }
-
-            private void loadStartupLiveOnce() {
-                if (liveStarted) return;
-                liveStarted = true;
-                loadStartupLive();
+                if (startup && !checkAction(getIntent())) loadStartupLive();
             }
         };
     }
 
     private void loadStartupLive() {
-        if (openingPlaylist) return;
+        if (openingPlaylist || startupLiveStarted) return;
+        startupLiveStarted = true;
+        startupLiveFailed = false;
         ThreadPools.config().execute(() -> {
             List<Config> configs = getStartupConfigs(1);
             App.post(() -> {
@@ -624,6 +629,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void loadLive(Uri uri) {
         openingPlaylist = true;
+        startupLiveStarted = false;
         LiveConfig.loadPlaylist(this, uri, new Callback() {
             @Override
             public void success() {

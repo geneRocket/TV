@@ -10,7 +10,6 @@ import com.google.common.net.HttpHeaders;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.zip.Inflater;
 
@@ -30,11 +29,9 @@ import okio.Timeout;
 public class ResponseInterceptor implements Interceptor {
 
     private final List<Header> headers;
-    private final ConcurrentHashMap<String, String> redirectMap;
 
     public ResponseInterceptor() {
         headers = new CopyOnWriteArrayList<>();
-        redirectMap = new ConcurrentHashMap<>();
     }
 
     public void addAll(List<Header> items) {
@@ -43,7 +40,6 @@ public class ResponseInterceptor implements Interceptor {
 
     public void clear() {
         headers.clear();
-        redirectMap.clear();
     }
 
     @NonNull
@@ -52,13 +48,27 @@ public class ResponseInterceptor implements Interceptor {
         Request request = check(chain.request());
         Response response = chain.proceed(request);
         if ("deflate".equalsIgnoreCase(response.header(HttpHeaders.CONTENT_ENCODING))) response = deflate(response);
-        String location = response.code() == 406 ? redirectMap.remove(request.url().toString()) : null;
-        if (location != null) {
-            response.close();
-            return redirect(request, response, location);
+        RedirectFallback fallback = chain.call().tag(RedirectFallback.class);
+        if (response.code() == 302) {
+            String location = response.header(HttpHeaders.LOCATION);
+            HttpUrl target = location == null ? null : request.url().resolve(location);
+            if (target != null && !request.url().equals(target)) {
+                fallback = chain.call().tag(RedirectFallback.class, RedirectFallback::new);
+                fallback.source = request.url();
+                fallback.target = target;
+                return response;
+            }
         }
-        if (response.code() == 302) rememberRedirect(request, response.header(HttpHeaders.LOCATION));
-        return response;
+        if (fallback == null) return response;
+        HttpUrl source = fallback.source;
+        boolean retry = !fallback.retried && response.code() == 406 && request.url().equals(fallback.target);
+        fallback.source = null;
+        fallback.target = null;
+        if (!retry) return response;
+        fallback.retried = true;
+        response.close();
+        return new Response.Builder().request(request).protocol(response.protocol()).code(302)
+                .message("Found").header(HttpHeaders.LOCATION, source.toString()).build();
     }
 
     private Request check(Request request) {
@@ -73,14 +83,10 @@ public class ResponseInterceptor implements Interceptor {
         return builder.build();
     }
 
-    private Response redirect(Request request, Response response, String location) {
-        return new Response.Builder().request(request).protocol(response.protocol()).code(302).message("Found").header(HttpHeaders.LOCATION, location).build();
-    }
-
-    private void rememberRedirect(Request request, String location) {
-        if (location == null || location.isEmpty()) return;
-        HttpUrl target = request.url().resolve(location);
-        if (target != null) redirectMap.put(target.toString(), request.url().toString());
+    private static final class RedirectFallback {
+        private HttpUrl source;
+        private HttpUrl target;
+        private boolean retried;
     }
 
     private Response deflate(Response response) {

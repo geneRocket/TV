@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 import static org.junit.Assert.*;
 
@@ -81,15 +82,39 @@ public class EpgStreamingTest {
         assertEquals("", channel.logo);
     }
 
+    @Test public void unresolvedSharedNameSuppliesGuideToBothPlaylistChannels() throws Exception {
+        TestChannel hd = new TestChannel("news-hd", "News");
+        TestChannel sd = new TestChannel("news-sd", "News");
+        String xml = "<tv><channel id='provider-news'><display-name>News</display-name></channel>"
+                + programme("provider-news", today(0, 12), today(0, 13), "Today") + "</tv>";
+        read(xml, hd, sd);
+        assertEquals("Today", json(hd.data.getList().get(0), "title"));
+        assertEquals(1, sd.data.getList().size());
+        assertEquals("Today", json(sd.data.getList().get(0), "title"));
+    }
+
+    @Test public void historicalGuideMatchesEitherChannelUsingTheSharedName() throws Exception {
+        TestChannel hd = new TestChannel("news-hd", "News");
+        TestChannel sd = new TestChannel("news-sd", "News");
+        String xml = "<tv><channel id='provider-news'><display-name>News</display-name></channel>"
+                + programme("provider-news", "20261016120000 +0000", "20261016130000 +0000", "News") + "</tv>";
+        Epg result = EpgParser.readDay(xml, live(hd, sd), sd, "2026-10-16", TimeZone.getTimeZone("UTC"));
+        assertEquals(1, result.getList().size());
+        assertEquals("News", json(result.getList().get(0), "title"));
+    }
+
     private void read(String xml, TestChannel... channels) throws Exception {
         File file = temporary.newFile();
         Files.write(file.toPath(), xml.getBytes(StandardCharsets.UTF_8));
-        Group group = new Group("test");
-        group.setChannel(Arrays.asList(channels));
-        Live live = new Live() { @Override public List<Group> getGroups() { return Collections.singletonList(group); } };
         Method read = EpgParser.class.getDeclaredMethod("readXml", Live.class, File.class);
         read.setAccessible(true);
-        read.invoke(null, live, file);
+        read.invoke(null, live(channels), file);
+    }
+
+    private static Live live(TestChannel... channels) {
+        Group group = new Group("test");
+        group.setChannel(Arrays.asList(channels));
+        return new Live() { @Override public List<Group> getGroups() { return Collections.singletonList(group); } };
     }
 
     private static String today(int offset, int hour) {

@@ -71,8 +71,10 @@ public final class WallConfig {
     private void loadConfig(Callback callback, WallpaperSelection.Choice choice) {
         try (WallpaperFileStore.Prepared image = WallpaperImages.store().prepare(config.getUrl(), FileUtil.getWall(0))) {
             ConfigLoadTask.commit(() -> {
-                try { image.commit(); }
-                catch (java.io.IOException error) { throw new UncheckedIOException(error); }
+                config.commitUrlEdit(() -> {
+                    try { image.commit(); }
+                    catch (java.io.IOException error) { throw new UncheckedIOException(error); }
+                });
                 config.update();
                 current = this;
                 selection.finish(choice);

@@ -37,23 +37,18 @@ public class TVBus implements Source.Extractor {
     private static final int MAX_DOMAIN_BODY_BYTES = 256;
 
     private volatile Engine engine;
-    private Core core;
 
     @Override
     public boolean match(Uri uri) {
         return "tvbus".equals(uri.getScheme());
     }
 
-    private Engine init(Core core) throws InterruptedException {
-        String domain = UrlUtil.convert(core.getDomain());
-        String scheme = UrlUtil.scheme(domain);
-        if ("http".equals(scheme) || "https".equals(scheme)) domain = readDomainSuffix(OkHttp.client(), domain);
-        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+    private Engine init(Core core, String domain, boolean retryDomain) {
         Engine next;
         App.get().setHook(core.hook());
         try {
             TVCore tvcore = new TVCore(core.getSo());
-            next = new Engine(tvcore);
+            next = new Engine(tvcore, core, retryDomain);
             tvcore.auth(core.getAuth()).broker(core.getBroker()).domain(domain);
             tvcore.name(core.getName()).pass(core.getPass());
             tvcore.serv(0).play(8902).mode(1).listener(next);
@@ -118,11 +113,18 @@ public class TVBus implements Source.Extractor {
         Core nextCore = LiveConfig.get().getHome().getCore();
         if (nextCore == null) throw new ExtractException("TVBus core is not configured");
         Engine active = engine;
-        if (active == null || !nextCore.equals(core)) {
-            reset();
-            active = init(nextCore);
-            core = nextCore;
-            engine = active;
+        if (active == null || !nextCore.equals(active.core) || active.retryDomain) {
+            String domain = UrlUtil.convert(nextCore.getDomain());
+            String scheme = UrlUtil.scheme(domain);
+            boolean remote = "http".equals(scheme) || "https".equals(scheme);
+            if (remote) domain = readDomainSuffix(OkHttp.client(), domain);
+            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+            boolean retryDomain = remote && domain.isEmpty();
+            if (active == null || !nextCore.equals(active.core) || !retryDomain) {
+                reset();
+                active = init(nextCore, domain, retryDomain);
+                engine = active;
+            }
         }
         return active.fetch(url);
     }
@@ -130,7 +132,6 @@ public class TVBus implements Source.Extractor {
     private void reset() {
         Engine previous = engine;
         engine = null;
-        core = null;
         if (previous == null) return;
         try {
             previous.stop();
@@ -158,11 +159,15 @@ public class TVBus implements Source.Extractor {
     private static final class Engine implements Listener {
 
         private final TVCore tvcore;
+        private final Core core;
+        private final boolean retryDomain;
         private volatile String hls;
         private volatile CountDownLatch latch;
 
-        private Engine(TVCore tvcore) {
+        private Engine(TVCore tvcore, Core core, boolean retryDomain) {
             this.tvcore = tvcore;
+            this.core = core;
+            this.retryDomain = retryDomain;
         }
 
         private String fetch(String url) throws Exception {

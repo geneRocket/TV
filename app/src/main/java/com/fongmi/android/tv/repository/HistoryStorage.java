@@ -82,8 +82,8 @@ public final class HistoryStorage {
         prepared.setKey(key);
         prepared.setCid(cid);
         prepared.setVodName(vod.getVodName());
-        if (!TextValues.isEmpty(mark)) prepared.setVodRemarks(mark);
         findEpisode(prepared, vod.getVodFlags(), scope);
+        if (!TextValues.isEmpty(mark)) applyEpisodeMark(prepared, vod.getVodFlags(), mark);
         prepared.setVodPic(vod.getVodPic());
         return prepared;
     }
@@ -140,13 +140,11 @@ public final class HistoryStorage {
     public List<History> getLoaded(PersistenceScope scope) {
         List<Integer> cids = scope.ids();
         if (cids.size() == 1) return get(cids.get(0));
-        List<History> items = withCached(cids, cache(dao.get().find(cids)));
-        return copy(unique(items, true));
+        return copy(withCached(cids, cache(dao.get().find(cids))));
     }
 
     public List<History> get(int cid) {
-        List<History> items = withCached(Collections.singletonList(cid), cache(dao.get().find(cid)));
-        return copy(unique(items, false));
+        return copy(withCached(Collections.singletonList(cid), cache(dao.get().find(cid))));
     }
 
     private List<History> withCached(List<Integer> cids, List<History> items) {
@@ -163,29 +161,12 @@ public final class HistoryStorage {
         return result;
     }
 
-    private List<History> unique(List<History> items, boolean crossCid) {
-        Map<String, History> unique = new LinkedHashMap<>();
-        for (History item : items) {
-            String key = uniqueKey(item, crossCid);
-            History old = unique.get(key);
-            if (isNewerOrBetterSameVersion(item, old)) unique.put(key, item);
-        }
-        return new ArrayList<>(unique.values());
-    }
-
     public static boolean isNewerOrBetterSameVersion(History item, History old) {
         if (item == null) return false;
         if (old == null) return true;
         if (item.getCreateTime() != old.getCreateTime()) return item.getCreateTime() > old.getCreateTime();
         if (old.getPosition() <= 0 && item.getPosition() > 0) return true;
         return old.getDuration() <= 0 && item.getDuration() > 0;
-    }
-
-    private String uniqueKey(History item, boolean crossCid) {
-        String name = normalizedName(item.getVodName());
-        String scope = crossCid ? "" : item.getCid() + "@";
-        if (TextValues.isEmpty(name)) return scope + item.getCid() + "@" + item.getKey();
-        return scope + name;
     }
 
     private String normalizedName(String name) {
@@ -442,6 +423,19 @@ public final class HistoryStorage {
         subject.setEpisodeUrl(best.episode.getUrl());
         checkParam(subject, best.history);
         checkProgress(subject, best.history);
+    }
+
+    private void applyEpisodeMark(History history, List<Flag> flags, String mark) {
+        EpisodeMatch match = findEpisode(history, flags, history.getVodFlag(), mark);
+        String name = match == null ? mark : match.episode.getName();
+        String url = match == null ? "" : match.episode.getUrl();
+        if (!name.equals(history.getVodRemarks()) || !url.equals(history.getEpisodeUrl())) {
+            history.setPosition(0);
+            history.setDuration(0);
+        }
+        if (match != null) history.setVodFlag(match.flag.getFlag());
+        history.setVodRemarks(name);
+        history.setEpisodeUrl(url);
     }
 
     private boolean isBetterMatch(History subject, EpisodeMatch best, EpisodeMatch match, History item) {

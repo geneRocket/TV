@@ -13,6 +13,16 @@ import java.util.zip.ZipFile;
 
 /** Stage and validate remote dex archives before replacing the last working cache. */
 final class JarCache {
+    static boolean promote(File legacy, File target, String expectedMd5) throws IOException {
+        if (!legacy.isFile() || expectedMd5.isEmpty()) return false;
+        try (okio.BufferedSource source = okio.Okio.buffer(okio.Okio.source(legacy))) {
+            byte[] data = source.readByteArray();
+            if (!expectedMd5.equalsIgnoreCase(md5(data))) return false;
+            replace(target, data, expectedMd5);
+            return true;
+        }
+    }
+
     static void replace(File target, byte[] data, String expectedMd5) throws IOException {
         if (data.length == 0) throw new IOException("Empty JAR response");
         if (!expectedMd5.isEmpty() && (!expectedMd5.matches("(?i)[0-9a-f]{32}")

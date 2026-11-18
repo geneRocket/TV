@@ -4,6 +4,8 @@ import com.fongmi.android.tv.utils.TextValues;
 
 import com.fongmi.android.tv.api.Decoder;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.bean.Depot;
+import com.fongmi.android.tv.repository.ConfigRepository;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonObject;
 
@@ -11,13 +13,19 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Downloads and validates documents; has no access to the active runtime configuration. */
 final class VodConfigLoader {
     interface Reader { String read(String url) throws Throwable; }
     private final Reader reader;
-    VodConfigLoader() { this(Decoder::getJson); }
-    VodConfigLoader(Reader reader) { this.reader = reader; }
+    private final Consumer<Depot> register;
+    VodConfigLoader() { this(Decoder::getJson, item -> ConfigRepository.get().find(item, 0)); }
+    VodConfigLoader(Reader reader) { this(reader, item -> { }); }
+    VodConfigLoader(Reader reader, Consumer<Depot> register) {
+        this.reader = reader;
+        this.register = register;
+    }
     Result readCachedConfig(Config item) {
         ConfigLoadTask.check();
         if (TextValues.isEmpty(item.getJson())) return null;
@@ -76,7 +84,9 @@ final class VodConfigLoader {
         return url == null ? "" : url.trim();
     }
 
-    JsonObject loadObject(String url, int depth) throws Throwable { return new ConfigJsonLoader(reader::read, ConfigPayloadValidator::vod).load(url, depth); }
+    JsonObject loadObject(String url, int depth) throws Throwable {
+        return new ConfigJsonLoader(reader::read, ConfigPayloadValidator::vod, register).load(url, depth);
+    }
 
     void refreshDepotCache(Config target) {
         try {

@@ -75,4 +75,41 @@ public class ScopedPersistenceTest {
         assertNull(db.history.find(10, first.getKey()));
         assertEquals(180000L, db.history.find(20, second.getKey()).getPosition());
     }
+
+    @Test public void historyListsBothWorksWithTheSameTitle() {
+        MemoryPersistence db = new MemoryPersistence();
+        HistoryStorage storage = storage(db, new ArrayList<>(), new AtomicInteger());
+        History original = MemoryPersistence.entry(10, "film-1933", 120000);
+        History remake = MemoryPersistence.entry(10, "film-2005", 180000);
+        original.setVodName("King Kong");
+        remake.setVodName("King Kong");
+        storage.save(original);
+        storage.save(remake);
+
+        assertEquals(2, storage.get(10).size());
+    }
+
+    @Test public void explicitEpisodeKeepsItsSelectionAndStartsWithoutOtherEpisodeProgress() {
+        MemoryPersistence db = new MemoryPersistence();
+        HistoryStorage storage = storage(db, new ArrayList<>(), new AtomicInteger());
+        History saved = MemoryPersistence.entry(10, "show", 120000);
+        saved.setVodFlag("main");
+        saved.setVodRemarks("Episode 2");
+        saved.setEpisodeUrl("two");
+        saved.setDuration(450000);
+        storage.save(saved);
+        Flag flag = new Flag();
+        flag.setFlag("main");
+        flag.createEpisode("Episode 2$two#Episode 5$five");
+        Vod vod = new Vod();
+        vod.setVodName(saved.getVodName());
+        vod.setVodFlags(Collections.singletonList(flag));
+
+        History prepared = storage.prepare(saved, saved.getKey(), 10, vod, 1, "Episode 5", PersistenceScope.single(10));
+
+        assertEquals("Episode 5", prepared.getVodRemarks());
+        assertEquals("five", prepared.getEpisodeUrl());
+        assertEquals(0, prepared.getPosition());
+        assertEquals(0, prepared.getDuration());
+    }
 }

@@ -26,7 +26,6 @@ import com.fongmi.android.tv.utils.ThreadPools;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.net.HttpCallScope;
-import com.github.catvod.utils.Json;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -107,12 +106,35 @@ public class LiveViewModel extends ViewModel {
         String date = createDateFormat(timeZone).format(new Date());
         String epg = item.getEpg().replace("{date}", date);
         String url = epg.startsWith("file") ? epg : UrlUtil.normalize(epg, "");
-        List<SimpleDateFormat> formats = createTimeFormats(timeZone);
+        Live source = live.getValue();
         submitEpg(() -> {
             if (!url.startsWith("http")) return item.getData().selected();
-            if (!item.getData().equal(date)) item.setData(Epg.objectFrom(requestString(url, Constant.TIMEOUT_EPG), item.getTvgId(), formats));
+            if (!item.getData().equal(date)) item.setData(parseProgrammeGuide(requestString(url, Constant.TIMEOUT_EPG), source, item, date, timeZone));
             return item.getData().selected();
         });
+    }
+
+    static Epg parseProgrammeGuide(String body, Live source, Channel channel, String date, TimeZone zone) throws Exception {
+        String text = body.trim();
+        if (text.startsWith("\uFEFF")) text = text.substring(1).trim();
+        if (text.startsWith("<")) {
+            return EpgParser.readDay(text, source, channel, date, zone, isChannelEndpoint(source, channel));
+        }
+        return Epg.objectFrom(text, channel.getTvgId(), createTimeFormats(zone), date);
+    }
+
+    private static boolean isChannelEndpoint(Live source, Channel selected) {
+        if (source == null) return true;
+        String endpoint = selected.getEpg();
+        for (String configured : source.getEpg().split(",")) {
+            if (endpoint.equals(configured.trim())) return false;
+        }
+        for (Group group : source.getGroups()) {
+            for (Channel channel : group.getChannel()) {
+                if (!selected.getTvgId().equals(channel.getTvgId()) && endpoint.equals(channel.getEpg())) return false;
+            }
+        }
+        return true;
     }
 
     public boolean hasHistory(Live source, Channel channel) {
@@ -143,9 +165,7 @@ public class LiveViewModel extends ViewModel {
             if (url.startsWith("http")) {
                 try {
                     EpgDay day = new EpgDay(date, zone);
-                    String body = requestString(url, Constant.TIMEOUT_EPG);
-                    Epg result = Json.valid(body) ? Epg.objectFrom(body, channel.getTvgId(), createTimeFormats(zone), date)
-                            : EpgParser.readHistory(body, source, channel, date, zone);
+                    Epg result = parseProgrammeGuide(requestString(url, Constant.TIMEOUT_EPG), source, channel, date, zone);
                     List<EpgData> programmes = new ArrayList<>(result.getList());
                     programmes.removeIf(item -> !day.contains(item));
                     programmes.sort(java.util.Comparator.comparingLong(EpgData::getStartTime));
@@ -238,14 +258,14 @@ public class LiveViewModel extends ViewModel {
         return format;
     }
 
-    private List<SimpleDateFormat> createTimeFormats(TimeZone timeZone) {
+    private static List<SimpleDateFormat> createTimeFormats(TimeZone timeZone) {
         List<SimpleDateFormat> formats = new ArrayList<>();
         formats.add(createTimeFormat("yyyy-MM-ddHH:mm", timeZone));
         formats.add(createTimeFormat("yyyy-MM-ddHH:mm:ss", timeZone));
         return formats;
     }
 
-    private SimpleDateFormat createTimeFormat(String pattern, TimeZone timeZone) {
+    private static SimpleDateFormat createTimeFormat(String pattern, TimeZone timeZone) {
         SimpleDateFormat format = new SimpleDateFormat(pattern, Locale.getDefault());
         format.setTimeZone(timeZone);
         return format;

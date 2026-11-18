@@ -25,6 +25,7 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
 import com.fongmi.android.tv.utils.FileChooser;
+import com.fongmi.android.tv.utils.ConfigUrlParser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.OrderedParallelMapper;
 import com.fongmi.android.tv.utils.CacheFirstLoader;
@@ -76,6 +77,8 @@ public class LiveConfig {
         return ConfigRuntime.snapshot().live;
     }
 
+    boolean isExplicitPlaylist() { return explicitPlaylist; }
+
     public static String getUrl() {
         return get().getConfig().getUrl();
     }
@@ -104,13 +107,20 @@ public class LiveConfig {
         return getUrl() != null && getUrl().length() > 0;
     }
 
+    public static boolean hasIndependentStartupSelection() {
+        String selected = Setting.getLiveConfigUrls();
+        return !ConfigUrlParser.parse(selected).isEmpty()
+                && !ConfigApplicationService.isInheritedSelection(selected, Setting.getInheritedLiveUrls(),
+                        ConfigUrlParser.parse(Setting.getVodConfigUrls()));
+    }
+
     public static void load(Config config, Callback callback) {
         Config requested = config == null ? new Config() : config.copy();
         ConfigRequests.live(draft -> draft.config(requested).loadConfig(callback));
     }
 
     public static void loadPlaylist(Context context, Uri uri, Callback callback) {
-        ConfigRequests.live(draft -> {
+        ConfigRequests.live(true, draft -> {
             Config requested;
             try {
                 String path = FileChooser.getPathFromUri(context, uri);
@@ -245,6 +255,10 @@ public class LiveConfig {
                 ConfigLoadTask.check();
                 error = e;
                 ThreadPools.log(e, "Live config operation failed.");
+                if (result.config.isUrlEdit()) {
+                    if (callback != null) ConfigLoadTask.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
+                    return;
+                }
             }
         }
         ConfigLoadTask.check();
@@ -291,18 +305,7 @@ public class LiveConfig {
             boolean expired = !config.isCache();
             setPersistCache(false);
             parseConfig(config.getJson(), callback);
-            if (expired) ConfigLoadTask.background(() -> {
-                try {
-                    String text = Decoder.getJson(target.getUrl());
-                    if (Json.invalid(text)) {
-                        cacheConfig(target, text);
-                    } else {
-                        JsonObject object = loadObject(Json.parse(text).getAsJsonObject(), 0);
-                        cacheConfig(target, object);
-                    }
-                } catch (Throwable ignored) {
-                }
-            });
+            if (expired) ConfigLoadTask.background(() -> refreshDepotCache(target));
         } else {
             loadConfig(callback);
         }
@@ -319,11 +322,15 @@ public class LiveConfig {
     private List<LiveConfigLoader.Result> loadConfigResults(List<Config> configs, boolean cache) {
         List<Config> unique = getUniqueConfigs(configs);
         if (unique.isEmpty()) return Collections.emptyList();
-        if (cache) return CacheFirstLoader.load(unique, this::readCachedConfig,
+        boolean editing = unique.stream().anyMatch(Config::isUrlEdit);
+        if (cache && !editing) return CacheFirstLoader.load(unique, this::readCachedConfig,
                 item -> !item.isCache(), item -> ConfigLoadTask.background(() -> refreshDepotCache(item)),
                 this::fetchMissingConfig, () -> loadConfigResults(unique, false));
         try {
-            return OrderedParallelMapper.map(ThreadPools.config(), unique, ConfigLoadTask.bind(this::loadConfigResult), error -> ThreadPools.log(error, "Live config operation failed."));
+            return OrderedParallelMapper.map(ThreadPools.config(), unique, ConfigLoadTask.bind(item -> {
+                LiveConfigLoader.Result cached = cache ? readCachedConfig(item) : null;
+                return cached == null ? loadConfigResult(item) : cached;
+            }), error -> ThreadPools.log(error, "Live config operation failed."));
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             return Collections.emptyList();
@@ -355,6 +362,7 @@ public class LiveConfig {
         copy.hosts = new ArrayList<>(hosts);
         copy.ruleHosts = new ArrayList<>(ruleHosts);
         copy.lives.addAll(lives); copy.liveMap.putAll(liveMap); copy.sync = sync; copy.document = document;
+        copy.explicitPlaylist = explicitPlaylist;
         return copy;
     }
 
@@ -396,8 +404,6 @@ public class LiveConfig {
 
     private void cacheConfig(Config item, String text) { documents.cacheConfig(item, text); }
 
-    private JsonObject loadObject(JsonObject object, int depth) throws Throwable { return documents.loadObject(object, depth); }
-
 
 
     private void mergeConfig(JsonObject target, JsonObject source) { ConfigMerger.live(target,source); }
@@ -424,7 +430,7 @@ public class LiveConfig {
 
     private void parseText(String text, Callback callback) {
         try {
-            commitBuild(() -> parseTextOrThrow(text));
+            commitBuild(() -> parseTextOrThrow(config.getUrl(), text));
             if (callback != null) ConfigLoadTask.post(callback::success);
         } catch (Throwable e) {
             ConfigLoadTask.check();
@@ -467,17 +473,20 @@ public class LiveConfig {
     }
 
     private void parseDepotOrThrow(JsonObject object) throws Throwable {
-        List<Depot> items = Depot.arrayFrom(object.getAsJsonArray("urls").toString());
+        List<Depot> items = ConfigJsonLoader.entries(object);
         if (items.isEmpty()) throw new IllegalStateException(ResUtil.getString(R.string.error_config_parse));
-        ConfigRepository.get().delete(config.getUrl());
+        List<Config> sources = new ArrayList<>();
+        ConfigLoadTask.commit(() -> {
+            for (Depot item : items) sources.add(ConfigRepository.get().find(item, 1));
+        });
+        ConfigRepository.get().delete(config.getUrl(), 1);
         Throwable error = null;
-        for (Depot item : items) {
+        for (Config target : sources) {
             try {
-                Config target = ConfigRepository.get().find(item, 1);
-                String text = loadDepotConfig(target);
+                LiveConfigLoader.Payload payload = loadDepotConfig(target);
                 clear();
                 config(target);
-                parseConfigOrThrow(text);
+                parseResolvedPayload(payload);
                 return;
             } catch (Throwable e) {
                 ConfigLoadTask.check();
@@ -489,20 +498,20 @@ public class LiveConfig {
         throw new IllegalStateException("No valid config");
     }
 
-    private String loadDepotConfig(Config target) throws Throwable {
+    private LiveConfigLoader.Payload loadDepotConfig(Config target) throws Throwable {
         if (hasUsableCachedConfig(target)) {
             setPersistCache(false);
             if (!target.isCache()) ConfigLoadTask.background(() -> refreshDepotCache(target));
-            return target.getJson();
+            return documents.resolvePayload(target.getUrl(), target.getJson(), 0);
         }
-        String text = Decoder.getJson(target.getUrl());
-        if (Json.invalid(text)) {
-            cacheConfig(target, text);
-            return text;
-        }
-        JsonObject loaded = loadObject(Json.parse(text).getAsJsonObject(), 0);
-        cacheConfig(target, loaded);
-        return loaded.toString();
+        LiveConfigLoader.Payload payload = documents.resolvePayload(target.getUrl(), Decoder.getJson(target.getUrl()), 0);
+        cacheConfig(target, payload.text);
+        return payload;
+    }
+
+    private void parseResolvedPayload(LiveConfigLoader.Payload payload) throws Throwable {
+        if (payload.object == null) parseTextOrThrow(payload.url, payload.text);
+        else parseConfigOrThrow(payload.object);
     }
 
     private void refreshDepotCache(Config target) { documents.refreshDepotCache(target); }
@@ -521,11 +530,12 @@ public class LiveConfig {
 
     private void parseConfigOrThrow(String text) throws Throwable {
         ConfigLoadTask.check();
-        if (Json.invalid(text)) parseTextOrThrow(text);
+        if (Json.invalid(text)) parseTextOrThrow(config.getUrl(), text);
         else {
             JsonObject object = Json.parse(text).getAsJsonObject();
             if (object.has("msg")) throw new IllegalStateException(object.get("msg").getAsString());
-            if (object.has("urls")) parseDepotOrThrow(object);
+            if (object.has("urls") && config.isUrlEdit()) parseResolvedPayload(documents.resolvePayload(config.getUrl(), text, 0));
+            else if (object.has("urls")) parseDepotOrThrow(object);
             else parseConfigOrThrow(object);
         }
     }
@@ -534,9 +544,9 @@ public class LiveConfig {
 
     private void requireChannels(Live live) { documents.requireChannels(live); }
 
-    private void parseTextOrThrow(String text) throws Throwable {
+    private void parseTextOrThrow(String url, String text) throws Throwable {
         ConfigLoadTask.check();
-        Live live = new Live(parseName(config.getUrl()), config.getUrl()).sync();
+        Live live = new Live(parseName(config.getUrl()), url).sync();
         LiveParser.text(live, text);
         requireChannels(live);
         lives.add(live);
@@ -607,6 +617,10 @@ public class LiveConfig {
     }
 
     void persistSelection() {
+        if (config.isUrlEdit() && persistCache && pendingContent != null) {
+            config.json(pendingContent).time(System.currentTimeMillis());
+        }
+        ConfigApplicationService.commitUrlEdit(config, selectedConfigs);
         if (pendingContent != null && persistCache) config.json(pendingContent).update();
         if (pendingContent != null || !lives.isEmpty()) {
             config.saveHome(config.getHome()); config.activate();
@@ -660,6 +674,7 @@ public class LiveConfig {
     }
 
     private void bootLive() {
+        if (ConfigRequests.playlistRequested() || App.activity() instanceof LiveActivity) return;
         Setting.putBootLive(false);
         LiveActivity.start(App.get());
     }
@@ -799,7 +814,7 @@ public class LiveConfig {
     void afterPublication() {
         if (!requestBoot) return;
         requestBoot = false;
-        if (explicitPlaylist || App.activity() instanceof LiveActivity) return;
+        if (explicitPlaylist || ConfigRequests.playlistRequested() || App.activity() instanceof LiveActivity) return;
         if (home != null && (home.isBoot() || Setting.isBootLive())) ConfigLoadTask.post(this::bootLive);
     }
 

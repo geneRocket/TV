@@ -30,7 +30,7 @@ final class ConfigApplicationService {
         ConfigLoadTask.commit(() -> {
             synchronized (APPLY_LOCK) {
                 ConfigRuntime.Snapshot previous = ConfigRuntime.snapshot();
-                LinkedLive linked = prepareLinkedLive(candidate, document.object(), previous.live);
+                LinkedLive linked = prepareLinkedLive(candidate, document.object(), previous);
                 candidate.persistSelection(document);
                 if (linked != null) linked.candidate.persistSelection();
                 if (change == VodChange.REPLACE) BaseLoader.get().clear();
@@ -77,8 +77,45 @@ final class ConfigApplicationService {
         });
     }
 
-    private static LinkedLive prepareLinkedLive(VodConfig vod, JsonObject object, LiveConfig current) {
-        if (!vod.loadsLive() || !object.has("lives") || object.get("lives").isJsonNull()) return null;
+    static boolean isInheritedSelection(String saved, String marker, List<String> previousVodUrls) {
+        if (saved.isEmpty()) return false;
+        if (marker != null) return saved.equals(marker);
+        List<String> liveUrls = ConfigUrlParser.parse(saved);
+        return !liveUrls.isEmpty() && liveUrls.containsAll(previousVodUrls) && previousVodUrls.containsAll(liveUrls);
+    }
+
+    static void commitUrlEdit(Config active, List<Config> selected) {
+        List<Config> configs = selected.isEmpty() ? Collections.singletonList(active) : selected;
+        Config changed = null;
+        for (int i = 0; i < configs.size(); i++) {
+            Config item = configs.get(i);
+            if (!item.isUrlEdit()) continue;
+            if (item != active && active.isUrlEdit() && active.getId() == item.getId()) {
+                active.json(item.getJson()).time(item.getTime());
+                active.commitUrlEdit();
+                configs.set(i, active.copy());
+            } else {
+                item.commitUrlEdit();
+            }
+            changed = item;
+        }
+        if (changed == null) return;
+        int type = changed.getType();
+        List<String> urls = new ArrayList<>(), names = new ArrayList<>();
+        for (Config item : configs) {
+            urls.add(item.getUrl());
+            names.add(item.getDesc());
+        }
+        String selection = String.join("\n", urls);
+        String desc = names.get(0) + (names.size() == 1 ? "" : names.size() == 2
+                ? " + " + names.get(1) : " +" + (names.size() - 1));
+        if (type == 0) Setting.commitVodConfigSelection(Setting.beginVodConfigSelection(), selection, desc);
+        else Setting.putExplicitLiveConfig(selection, desc);
+    }
+
+    private static LinkedLive prepareLinkedLive(VodConfig vod, JsonObject object, ConfigRuntime.Snapshot previous) {
+        LiveConfig current = previous.live;
+        if (current.isExplicitPlaylist() || !vod.loadsLive() || !object.has("lives") || object.get("lives").isJsonNull()) return null;
         List<String> urls = vod.getLoadUrls();
         if (urls.isEmpty()) urls = Collections.singletonList(vod.getConfig().getUrl());
         String savedSelection = Setting.getLiveConfigUrls();
@@ -87,7 +124,11 @@ final class ConfigApplicationService {
             String saved = current.getConfig().isEmpty() ? Config.live().getUrl() : current.getConfig().getUrl();
             if (!saved.isEmpty()) selected = Collections.singletonList(saved);
         }
-        boolean inherited = !savedSelection.isEmpty() && savedSelection.equals(Setting.getInheritedLiveUrls());
+        List<String> previousVodUrls = previous.vod.getLoadUrls();
+        if (previousVodUrls.isEmpty()) previousVodUrls = ConfigUrlParser.parse(Setting.getVodConfigUrls());
+        String marker = Setting.getInheritedLiveUrls();
+        if ("".equals(marker) && !selected.isEmpty()) return null;
+        boolean inherited = isInheritedSelection(savedSelection, marker, previousVodUrls);
         if (!inherited && !selected.isEmpty() && !(urls.containsAll(selected) && selected.containsAll(urls))) return null;
         boolean sync = inherited;
         for (String url : urls) if (current.needSync(url)) { sync = true; break; }

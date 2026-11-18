@@ -36,6 +36,7 @@ public class Global {
     private final QuickJSContext ctx;
     private final Parser parser;
     private final Timer timer;
+    private boolean closed;
 
     public static Global create(QuickJSContext ctx, ExecutorService executor) {
         return new Global(ctx, executor);
@@ -46,6 +47,11 @@ public class Global {
         this.executor = executor;
         this.timer = new Timer();
         this.ctx = ctx;
+    }
+
+    public void close() {
+        closed = true;
+        timer.cancel();
     }
 
     public void setProperty() {
@@ -197,9 +203,9 @@ public class Global {
             public void onResponse(@NonNull Call call, @NonNull Response res) {
                 if (!submit(() -> {
                     try (Response response = res) {
-                        delivery.accept(response);
+                        if (!closed) delivery.accept(response);
                     } finally {
-                        complete.release();
+                        if (!closed) complete.release();
                     }
                 })) res.close();
             }
@@ -207,6 +213,7 @@ public class Global {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 submit(() -> {
+                    if (closed) return;
                     try { delivery.accept(null); }
                     finally { complete.release(); }
                 });
@@ -219,8 +226,9 @@ public class Global {
             @Override
             public void run() {
                 submit(() -> {
-                    func.call();
-                    func.release();
+                    if (closed) return;
+                    try { func.callVoid(); }
+                    finally { func.release(); }
                 });
             }
         }, delay);

@@ -55,8 +55,8 @@ public class EpgParserTest {
                     + "<channel id='provider-news'><display-name>News</display-name></channel></tv>";
             java.nio.file.Files.write(xml, payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             java.util.TimeZone zone = java.util.TimeZone.getTimeZone("Asia/Shanghai");
-            Epg result = EpgParser.readHistory(xml.toFile(), live, news, "2026-10-16", zone);
-            Epg response = EpgParser.readHistory(payload, live, news, "2026-10-16", zone);
+            Epg result = EpgParser.readDay(xml.toFile(), live, news, "2026-10-16", zone);
+            Epg response = EpgParser.readDay(payload, live, news, "2026-10-16", zone);
             assertEquals(2, response.getList().size());
             assertEquals("23:30", new com.google.gson.Gson().toJsonTree(response.getList().get(0)).getAsJsonObject().get("start").getAsString());
             assertEquals(2, result.getList().size());
@@ -90,25 +90,26 @@ public class EpgParserTest {
     @Test public void exactChannelIdTakesPriorityOverAnotherChannelsName() throws Exception {
         Channel alias = namedChannel("news-hd", "News", "News");
         Channel exact = namedChannel("News", "Other", "Other");
-        assertSame(exact, channelIndex(alias, exact).get("News"));
-        assertSame(exact, channelIndex(exact, alias).get("News"));
-        assertSame(alias, channelIndex(alias, exact).get("news-hd"));
+        assertEquals(Map.of("News", exact), channelIndex(alias, exact).get("News"));
+        assertEquals(Map.of("News", exact), channelIndex(exact, alias).get("News"));
+        assertEquals(Map.of("news-hd", alias), channelIndex(alias, exact).get("news-hd"));
     }
 
     @Test public void namesRemainAvailableWhenNoExactIdMatches() throws Exception {
         Channel channel = namedChannel("provider.101", "Guide Name", "Display Name");
-        Map<String, Channel> index = channelIndex(channel);
-        assertSame(channel, index.get("provider.101"));
-        assertSame(channel, index.get("Guide Name"));
-        assertSame(channel, index.get("Display Name"));
+        Map<String, Map<String, Channel>> index = channelIndex(channel);
+        Map<String, Channel> expected = Map.of("provider.101", channel);
+        assertEquals(expected, index.get("provider.101"));
+        assertEquals(expected, index.get("Guide Name"));
+        assertEquals(expected, index.get("Display Name"));
     }
 
     @Test public void implicitIdFromNameCannotShadowAnExplicitProviderId() throws Exception {
         Channel fallback = namedChannel("News", "News", "News", false);
         Channel explicit = namedChannel("News", "Other", "Other");
-        assertSame(explicit, channelIndex(fallback, explicit).get("News"));
-        assertSame(explicit, channelIndex(explicit, fallback).get("News"));
-        assertSame(fallback, channelIndex(fallback).get("News"));
+        assertEquals(Map.of("News", explicit), channelIndex(fallback, explicit).get("News"));
+        assertEquals(Map.of("News", explicit), channelIndex(explicit, fallback).get("News"));
+        assertEquals(Map.of("News", fallback), channelIndex(fallback).get("News"));
     }
 
     private static Channel namedChannel(String id, String guideName, String name) {
@@ -126,13 +127,13 @@ public class EpgParserTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Channel> channelIndex(Channel... channels) throws Exception {
+    private static Map<String, Map<String, Channel>> channelIndex(Channel... channels) throws Exception {
         Group group = new Group("Test");
         group.setChannel(Arrays.asList(channels));
         Live live = new Live() { @Override public List<Group> getGroups() { return Arrays.asList(group); } };
-        Method prepare = EpgParser.class.getDeclaredMethod("prepareLiveChannels", Live.class);
+        Method prepare = EpgParser.class.getDeclaredMethod("prepareLiveChannels", Live.class, Channel.class);
         prepare.setAccessible(true);
-        return (Map<String, Channel>) prepare.invoke(null, live);
+        return (Map<String, Map<String, Channel>>) prepare.invoke(null, live, null);
     }
 
     @Test public void nextDayRefreshReplacesPreviousSchedule() throws Exception {

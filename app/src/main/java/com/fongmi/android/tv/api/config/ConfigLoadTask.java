@@ -16,7 +16,7 @@ public final class ConfigLoadTask {
 
     public synchronized void submit(String key, Runnable task) {
         if (current != null) current.cancel();
-        Session next = current = new Session();
+        Session next = current = new Session(key);
         ThreadPools.executeLatestConfig(key, () -> next.run(task));
     }
 
@@ -56,7 +56,8 @@ public final class ConfigLoadTask {
 
     /** Resume on the state owner without cancelling the current configuration generation. */
     static void continueLoad(Runnable task) {
-        continueLoad(task, ThreadPools.configLoad());
+        Session session = CURRENT.get();
+        continueLoad(task, ThreadPools.configLoad(session == null ? "" : session.key));
     }
 
     static void continueLoad(Runnable task, java.util.concurrent.Executor executor) {
@@ -73,9 +74,14 @@ public final class ConfigLoadTask {
     }
 
     static final class Session {
+        final String key;
         final long started = System.currentTimeMillis();
         final Set<HttpCallScope> calls = new HashSet<>();
         volatile boolean cancelled;
+
+        Session() { this(""); }
+
+        Session(String key) { this.key = key; }
 
         synchronized void cancel() {
             cancelled = true;

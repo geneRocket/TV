@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.bean;
 
 import com.fongmi.android.tv.utils.TextValues;
+import com.fongmi.android.tv.utils.UrlUtil;
 
 import com.google.gson.annotations.SerializedName;
 
@@ -103,13 +104,18 @@ public class Catchup {
     }
 
     private String format(String url, String result) {
-        url = rewrite(url);
+        String mediaUrl = UrlUtil.stripTag(url);
+        String tags = url.substring(mediaUrl.length());
+        url = rewrite(mediaUrl);
         int fragment = url.indexOf('#');
+        String fragmentSuffix = fragment < 0 ? "" : url.substring(fragment);
+        if (fragment >= 0) url = url.substring(0, fragment);
         int query = url.indexOf('?');
-        if (result.startsWith("?") && query >= 0 && query + 1 < (fragment < 0 ? url.length() : fragment)) {
-            result = "&" + result.substring(1);
+        if (result.startsWith("?") && query >= 0) {
+            String separator = query == url.length() - 1 || url.endsWith("&") ? "" : "&";
+            result = separator + result.substring(1);
         }
-        return url + result;
+        return url + result + fragmentSuffix + tags;
     }
 
     private String rewrite(String url) {

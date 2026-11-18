@@ -22,6 +22,7 @@ public final class ThreadPools {
     private static final ExecutorService CONFIG = createQueued("config", BUDGET.config);
     private static final ExecutorService CONFIG_REFRESH = createQueued("config-refresh", 2);
     private static final ExecutorService CONFIG_LOAD = createQueued("config-load", 1);
+    private static final ExecutorService LIVE_CONFIG_LOAD = createQueued("config-load", 1);
     private static final ExecutorService LOADER = createQueued("loader", BUDGET.loader);
     private static final ExecutorService RECOMMEND = createQueued("recommend", 1);
     private static final ExecutorService SEARCH = createQueued("search", BUDGET.search);
@@ -72,16 +73,17 @@ public final class ThreadPools {
         return CONFIG_REFRESH;
     }
 
-    public static ExecutorService configLoad() {
-        return CONFIG_LOAD;
+    public static ExecutorService configLoad(String key) {
+        return "live-config".equals(key) ? LIVE_CONFIG_LOAD : CONFIG_LOAD;
     }
 
     public static void executeLatestConfig(String key, Runnable task) {
+        ExecutorService executor = configLoad(key);
         LatestFutureTask next = new LatestFutureTask(key, task);
         LatestFutureTask previous = CONFIG_TASKS.put(key, next);
-        cancel(CONFIG_LOAD, previous);
+        cancel(executor, previous);
         try {
-            CONFIG_LOAD.execute(next);
+            executor.execute(next);
         } catch (java.util.concurrent.RejectedExecutionException error) {
             CONFIG_TASKS.remove(key, next);
             throw error;
@@ -170,7 +172,6 @@ public final class ThreadPools {
         @Override
         protected void done() {
             CONFIG_TASKS.remove(key, this);
-            if (CONFIG_LOAD instanceof ThreadPoolExecutor) ((ThreadPoolExecutor) CONFIG_LOAD).remove(this);
         }
     }
 

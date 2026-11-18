@@ -429,7 +429,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     }
 
     private void onLine() {
-        nextLine(false);
+        nextLine(false, true);
     }
 
     private void onScale() {
@@ -998,7 +998,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
     private void startFlow() {
         if (!Setting.isChange() || mChannel == null) return;
         if (!mChannel.isLast()) {
-            nextLine(true);
+            nextLine(true, false);
         } else {
             mChannel.setLine(0);
             nextChannel();
@@ -1019,13 +1019,15 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     private void prevLine() {
         if (mChannel == null || mChannel.isOnly()) return;
+        mPlaybackFlow.beginSource();
         mChannel.prevLine();
         showInfo();
         fetch();
     }
 
-    private void nextLine(boolean show) {
+    private void nextLine(boolean show, boolean userSelected) {
         if (mChannel == null || mChannel.isOnly()) return;
+        if (userSelected) mPlaybackFlow.beginSource();
         mChannel.nextLine();
         if (show) showInfo();
         else setInfo();
@@ -1120,7 +1122,7 @@ public class LiveActivity extends BaseActivity implements Clock.Callback, GroupP
 
     @Override
     public void onKeyRight(int time) {
-        if (!mPlayers.isVod()) nextLine(true);
+        if (!mPlayers.isVod()) nextLine(true, true);
         else postSeekTo(time);
     }
 
