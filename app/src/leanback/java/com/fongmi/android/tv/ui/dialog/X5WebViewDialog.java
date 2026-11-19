@@ -6,6 +6,7 @@ import android.view.View;
 
 import androidx.appcompat.app.AlertDialog;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogX5webviewBinding;
 import com.fongmi.android.tv.impl.X5WebViewCallback;
 import com.fongmi.android.tv.utils.Download;
@@ -60,10 +61,15 @@ public class X5WebViewDialog  implements Download.Callback {
 
     private void confirm(View view) {
         if (confirm) return;
+        String url = getTbs();
+        if (url.isEmpty()) {
+            error(activity.getString(R.string.x5webview_package_missing));
+            return;
+        }
         confirm = true;
         binding.confirm.setEnabled(false);
         Tbs.remove();
-        Download.create(getTbs(), getFile(), this).start();
+        Download.create(url, getFile(), this).start();
     }
 
     private void dismiss() {
